@@ -33,6 +33,10 @@ namespace edge::platform {
 	auto WindowsPlatformContext::_get_platform_name() const -> std::string_view {
 		return "Windows";
 	}
+
+	auto WindowsPlatformContext::_shutdown() -> void {
+
+	}
 }
 
 int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) {

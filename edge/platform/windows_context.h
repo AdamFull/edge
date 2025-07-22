@@ -16,6 +16,7 @@ namespace edge::platform {
 	private:
 		auto _construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) -> bool;
 		auto _initialize() -> bool;
+		auto _shutdown() -> void;
 		auto _get_platform_name() const -> std::string_view;
 	};
 

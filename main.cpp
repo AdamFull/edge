@@ -9,5 +9,7 @@ auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
 
 	std::println("{}", platform_context.get_platform_name());
 
+	platform_context.shutdown();
+
 	return 0;
 }
