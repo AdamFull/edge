@@ -1,6 +1,5 @@
 if(WIN32)
-    target_sources(${PROJECT_NAME} PRIVATE
-        "windows_context.cpp"
-    )
+    target_sources(${PROJECT_NAME} PRIVATE "windows_context.cpp")
 elseif(ANDROID)
+    target_sources(${PROJECT_NAME} PRIVATE "android_context.cpp")
 endif()

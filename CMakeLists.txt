@@ -15,7 +15,15 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 set(APP_SOURCES main.cpp)
 
 if(ANDROID)
+    find_package(game-activity REQUIRED CONFIG)
+
     add_library(${PROJECT_NAME} SHARED ${APP_SOURCES})
+
+    target_link_libraries(${PROJECT_NAME} 
+        PUBLIC
+        log android 
+        game-activity::game-activity_static
+    )
 elseif(WIN32)
     add_executable(${PROJECT_NAME} WIN32 ${APP_SOURCES})
 else()
