@@ -11,7 +11,7 @@ namespace edge::platform {
 		{ ctx.get_platform_name() } -> std::convertible_to<std::string_view>;
 	};
 
-	class PlatformContextBase {
+	class PlatformContextInterface {
 	public:
 		template<typename _Self>
 		auto initialize(this _Self& self) -> bool {

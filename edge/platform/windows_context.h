@@ -9,9 +9,9 @@
 #undef WIN32_LEAN_AND_MEAN
 
 namespace edge::platform {
-	class WindowsPlatformContext final : public PlatformContextBase {
+	class WindowsPlatformContext final : public PlatformContextInterface {
 	public:
-		friend class PlatformContextBase;
+		friend class PlatformContextInterface;
 		static auto construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) -> std::unique_ptr<WindowsPlatformContext>;
 	private:
 		auto _construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) -> bool;
