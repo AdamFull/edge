@@ -1,6 +1,11 @@
 #include "entry_point.h"
 
-#include <game-activity/native_app_glue/android_native_app_glue.h>
+#include <game-activity/GameActivity.cpp>
+#include <game-text-input/gametextinput.cpp>
+
+extern "C" {
+#include <game-activity/native_app_glue/android_native_app_glue.c>
+}
 
 namespace edge::platform {
 	auto AndroidPlatformContext::construct(android_app* app)
@@ -36,7 +41,7 @@ namespace edge::platform {
 	}
 }
 
-extern "C" auto android_main(android_app* state) -> void {
+extern "C" void android_main(android_app* state) {
 	auto context = edge::platform::AndroidPlatformContext::construct(state);
 	platform_main(*context);
 }
