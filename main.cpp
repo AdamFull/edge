@@ -1,4 +1,4 @@
-#include "edge/platform/entry_point.h"
+#include "edge/core/platform/entry_point.h"
 
 #include <print>
 
@@ -8,6 +8,44 @@ auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
 	}
 
 	std::println("{}", platform_context.get_platform_name());
+
+	edge::platform::window::Properties window_properties{
+		.title = "Edge Engine - Windows Demo"
+	};
+	if (platform_context.create_window(window_properties)) {
+		auto& window = platform_context.get_window();
+		window.show();
+
+		std::println("Window created: {}x{}", window.get_width(), window.get_height());
+		std::println("Window title: {}", window.get_title());
+
+		// Simple message loop
+		MSG msg = {};
+		bool running = true;
+
+		while (running) {
+			while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+				if (msg.message == WM_QUIT) {
+					running = false;
+					break;
+				}
+
+				TranslateMessage(&msg);
+				DispatchMessageW(&msg);
+			}
+
+			// Check if window is still visible
+			if (!window.is_visible()) {
+				running = false;
+			}
+
+			// Small delay to prevent 100% CPU usage
+			Sleep(1);
+		}
+	}
+	else {
+		std::println("Failed to create window");
+	}
 
 	platform_context.shutdown();
 

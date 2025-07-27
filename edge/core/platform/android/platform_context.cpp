@@ -1,4 +1,4 @@
-#include "entry_point.h"
+#include "../entry_point.h"
 
 #include <game-activity/GameActivity.cpp>
 #include <game-text-input/gametextinput.cpp>
