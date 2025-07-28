@@ -19,28 +19,8 @@ auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
 		std::println("Window created: {}x{}", window.get_width(), window.get_height());
 		std::println("Window title: {}", window.get_title());
 
-		// Simple message loop
-		MSG msg = {};
-		bool running = true;
-
-		while (running) {
-			while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
-				if (msg.message == WM_QUIT) {
-					running = false;
-					break;
-				}
-
-				TranslateMessage(&msg);
-				DispatchMessageW(&msg);
-			}
-
-			// Check if window is still visible
-			if (!window.is_visible()) {
-				running = false;
-			}
-
-			// Small delay to prevent 100% CPU usage
-			Sleep(1);
+		while (!window.requested_close()) {
+			window.poll_events();
 		}
 	}
 	else {
