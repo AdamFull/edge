@@ -296,8 +296,8 @@ constexpr auto operator~(E flag) noexcept -> edge::foundation::Flags<E> {
 }
 
 
-#define EDGE_MAKE_ENUM_FLAGS(EnumType) \
-    using EnumType##Flags = ::edge::foundation::Flags<EnumType>; \
+#define EDGE_MAKE_ENUM_FLAGS(FlagsType, EnumType) \
+    using FlagsType = ::edge::foundation::Flags<EnumType>; \
     static_assert(::edge::foundation::EnumFlag<EnumType>, "EnumType must satisfy EnumFlag concept");
 
 // Macro to define flag names for string conversion
