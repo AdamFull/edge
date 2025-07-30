@@ -162,6 +162,6 @@ else()
     add_executable(${PROJECT_NAME} ${APP_SOURCES})
 endif()
 
-add_subdirectory("edge/core/platform")
+add_subdirectory("edge/core")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
