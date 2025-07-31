@@ -454,7 +454,7 @@ namespace edge::platform {
 					}
 
 					if (key_action != KeyAction::eUnknown) {
-						dispatcher.defer(events::GamepadButtonEvent{
+						dispatcher.emit(events::GamepadButtonEvent{
 							.gamepad_id = jid,
 							.key_code = translate_gamepad_key_code(btn),
 							.key_action = key_action
@@ -467,7 +467,7 @@ namespace edge::platform {
 					float curr = state.axes[axis];
 					float prev = last_state.axes[axis];
 
-					dispatcher.defer(events::GamepadAxisEvent{
+					dispatcher.emit(events::GamepadAxisEvent{
 							.gamepad_id = jid,
 							.value = curr,
 							.axis_code = translate_gamepad_axis_code(axis)
