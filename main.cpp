@@ -5,6 +5,27 @@
 
 #include <print>
 
+class MyApplication : public edge::ApplicationInterface {
+public:
+	~MyApplication() override = default;
+
+	auto initialize() -> bool override {
+		return true;
+	}
+
+	auto finish() -> void override {
+
+	}
+
+	auto update(float delta_time) -> void override {
+
+	}
+
+	auto fixed_update(float delta_time) -> void override {
+
+	}
+};
+
 auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
 	edge::platform::window::Properties window_properties{
 		.title = "Edge Engine - Windows Demo"
@@ -22,9 +43,13 @@ auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
 	std::println("Window created: {}x{}", window.get_width(), window.get_height());
 	std::println("Window title: {}", window.get_title());
 
-	while (!window.requested_close()) {
-		window.poll_events();
+	if (!platform_context.setup_application([](std::unique_ptr<edge::ApplicationInterface>& out_app) {
+		out_app = std::make_unique<MyApplication>();
+		})) {
+		return -2;
 	}
+
+	platform_context.main_loop();
 
 	platform_context.shutdown();
 

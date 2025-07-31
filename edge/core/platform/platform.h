@@ -1,7 +1,10 @@
 #pragma once
 
 #include <memory>
+
+#include "../application.h"
 #include "../events.h"
+#include "../foundation/stopwatch.h"
 
 namespace edge::platform {
 	class PlatformWindowInterface;
@@ -120,11 +123,21 @@ namespace edge::platform {
 
 	class PlatformContextInterface {
 	public:
-		virtual ~PlatformContextInterface() = default;
+		virtual ~PlatformContextInterface();
 
 		virtual auto initialize(const PlatformCreateInfo& create_info) -> bool;
 		virtual auto shutdown() -> void = 0;
+
+		auto terminate(int32_t code) -> void;
+
+		auto setup_application(void(*app_setup_func)(std::unique_ptr<ApplicationInterface>&)) -> bool;
+
+		auto main_loop() -> int32_t;
+		auto main_loop_tick() -> int32_t;
+
 		[[nodiscard]] virtual auto get_platform_name() const -> std::string_view = 0;
+
+		auto on_any_window_event(const events::Dispatcher::event_variant_t& e) -> void;
 
 		auto get_window() -> PlatformWindowInterface& {
 			return *window_;
@@ -133,8 +146,6 @@ namespace edge::platform {
 		auto get_window() const -> PlatformWindowInterface const& {
 			return *window_;
 		}
-
-		virtual auto tick(float dt) -> void;
 
 		auto get_event_dispatcher() -> events::Dispatcher& {
 			return *event_dispatcher_;
@@ -145,7 +156,18 @@ namespace edge::platform {
 		}
 
 	protected:
+		foundation::Stopwatch stopwatch_{};
+
+		std::unique_ptr<ApplicationInterface> application_;
+
 		std::unique_ptr<PlatformWindowInterface> window_;
 		std::unique_ptr<events::Dispatcher> event_dispatcher_;
+
+		bool window_focused_{ true };
+
+		const float fixed_delta_time_{ 0.02f };
+		float accumulated_delta_time_{ 0.0f };
+
+		events::Dispatcher::listener_id_t any_window_event_listener_{ ~0ull };
 	};
 }

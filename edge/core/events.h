@@ -7,7 +7,7 @@ namespace edge::events {
 	enum class EventTag {
 		eNone = 0,
 		eWindow = 1 << 0,
-		eInput = 1 << 1
+		eRawInput = 1 << 1
 	};
 
 	EDGE_MAKE_ENUM_FLAGS(EventTags, EventTag);
@@ -30,53 +30,53 @@ namespace edge::events {
 	};
 
 	struct KeyEvent {
-		static constexpr EventTags tag_flags = EventTag::eWindow;
+		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		KeyboardKeyCode key_code;
 		KeyAction key_action;
 		uint64_t window_id;
 	};
 
 	struct MousePositionEvent {
-		static constexpr EventTags tag_flags = EventTag::eWindow;
+		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		double x, y;
 		uint64_t window_id;
 	};
 
 	struct MouseKeyEvent {
-		static constexpr EventTags tag_flags = EventTag::eWindow;
+		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		MouseKeyCode key_code;
 		KeyAction key_action;
 		uint64_t window_id;
 	};
 
 	struct MouseScrollEvent {
-		static constexpr EventTags tag_flags = EventTag::eWindow;
+		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		double offset_x, offset_y;
 		uint64_t window_id;
 	};
 
 	struct CharacterInputEvent {
-		static constexpr EventTags tag_flags = EventTag::eWindow;
+		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		uint32_t charcode;
 		uint64_t window_id;
 	};
 
 	struct GamepadConnectionEvent {
-		static constexpr EventTags tag_flags = EventTag::eWindow;
+		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		int32_t gamepad_id;
 		bool connected;
 		const char* name;
 	};
 
 	struct GamepadButtonEvent {
-		static constexpr EventTags tag_flags = EventTag::eWindow;
+		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		int32_t gamepad_id;
 		GamepadKeyCode key_code;
 		KeyAction key_action;
 	};
 
 	struct GamepadAxisEvent {
-		static constexpr EventTags tag_flags = EventTag::eWindow;
+		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		int32_t gamepad_id;
 		float value;
 		GamepadAxisCode axis_code;
