@@ -162,7 +162,7 @@ namespace edge {
         // Defer an event for later processing with priority
         template<Event<FlagsType> E>
             requires (std::same_as<E, SupportedEvents> || ...)
-        auto defer(E event, EventPriority priority = EventPriority::eNormal) -> bool {
+        auto defer(E event, EventPriority priority = EventPriority::eNormal) -> void {
             uint64_t seq = sequence_counter_.fetch_add(1, std::memory_order_acq_rel);
             std::lock_guard<std::mutex> lock(deferred_events_mutex_);
             deferred_events_.emplace(event_variant_t(std::move(event)), priority, seq);
