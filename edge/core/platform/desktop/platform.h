@@ -9,9 +9,9 @@ namespace edge::platform {
 	public:
 		DesktopPlatformWindow();
 		~DesktopPlatformWindow() override;
-		static auto construct(const window::CreateInfo& create_info) -> std::unique_ptr<DesktopPlatformWindow>;
+		static auto construct(PlatformContextInterface* platform_context) -> std::unique_ptr<DesktopPlatformWindow>;
 
-		[[nodiscard]] auto create() -> bool override;
+		[[nodiscard]] auto create(const window::Properties& props) -> bool override;
 		auto destroy() -> void override;
 		auto show() -> void override;
 		auto hide() -> void override;
@@ -31,9 +31,10 @@ namespace edge::platform {
 		static auto mouse_button_callback(GLFWwindow* window, int button, int action, int /*mods*/) -> void;
 		static auto mouse_scroll_callback(GLFWwindow* window, double xoffset, double yoffset) -> void;
 		static auto character_input_callback(GLFWwindow* window, uint32_t codepoint) -> void;
+		static auto gamepad_connected_callback(int jid, int event) -> void;
 
 		GLFWwindow* handle_{ nullptr };
-		PlatformContextInterface* platform_context_{ nullptr };
+		static PlatformContextInterface* platform_context_;
 	};
 
 	using Window = DesktopPlatformWindow;

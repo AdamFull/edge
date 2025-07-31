@@ -34,14 +34,13 @@ namespace edge::platform::window {
 		Vsync vsync = Vsync::eDefault;
 		Extent extent = { 1280, 720 };
 	};
-
-	struct CreateInfo {
-		Properties props;
-		PlatformContextInterface* platform_context_;
-	};
 }
 
 namespace edge::platform {
+	struct PlatformCreateInfo {
+		window::Properties window_props;
+	};
+
 	class PlatformWindowInterface {
 	public:
 		virtual ~PlatformWindowInterface() = default;
@@ -49,7 +48,7 @@ namespace edge::platform {
 		/**
 		 * @brief Creates window and return result of creation
 		 */
-		virtual auto create() -> bool = 0;
+		virtual auto create(const window::Properties& props) -> bool = 0;
 
 		/**
 		 * @brief Requests to close and destroy the window
@@ -123,13 +122,19 @@ namespace edge::platform {
 	public:
 		virtual ~PlatformContextInterface() = default;
 
-		virtual auto initialize() -> bool = 0;
+		virtual auto initialize(const PlatformCreateInfo& create_info) -> bool;
 		virtual auto shutdown() -> void = 0;
 		[[nodiscard]] virtual auto get_platform_name() const -> std::string_view = 0;
 
-		virtual auto create_window(const window::Properties& props) -> bool = 0;
-		virtual auto get_window() -> PlatformWindowInterface& = 0;
-		virtual auto get_window() const -> PlatformWindowInterface const& = 0;
+		auto get_window() -> PlatformWindowInterface& {
+			return *window_;
+		}
+
+		auto get_window() const -> PlatformWindowInterface const& {
+			return *window_;
+		}
+
+		virtual auto tick(float dt) -> void;
 
 		auto get_event_dispatcher() -> events::Dispatcher& {
 			return *event_dispatcher_;
@@ -140,6 +145,7 @@ namespace edge::platform {
 		}
 
 	protected:
+		std::unique_ptr<PlatformWindowInterface> window_;
 		std::unique_ptr<events::Dispatcher> event_dispatcher_;
 	};
 }
