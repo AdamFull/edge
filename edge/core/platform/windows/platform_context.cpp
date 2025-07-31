@@ -46,7 +46,7 @@ namespace edge::platform {
 	}
 
 	auto WindowsPlatformContext::create_window(const window::Properties& props) -> bool {
-		window_ = DesktopPlatformWindow::construct(props);
+		window_ = DesktopPlatformWindow::construct({ props, this });
 		if (!window_) {
 			return false;
 		}

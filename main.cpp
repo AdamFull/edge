@@ -1,5 +1,8 @@
 #include "edge/core/platform/entry_point.h"
 
+#include "edge/core/event_system.h"
+#include "edge/core/foundation/enum_flags.h"
+
 #include <print>
 
 auto platform_main(edge::platform::PlatformContext& platform_context) -> int {

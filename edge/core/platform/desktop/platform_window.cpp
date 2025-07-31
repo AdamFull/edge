@@ -5,21 +5,53 @@
 namespace edge::platform {
 	static int32_t g_glfw_context_init_counter{ 0 };
 
+	inline auto translate_key_code(int key) -> KeyboardKeyCode {
+
+	}
+
 	auto glfw_error_callback(int error, const char* description) -> void {
 		//EDGE_LOGE("[GLFW Window] (code {}): {}", error, description);
 	}
 
 	void DesktopPlatformWindow::window_close_callback(GLFWwindow* window) {
+		if (auto* platform_context = (PlatformContextInterface*)(glfwGetWindowUserPointer(window))) {
+			auto& dispatcher = platform_context->get_event_dispatcher();
+			dispatcher.emit(events::WindowShouldCloseEvent{ 
+				.window_id = (uint64_t)window 
+				});
+		}
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
 	}
 
 	void DesktopPlatformWindow::window_size_callback(GLFWwindow* window, int width, int height) {
+		if (auto* platform_context = (PlatformContextInterface*)(glfwGetWindowUserPointer(window))) {
+			auto& dispatcher = platform_context->get_event_dispatcher();
+			dispatcher.emit(events::WindowSizeChangedEvent{ 
+				.width = width, 
+				.height = height, 
+				.window_id = (uint64_t)window 
+				});
+		}
 	}
 
 	void DesktopPlatformWindow::window_focus_callback(GLFWwindow* window, int focused) {
+		if (auto* platform_context = (PlatformContextInterface*)(glfwGetWindowUserPointer(window))) {
+			auto& dispatcher = platform_context->get_event_dispatcher();
+			dispatcher.emit(events::WindowFocusChangedEvent{ 
+				.focused = focused == 1, 
+				.window_id = (uint64_t)window
+				});
+		}
 	}
 
-	void DesktopPlatformWindow::key_callback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/) {
+	void DesktopPlatformWindow::key_callback(GLFWwindow* window, int key, int scancode, int action, int mods) {
+		if (auto* platform_context = (PlatformContextInterface*)(glfwGetWindowUserPointer(window))) {
+			auto& dispatcher = platform_context->get_event_dispatcher();
+			dispatcher.emit(events::KeyEvent{ 
+				.key_code = key,
+				.window_id = (uint64_t)window 
+				});
+		}
 	}
 
 	void DesktopPlatformWindow::cursor_position_callback(GLFWwindow* window, double xpos, double ypos) {
@@ -54,9 +86,10 @@ namespace edge::platform {
 		}
 	}
 
-	auto DesktopPlatformWindow::construct(const window::Properties& properties) -> std::unique_ptr<DesktopPlatformWindow> {
+	auto DesktopPlatformWindow::construct(const window::CreateInfo& create_info) -> std::unique_ptr<DesktopPlatformWindow> {
 		auto window = std::make_unique<DesktopPlatformWindow>();
-		window->_construct(properties);
+		window->properties_ = create_info.props;
+		window->platform_context_ = create_info.platform_context_;
 		return window;
 	}
 
@@ -104,7 +137,7 @@ namespace edge::platform {
 		glfwSetScrollCallback(handle_, &DesktopPlatformWindow::mouse_scroll_callback);
 		glfwSetCharCallback(handle_, &DesktopPlatformWindow::character_input_callback);
 
-		//glfwSetWindowUserPointer(handle_, this);
+		glfwSetWindowUserPointer(handle_, platform_context_);
 
 		glfwSetInputMode(handle_, GLFW_STICKY_KEYS, 1);
 		glfwSetInputMode(handle_, GLFW_STICKY_MOUSE_BUTTONS, 1);
@@ -182,10 +215,5 @@ namespace edge::platform {
 			glfwSetWindowTitle(handle_, title.data());
 			properties_.title = title;
 		}
-	}
-
-	auto DesktopPlatformWindow::_construct(const window::Properties& properties) -> bool {
-		properties_ = properties;
-		return true;
 	}
 }

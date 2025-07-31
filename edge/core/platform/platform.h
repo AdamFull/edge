@@ -1,38 +1,47 @@
 #pragma once
 
-#include <string>
-#include <string_view>
 #include <memory>
+#include "../events.h"
 
 namespace edge::platform {
-	namespace window {
-		enum class Mode {
-			eFullscreen,
-			eFullscreenBorderless,
-			eFullscreenStretch,
-			eDefault
-		};
+	class PlatformWindowInterface;
+	class PlatformContextInterface;
+}
 
-		enum class Vsync {
-			eOFF,
-			eON,
-			eDefault
-		};
+namespace edge::platform::window {
+	enum class Mode {
+		eFullscreen,
+		eFullscreenBorderless,
+		eFullscreenStretch,
+		eDefault
+	};
 
-		struct Extent {
-			uint32_t width;
-			uint32_t height;
-		};
+	enum class Vsync {
+		eOFF,
+		eON,
+		eDefault
+	};
 
-		struct Properties {
-			std::string title{ "Window" };
-			Mode mode = Mode::eDefault;
-			bool resizable = true;
-			Vsync vsync = Vsync::eDefault;
-			Extent extent = { 1280, 720 };
-		};
-	}
+	struct Extent {
+		uint32_t width;
+		uint32_t height;
+	};
 
+	struct Properties {
+		std::string title{ "Window" };
+		Mode mode = Mode::eDefault;
+		bool resizable = true;
+		Vsync vsync = Vsync::eDefault;
+		Extent extent = { 1280, 720 };
+	};
+
+	struct CreateInfo {
+		Properties props;
+		PlatformContextInterface* platform_context_;
+	};
+}
+
+namespace edge::platform {
 	class PlatformWindowInterface {
 	public:
 		virtual ~PlatformWindowInterface() = default;
@@ -121,5 +130,16 @@ namespace edge::platform {
 		virtual auto create_window(const window::Properties& props) -> bool = 0;
 		virtual auto get_window() -> PlatformWindowInterface& = 0;
 		virtual auto get_window() const -> PlatformWindowInterface const& = 0;
+
+		auto get_event_dispatcher() -> events::Dispatcher& {
+			return *event_dispatcher_;
+		}
+		
+		auto get_event_dispatcher() const -> events::Dispatcher const& {
+			return *event_dispatcher_;
+		}
+
+	protected:
+		std::unique_ptr<events::Dispatcher> event_dispatcher_;
 	};
 }

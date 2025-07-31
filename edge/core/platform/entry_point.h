@@ -1,7 +1,5 @@
 #pragma once
 
-#include "platform_definitioin.h"
-
 #if EDGE_PLATFORM_WINDOWS
 #include "windows/platform.h"
 #elif EDGE_PLATFORM_ANDROID

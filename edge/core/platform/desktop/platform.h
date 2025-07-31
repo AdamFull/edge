@@ -9,7 +9,7 @@ namespace edge::platform {
 	public:
 		DesktopPlatformWindow();
 		~DesktopPlatformWindow() override;
-		static auto construct(const window::Properties& properties) -> std::unique_ptr<DesktopPlatformWindow>;
+		static auto construct(const window::CreateInfo& create_info) -> std::unique_ptr<DesktopPlatformWindow>;
 
 		[[nodiscard]] auto create() -> bool override;
 		auto destroy() -> void override;
@@ -23,8 +23,6 @@ namespace edge::platform {
 
 		auto set_title(std::string_view title) -> void override;
 	private:
-		auto _construct(const window::Properties& properties) -> bool;
-
 		static auto window_close_callback(GLFWwindow* window) -> void;
 		static auto window_size_callback(GLFWwindow* window, int width, int height) -> void;
 		static auto window_focus_callback(GLFWwindow* window, int focused) -> void;
@@ -35,6 +33,7 @@ namespace edge::platform {
 		static auto character_input_callback(GLFWwindow* window, uint32_t codepoint) -> void;
 
 		GLFWwindow* handle_{ nullptr };
+		PlatformContextInterface* platform_context_{ nullptr };
 	};
 
 	using Window = DesktopPlatformWindow;

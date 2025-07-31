@@ -3,7 +3,6 @@
 #include <type_traits>
 #include <concepts>
 #include <format>
-#include <iostream>
 #include <string>
 #include <string_view>
 #include <array>
@@ -259,46 +258,39 @@ namespace edge::foundation {
     };
 }
 
-// Free functions for bitwise operations (enum | enum, etc.)
-template<edge::foundation::EnumFlag E>
-constexpr auto operator|(E lhs, E rhs) noexcept -> edge::foundation::Flags<E> {
-    return edge::foundation::Flags<E>(lhs) | rhs;
-}
-
-template<edge::foundation::EnumFlag E>
-constexpr auto operator|(E lhs, edge::foundation::Flags<E> rhs) noexcept -> edge::foundation::Flags<E> {
-    return edge::foundation::Flags<E>(lhs) | rhs;
-}
-
-template<edge::foundation::EnumFlag E>
-constexpr auto operator&(E lhs, E rhs) noexcept -> edge::foundation::Flags<E> {
-    return edge::foundation::Flags<E>(lhs) & rhs;
-}
-
-template<edge::foundation::EnumFlag E>
-constexpr auto operator&(E lhs, edge::foundation::Flags<E> rhs) noexcept -> edge::foundation::Flags<E> {
-    return edge::foundation::Flags<E>(lhs) & rhs;
-}
-
-template<edge::foundation::EnumFlag E>
-constexpr auto operator^(E lhs, E rhs) noexcept -> edge::foundation::Flags<E> {
-    return edge::foundation::Flags<E>(lhs) ^ rhs;
-}
-
-template<edge::foundation::EnumFlag E>
-constexpr auto operator^(E lhs, edge::foundation::Flags<E> rhs) noexcept -> edge::foundation::Flags<E> {
-    return edge::foundation::Flags<E>(lhs) ^ rhs;
-}
-
-template<edge::foundation::EnumFlag E>
-constexpr auto operator~(E flag) noexcept -> edge::foundation::Flags<E> {
-    return ~edge::foundation::Flags<E>(flag);
-}
-
-
 #define EDGE_MAKE_ENUM_FLAGS(FlagsType, EnumType) \
     using FlagsType = ::edge::foundation::Flags<EnumType>; \
-    static_assert(::edge::foundation::EnumFlag<EnumType>, "EnumType must satisfy EnumFlag concept");
+    static_assert(::edge::foundation::EnumFlag<EnumType>, "EnumType must satisfy EnumFlag concept"); \
+    \
+    /* Free function operators in the same namespace as the enum for ADL */ \
+    constexpr ::edge::foundation::Flags<EnumType> operator|(EnumType lhs, EnumType rhs) noexcept { \
+        return ::edge::foundation::Flags<EnumType>(lhs) | rhs; \
+    } \
+    \
+    constexpr ::edge::foundation::Flags<EnumType> operator|(EnumType lhs, ::edge::foundation::Flags<EnumType> rhs) noexcept { \
+        return ::edge::foundation::Flags<EnumType>(lhs) | rhs; \
+    } \
+    \
+    constexpr ::edge::foundation::Flags<EnumType> operator&(EnumType lhs, EnumType rhs) noexcept { \
+        return ::edge::foundation::Flags<EnumType>(lhs) & rhs; \
+    } \
+    \
+    constexpr ::edge::foundation::Flags<EnumType> operator&(EnumType lhs, ::edge::foundation::Flags<EnumType> rhs) noexcept { \
+        return ::edge::foundation::Flags<EnumType>(lhs) & rhs; \
+    } \
+    \
+    constexpr ::edge::foundation::Flags<EnumType> operator^(EnumType lhs, EnumType rhs) noexcept { \
+        return ::edge::foundation::Flags<EnumType>(lhs) ^ rhs; \
+    } \
+    \
+    constexpr ::edge::foundation::Flags<EnumType> operator^(EnumType lhs, ::edge::foundation::Flags<EnumType> rhs) noexcept { \
+        return ::edge::foundation::Flags<EnumType>(lhs) ^ rhs; \
+    } \
+    \
+    constexpr ::edge::foundation::Flags<EnumType> operator~(EnumType flag) noexcept { \
+        return ~::edge::foundation::Flags<EnumType>(flag); \
+    }
+
 
 // Macro to define flag names for string conversion
 #define EDGE_DEFINE_FLAG_NAMES(EnumType, ...) \
@@ -311,7 +303,7 @@ constexpr auto operator~(E flag) noexcept -> edge::foundation::Flags<E> {
     };
 
 // std::format support
-template<::edge::foundation::EnumFlag E>
+/*template<::edge::foundation::EnumFlag E>
 struct std::formatter<::edge::foundation::Flags<E>> {
     constexpr auto parse(format_parse_context& ctx) {
         return ctx.begin();
@@ -320,4 +312,4 @@ struct std::formatter<::edge::foundation::Flags<E>> {
     auto format(const ::edge::foundation::Flags<E>& flags, format_context& ctx) const {
         return format_to(ctx.out(), "{}", flags.to_string());
     }
-};
+};*/
