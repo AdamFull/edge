@@ -32,7 +32,54 @@ namespace edge::events {
 	struct KeyEvent {
 		static constexpr EventTags tag_flags = EventTag::eWindow;
 		KeyboardKeyCode key_code;
+		KeyAction key_action;
 		uint64_t window_id;
+	};
+
+	struct MousePositionEvent {
+		static constexpr EventTags tag_flags = EventTag::eWindow;
+		double x, y;
+		uint64_t window_id;
+	};
+
+	struct MouseKeyEvent {
+		static constexpr EventTags tag_flags = EventTag::eWindow;
+		MouseKeyCode key_code;
+		KeyAction key_action;
+		uint64_t window_id;
+	};
+
+	struct MouseScrollEvent {
+		static constexpr EventTags tag_flags = EventTag::eWindow;
+		double offset_x, offset_y;
+		uint64_t window_id;
+	};
+
+	struct CharacterInputEvent {
+		static constexpr EventTags tag_flags = EventTag::eWindow;
+		uint32_t charcode;
+		uint64_t window_id;
+	};
+
+	struct GamepadConnectionEvent {
+		static constexpr EventTags tag_flags = EventTag::eWindow;
+		int32_t gamepad_id;
+		bool connected;
+		const char* name;
+	};
+
+	struct GamepadButtonEvent {
+		static constexpr EventTags tag_flags = EventTag::eWindow;
+		int32_t gamepad_id;
+		GamepadKeyCode key_code;
+		KeyAction key_action;
+	};
+
+	struct GamepadAxisEvent {
+		static constexpr EventTags tag_flags = EventTag::eWindow;
+		int32_t gamepad_id;
+		float value;
+		GamepadAxisCode axis_code;
 	};
 
 	using Dispatcher = EventDispatcher<
@@ -40,5 +87,12 @@ namespace edge::events {
 		WindowShouldCloseEvent,
 		WindowSizeChangedEvent,
 		WindowFocusChangedEvent,
-		KeyEvent>;
+		KeyEvent,
+		MousePositionEvent,
+		MouseKeyEvent,
+		MouseScrollEvent,
+		CharacterInputEvent,
+		GamepadConnectionEvent,
+		GamepadButtonEvent,
+		GamepadAxisEvent>;
 }
