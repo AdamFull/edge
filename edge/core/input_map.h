@@ -1,6 +1,13 @@
 #pragma once
 
 namespace edge {
+	enum class KeyAction {
+		eUnknown,
+		ePress,
+		eRelease,
+		eHold
+	};
+
 	enum class KeyboardKeyCode {
 		eUnknown,
 		eSpace,
@@ -59,7 +66,7 @@ namespace edge {
 		eEnter,
 		eTab,
 		eBackspace,
-		eIinsert,
+		eInsert,
 		eDel,
 		eRight,
 		eLeft,
@@ -167,5 +174,15 @@ namespace edge {
 		eButtonDPadRight,
 		eButtonDPadDown,
 		eButtonDPadLeft
+	};
+
+	enum class GamepadAxisCode {
+		eUnknown,
+		eLeftX,
+		eLeftY,
+		eRightX,
+		eRightY,
+		eLeftTrigger,
+		eRightTrigger
 	};
 }
