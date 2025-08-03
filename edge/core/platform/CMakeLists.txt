@@ -62,27 +62,31 @@ if(WIN32 OR (UNIX AND NOT ANDROID AND NOT IOS))
     )
 endif()
 
-# Windows-specific sources
 if(WIN32)
+    # Windows-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
+        "windows/frame_handler.cpp"
         "windows/platform_context.cpp"
     )
-endif()
-
-# Android-specific sources  
-if(ANDROID)
+elseif(ANDROID)
+    # Android-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
+        "android/frame_handler.cpp"
         "android/platform_context.cpp"
         "android/platform_window.cpp"
     )
-endif()
-
-# Linux-specific sources (if needed)
-if(UNIX AND NOT APPLE AND NOT ANDROID)
-    # Add Linux-specific sources here if needed
-endif()
-
-# macOS-specific sources (if needed)
-if(APPLE AND NOT IOS)
-    # Add macOS-specific sources here if needed
+elseif(UNIX AND NOT APPLE AND NOT ANDROID)
+    # Linux-specific sources
+    target_sources(${PROJECT_NAME} PRIVATE 
+        "linux/frame_handler.cpp"
+    )
+elseif(APPLE AND NOT IOS)
+    # macOS-specific sources
+    target_sources(${PROJECT_NAME} PRIVATE 
+        "apple/frame_handler.cpp"
+    )
+else()
+    target_sources(${PROJECT_NAME} PRIVATE 
+        "generic/frame_handler.cpp"
+    )
 endif()
