@@ -2,9 +2,10 @@
 
 #include <memory>
 
+#include "frame_handler.h"
+
 #include "../application.h"
 #include "../events.h"
-#include "../foundation/stopwatch.h"
 
 namespace edge::platform {
 	class PlatformWindowInterface;
@@ -133,7 +134,7 @@ namespace edge::platform {
 		auto setup_application(void(*app_setup_func)(std::unique_ptr<ApplicationInterface>&)) -> bool;
 
 		auto main_loop() -> int32_t;
-		auto main_loop_tick() -> int32_t;
+		auto main_loop_tick(float delta_time) -> int32_t;
 
 		[[nodiscard]] virtual auto get_platform_name() const -> std::string_view = 0;
 
@@ -156,7 +157,7 @@ namespace edge::platform {
 		}
 
 	protected:
-		foundation::Stopwatch stopwatch_{};
+		FrameHandler frame_handler_;
 
 		std::unique_ptr<ApplicationInterface> application_;
 

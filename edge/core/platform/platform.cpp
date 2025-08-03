@@ -1,5 +1,7 @@
 #include "platform.h"
 
+#include <print>
+
 namespace edge::platform {
 	PlatformContextInterface::~PlatformContextInterface() {
 		event_dispatcher_->clear_events();
@@ -17,6 +19,12 @@ namespace edge::platform {
 			[](const events::Dispatcher::event_variant_t& e, void* user_ptr) {
 				auto* self = static_cast<PlatformContextInterface*>(user_ptr);
 				self->on_any_window_event(e);
+			}, this);
+
+		frame_handler_.set_limit(60);
+		frame_handler_.setup_callback([](float delta_time, void* user_data) -> int32_t {
+			auto* self = static_cast<PlatformContextInterface*>(user_data);
+			return self->main_loop_tick(delta_time);
 			}, this);
 
 		return true;
@@ -45,14 +53,16 @@ namespace edge::platform {
 	auto PlatformContextInterface::main_loop() -> int32_t {
 		int32_t exit_code = 0;
 		while (!window_->requested_close()) {
-			exit_code = main_loop_tick();
+			exit_code = frame_handler_.process();
 			// TODO: Frame mark
 		}
 		return exit_code;
 	}
 
-	auto PlatformContextInterface::main_loop_tick() -> int32_t {
-		auto delta_time = stopwatch_.stop<float>();
+	auto PlatformContextInterface::main_loop_tick(float delta_time) -> int32_t {
+		std::println("Frame time: {:.2f}", delta_time * 1000.f);
+		auto new_windows_name = std::format("{} [{} fps; {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time());
+		window_->set_title(new_windows_name);
 
 		window_->poll_events();
 
@@ -62,7 +72,7 @@ namespace edge::platform {
 				application_->fixed_update(fixed_delta_time_);
 				accumulated_delta_time_ -= fixed_delta_time_;
 			}
-
+		
 			application_->update(delta_time);
 		}
 		else {
@@ -74,7 +84,18 @@ namespace edge::platform {
 		return 0;
 	}
 
-	auto PlatformContextInterface::on_any_window_event(const events::Dispatcher::event_variant_t& e) -> void {
+	auto PlatformContextInterface::on_any_window_event(const events::Dispatcher::event_variant_t& event) -> void {
+		std::visit([this](const auto& e) {
+			using EventType = std::decay_t<decltype(e)>;
+			if constexpr (std::same_as<EventType, events::WindowShouldCloseEvent>) {
+				
+			}
+			else if constexpr (std::same_as<EventType, events::WindowSizeChangedEvent>) {
 
+			}
+			else if constexpr (std::same_as<EventType, events::WindowFocusChangedEvent>) {
+				window_focused_ = e.focused;
+			}
+			}, event);
 	}
 }
