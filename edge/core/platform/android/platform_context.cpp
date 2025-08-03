@@ -20,7 +20,7 @@ namespace edge::platform {
 		return true;
 	}
 
-	auto AndroidPlatformContext::initialize() -> bool {
+	auto AndroidPlatformContext::initialize(const PlatformCreateInfo& create_info) -> bool {
 		return true;
 	}
 
@@ -30,28 +30,6 @@ namespace edge::platform {
 
     auto AndroidPlatformContext::get_platform_name() const -> std::string_view {
         return "Android";
-    }
-
-    auto AndroidPlatformContext::get_window() -> PlatformWindowInterface& {
-        return *window_;
-    }
-
-    auto AndroidPlatformContext::get_window() const->PlatformWindowInterface const& {
-        return *window_;
-    }
-
-    auto AndroidPlatformContext::create_window(const window::Properties& props) -> bool {
-        window_ = AndroidPlatformWindow::construct(props);
-        if (!window_) {
-            return false;
-        }
-
-        if (!window_->create()) {
-            window_.reset();
-            return false;
-        }
-
-        return true;
     }
 
 	auto AndroidPlatformContext::get_android_app() -> android_app* {

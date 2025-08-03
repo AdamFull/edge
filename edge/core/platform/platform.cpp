@@ -1,6 +1,7 @@
 #include "platform.h"
 
 #include <print>
+#include <thread>
 
 namespace edge::platform {
 	PlatformContextInterface::~PlatformContextInterface() {

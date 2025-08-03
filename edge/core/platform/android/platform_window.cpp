@@ -7,7 +7,7 @@ namespace edge::platform {
         return window;
     }
 
-    auto AndroidPlatformWindow::create() -> bool {
+    auto AndroidPlatformWindow::create(const window::Properties& props) -> bool {
         return true;
     }
 
@@ -31,12 +31,16 @@ namespace edge::platform {
 
     }
 
-    auto AndroidPlatformWindow::set_title(std::string_view title) -> void {
-        properties_.title = title;
+    auto AndroidPlatformWindow::get_dpi_factor() const noexcept -> float {
+        return 1.0f;
     }
 
-    auto AndroidPlatformWindow::get_title() const->std::string_view {
-        return properties_.title;
+    auto AndroidPlatformWindow::get_content_scale_factor() const noexcept -> float {
+        return 1.0f;
+    }
+
+    auto AndroidPlatformWindow::set_title(std::string_view title) -> void {
+        properties_.title = title;
     }
 
     auto AndroidPlatformWindow::_construct(const window::Properties& properties) -> bool {
