@@ -8,22 +8,22 @@ namespace edge::platform {
     class AndroidPlatformWindow final : public PlatformWindowInterface {
     public:
         ~AndroidPlatformWindow() override = default;
-        static auto construct(const window::Properties& properties) -> std::unique_ptr<AndroidPlatformWindow>;
+        static auto construct(PlatformContextInterface* platform_context) -> std::unique_ptr<AndroidPlatformWindow>;
 
         auto create(const window::Properties& props) -> bool override;
         auto destroy() -> void override;
-        auto show() -> void override;
-        auto hide() -> void override;
-        auto is_visible() const -> bool override;
+        [[maybe_unused]]auto show() -> void override {}
+        [[maybe_unused]]auto hide() -> void override {}
+        [[maybe_unused]] auto is_visible() const -> bool override { return true; }
         auto poll_events() -> void override;
 
         auto get_dpi_factor() const noexcept -> float override;
         auto get_content_scale_factor() const noexcept -> float override;
 
         auto set_title(std::string_view title) -> void override;
-
     private:
-        auto _construct(const window::Properties& properties) -> bool;
+        android_app* android_app_{ nullptr };
+        events::Dispatcher* event_dispatcher_{ nullptr };
     };
 
     using Window = AndroidPlatformWindow;
@@ -39,8 +39,11 @@ namespace edge::platform {
 		auto get_android_app() -> android_app*;
 		[[nodiscard]] auto get_android_app() const -> const android_app*;
 	private:
+        static auto on_app_cmd(android_app* app, int32_t cmd) -> void;
+        auto _process_commands(android_app* app, int32_t cmd) -> void;
 		auto _construct(android_app* app) -> bool;
 
+        bool surface_ready_{ false };
 		android_app* android_app_{ nullptr };
         std::unique_ptr<Window> window_;
 	};
