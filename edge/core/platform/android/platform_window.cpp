@@ -115,11 +115,11 @@ namespace edge::platform {
                 break;
             }
             case APP_CMD_START: {
-                gamepad_manager_->on_app_start();
+                input_layer_->on_app_start();
                 break;
             }
             case APP_CMD_STOP: {
-                gamepad_manager_->on_app_stop();
+                input_layer_->on_app_stop();
                 break;
             }
         }
