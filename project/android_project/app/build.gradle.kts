@@ -19,7 +19,12 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
-                cppFlags += "-std=c++23"
+                cppFlags += listOf(
+                    "-std=c++23",
+                    "-fexceptions",
+                    "-frtti"
+                )
+                arguments += "-DANDROID_STL=c++_shared"
             }
         }
     }
@@ -60,6 +65,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.games.activity)
+    implementation(libs.androidx.games.controller)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

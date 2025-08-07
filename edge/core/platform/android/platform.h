@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../platform.h"
+#include "android_input_layer.h"
 
 struct android_app;
 
@@ -12,9 +13,9 @@ namespace edge::platform {
 
         auto create(const window::Properties& props) -> bool override;
         auto destroy() -> void override;
-        [[maybe_unused]]auto show() -> void override {}
-        [[maybe_unused]]auto hide() -> void override {}
-        [[maybe_unused]] auto is_visible() const -> bool override { return true; }
+        [[maybe_unused]] auto show() -> void override {}
+        [[maybe_unused]] auto hide() -> void override {}
+        [[maybe_unused]] auto is_visible() const -> bool override { return surface_ready_; }
         auto poll_events() -> void override;
 
         auto get_dpi_factor() const noexcept -> float override;
@@ -22,8 +23,13 @@ namespace edge::platform {
 
         auto set_title(std::string_view title) -> void override;
     private:
+        static auto on_app_cmd(android_app* app, int32_t cmd) -> void;
+        auto _process_commands(android_app* app, int32_t cmd) -> void;
+
         android_app* android_app_{ nullptr };
-        events::Dispatcher* event_dispatcher_{ nullptr };
+        PlatformContextInterface* platform_context_{ nullptr };
+        std::unique_ptr<InputLayer> input_layer_;
+        bool surface_ready_{ false };
     };
 
     using Window = AndroidPlatformWindow;
@@ -38,12 +44,9 @@ namespace edge::platform {
 
 		auto get_android_app() -> android_app*;
 		[[nodiscard]] auto get_android_app() const -> const android_app*;
-	private:
-        static auto on_app_cmd(android_app* app, int32_t cmd) -> void;
-        auto _process_commands(android_app* app, int32_t cmd) -> void;
+    private:
 		auto _construct(android_app* app) -> bool;
 
-        bool surface_ready_{ false };
 		android_app* android_app_{ nullptr };
         std::unique_ptr<Window> window_;
 	};
