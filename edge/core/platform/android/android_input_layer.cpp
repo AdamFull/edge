@@ -174,7 +174,12 @@ namespace edge::platform {
 
         Paddleboat_ErrorCode result = Paddleboat_init(jni_env_, android_app_->activity->javaGameActivity);
         if (result != PADDLEBOAT_NO_ERROR) {
-            // TODO: LOG ERROR
+            // LOGE("Failed to initialize Paddleboat: %d", result);
+            return false;
+        }
+
+        if (!Paddleboat_isInitialized()) {
+            // LOGE("Paddleboat initialization verification failed");
             return false;
         }
 
@@ -185,19 +190,40 @@ namespace edge::platform {
 
         Paddleboat_setControllerStatusCallback([](const int32_t controller_index, const Paddleboat_ControllerStatus controller_status, void *user_data) -> void {
             auto* input_layer = static_cast<InputLayer*>(user_data);
-            input_layer->process_controller_state_changes(controller_index, controller_status);
+            input_layer->process_controller_status_change(controller_index, controller_status);
+            }, this);
+
+        Paddleboat_setMouseStatusCallback([](const Paddleboat_MouseStatus mouse_status, void *user_data) {
+            auto* input_layer = static_cast<InputLayer*>(user_data);
+            input_layer->process_mouse_status_change(mouse_status);
+            }, this);
+
+        Paddleboat_setPhysicalKeyboardStatusCallback([](const bool physical_keyboard_status, void *user_data) {
+            auto* input_layer = static_cast<InputLayer*>(user_data);
+            input_layer->process_keyboard_status_change(physical_keyboard_status);
             }, this);
 
         return true;
     }
 
     auto InputLayer::shutdown() -> void {
-        Paddleboat_setMotionDataCallback(nullptr, nullptr);
-        Paddleboat_setControllerStatusCallback(nullptr, nullptr);
-        Paddleboat_destroy(jni_env_);
+        if (Paddleboat_isInitialized()) {
+
+            // Clear callbacks
+            Paddleboat_setControllerStatusCallback(nullptr, nullptr);
+            Paddleboat_setMouseStatusCallback(nullptr, nullptr);
+            Paddleboat_setPhysicalKeyboardStatusCallback(nullptr, nullptr);
+            Paddleboat_setMotionDataCallback(nullptr, nullptr);
+
+            Paddleboat_destroy(jni_env_);
+        }
     }
 
     auto InputLayer::update() -> void {
+        if (!Paddleboat_isInitialized()) {
+            return;
+        }
+
         auto& dispatcher = platform_context_->get_event_dispatcher();
 
         jni_env_ = get_jni_env(android_app_);
@@ -339,10 +365,18 @@ namespace edge::platform {
     }
 
     auto InputLayer::on_app_start() -> void {
+        if (!Paddleboat_isInitialized()) {
+            return;
+        }
+
         Paddleboat_onStart(jni_env_);
     }
 
     auto InputLayer::on_app_stop() -> void {
+        if (!Paddleboat_isInitialized()) {
+            return;
+        }
+
         Paddleboat_onStop(jni_env_);
     }
 
@@ -373,7 +407,7 @@ namespace edge::platform {
         }
     }
 
-    auto InputLayer::process_controller_state_changes(const int32_t controller_index, const uint32_t controller_status) -> void {
+    auto InputLayer::process_controller_status_change(const int32_t controller_index, const uint32_t controller_status) -> void {
         auto& dispatcher = platform_context_->get_event_dispatcher();
         bool is_just_connected = controller_status == PADDLEBOAT_CONTROLLER_JUST_CONNECTED;
         bool is_just_disconnected = controller_status == PADDLEBOAT_CONTROLLER_JUST_DISCONNECTED;
@@ -393,5 +427,13 @@ namespace edge::platform {
                 });
             }
         }
+    }
+
+    auto InputLayer::process_mouse_status_change(const uint32_t mouse_status) -> void {
+
+    }
+
+    auto InputLayer::process_keyboard_status_change(bool mouse_status) -> void {
+
     }
 }
