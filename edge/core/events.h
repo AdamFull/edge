@@ -78,7 +78,7 @@ namespace edge::events {
 	struct GamepadAxisEvent {
 		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		int32_t gamepad_id;
-		float value;
+		float values[3];
 		GamepadAxisCode axis_code;
 	};
 

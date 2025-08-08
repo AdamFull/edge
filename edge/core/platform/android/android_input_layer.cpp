@@ -9,6 +9,8 @@
 #include "jni_helper.h"
 
 namespace edge::platform {
+    static std::array<Paddleboat_Controller_Data, PADDLEBOAT_MAX_CONTROLLERS> gamepad_last_state_{};
+
     inline constexpr auto trnaslate_key_action(int action) -> KeyAction {
         if (action == AKEY_STATE_DOWN)
             return KeyAction::ePress;
@@ -131,6 +133,35 @@ namespace edge::platform {
         return KeyboardKeyCode::eUnknown;
     }
 
+    inline auto translate_gamepad_key_code(int32_t key) -> GamepadKeyCode {
+        static std::array<GamepadKeyCode, PADDLEBOAT_BUTTON_COUNT> lut {
+                GamepadKeyCode::eButtonDPadUp,
+                GamepadKeyCode::eButtonDPadLeft,
+                GamepadKeyCode::eButtonDPadDown,
+                GamepadKeyCode::eButtonDPadRight,
+                GamepadKeyCode::eButtonA,
+                GamepadKeyCode::eButtonB,
+                GamepadKeyCode::eButtonX,
+                GamepadKeyCode::eButtonY,
+                GamepadKeyCode::eButtonLeftBumper,
+                GamepadKeyCode::eButtonLeftTrigger,
+                GamepadKeyCode::eButtonLeftThumb,
+                GamepadKeyCode::eButtonRightBumper,
+                GamepadKeyCode::eButtonRightTrigger,
+                GamepadKeyCode::eButtonRightThumb,
+                GamepadKeyCode::eButtonBack,
+                GamepadKeyCode::eButtonStart,
+                GamepadKeyCode::eButtonGuide,
+                GamepadKeyCode::eUnknown, // Touchpad
+                GamepadKeyCode::eUnknown, // Aux1
+                GamepadKeyCode::eUnknown, // Aux2
+                GamepadKeyCode::eUnknown, // Aux3
+                GamepadKeyCode::eUnknown, // Aux4
+        };
+
+        return lut[key];
+    }
+
     auto InputLayer::construct(android_app* app, PlatformContextInterface* platform_context) -> std::unique_ptr<InputLayer> {
         auto self = std::make_unique<InputLayer>();
         self->android_app_ = app;
@@ -147,12 +178,17 @@ namespace edge::platform {
             return false;
         }
 
+        Paddleboat_setMotionDataCallbackWithIntegratedFlags([](const int32_t controller_index, const Paddleboat_Motion_Data *motion_data, void *user_data) -> void {
+            auto* input_layer = static_cast<InputLayer*>(user_data);
+            input_layer->process_controller_motion_data(controller_index, motion_data);
+        }, Paddleboat_getIntegratedMotionSensorFlags(), this);
+
         Paddleboat_setControllerStatusCallback([](const int32_t controller_index, const Paddleboat_ControllerStatus controller_status, void *user_data) -> void {
             auto* input_layer = static_cast<InputLayer*>(user_data);
             input_layer->process_controller_state_changes(controller_index, controller_status);
             }, this);
 
-        return false;
+        return true;
     }
 
     auto InputLayer::shutdown() -> void {
@@ -162,6 +198,8 @@ namespace edge::platform {
     }
 
     auto InputLayer::update() -> void {
+        auto& dispatcher = platform_context_->get_event_dispatcher();
+
         jni_env_ = get_jni_env(android_app_);
         Paddleboat_update(jni_env_);
 
@@ -188,6 +226,81 @@ namespace edge::platform {
                 process_key_event(event);
             }
             android_app_clear_key_events(input_buf);
+        }
+
+        // Update all controllers available
+        for (int32_t jid = 0; jid < PADDLEBOAT_MAX_CONTROLLERS; ++jid) {
+            Paddleboat_ControllerStatus status = Paddleboat_getControllerStatus(jid);
+            if (status == PADDLEBOAT_CONTROLLER_ACTIVE) {
+                Paddleboat_Controller_Data controller_data;
+                if (Paddleboat_getControllerData(jid, &controller_data) == PADDLEBOAT_NO_ERROR) {
+                    auto& last_state = gamepad_last_state_[jid];
+
+                    // Update gamepad buttons
+                    for(int32_t button_idx = 0; button_idx < PADDLEBOAT_BUTTON_COUNT; ++button_idx) {
+                        auto controller_button = static_cast<Paddleboat_Buttons>(1 << button_idx);
+
+                        bool curr = (controller_data.buttonsDown & controller_button) == controller_button;
+                        bool prev = (last_state.buttonsDown & controller_button) == controller_button;
+
+                        KeyAction key_action = KeyAction::eUnknown;
+                        if (curr && !prev) {
+                            key_action = KeyAction::ePress;
+                        }
+                        else if (curr && prev) {
+                            key_action = KeyAction::eHold;
+                        }
+                        else if (!curr && prev) {
+                            key_action = KeyAction::eRelease;
+                        }
+
+                        if (key_action != KeyAction::eUnknown) {
+                            dispatcher.emit(events::GamepadButtonEvent{
+                                    .gamepad_id = jid,
+                                    .key_code = translate_gamepad_key_code(button_idx),
+                                    .key_action = key_action
+                            });
+                        }
+                    }
+
+                    // Update gamepad axis
+                    if(controller_data.leftStick.stickX != last_state.leftStick.stickX ||
+                            controller_data.leftStick.stickY != last_state.leftStick.stickY) {
+                        dispatcher.emit(events::GamepadAxisEvent{
+                                .gamepad_id = jid,
+                                .values = { controller_data.leftStick.stickX, controller_data.leftStick.stickY },
+                                .axis_code = GamepadAxisCode::eLeftStick
+                        });
+                    }
+
+                    if(controller_data.rightStick.stickX != last_state.rightStick.stickX ||
+                            controller_data.rightStick.stickY != last_state.rightStick.stickY) {
+                        dispatcher.emit(events::GamepadAxisEvent{
+                                .gamepad_id = jid,
+                                .values = { controller_data.rightStick.stickX, controller_data.rightStick.stickY },
+                                .axis_code = GamepadAxisCode::eRightStick
+                        });
+                    }
+
+                    if(controller_data.triggerL2 > last_state.triggerL2) {
+                        dispatcher.emit(events::GamepadAxisEvent{
+                                .gamepad_id = jid,
+                                .values = { controller_data.triggerL2 },
+                                .axis_code = GamepadAxisCode::eLeftTrigger
+                        });
+                    }
+
+                    if(controller_data.triggerR2 > last_state.triggerR2) {
+                        dispatcher.emit(events::GamepadAxisEvent{
+                                .gamepad_id = jid,
+                                .values = { controller_data.triggerR2 },
+                                .axis_code = GamepadAxisCode::eRightTrigger
+                        });
+                    }
+
+                    gamepad_last_state_[jid] = controller_data;
+                }
+            }
         }
     }
 
@@ -233,6 +346,33 @@ namespace edge::platform {
         Paddleboat_onStop(jni_env_);
     }
 
+    auto InputLayer::process_controller_motion_data(const int32_t controller_index, const void* motion_data) -> void {
+        if(!motion_data) {
+            return;
+        }
+
+        auto& dispatcher = platform_context_->get_event_dispatcher();
+        auto* data = static_cast<const Paddleboat_Motion_Data*>(motion_data);
+        switch (data->motionType) {
+            case PADDLEBOAT_MOTION_ACCELEROMETER: {
+                dispatcher.emit(events::GamepadAxisEvent{
+                        .gamepad_id = controller_index,
+                        .values = { data->motionX, data->motionY, data->motionZ },
+                        .axis_code = GamepadAxisCode::eAccel
+                });
+                break;
+            }
+            case PADDLEBOAT_MOTION_GYROSCOPE: {
+                dispatcher.emit(events::GamepadAxisEvent{
+                        .gamepad_id = controller_index,
+                        .values = { data->motionX, data->motionY, data->motionZ },
+                        .axis_code = GamepadAxisCode::eGyro
+                });
+                break;
+            }
+        }
+    }
+
     auto InputLayer::process_controller_state_changes(const int32_t controller_index, const uint32_t controller_status) -> void {
         auto& dispatcher = platform_context_->get_event_dispatcher();
         bool is_just_connected = controller_status == PADDLEBOAT_CONTROLLER_JUST_CONNECTED;
@@ -241,6 +381,11 @@ namespace edge::platform {
             char controller_name[256];
             Paddleboat_ErrorCode result = Paddleboat_getControllerName(controller_index, sizeof(controller_name), controller_name);
             if (result == PADDLEBOAT_NO_ERROR) {
+                Paddleboat_Controller_Info controller_info;
+                if (Paddleboat_getControllerInfo(controller_index, &controller_info) == PADDLEBOAT_NO_ERROR) {
+                    // TODO: Can be used for provide additional info
+                }
+
                 dispatcher.emit(events::GamepadConnectionEvent{
                         .gamepad_id = controller_index,
                         .connected = is_just_connected,

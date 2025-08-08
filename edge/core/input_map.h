@@ -164,7 +164,9 @@ namespace edge {
 		eButtonSquare = eButtonX,
 		eButtonTriangle = eButtonY,
 		eButtonLeftBumper,
+		eButtonLeftTrigger,
 		eButtonRightBumper,
+		eButtonRightTrigger,
 		eButtonBack,
 		eButtonStart,
 		eButtonGuide,
@@ -178,11 +180,11 @@ namespace edge {
 
 	enum class GamepadAxisCode {
 		eUnknown,
-		eLeftX,
-		eLeftY,
-		eRightX,
-		eRightY,
+		eLeftStick,
+		eRightStick,
 		eLeftTrigger,
-		eRightTrigger
+		eRightTrigger,
+		eAccel,
+		eGyro
 	};
 }

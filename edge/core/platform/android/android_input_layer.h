@@ -26,6 +26,7 @@ namespace edge::platform {
         auto on_app_start() -> void;
         auto on_app_stop() -> void;
     private:
+        auto process_controller_motion_data(const int32_t controller_index, const void* motion_data) -> void;
         auto process_controller_state_changes(const int32_t controller_index, const uint32_t controller_status) -> void;
 
         android_app* android_app_{ nullptr };
