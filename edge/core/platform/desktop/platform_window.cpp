@@ -196,23 +196,6 @@ namespace edge::platform {
 		return GamepadKeyCode::eUnknown;
 	}
 
-	inline auto translate_gamepad_axis_code(int key) -> GamepadAxisCode {
-		static auto lut = std::unordered_map<int32_t, GamepadAxisCode>({
-				{ GLFW_GAMEPAD_AXIS_LEFT_X, GamepadAxisCode::eLeftX },
-				{ GLFW_GAMEPAD_AXIS_LEFT_Y, GamepadAxisCode::eLeftY },
-				{ GLFW_GAMEPAD_AXIS_RIGHT_X, GamepadAxisCode::eRightX },
-				{ GLFW_GAMEPAD_AXIS_RIGHT_Y, GamepadAxisCode::eRightY },
-				{ GLFW_GAMEPAD_AXIS_LEFT_TRIGGER, GamepadAxisCode::eLeftTrigger },
-				{ GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER, GamepadAxisCode::eRightTrigger }
-			});
-
-		if (auto found = lut.find(key); found != lut.end()) {
-			return found->second;
-		}
-
-		return GamepadAxisCode::eUnknown;
-	}
-
 	auto glfw_error_callback(int error, const char* description) -> void {
 		//EDGE_LOGE("[GLFW Window] (code {}): {}", error, description);
 	}
@@ -463,14 +446,37 @@ namespace edge::platform {
 				}
 				
 				// Process axis
-				for (int32_t axis = 0; axis < GLFW_GAMEPAD_AXIS_LAST + 1; ++axis) {
-					float curr = state.axes[axis];
-					float prev = last_state.axes[axis];
-
+				if (state.axes[GLFW_GAMEPAD_AXIS_LEFT_X] != last_state.axes[GLFW_GAMEPAD_AXIS_LEFT_X] ||
+					state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] != last_state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]) {
 					dispatcher.emit(events::GamepadAxisEvent{
 							.gamepad_id = jid,
-							.value = curr,
-							.axis_code = translate_gamepad_axis_code(axis)
+							.values = { state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] },
+							.axis_code = GamepadAxisCode::eLeftStick
+						});
+				}
+
+				if (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X] != last_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X] ||
+					state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] != last_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]) {
+					dispatcher.emit(events::GamepadAxisEvent{
+							.gamepad_id = jid,
+							.values = { state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] },
+							.axis_code = GamepadAxisCode::eRightStick
+						});
+				}
+
+				if (state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] != last_state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]) {
+					dispatcher.emit(events::GamepadAxisEvent{
+							.gamepad_id = jid,
+							.values = { state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] },
+							.axis_code = GamepadAxisCode::eLeftTrigger
+						});
+				}
+
+				if (state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] != last_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]) {
+					dispatcher.emit(events::GamepadAxisEvent{
+							.gamepad_id = jid,
+							.values = { state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] },
+							.axis_code = GamepadAxisCode::eRightTrigger
 						});
 				}
 
