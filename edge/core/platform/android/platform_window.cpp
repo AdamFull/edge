@@ -6,10 +6,9 @@
 #include "jni_helper.h"
 
 namespace edge::platform {
-    auto AndroidPlatformWindow::construct(PlatformContextInterface* platform_context) -> std::unique_ptr<AndroidPlatformWindow> {
+    auto AndroidPlatformWindow::construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformWindow> {
         auto window = std::make_unique<AndroidPlatformWindow>();
-        auto& android_platform_context = static_cast<AndroidPlatformContext&>(*platform_context);
-        window->android_app_ = android_platform_context.get_android_app();
+        window->android_app_ = platform_context->get_android_app();
         window->platform_context_ = platform_context;
         return window;
     }
@@ -20,8 +19,8 @@ namespace edge::platform {
 
         // TODO: Setup filters here
 
-        input_layer_ = InputLayer::construct(android_app_, platform_context_);
-        if(!input_layer_->initialize()) {
+        platform_input_ = AndroidPlatformInput::construct(platform_context_);
+        if(!platform_input_->create()) {
             return false;
         }
 
@@ -29,7 +28,7 @@ namespace edge::platform {
     }
 
     auto AndroidPlatformWindow::destroy() -> void {
-        input_layer_->shutdown();
+        platform_input_->destroy();
         GameActivity_finish(android_app_->activity);
         requested_close_ = true;
     }
@@ -54,7 +53,7 @@ namespace edge::platform {
             requested_close_ = true;
         }
 
-        input_layer_->update();
+        platform_input_->update(0.16f);
     }
 
     auto AndroidPlatformWindow::get_dpi_factor() const noexcept -> float {
@@ -115,11 +114,11 @@ namespace edge::platform {
                 break;
             }
             case APP_CMD_START: {
-                input_layer_->on_app_start();
+                platform_input_->on_app_start();
                 break;
             }
             case APP_CMD_STOP: {
-                input_layer_->on_app_stop();
+                platform_input_->on_app_stop();
                 break;
             }
         }

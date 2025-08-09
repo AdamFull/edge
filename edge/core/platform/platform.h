@@ -1,6 +1,10 @@
 #pragma once
 
+#include <array>
+#include <bitset>
 #include <memory>
+#include <string>
+#include <string_view>
 
 #include "frame_handler.h"
 
@@ -40,10 +44,86 @@ namespace edge::platform::window {
 	};
 }
 
+namespace edge::platform::input {
+    struct InputDevice {
+        int32_t vendor_id;
+        int32_t product_id;
+        int32_t device_id;
+        bool connected;
+        std::string name;
+    };
+
+    struct MouseDevice : InputDevice {
+        std::array<float, 2> ss_pointer_pos;
+        std::array<float, 2> pointer_delta;
+        std::bitset<static_cast<size_t>(KeyboardKeyCode::eCount)> buttons;
+    };
+
+    struct KeyboardDevice : InputDevice {
+        std::bitset<static_cast<size_t>(MouseKeyCode::eCount)> buttons;
+    };
+
+    struct GamepadDevice : InputDevice {
+        int32_t gamepad_id;
+        std::array<float, 2> left_stick;
+        std::array<float, 2> right_stick;
+        std::array<float, 3> accelerometer;
+        float left_trigger;
+        std::array<float, 3> gyroscope;
+        float right_trigger;
+
+        std::bitset<static_cast<size_t>(GamepadKeyCode::eButtonCount)> buttons;
+    };
+
+    struct TouchPointer {
+        std::array<float, 2> position;
+        KeyAction action;
+    };
+
+    struct TouchDevice : InputDevice {
+        static constexpr size_t k_max_touch_pointers{ 16 };
+        std::array<TouchPointer, k_max_touch_pointers> pointers;
+    };
+
+    enum InputDeviceAvaliabilityFlagBits {
+        ENUM_INPUT_MOUSE_AVAILABLE_FLAG_BIT = 1 << 0,
+        ENUM_INPUT_KEYBOARD_AVAILABLE_FLAG_BIT = 1 << 1,
+        ENUM_INPUT_TOUCH_AVAILABLE_FLAG_BIT = 1 << 2,
+        ENUM_INPUT_GAMEPAD_0_AVAILABLE_FLAG_BIT = 1 << 3,
+        ENUM_INPUT_GAMEPAD_1_AVAILABLE_FLAG_BIT = 1 << 4,
+        ENUM_INPUT_GAMEPAD_2_AVAILABLE_FLAG_BIT = 1 << 5,
+        ENUM_INPUT_GAMEPAD_3_AVAILABLE_FLAG_BIT = 1 << 6,
+        ENUM_INPUT_GAMEPAD_4_AVAILABLE_FLAG_BIT = 1 << 7,
+        ENUM_INPUT_GAMEPAD_5_AVAILABLE_FLAG_BIT = 1 << 8,
+        ENUM_INPUT_GAMEPAD_6_AVAILABLE_FLAG_BIT = 1 << 9,
+        ENUM_INPUT_GAMEPAD_7_AVAILABLE_FLAG_BIT = 1 << 10,
+    };
+};
+
 namespace edge::platform {
 	struct PlatformCreateInfo {
 		window::Properties window_props;
 	};
+
+    class PlatformInputInterface {
+    public:
+        static constexpr size_t k_max_gamepad_supported{ 8 };
+        virtual ~PlatformInputInterface() = default;
+
+        virtual auto create() -> bool = 0;
+        virtual auto destroy() -> void = 0;
+
+        virtual auto update(float delta_time) -> void = 0;
+
+        virtual auto begin_text_input_capture(std::wstring_view initial_text = {}) -> bool = 0;
+        virtual auto end_text_input_capture() -> void = 0;
+    protected:
+        input::MouseDevice mouse_device_;
+        input::KeyboardDevice keyboard_device;
+        input::TouchDevice touch_device;
+        std::array<input::GamepadDevice, k_max_gamepad_supported> gamepad_devices;
+        uint32_t devices_availability;
+    };
 
 	class PlatformWindowInterface {
 	public:

@@ -79,9 +79,9 @@ elseif(ANDROID)
     target_sources(${PROJECT_NAME} PRIVATE
         #"${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c"
         "android/frame_handler.cpp"
-        "android/android_input_layer.cpp"
         "android/jni_helper.cpp"
         "android/platform_context.cpp"
+        "android/platform_input.cpp"
         "android/platform_window.cpp"
     )
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)

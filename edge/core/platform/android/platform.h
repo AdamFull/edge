@@ -1,15 +1,51 @@
 #pragma once
 
 #include "../platform.h"
-#include "android_input_layer.h"
+
+struct _JNIEnv;
+typedef _JNIEnv JNIEnv;
 
 struct android_app;
+struct GameActivityMotionEvent;
+struct GameActivityKeyEvent;
 
 namespace edge::platform {
+    class AndroidPlatformInput;
+    class AndroidPlatformWindow;
+    class AndroidPlatformContext;
+
+    class AndroidPlatformInput final : public PlatformInputInterface {
+    public:
+        ~AndroidPlatformInput() override = default;
+        static auto construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformInput>;
+
+        auto create() -> bool override;
+        auto destroy() -> void override;
+
+        auto update(float delta_time) -> void override;
+
+        auto begin_text_input_capture(std::wstring_view initial_text = {}) -> bool override;
+        auto end_text_input_capture() -> void override;
+
+        auto process_motion_event(GameActivityMotionEvent* event) -> void;
+        auto process_key_event(GameActivityKeyEvent* event) -> void;
+        auto on_app_start() -> void;
+        auto on_app_stop() -> void;
+    private:
+        auto process_controller_motion_data(const int32_t controller_index, const void* motion_data) -> void;
+        auto process_controller_status_change(const int32_t controller_index, const uint32_t controller_status) -> void;
+        auto process_mouse_status_change(const uint32_t mouse_status) -> void;
+        auto process_keyboard_status_change(bool mouse_status) -> void;
+
+        android_app* android_app_{ nullptr };
+        JNIEnv* jni_env_{ nullptr };
+        AndroidPlatformContext* platform_context_{ nullptr };
+    };
+
     class AndroidPlatformWindow final : public PlatformWindowInterface {
     public:
         ~AndroidPlatformWindow() override = default;
-        static auto construct(PlatformContextInterface* platform_context) -> std::unique_ptr<AndroidPlatformWindow>;
+        static auto construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformWindow>;
 
         auto create(const window::Properties& props) -> bool override;
         auto destroy() -> void override;
@@ -27,8 +63,8 @@ namespace edge::platform {
         auto _process_commands(android_app* app, int32_t cmd) -> void;
 
         android_app* android_app_{ nullptr };
-        PlatformContextInterface* platform_context_{ nullptr };
-        std::unique_ptr<InputLayer> input_layer_;
+        AndroidPlatformContext* platform_context_{ nullptr };
+        std::unique_ptr<AndroidPlatformInput> platform_input_;
         bool surface_ready_{ false };
     };
 

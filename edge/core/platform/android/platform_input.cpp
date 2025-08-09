@@ -1,12 +1,13 @@
 #include "platform.h"
 
-#include <cassert>
-#include <unordered_map>
-
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <paddleboat/paddleboat.h>
+#include <game-text-input/gametextinput.h>
 
 #include "jni_helper.h"
+
+#include <cassert>
+#include <unordered_map>
 
 namespace edge::platform {
     static std::array<Paddleboat_Controller_Data, PADDLEBOAT_MAX_CONTROLLERS> gamepad_last_state_{};
@@ -162,14 +163,14 @@ namespace edge::platform {
         return lut[key];
     }
 
-    auto InputLayer::construct(android_app* app, PlatformContextInterface* platform_context) -> std::unique_ptr<InputLayer> {
-        auto self = std::make_unique<InputLayer>();
-        self->android_app_ = app;
+    auto AndroidPlatformInput::construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformInput> {
+        auto self = std::make_unique<AndroidPlatformInput>();
+        self->android_app_ = platform_context->get_android_app();
         self->platform_context_ = platform_context;
         return self;
     }
 
-    auto InputLayer::initialize() -> bool {
+    auto AndroidPlatformInput::create() -> bool {
         jni_env_ = get_jni_env(android_app_);
 
         Paddleboat_ErrorCode result = Paddleboat_init(jni_env_, android_app_->activity->javaGameActivity);
@@ -184,29 +185,29 @@ namespace edge::platform {
         }
 
         Paddleboat_setMotionDataCallbackWithIntegratedFlags([](const int32_t controller_index, const Paddleboat_Motion_Data *motion_data, void *user_data) -> void {
-            auto* input_layer = static_cast<InputLayer*>(user_data);
+            auto* input_layer = static_cast<AndroidPlatformInput*>(user_data);
             input_layer->process_controller_motion_data(controller_index, motion_data);
         }, Paddleboat_getIntegratedMotionSensorFlags(), this);
 
         Paddleboat_setControllerStatusCallback([](const int32_t controller_index, const Paddleboat_ControllerStatus controller_status, void *user_data) -> void {
-            auto* input_layer = static_cast<InputLayer*>(user_data);
+            auto* input_layer = static_cast<AndroidPlatformInput*>(user_data);
             input_layer->process_controller_status_change(controller_index, controller_status);
-            }, this);
+        }, this);
 
         Paddleboat_setMouseStatusCallback([](const Paddleboat_MouseStatus mouse_status, void *user_data) {
-            auto* input_layer = static_cast<InputLayer*>(user_data);
+            auto* input_layer = static_cast<AndroidPlatformInput*>(user_data);
             input_layer->process_mouse_status_change(mouse_status);
-            }, this);
+        }, this);
 
         Paddleboat_setPhysicalKeyboardStatusCallback([](const bool physical_keyboard_status, void *user_data) {
-            auto* input_layer = static_cast<InputLayer*>(user_data);
+            auto* input_layer = static_cast<AndroidPlatformInput*>(user_data);
             input_layer->process_keyboard_status_change(physical_keyboard_status);
-            }, this);
+        }, this);
 
         return true;
     }
 
-    auto InputLayer::shutdown() -> void {
+    auto AndroidPlatformInput::destroy() -> void {
         if (Paddleboat_isInitialized()) {
 
             // Clear callbacks
@@ -219,7 +220,7 @@ namespace edge::platform {
         }
     }
 
-    auto InputLayer::update() -> void {
+    auto AndroidPlatformInput::update(float delta_time) -> void {
         if (!Paddleboat_isInitialized()) {
             return;
         }
@@ -291,7 +292,7 @@ namespace edge::platform {
 
                     // Update gamepad axis
                     if(controller_data.leftStick.stickX != last_state.leftStick.stickX ||
-                            controller_data.leftStick.stickY != last_state.leftStick.stickY) {
+                       controller_data.leftStick.stickY != last_state.leftStick.stickY) {
                         dispatcher.emit(events::GamepadAxisEvent{
                                 .gamepad_id = jid,
                                 .values = { controller_data.leftStick.stickX, controller_data.leftStick.stickY },
@@ -300,7 +301,7 @@ namespace edge::platform {
                     }
 
                     if(controller_data.rightStick.stickX != last_state.rightStick.stickX ||
-                            controller_data.rightStick.stickY != last_state.rightStick.stickY) {
+                       controller_data.rightStick.stickY != last_state.rightStick.stickY) {
                         dispatcher.emit(events::GamepadAxisEvent{
                                 .gamepad_id = jid,
                                 .values = { controller_data.rightStick.stickX, controller_data.rightStick.stickY },
@@ -330,7 +331,17 @@ namespace edge::platform {
         }
     }
 
-    auto InputLayer::process_motion_event(GameActivityMotionEvent* event) -> void {
+    auto AndroidPlatformInput::begin_text_input_capture(std::wstring_view initial_text) -> bool {
+        GameActivity_showSoftInput(android_app_->activity, 0);
+    }
+
+    auto AndroidPlatformInput::end_text_input_capture() -> void {
+        //GameActivity_setTextInputState(android_app_->activity, &mTextInputState.inner);
+        GameTextInput_set
+        GameActivity_hideSoftInput(android_app_->activity, 0);
+    }
+
+    auto AndroidPlatformInput::process_motion_event(GameActivityMotionEvent* event) -> void {
         if(Paddleboat_processGameActivityMotionInputEvent(event, sizeof(GameActivityMotionEvent)) != 0) {
             return;
         }
@@ -349,7 +360,7 @@ namespace edge::platform {
         }
     }
 
-    auto InputLayer::process_key_event(GameActivityKeyEvent* event) -> void {
+    auto AndroidPlatformInput::process_key_event(GameActivityKeyEvent* event) -> void {
         if(Paddleboat_processGameActivityKeyInputEvent(event, sizeof(GameActivityKeyEvent)) != 0) {
             return;
         }
@@ -364,7 +375,7 @@ namespace edge::platform {
         });
     }
 
-    auto InputLayer::on_app_start() -> void {
+    auto AndroidPlatformInput::on_app_start() -> void {
         if (!Paddleboat_isInitialized()) {
             return;
         }
@@ -372,7 +383,7 @@ namespace edge::platform {
         Paddleboat_onStart(jni_env_);
     }
 
-    auto InputLayer::on_app_stop() -> void {
+    auto AndroidPlatformInput::on_app_stop() -> void {
         if (!Paddleboat_isInitialized()) {
             return;
         }
@@ -380,7 +391,7 @@ namespace edge::platform {
         Paddleboat_onStop(jni_env_);
     }
 
-    auto InputLayer::process_controller_motion_data(const int32_t controller_index, const void* motion_data) -> void {
+    auto AndroidPlatformInput::process_controller_motion_data(const int32_t controller_index, const void* motion_data) -> void {
         if(!motion_data) {
             return;
         }
@@ -407,7 +418,7 @@ namespace edge::platform {
         }
     }
 
-    auto InputLayer::process_controller_status_change(const int32_t controller_index, const uint32_t controller_status) -> void {
+    auto AndroidPlatformInput::process_controller_status_change(const int32_t controller_index, const uint32_t controller_status) -> void {
         auto& dispatcher = platform_context_->get_event_dispatcher();
         bool is_just_connected = controller_status == PADDLEBOAT_CONTROLLER_JUST_CONNECTED;
         bool is_just_disconnected = controller_status == PADDLEBOAT_CONTROLLER_JUST_DISCONNECTED;
@@ -429,11 +440,11 @@ namespace edge::platform {
         }
     }
 
-    auto InputLayer::process_mouse_status_change(const uint32_t mouse_status) -> void {
+    auto AndroidPlatformInput::process_mouse_status_change(const uint32_t mouse_status) -> void {
 
     }
 
-    auto InputLayer::process_keyboard_status_change(bool mouse_status) -> void {
+    auto AndroidPlatformInput::process_keyboard_status_change(bool mouse_status) -> void {
 
     }
 }

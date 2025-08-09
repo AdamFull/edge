@@ -175,7 +175,8 @@ namespace edge {
 		eButtonDPadUp,
 		eButtonDPadRight,
 		eButtonDPadDown,
-		eButtonDPadLeft
+		eButtonDPadLeft,
+        eButtonCount
 	};
 
 	enum class GamepadAxisCode {
