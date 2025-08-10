@@ -8,6 +8,7 @@ typedef _JNIEnv JNIEnv;
 struct android_app;
 struct GameActivityMotionEvent;
 struct GameActivityKeyEvent;
+struct GameTextInputState;
 
 namespace edge::platform {
     class AndroidPlatformInput;
@@ -16,7 +17,7 @@ namespace edge::platform {
 
     class AndroidPlatformInput final : public PlatformInputInterface {
     public:
-        ~AndroidPlatformInput() override = default;
+        ~AndroidPlatformInput() override;
         static auto construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformInput>;
 
         auto create() -> bool override;
@@ -24,8 +25,10 @@ namespace edge::platform {
 
         auto update(float delta_time) -> void override;
 
-        auto begin_text_input_capture(std::wstring_view initial_text = {}) -> bool override;
+        auto begin_text_input_capture(std::string_view initial_text = {}) -> bool override;
         auto end_text_input_capture() -> void override;
+
+        auto set_gamepad_color(int32_t gamepad_id, uint32_t color) -> bool override;
 
         auto process_motion_event(GameActivityMotionEvent* event) -> void;
         auto process_key_event(GameActivityKeyEvent* event) -> void;
@@ -40,6 +43,9 @@ namespace edge::platform {
         android_app* android_app_{ nullptr };
         JNIEnv* jni_env_{ nullptr };
         AndroidPlatformContext* platform_context_{ nullptr };
+
+        GameTextInputState* input_state_{ nullptr };
+        std::string input_string_{};
     };
 
     class AndroidPlatformWindow final : public PlatformWindowInterface {
@@ -64,7 +70,6 @@ namespace edge::platform {
 
         android_app* android_app_{ nullptr };
         AndroidPlatformContext* platform_context_{ nullptr };
-        std::unique_ptr<AndroidPlatformInput> platform_input_;
         bool surface_ready_{ false };
     };
 

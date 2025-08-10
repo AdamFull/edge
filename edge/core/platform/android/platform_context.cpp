@@ -27,8 +27,13 @@ namespace edge::platform {
 
 	auto AndroidPlatformContext::initialize(const PlatformCreateInfo& create_info) -> bool {
         window_ = AndroidPlatformWindow::construct(this);
-        if(!window_->create(create_info.window_props)) {
+        if(!window_) {
             // TODO: LOG ERROR
+            return false;
+        }
+
+        input_ = AndroidPlatformInput::construct(this);
+        if(!input_->create()) {
             return false;
         }
 
@@ -41,10 +46,14 @@ namespace edge::platform {
             window_->poll_events();
         } while (!window_->is_visible());
 
+        input_->begin_text_input_capture("Herro Everynyan");
+
 		return true;
 	}
 
 	auto AndroidPlatformContext::shutdown() -> void {
+        input_->destroy();
+        window_->destroy();
 	}
 
     auto AndroidPlatformContext::get_platform_name() const -> std::string_view {

@@ -64,6 +64,9 @@ namespace edge::events {
 	struct GamepadConnectionEvent {
 		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		int32_t gamepad_id;
+        int32_t vendor_id;
+        int32_t product_id;
+        int32_t device_id;
 		bool connected;
 		const char* name;
 	};

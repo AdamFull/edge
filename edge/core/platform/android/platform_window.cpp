@@ -19,16 +19,10 @@ namespace edge::platform {
 
         // TODO: Setup filters here
 
-        platform_input_ = AndroidPlatformInput::construct(platform_context_);
-        if(!platform_input_->create()) {
-            return false;
-        }
-
         return true;
     }
 
     auto AndroidPlatformWindow::destroy() -> void {
-        platform_input_->destroy();
         GameActivity_finish(android_app_->activity);
         requested_close_ = true;
     }
@@ -53,7 +47,8 @@ namespace edge::platform {
             requested_close_ = true;
         }
 
-        platform_input_->update(0.16f);
+        auto& input = platform_context_->get_input();
+        input.update(0.16f);
     }
 
     auto AndroidPlatformWindow::get_dpi_factor() const noexcept -> float {
@@ -114,11 +109,13 @@ namespace edge::platform {
                 break;
             }
             case APP_CMD_START: {
-                platform_input_->on_app_start();
+                auto& input = static_cast<AndroidPlatformInput&>(platform_context_->get_input());
+                input.on_app_start();
                 break;
             }
             case APP_CMD_STOP: {
-                platform_input_->on_app_stop();
+                auto& input = static_cast<AndroidPlatformInput&>(platform_context_->get_input());
+                input.on_app_stop();
                 break;
             }
         }

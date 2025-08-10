@@ -11,6 +11,7 @@
 
 namespace edge::platform {
     static std::array<Paddleboat_Controller_Data, PADDLEBOAT_MAX_CONTROLLERS> gamepad_last_state_{};
+    static Paddleboat_Mouse_Data mouse_last_state_{};
 
     inline constexpr auto trnaslate_key_action(int action) -> KeyAction {
         if (action == AKEY_STATE_DOWN)
@@ -163,10 +164,39 @@ namespace edge::platform {
         return lut[key];
     }
 
+    inline auto translate_mouse_key_code(int32_t key) -> MouseKeyCode {
+        static std::array<MouseKeyCode, 8> lut{
+                MouseKeyCode::eButton1,
+                MouseKeyCode::eButton2,
+                MouseKeyCode::eButton3,
+                MouseKeyCode::eButton4,
+                MouseKeyCode::eButton5,
+                MouseKeyCode::eButton6,
+                MouseKeyCode::eButton7,
+                MouseKeyCode::eButton8,
+        };
+
+        return lut[key];
+    }
+
+    AndroidPlatformInput::~AndroidPlatformInput() {
+        if(input_state_) {
+            delete input_state_;
+            input_state_ = nullptr;
+        }
+    }
+
     auto AndroidPlatformInput::construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformInput> {
         auto self = std::make_unique<AndroidPlatformInput>();
         self->android_app_ = platform_context->get_android_app();
         self->platform_context_ = platform_context;
+        self->input_state_ = new GameTextInputState;
+        self->input_state_->text_UTF8 = self->input_string_.c_str();
+        self->input_state_->text_length = static_cast<int32_t>(self->input_string_.length());
+        self->input_state_->selection.start = 0;
+        self->input_state_->selection.end = self->input_state_->text_length;
+        self->input_state_->composingRegion.start = -1;
+        self->input_state_->composingRegion.end = -1;
         return self;
     }
 
@@ -227,9 +257,6 @@ namespace edge::platform {
 
         auto& dispatcher = platform_context_->get_event_dispatcher();
 
-        jni_env_ = get_jni_env(android_app_);
-        Paddleboat_update(jni_env_);
-
         // Process input
         auto input_buf = android_app_swap_input_buffers(android_app_);
         if(!input_buf)
@@ -253,6 +280,71 @@ namespace edge::platform {
                 process_key_event(event);
             }
             android_app_clear_key_events(input_buf);
+        }
+
+        GameActivity_getTextInputState(android_app_->activity, [](void *context, const GameTextInputState *state) -> void {
+            auto self = static_cast<AndroidPlatformInput*>(context);
+            *self->input_state_ = *state;
+
+            auto& dispatcher = self->platform_context_->get_event_dispatcher();
+            dispatcher.emit(events::CharacterInputEvent{
+                    .charcode = static_cast<uint32_t>(*state->text_UTF8),
+                    .window_id = ~0ull
+            });
+        }, this);
+
+        jni_env_ = get_jni_env(android_app_);
+        Paddleboat_update(jni_env_);
+
+        // Process mouse input
+        Paddleboat_Mouse_Data mouse_data;
+        if(Paddleboat_getMouseData(&mouse_data) == PADDLEBOAT_NO_ERROR) {
+            // Process mouse buttons
+            for(int32_t button_idx = 0; button_idx < 8; ++button_idx) {
+                auto mouse_button = static_cast<Paddleboat_Mouse_Buttons>(1 << button_idx);
+
+                bool curr = (mouse_data.buttonsDown & mouse_button) == mouse_button;
+                bool prev = (mouse_last_state_.buttonsDown & mouse_button) == mouse_button;
+
+                KeyAction key_action = KeyAction::eUnknown;
+                if (curr && !prev) {
+                    key_action = KeyAction::ePress;
+                }
+                else if (curr && prev) {
+                    key_action = KeyAction::eHold;
+                }
+                else if (!curr && prev) {
+                    key_action = KeyAction::eRelease;
+                }
+
+                if (key_action != KeyAction::eUnknown) {
+                    dispatcher.emit(events::MouseKeyEvent{
+                            .key_code = translate_mouse_key_code(button_idx),
+                            .key_action = key_action,
+                            .window_id = ~0ull
+                    });
+                }
+            }
+
+            // Process mouse motion
+            if(mouse_data.mouseX != mouse_last_state_.mouseX || mouse_data.mouseY != mouse_last_state_.mouseY) {
+                dispatcher.emit(events::MousePositionEvent{
+                        .x = mouse_data.mouseX,
+                        .y = mouse_data.mouseY,
+                        .window_id = ~0ull
+                });
+            }
+
+            // Process mouse scroll
+            if(mouse_data.mouseScrollDeltaH != mouse_last_state_.mouseScrollDeltaH || mouse_data.mouseScrollDeltaV != mouse_last_state_.mouseScrollDeltaV) {
+                dispatcher.emit(events::MouseScrollEvent{
+                        .offset_x = static_cast<double>(mouse_data.mouseScrollDeltaH),
+                        .offset_y = static_cast<double>(mouse_data.mouseScrollDeltaV),
+                        .window_id = ~0ull
+                });
+            }
+
+            mouse_last_state_ = mouse_data;
         }
 
         // Update all controllers available
@@ -285,7 +377,7 @@ namespace edge::platform {
                             dispatcher.emit(events::GamepadButtonEvent{
                                     .gamepad_id = jid,
                                     .key_code = translate_gamepad_key_code(button_idx),
-                                    .key_action = key_action
+                                    .key_action = key_action,
                             });
                         }
                     }
@@ -331,14 +423,24 @@ namespace edge::platform {
         }
     }
 
-    auto AndroidPlatformInput::begin_text_input_capture(std::wstring_view initial_text) -> bool {
+    auto AndroidPlatformInput::begin_text_input_capture(std::string_view initial_text) -> bool {
+        input_state_->text_UTF8 = initial_text.data();
+        input_state_->text_length = static_cast<int32_t>(initial_text.length());
+        input_state_->selection.start = 0;
+        input_state_->selection.end = input_state_->text_length;
+        input_state_->composingRegion.start = -1;
+        input_state_->composingRegion.end = -1;
+
+        GameActivity_setTextInputState(android_app_->activity, input_state_);
         GameActivity_showSoftInput(android_app_->activity, 0);
     }
 
     auto AndroidPlatformInput::end_text_input_capture() -> void {
-        //GameActivity_setTextInputState(android_app_->activity, &mTextInputState.inner);
-        GameTextInput_set
         GameActivity_hideSoftInput(android_app_->activity, 0);
+    }
+
+    auto AndroidPlatformInput::set_gamepad_color(int32_t gamepad_id, uint32_t color) -> bool {
+        return false;
     }
 
     auto AndroidPlatformInput::process_motion_event(GameActivityMotionEvent* event) -> void {
@@ -347,12 +449,7 @@ namespace edge::platform {
         }
 
         // Process other events
-        if (event->source == AINPUT_SOURCE_MOUSE) {
-            // TODO: Not Implemented
-            //float x = GameActivityPointerAxes_getX(&event->pointers[0]);
-            //float y = GameActivityPointerAxes_getY(&event->pointers[0]);
-        }
-        else if (event->source == AINPUT_SOURCE_TOUCHSCREEN) {
+        if (event->source == AINPUT_SOURCE_TOUCHSCREEN) {
             // TODO: Not Implemented
             for(int32_t i = 0; i < event->pointerCount; ++i) {
 
@@ -424,27 +521,31 @@ namespace edge::platform {
         bool is_just_disconnected = controller_status == PADDLEBOAT_CONTROLLER_JUST_DISCONNECTED;
         if(is_just_connected || is_just_disconnected) {
             char controller_name[256];
-            Paddleboat_ErrorCode result = Paddleboat_getControllerName(controller_index, sizeof(controller_name), controller_name);
-            if (result == PADDLEBOAT_NO_ERROR) {
-                Paddleboat_Controller_Info controller_info;
-                if (Paddleboat_getControllerInfo(controller_index, &controller_info) == PADDLEBOAT_NO_ERROR) {
-                    // TODO: Can be used for provide additional info
-                }
-
-                dispatcher.emit(events::GamepadConnectionEvent{
-                        .gamepad_id = controller_index,
-                        .connected = is_just_connected,
-                        .name = controller_name
-                });
+            if(Paddleboat_getControllerName(controller_index, sizeof(controller_name), controller_name) != PADDLEBOAT_NO_ERROR) {
+                return;
             }
+
+            Paddleboat_Controller_Info controller_info;
+            if (Paddleboat_getControllerInfo(controller_index, &controller_info) != PADDLEBOAT_NO_ERROR) {
+                return;
+            }
+
+            dispatcher.emit(events::GamepadConnectionEvent{
+                .gamepad_id = controller_index,
+                .vendor_id = controller_info.vendorId,
+                .product_id = controller_info.productId,
+                .device_id = controller_info.deviceId,
+                .connected = is_just_connected,
+                .name = controller_name
+            });
         }
     }
 
     auto AndroidPlatformInput::process_mouse_status_change(const uint32_t mouse_status) -> void {
-
+        // TODO: Implement just state change
     }
 
     auto AndroidPlatformInput::process_keyboard_status_change(bool mouse_status) -> void {
-
+        // TODO: Implement just state change
     }
 }
