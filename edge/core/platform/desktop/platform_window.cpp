@@ -1,5 +1,7 @@
 #include "platform.h"
 
+#include <spdlog/spdlog.h>
+
 #include <unordered_map>
 
 #include <GLFW/glfw3.h>
@@ -197,7 +199,7 @@ namespace edge::platform {
 	}
 
 	auto glfw_error_callback(int error, const char* description) -> void {
-		//EDGE_LOGE("[GLFW Window] (code {}): {}", error, description);
+		spdlog::error("[GLFW Window]: (code {}): {}", error, description);
 	}
 
 	auto DesktopPlatformWindow::window_close_callback(GLFWwindow* window) -> void {
@@ -212,6 +214,8 @@ namespace edge::platform {
 
 	auto DesktopPlatformWindow::window_size_callback(GLFWwindow* window, int width, int height) -> void {
 		if (platform_context_) {
+			spdlog::debug("[Desktop Window]: Window[{}] size changed[{}, {}]", (uint64_t)window, width, height);
+
 			auto& dispatcher = platform_context_->get_event_dispatcher();
 			dispatcher.emit(events::WindowSizeChangedEvent{ 
 				.width = width, 
@@ -223,6 +227,8 @@ namespace edge::platform {
 
 	auto DesktopPlatformWindow::window_focus_callback(GLFWwindow* window, int focused) -> void {
 		if (platform_context_) {
+			spdlog::debug("[Desktop Window]: Window[{}] {}.", (uint64_t)window, focused == 1 ? "focused" : "unfocused");
+
 			auto& dispatcher = platform_context_->get_event_dispatcher();
 			dispatcher.emit(events::WindowFocusChangedEvent{ 
 				.focused = focused == 1, 
@@ -277,6 +283,8 @@ namespace edge::platform {
 
 	void DesktopPlatformWindow::character_input_callback(GLFWwindow* window, uint32_t codepoint) {
 		if (platform_context_) {
+			spdlog::debug("[Desktop Window]: Window[{}] character input: {}", (uint64_t)window, codepoint);
+
 			auto& dispatcher = platform_context_->get_event_dispatcher();
 			dispatcher.emit(events::CharacterInputEvent{
 				.charcode = codepoint,
@@ -287,6 +295,8 @@ namespace edge::platform {
 
 	auto DesktopPlatformWindow::gamepad_connected_callback(int jid, int event) -> void {
 		if (platform_context_) {
+			spdlog::debug("[Desktop Window]: Gamepad[{}] {}.", jid, event == GLFW_CONNECTED ? "connected" : "disconnected");
+
 			auto& dispatcher = platform_context_->get_event_dispatcher();
 			dispatcher.emit(events::GamepadConnectionEvent{
 				.gamepad_id = jid,
@@ -305,7 +315,7 @@ namespace edge::platform {
 		// NOTE: In case where we can have multiple windows, we need to init glfw context only one tile
 		if (g_glfw_context_init_counter <= 0) {
 			if (!glfwInit()) {
-				// TODO: add error logging
+				spdlog::error("[Desktop Window]: Failed to init glfw context.");
 				return;
 			}
 
@@ -317,6 +327,7 @@ namespace edge::platform {
 
 	DesktopPlatformWindow::~DesktopPlatformWindow() {
 		if (--g_glfw_context_init_counter <= 0) {
+			spdlog::debug("[Desktop Window]: GLFW context terminated.");
 			glfwTerminate();
 		}
 	}
@@ -350,7 +361,7 @@ namespace edge::platform {
 		}
 
 		case window::Mode::eFullscreenStretch: {
-			//EDGE_LOGE("[GLFW Window] Cannot support stretch mode on this platform.");
+			spdlog::error("[Desktop Window]: Cannot support stretch mode on this platform.");
 			break;
 		}
 
@@ -360,7 +371,7 @@ namespace edge::platform {
 		}
 
 		if (!handle_) {
-			//EDGE_LOGE("[GLFW Window] Couldn't create glfw window.");
+			spdlog::error("[Desktop Window]: Couldn't create glfw window.");
 			return false;
 		}
 
