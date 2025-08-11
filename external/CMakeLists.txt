@@ -3,7 +3,10 @@ project(edge_externals LANGUAGES C CXX)
 include(FetchContent)
 
 # Fetch spdlog
-set(SPDLOG_BUILD_SHARED ON CACHE BOOL "Build shared library")
+if(NOT WIN32)
+    set(SPDLOG_BUILD_SHARED ON CACHE BOOL "Build shared library")
+endif()
+
 set(SPDLOG_USE_STD_FORMAT ON CACHE BOOL "Use std::format instead of fmt")
 
 FetchContent_Declare(
