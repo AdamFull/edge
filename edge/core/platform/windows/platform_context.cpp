@@ -60,8 +60,6 @@ namespace edge::platform {
 			return false;
 		}
 
-		spdlog::info("Herro everynyan");
-
 		return true;
 	}
 
