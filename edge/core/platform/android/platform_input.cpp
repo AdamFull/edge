@@ -431,7 +431,7 @@ namespace edge::platform {
         input_state_->composingRegion.start = -1;
         input_state_->composingRegion.end = -1;
 
-        //GameActivity_setTextInputState(android_app_->activity, input_state_);
+        GameActivity_setTextInputState(android_app_->activity, input_state_);
         GameActivity_showSoftInput(android_app_->activity, 0);
     }
 

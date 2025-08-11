@@ -36,8 +36,6 @@ namespace edge::platform {
             return false;
         }
 
-        input_->begin_text_input_capture("Horro everynyan!");
-
 		return true;
 	}
 
