@@ -57,7 +57,7 @@ namespace edge::platform {
         auto destroy() -> void override;
         [[maybe_unused]] auto show() -> void override {}
         [[maybe_unused]] auto hide() -> void override {}
-        [[maybe_unused]] auto is_visible() const -> bool override { return surface_ready_; }
+        [[nodiscard]] auto is_visible() const -> bool override { return surface_ready_; }
         auto poll_events() -> void override;
 
         auto get_dpi_factor() const noexcept -> float override;
@@ -79,7 +79,6 @@ namespace edge::platform {
 	public:
 		static auto construct(android_app* app) -> std::unique_ptr<AndroidPlatformContext>;
 
-        auto initialize(const PlatformCreateInfo& create_info) -> bool override;
         auto shutdown() -> void override;
         [[nodiscard]] auto get_platform_name() const->std::string_view override;
 
@@ -89,7 +88,6 @@ namespace edge::platform {
 		auto _construct(android_app* app) -> bool;
 
 		android_app* android_app_{ nullptr };
-        std::unique_ptr<Window> window_;
 	};
 
 	using PlatformContext = AndroidPlatformContext;

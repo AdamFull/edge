@@ -22,34 +22,10 @@ namespace edge::platform {
 		-> std::unique_ptr<AndroidPlatformContext> {
         auto ctx = std::make_unique<AndroidPlatformContext>();
         ctx->_construct(app);
+        ctx->window_ = AndroidPlatformWindow::construct(ctx.get());
+        ctx->input_ = AndroidPlatformInput::construct(ctx.get());
         return ctx;
     }
-
-	auto AndroidPlatformContext::initialize(const PlatformCreateInfo& create_info) -> bool {
-        window_ = AndroidPlatformWindow::construct(this);
-        if(!window_) {
-            // TODO: LOG ERROR
-            return false;
-        }
-
-        input_ = AndroidPlatformInput::construct(this);
-        if(!input_->create()) {
-            return false;
-        }
-
-        auto code = PlatformContextInterface::initialize(create_info);
-        if (code != 0) {
-            return code;
-        }
-
-        do {
-            window_->poll_events();
-        } while (!window_->is_visible());
-
-        input_->begin_text_input_capture("Herro Everynyan");
-
-		return true;
-	}
 
 	auto AndroidPlatformContext::shutdown() -> void {
         input_->destroy();

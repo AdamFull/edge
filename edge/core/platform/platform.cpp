@@ -9,24 +9,34 @@ namespace edge::platform {
 	}
 
 	auto PlatformContextInterface::initialize(const PlatformCreateInfo& create_info) -> bool {
+        event_dispatcher_ = std::make_unique<events::Dispatcher>();
+
+        any_window_event_listener_ = event_dispatcher_->add_listener<events::EventTag::eWindow>(
+                [](const events::Dispatcher::event_variant_t& e, void* user_ptr) {
+                    auto* self = static_cast<PlatformContextInterface*>(user_ptr);
+                    self->on_any_window_event(e);
+                }, this);
+
+        frame_handler_.set_limit(60);
+        frame_handler_.setup_callback([](float delta_time, void* user_data) -> int32_t {
+            auto* self = static_cast<PlatformContextInterface*>(user_data);
+            return self->main_loop_tick(delta_time);
+        }, this);
+
 		if (!window_->create(create_info.window_props)) {
 			window_.reset();
 			return false;
 		}
 
-		event_dispatcher_ = std::make_unique<events::Dispatcher>();
+        do {
+            window_->poll_events();
+        } while (!window_->is_visible());
 
-		any_window_event_listener_ = event_dispatcher_->add_listener<events::EventTag::eWindow>(
-			[](const events::Dispatcher::event_variant_t& e, void* user_ptr) {
-				auto* self = static_cast<PlatformContextInterface*>(user_ptr);
-				self->on_any_window_event(e);
-			}, this);
+        if(!input_->create()) {
+            return false;
+        }
 
-		frame_handler_.set_limit(60);
-		frame_handler_.setup_callback([](float delta_time, void* user_data) -> int32_t {
-			auto* self = static_cast<PlatformContextInterface*>(user_data);
-			return self->main_loop_tick(delta_time);
-			}, this);
+        input_->begin_text_input_capture("Horro everynyan!");
 
 		return true;
 	}

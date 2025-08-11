@@ -147,7 +147,7 @@ namespace edge::platform {
 	public:
 		virtual ~PlatformContextInterface();
 
-		virtual auto initialize(const PlatformCreateInfo& create_info) -> bool;
+		auto initialize(const PlatformCreateInfo& create_info) -> bool;
 		virtual auto shutdown() -> void = 0;
 
 		auto terminate(int32_t code) -> void;
