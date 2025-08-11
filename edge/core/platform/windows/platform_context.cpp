@@ -23,7 +23,6 @@ namespace edge::platform {
 			// No parent console, allocate a new one for this process
 			if (!AllocConsole()) {
 				return false;
-				//EDGE_LOGE("[Windows Runtime Context] AllocConsole error");
 			}
 		}
 
@@ -32,25 +31,36 @@ namespace edge::platform {
 		freopen_s(&fp, "conout$", "w", stdout);
 		freopen_s(&fp, "conout$", "w", stderr);
 
+		std::ios::sync_with_stdio(true);
+
+#ifdef NDEBUG
+		static constexpr auto log_level{ spdlog::level::info };
+#else
+		static constexpr auto log_level{ spdlog::level::trace };
+#endif
+
 		// Init logger
 		spdlog::sinks_init_list sink_list{
 			std::make_shared<spdlog::sinks::basic_file_sink_mt>("log.log", true),
 			std::make_shared<spdlog::sinks::stdout_color_sink_mt>()
 		};
 
+		for (auto& sink : sink_list) {
+			sink->set_level(log_level);
+		}
+
 		auto logger = std::make_shared<spdlog::logger>("Logger", sink_list.begin(), sink_list.end());
-#ifdef NDEBUG
-		logger->set_level(spdlog::level::info);
-#else
-		logger->set_level(spdlog::level::trace);
-#endif
+		logger->set_level(log_level);
 		logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
 		spdlog::set_default_logger(logger);
 
 		window_ = DesktopPlatformWindow::construct(this);
 		if (!window_) {
+			spdlog::error("[Windows Runtime Context]: Window construction failed");
 			return false;
 		}
+
+		spdlog::info("Herro everynyan");
 
 		return true;
 	}
