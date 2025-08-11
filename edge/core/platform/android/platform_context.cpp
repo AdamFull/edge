@@ -1,5 +1,9 @@
 #include "../entry_point.h"
 
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/android_sink.h>
+
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 
 #include <cassert>
@@ -24,6 +28,16 @@ namespace edge::platform {
         ctx->_construct(app);
         ctx->window_ = AndroidPlatformWindow::construct(ctx.get());
         ctx->input_ = AndroidPlatformInput::construct(ctx.get());
+
+        auto logger = std::make_shared<spdlog::logger>("Logger", std::make_shared<spdlog::sinks::android_sink_mt>("Logger"));
+#ifdef NDEBUG
+        logger->set_level(spdlog::level::info);
+#else
+        logger->set_level(spdlog::level::trace);
+#endif
+        logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+        spdlog::set_default_logger(logger);
+
         return ctx;
     }
 

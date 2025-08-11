@@ -5,6 +5,22 @@
 struct GLFWwindow;
 
 namespace edge::platform {
+	class DesktopPlatformInput final : public PlatformInputInterface {
+	public:
+		~DesktopPlatformInput() override {}
+		static auto construct() -> std::unique_ptr<DesktopPlatformInput> { return std::make_unique<DesktopPlatformInput>(); }
+
+		auto create() -> bool override { return true; }
+		auto destroy() -> void override {}
+
+		auto update(float delta_time) -> void override {}
+
+		auto begin_text_input_capture(std::string_view initial_text = {}) -> bool override { return true; }
+		auto end_text_input_capture() -> void override {}
+
+		auto set_gamepad_color(int32_t gamepad_id, uint32_t color) -> bool override { return true; }
+	};
+
 	class DesktopPlatformWindow final : public PlatformWindowInterface {
 	public:
 		DesktopPlatformWindow();

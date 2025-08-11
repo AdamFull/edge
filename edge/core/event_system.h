@@ -288,7 +288,7 @@ namespace edge {
         template<Event<FlagsType> E>
         static constexpr auto get_event_index() -> size_t {
             size_t index = 0;
-            ((std::same_as<E, SupportedEvents> ? true : (++index, false)) || ...);
+            [[maybe_unused]] auto result = ((std::same_as<E, SupportedEvents> || (++index, false)) || ...);
             return index;
         }
 

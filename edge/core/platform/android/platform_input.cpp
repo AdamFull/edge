@@ -1,5 +1,7 @@
 #include "platform.h"
 
+#include <spdlog/spdlog.h>
+
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <paddleboat/paddleboat.h>
 #include <game-text-input/gametextinput.h>
@@ -205,12 +207,12 @@ namespace edge::platform {
 
         Paddleboat_ErrorCode result = Paddleboat_init(jni_env_, android_app_->activity->javaGameActivity);
         if (result != PADDLEBOAT_NO_ERROR) {
-            // LOGE("Failed to initialize Paddleboat: %d", result);
+            spdlog::error("Failed to initialize Paddleboat: {}", (int32_t)result);
             return false;
         }
 
         if (!Paddleboat_isInitialized()) {
-            // LOGE("Paddleboat initialization verification failed");
+            spdlog::error("Paddleboat initialization verification failed");
             return false;
         }
 
@@ -285,6 +287,10 @@ namespace edge::platform {
         GameActivity_getTextInputState(android_app_->activity, [](void *context, const GameTextInputState *state) -> void {
             auto self = static_cast<AndroidPlatformInput*>(context);
             *self->input_state_ = *state;
+
+            if(!state->text_UTF8) {
+                return;
+            }
 
             auto& dispatcher = self->platform_context_->get_event_dispatcher();
             dispatcher.emit(events::CharacterInputEvent{
@@ -433,6 +439,8 @@ namespace edge::platform {
 
         GameActivity_setTextInputState(android_app_->activity, input_state_);
         GameActivity_showSoftInput(android_app_->activity, 0);
+
+        return true;
     }
 
     auto AndroidPlatformInput::end_text_input_capture() -> void {
@@ -530,6 +538,20 @@ namespace edge::platform {
                 return;
             }
 
+            spdlog::debug("[Android Input]: Connected gamepad, name: \"{}\", id: {}, vendor: {}, product: {}, device: {}.",
+                          controller_name, controller_index, controller_info.vendorId,
+                          controller_info.productId, controller_info.deviceId);
+            spdlog::debug("[Android Input]: Feature support:\naccel: {}; gyro: {}; player light: {}; rgb light: {}; battery info: {}; vibration: {}; dual motor vibration: {}; touchpad: {}; virtual mouse: {};",
+                          (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_ACCELEROMETER) == PADDLEBOAT_CONTROLLER_FLAG_ACCELEROMETER,
+                          (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_GYROSCOPE) == PADDLEBOAT_CONTROLLER_FLAG_GYROSCOPE,
+                          (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_LIGHT_PLAYER) == PADDLEBOAT_CONTROLLER_FLAG_LIGHT_PLAYER,
+                          (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_LIGHT_RGB) == PADDLEBOAT_CONTROLLER_FLAG_LIGHT_RGB,
+                          (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_BATTERY) == PADDLEBOAT_CONTROLLER_FLAG_BATTERY,
+                          (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_VIBRATION) == PADDLEBOAT_CONTROLLER_FLAG_VIBRATION,
+                          (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_VIBRATION_DUAL_MOTOR) == PADDLEBOAT_CONTROLLER_FLAG_VIBRATION_DUAL_MOTOR,
+                          (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_TOUCHPAD) == PADDLEBOAT_CONTROLLER_FLAG_TOUCHPAD,
+                          (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_VIRTUAL_MOUSE) == PADDLEBOAT_CONTROLLER_FLAG_VIRTUAL_MOUSE);
+
             dispatcher.emit(events::GamepadConnectionEvent{
                 .gamepad_id = controller_index,
                 .vendor_id = controller_info.vendorId,
@@ -542,10 +564,16 @@ namespace edge::platform {
     }
 
     auto AndroidPlatformInput::process_mouse_status_change(const uint32_t mouse_status) -> void {
-        // TODO: Implement just state change
+        auto status = static_cast<Paddleboat_MouseStatus>(mouse_status);
+        if(status == PADDLEBOAT_MOUSE_NONE) {
+            spdlog::debug("[Android Input] Mouse connected.");
+        }
+        else {
+            spdlog::debug("[Android Input] {} mouse connected.", status == PADDLEBOAT_MOUSE_CONTROLLER_EMULATED ? "Virtual" : "Physical");
+        }
     }
 
-    auto AndroidPlatformInput::process_keyboard_status_change(bool mouse_status) -> void {
-        // TODO: Implement just state change
+    auto AndroidPlatformInput::process_keyboard_status_change(bool keyboard_status) -> void {
+        spdlog::debug("[Android Input] Physical keyboard {}connected.", keyboard_status ? "" : "dis");
     }
 }

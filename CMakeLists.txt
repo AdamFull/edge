@@ -162,6 +162,12 @@ else()
     add_executable(${PROJECT_NAME} ${APP_SOURCES})
 endif()
 
+add_subdirectory("external")
 add_subdirectory("edge/core")
+
+target_link_libraries(${PROJECT_NAME} 
+        PUBLIC
+        edge_externals
+    )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

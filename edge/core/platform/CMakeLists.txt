@@ -53,11 +53,12 @@ if(WIN32 OR (UNIX AND NOT ANDROID AND NOT IOS))
     )
     FetchContent_MakeAvailable(glfw)
     
-    target_link_libraries(${PROJECT_NAME} glfw)
+    target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
     target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
     
     # Desktop window implementation
     target_sources(${PROJECT_NAME} PRIVATE 
+        "desktop/platform_input.cpp"
         "desktop/platform_window.cpp"
     )
 endif()

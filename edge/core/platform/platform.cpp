@@ -1,6 +1,6 @@
 #include "platform.h"
 
-#include <print>
+#include <spdlog/spdlog.h>
 #include <thread>
 
 namespace edge::platform {
@@ -69,18 +69,18 @@ namespace edge::platform {
 	}
 
 	auto PlatformContextInterface::main_loop_tick(float delta_time) -> int32_t {
-		std::println("Frame time: {:.2f}", delta_time * 1000.f);
+		spdlog::trace("[Android Platform] Frame time: {:.2f}", delta_time * 1000.f);
 		auto new_windows_name = std::format("{} [{} fps; {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time());
 		window_->set_title(new_windows_name);
 
 		window_->poll_events();
 
 		if (window_focused_) {
-			accumulated_delta_time_ += delta_time;
-			while (accumulated_delta_time_ > fixed_delta_time_) {
-				application_->fixed_update(fixed_delta_time_);
-				accumulated_delta_time_ -= fixed_delta_time_;
-			}
+			//accumulated_delta_time_ += delta_time;
+			//while (accumulated_delta_time_ > fixed_delta_time_) {
+			//	application_->fixed_update(fixed_delta_time_);
+			//	accumulated_delta_time_ -= fixed_delta_time_;
+			//}
 		
 			application_->update(delta_time);
 		}

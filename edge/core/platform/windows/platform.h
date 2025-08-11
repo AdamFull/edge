@@ -10,7 +10,6 @@ namespace edge::platform {
 		~WindowsPlatformContext() override = default;
 		static auto construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) -> std::unique_ptr<WindowsPlatformContext>;
 
-		auto initialize(const PlatformCreateInfo& create_info) -> bool override;
 		auto shutdown() -> void override;
 		auto get_platform_name() const->std::string_view override;
 	private:

@@ -3,7 +3,7 @@
 #include "edge/core/event_system.h"
 #include "edge/core/foundation/enum_flags.h"
 
-#include <print>
+#include <spdlog/spdlog.h>
 
 class MyApplication : public edge::ApplicationInterface {
 public:
@@ -35,13 +35,13 @@ auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
 		return -1;
 	}
 
-	std::println("{}", platform_context.get_platform_name());
+	spdlog::info("{}", platform_context.get_platform_name());
 
 	auto& window = platform_context.get_window();
 	window.show();
 
-	std::println("Window created: {}x{}", window.get_width(), window.get_height());
-	std::println("Window title: {}", window.get_title());
+    spdlog::info("Window created: {}x{}", window.get_width(), window.get_height());
+    spdlog::info("Window title: {}", window.get_title());
 
 	if (!platform_context.setup_application([](std::unique_ptr<edge::ApplicationInterface>& out_app) {
 		out_app = std::make_unique<MyApplication>();

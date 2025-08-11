@@ -1,5 +1,9 @@
 #include "../entry_point.h"
 
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
+
 namespace edge::platform {
 	auto WindowsPlatformContext::construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 		-> std::unique_ptr<WindowsPlatformContext> {
@@ -13,10 +17,7 @@ namespace edge::platform {
 		hPrevInstance_ = hPrevInstance;
 		lpCmdLine_ = lpCmdLine;
 		nCmdShow_ = nCmdShow;
-		return true;
-	}
 
-	auto WindowsPlatformContext::initialize(const PlatformCreateInfo& create_info) -> bool {
 		// Attempt to attach to the parent process console if it exists
 		if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
 			// No parent console, allocate a new one for this process
@@ -31,12 +32,27 @@ namespace edge::platform {
 		freopen_s(&fp, "conout$", "w", stdout);
 		freopen_s(&fp, "conout$", "w", stderr);
 
+		// Init logger
+		spdlog::sinks_init_list sink_list{
+			std::make_shared<spdlog::sinks::basic_file_sink_mt>("log.log", true),
+			std::make_shared<spdlog::sinks::stdout_color_sink_mt>()
+		};
+
+		auto logger = std::make_shared<spdlog::logger>("Logger", sink_list.begin(), sink_list.end());
+#ifdef NDEBUG
+		logger->set_level(spdlog::level::info);
+#else
+		logger->set_level(spdlog::level::trace);
+#endif
+		logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+		spdlog::set_default_logger(logger);
+
 		window_ = DesktopPlatformWindow::construct(this);
 		if (!window_) {
 			return false;
 		}
 
-		return PlatformContextInterface::initialize(create_info);
+		return true;
 	}
 
 	auto WindowsPlatformContext::get_platform_name() const -> std::string_view {
