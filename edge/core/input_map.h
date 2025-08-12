@@ -180,12 +180,13 @@ namespace edge {
 	};
 
 	enum class GamepadAxisCode {
-		eUnknown,
-		eLeftStick,
+		eUnknown = -1,
+		eLeftStick = 0,
 		eRightStick,
 		eLeftTrigger,
 		eRightTrigger,
 		eAccel,
-		eGyro
+		eGyro,
+		eCount
 	};
 }
