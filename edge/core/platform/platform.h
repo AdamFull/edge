@@ -63,7 +63,6 @@ namespace edge::platform {
         virtual auto end_text_input_capture() -> void = 0;
 
         virtual auto set_gamepad_color(int32_t gamepad_id, uint32_t color) -> bool = 0;
-
     };
 
 	class PlatformWindowInterface {
