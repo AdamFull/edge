@@ -12,9 +12,6 @@
 #include <unordered_map>
 
 namespace edge::platform {
-    static std::array<Paddleboat_Controller_Data, PADDLEBOAT_MAX_CONTROLLERS> gamepad_last_state_{};
-    static Paddleboat_Mouse_Data mouse_last_state_{};
-
     inline constexpr auto trnaslate_key_action(int action) -> KeyAction {
         if (action == AKEY_STATE_DOWN)
             return KeyAction::ePress;
@@ -308,49 +305,26 @@ namespace edge::platform {
             // Process mouse buttons
             for(int32_t button_idx = 0; button_idx < 8; ++button_idx) {
                 auto mouse_button = static_cast<Paddleboat_Mouse_Buttons>(1 << button_idx);
-
-                bool curr = (mouse_data.buttonsDown & mouse_button) == mouse_button;
-                bool prev = (mouse_last_state_.buttonsDown & mouse_button) == mouse_button;
-
-                KeyAction key_action = KeyAction::eUnknown;
-                if (curr && !prev) {
-                    key_action = KeyAction::ePress;
-                }
-                else if (curr && prev) {
-                    key_action = KeyAction::eHold;
-                }
-                else if (!curr && prev) {
-                    key_action = KeyAction::eRelease;
-                }
-
-                if (key_action != KeyAction::eUnknown) {
-                    dispatcher.emit(events::MouseKeyEvent{
-                            .key_code = translate_mouse_key_code(button_idx),
-                            .key_action = key_action,
-                            .window_id = ~0ull
-                    });
-                }
+                dispatcher.emit(events::MouseKeyEvent{
+                        .key_code = translate_mouse_key_code(button_idx),
+                        .state = (mouse_data.buttonsDown & mouse_button) == mouse_button,
+                        .window_id = ~0ull
+                });
             }
 
             // Process mouse motion
-            if(mouse_data.mouseX != mouse_last_state_.mouseX || mouse_data.mouseY != mouse_last_state_.mouseY) {
-                dispatcher.emit(events::MousePositionEvent{
-                        .x = mouse_data.mouseX,
-                        .y = mouse_data.mouseY,
-                        .window_id = ~0ull
-                });
-            }
+            dispatcher.emit(events::MousePositionEvent{
+                .x = mouse_data.mouseX,
+                .y = mouse_data.mouseY,
+                .window_id = ~0ull
+            });
 
             // Process mouse scroll
-            if(mouse_data.mouseScrollDeltaH != mouse_last_state_.mouseScrollDeltaH || mouse_data.mouseScrollDeltaV != mouse_last_state_.mouseScrollDeltaV) {
-                dispatcher.emit(events::MouseScrollEvent{
-                        .offset_x = static_cast<double>(mouse_data.mouseScrollDeltaH),
-                        .offset_y = static_cast<double>(mouse_data.mouseScrollDeltaV),
-                        .window_id = ~0ull
-                });
-            }
-
-            mouse_last_state_ = mouse_data;
+            dispatcher.emit(events::MouseScrollEvent{
+                .offset_x = static_cast<double>(mouse_data.mouseScrollDeltaH),
+                .offset_y = static_cast<double>(mouse_data.mouseScrollDeltaV),
+                .window_id = ~0ull
+            });
         }
 
         // Update all controllers available
@@ -359,71 +333,40 @@ namespace edge::platform {
             if (status == PADDLEBOAT_CONTROLLER_ACTIVE) {
                 Paddleboat_Controller_Data controller_data;
                 if (Paddleboat_getControllerData(jid, &controller_data) == PADDLEBOAT_NO_ERROR) {
-                    auto& last_state = gamepad_last_state_[jid];
-
                     // Update gamepad buttons
                     for(int32_t button_idx = 0; button_idx < PADDLEBOAT_BUTTON_COUNT; ++button_idx) {
                         auto controller_button = static_cast<Paddleboat_Buttons>(1 << button_idx);
-
-                        bool curr = (controller_data.buttonsDown & controller_button) == controller_button;
-                        bool prev = (last_state.buttonsDown & controller_button) == controller_button;
-
-                        KeyAction key_action = KeyAction::eUnknown;
-                        if (curr && !prev) {
-                            key_action = KeyAction::ePress;
-                        }
-                        else if (curr && prev) {
-                            key_action = KeyAction::eHold;
-                        }
-                        else if (!curr && prev) {
-                            key_action = KeyAction::eRelease;
-                        }
-
-                        if (key_action != KeyAction::eUnknown) {
-                            dispatcher.emit(events::GamepadButtonEvent{
-                                    .gamepad_id = jid,
-                                    .key_code = translate_gamepad_key_code(button_idx),
-                                    .key_action = key_action,
-                            });
-                        }
+                        dispatcher.emit(events::GamepadButtonEvent{
+                            .gamepad_id = jid,
+                            .key_code = translate_gamepad_key_code(button_idx),
+                            .state = (controller_data.buttonsDown & controller_button) == controller_button
+                        });
                     }
 
                     // Update gamepad axis
-                    if(controller_data.leftStick.stickX != last_state.leftStick.stickX ||
-                       controller_data.leftStick.stickY != last_state.leftStick.stickY) {
-                        dispatcher.emit(events::GamepadAxisEvent{
-                                .gamepad_id = jid,
-                                .values = { controller_data.leftStick.stickX, controller_data.leftStick.stickY },
-                                .axis_code = GamepadAxisCode::eLeftStick
-                        });
-                    }
+                    dispatcher.emit(events::GamepadAxisEvent{
+                        .gamepad_id = jid,
+                        .values = { controller_data.leftStick.stickX, controller_data.leftStick.stickY },
+                        .axis_code = GamepadAxisCode::eLeftStick
+                    });
 
-                    if(controller_data.rightStick.stickX != last_state.rightStick.stickX ||
-                       controller_data.rightStick.stickY != last_state.rightStick.stickY) {
-                        dispatcher.emit(events::GamepadAxisEvent{
-                                .gamepad_id = jid,
-                                .values = { controller_data.rightStick.stickX, controller_data.rightStick.stickY },
-                                .axis_code = GamepadAxisCode::eRightStick
-                        });
-                    }
+                    dispatcher.emit(events::GamepadAxisEvent{
+                        .gamepad_id = jid,
+                        .values = { controller_data.rightStick.stickX, controller_data.rightStick.stickY },
+                        .axis_code = GamepadAxisCode::eRightStick
+                    });
 
-                    if(controller_data.triggerL2 > last_state.triggerL2) {
-                        dispatcher.emit(events::GamepadAxisEvent{
-                                .gamepad_id = jid,
-                                .values = { controller_data.triggerL2 },
-                                .axis_code = GamepadAxisCode::eLeftTrigger
-                        });
-                    }
+                    dispatcher.emit(events::GamepadAxisEvent{
+                        .gamepad_id = jid,
+                        .values = { controller_data.triggerL2 },
+                        .axis_code = GamepadAxisCode::eLeftTrigger
+                    });
 
-                    if(controller_data.triggerR2 > last_state.triggerR2) {
-                        dispatcher.emit(events::GamepadAxisEvent{
-                                .gamepad_id = jid,
-                                .values = { controller_data.triggerR2 },
-                                .axis_code = GamepadAxisCode::eRightTrigger
-                        });
-                    }
-
-                    gamepad_last_state_[jid] = controller_data;
+                    dispatcher.emit(events::GamepadAxisEvent{
+                        .gamepad_id = jid,
+                        .values = { controller_data.triggerR2 },
+                        .axis_code = GamepadAxisCode::eRightTrigger
+                    });
                 }
             }
         }
@@ -470,12 +413,15 @@ namespace edge::platform {
             return;
         }
 
-        auto& dispatcher = platform_context_->get_event_dispatcher();
+        if(event->action == AKEY_STATE_VIRTUAL) {
+            return;
+        }
 
         // Process other events
+        auto& dispatcher = platform_context_->get_event_dispatcher();
         dispatcher.emit(events::KeyEvent{
                 .key_code = translate_keyboard_key_code(event->keyCode),
-                .key_action = trnaslate_key_action(event->action),
+                .state = event->action == AKEY_STATE_DOWN,
                 .window_id = ~0ull
         });
     }
@@ -566,7 +512,7 @@ namespace edge::platform {
     auto AndroidPlatformInput::process_mouse_status_change(const uint32_t mouse_status) -> void {
         auto status = static_cast<Paddleboat_MouseStatus>(mouse_status);
         if(status == PADDLEBOAT_MOUSE_NONE) {
-            spdlog::debug("[Android Input] Mouse connected.");
+            spdlog::debug("[Android Input] Mouse disconnected.");
         }
         else {
             spdlog::debug("[Android Input] {} mouse connected.", status == PADDLEBOAT_MOUSE_CONTROLLER_EMULATED ? "Virtual" : "Physical");
