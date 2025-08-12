@@ -32,7 +32,7 @@ namespace edge::events {
 	struct KeyEvent {
 		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		KeyboardKeyCode key_code;
-		KeyAction key_action;
+		bool state;
 		uint64_t window_id;
 	};
 
@@ -45,7 +45,7 @@ namespace edge::events {
 	struct MouseKeyEvent {
 		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		MouseKeyCode key_code;
-		KeyAction key_action;
+		bool state;
 		uint64_t window_id;
 	};
 
@@ -75,7 +75,7 @@ namespace edge::events {
 		static constexpr EventTags tag_flags = EventTag::eRawInput;
 		int32_t gamepad_id;
 		GamepadKeyCode key_code;
-		KeyAction key_action;
+		bool state;
 	};
 
 	struct GamepadAxisEvent {
