@@ -11,6 +11,8 @@
 #include "../application.h"
 #include "../events.h"
 
+#include "../gfx/context.h"
+
 namespace edge::platform {
 	class PlatformWindowInterface;
 	class PlatformContextInterface;
@@ -191,6 +193,7 @@ namespace edge::platform {
 
 		std::unique_ptr<PlatformWindowInterface> window_;
         std::unique_ptr<PlatformInputInterface> input_;
+		std::unique_ptr<gfx::GraphicsContextInterface> graphics_;
 		std::unique_ptr<events::Dispatcher> event_dispatcher_;
 
 		bool window_focused_{ true };

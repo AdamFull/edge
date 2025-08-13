@@ -4,6 +4,7 @@
 
 #include <spdlog/spdlog.h>
 #include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
 
 namespace edge::platform {
 	static int32_t g_glfw_context_init_counter{ 0 };

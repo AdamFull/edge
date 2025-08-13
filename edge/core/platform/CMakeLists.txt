@@ -6,6 +6,7 @@ if(WIN32)
         EDGE_PLATFORM_WINDOWS=1
         WIN32_LEAN_AND_MEAN
         NOMINMAX
+        GLFW_EXPOSE_NATIVE_WIN32
     )
     if(CMAKE_SIZEOF_VOID_P EQUAL 8)
         target_compile_definitions(${PROJECT_NAME} PRIVATE EDGE_PLATFORM_WIN64=1)

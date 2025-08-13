@@ -84,3 +84,22 @@ target_link_libraries(${PROJECT_NAME}
     GPUOpen::VulkanMemoryAllocator
     volk
 )
+
+target_sources(${PROJECT_NAME} PRIVATE
+	"vk_context.cpp"
+)
+
+target_compile_definitions(${PROJECT_NAME}
+    PRIVATE
+    VK_NO_PROTOTYPES
+)
+
+if(ANDROID)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC VK_USE_PLATFORM_ANDROID_KHR)
+elseif(WIN32)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC VK_USE_PLATFORM_WIN32_KHR)
+elseif(APPLE)
+	target_compile_definitions(${PROJECT_NAME} PUBLIC VK_USE_PLATFORM_METAL_EXT)
+elseif(UNIX)
+    #TODO
+endif()

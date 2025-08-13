@@ -10,6 +10,8 @@
 
 #include "jni_helper.h"
 
+#include "../../gfx/vulkan/vk_context.h"
+
 namespace edge::platform {
     auto get_package_code_path(android_app* app) -> std::string {
         auto* env = get_jni_env(app);
@@ -26,17 +28,6 @@ namespace edge::platform {
 		-> std::unique_ptr<AndroidPlatformContext> {
         auto ctx = std::make_unique<AndroidPlatformContext>();
         ctx->_construct(app);
-        ctx->window_ = AndroidPlatformWindow::construct(ctx.get());
-        ctx->input_ = AndroidPlatformInput::construct(ctx.get());
-
-        auto logger = std::make_shared<spdlog::logger>("Logger", std::make_shared<spdlog::sinks::android_sink_mt>("Logger"));
-#ifdef NDEBUG
-        logger->set_level(spdlog::level::info);
-#else
-        logger->set_level(spdlog::level::trace);
-#endif
-        logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
-        spdlog::set_default_logger(logger);
 
         return ctx;
     }
@@ -60,6 +51,36 @@ namespace edge::platform {
 
     auto AndroidPlatformContext::_construct(android_app* app) -> bool {
         android_app_ = app;
+
+        auto logger = std::make_shared<spdlog::logger>("Logger", std::make_shared<spdlog::sinks::android_sink_mt>("Logger"));
+#ifdef NDEBUG
+        logger->set_level(spdlog::level::info);
+#else
+        logger->set_level(spdlog::level::trace);
+#endif
+        logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+        spdlog::set_default_logger(logger);
+
+        window_ = DesktopPlatformWindow::construct(this);
+        if (!window_) {
+            spdlog::error("[Android Runtime Context]: Window construction failed");
+            return false;
+        }
+
+        input_ = DesktopPlatformInput::construct(static_cast<DesktopPlatformWindow*>(window_.get()));
+        if (!input_) {
+            spdlog::error("[Android Runtime Context]: Input construction failed");
+            return false;
+        }
+
+        graphics_ = gfx::VulkanGraphicsContext::construct();
+        if (!graphics_) {
+            spdlog::error("[Android Runtime Context]: Graphics construction failed");
+            return false;
+        }
+
+        
+
         return true;
     }
 }

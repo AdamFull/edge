@@ -4,6 +4,8 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
+#include "../../gfx/vulkan/vk_context.h"
+
 namespace edge::platform {
 	auto WindowsPlatformContext::construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 		-> std::unique_ptr<WindowsPlatformContext> {
@@ -57,6 +59,24 @@ namespace edge::platform {
 		window_ = DesktopPlatformWindow::construct(this);
 		if (!window_) {
 			spdlog::error("[Windows Runtime Context]: Window construction failed");
+			return false;
+		}
+
+		auto* desktop_window = static_cast<DesktopPlatformWindow*>(window_.get());
+
+		input_ = DesktopPlatformInput::construct(desktop_window);
+		if (!input_) {
+			spdlog::error("[Windows Runtime Context]: Input construction failed");
+			return false;
+		}
+
+		graphics_ = gfx::VulkanGraphicsContext::construct({
+			.physical_device_type = gfx::GraphicsDeviceType::eDiscrete,
+			//.hwnd = glfwGetWin32Window(desktop_window->get_handle()),
+			.hinst = hInstance
+			});
+		if (!graphics_) {
+			spdlog::error("[Windows Runtime Context]: Graphics construction failed");
 			return false;
 		}
 
