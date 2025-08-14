@@ -1,35 +1,4 @@
-include(FetchContent)
-
-# Fetch Vulkan-Headers v1.4.309
-FetchContent_Declare(
-    VulkanHeaders
-    GIT_REPOSITORY https://github.com/KhronosGroup/Vulkan-Headers.git
-    GIT_TAG v1.4.309
-)
-
-# Fetch VulkanMemoryAllocator v3.3.0
-FetchContent_Declare(
-    VulkanMemoryAllocator
-    GIT_REPOSITORY https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-    GIT_TAG v3.3.0
-)
-
-# Fetch Volk vulkan-sdk-1.4.309.0
-FetchContent_Declare(
-    volk
-    GIT_REPOSITORY https://github.com/zeux/volk.git
-    GIT_TAG vulkan-sdk-1.4.309.0
-)
-
-# Configure VulkanMemoryAllocator - disable samples and examples
-set(VMA_BUILD_DOCUMENTATION OFF CACHE BOOL "" FORCE)
-set(VMA_BUILD_SAMPLES OFF CACHE BOOL "" FORCE)
-
-# Configure volk - disable examples
-set(VOLK_INSTALL OFF CACHE BOOL "" FORCE)
-
-# Make the content available
-FetchContent_MakeAvailable(VulkanHeaders VulkanMemoryAllocator volk)
+add_subdirectory("external")
 
 set(ENABLE_VULKAN_VALIDATION_LAYERS ON CACHE BOOL "Enable validation layers for every application.")
 set(ENABLE_VULKAN_VALIDATION_LAYERS_GPU_ASSISTED OFF CACHE BOOL "Enable GPU assisted validation layers for every application.")
@@ -80,9 +49,7 @@ endif()
 
 target_link_libraries(${PROJECT_NAME}
     PRIVATE
-    Vulkan::Headers
-    GPUOpen::VulkanMemoryAllocator
-    volk
+    vulkan_externals
 )
 
 target_sources(${PROJECT_NAME} PRIVATE
@@ -93,13 +60,3 @@ target_compile_definitions(${PROJECT_NAME}
     PRIVATE
     VK_NO_PROTOTYPES
 )
-
-if(ANDROID)
-    target_compile_definitions(${PROJECT_NAME} PUBLIC VK_USE_PLATFORM_ANDROID_KHR)
-elseif(WIN32)
-    target_compile_definitions(${PROJECT_NAME} PUBLIC VK_USE_PLATFORM_WIN32_KHR)
-elseif(APPLE)
-	target_compile_definitions(${PROJECT_NAME} PUBLIC VK_USE_PLATFORM_METAL_EXT)
-elseif(UNIX)
-    #TODO
-endif()
