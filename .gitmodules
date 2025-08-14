@@ -1,0 +1,11 @@
+[submodule "edge/core/gfx/vulkan/external/vulkan"]
+	path = edge/core/gfx/vulkan/external/vulkan
+	url = https://github.com/KhronosGroup/Vulkan-Headers.git
+	branch = vulkan-sdk-1.4.309
+[submodule "edge/core/gfx/vulkan/external/volk"]
+	path = edge/core/gfx/vulkan/external/volk
+	url = https://github.com/zeux/volk.git
+	branch = vulkan-sdk-1.4.309
+[submodule "edge/core/gfx/vulkan/external/vma"]
+	path = edge/core/gfx/vulkan/external/vma
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
