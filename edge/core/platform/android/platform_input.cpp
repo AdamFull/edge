@@ -179,6 +179,17 @@ namespace edge::platform {
     }
 
     AndroidPlatformInput::~AndroidPlatformInput() {
+        if (Paddleboat_isInitialized()) {
+
+            // Clear callbacks
+            Paddleboat_setControllerStatusCallback(nullptr, nullptr);
+            Paddleboat_setMouseStatusCallback(nullptr, nullptr);
+            Paddleboat_setPhysicalKeyboardStatusCallback(nullptr, nullptr);
+            Paddleboat_setMotionDataCallback(nullptr, nullptr);
+
+            Paddleboat_destroy(jni_env_);
+        }
+
         if(input_state_) {
             delete input_state_;
             input_state_ = nullptr;
@@ -234,19 +245,6 @@ namespace edge::platform {
         }, this);
 
         return true;
-    }
-
-    auto AndroidPlatformInput::destroy() -> void {
-        if (Paddleboat_isInitialized()) {
-
-            // Clear callbacks
-            Paddleboat_setControllerStatusCallback(nullptr, nullptr);
-            Paddleboat_setMouseStatusCallback(nullptr, nullptr);
-            Paddleboat_setPhysicalKeyboardStatusCallback(nullptr, nullptr);
-            Paddleboat_setMotionDataCallback(nullptr, nullptr);
-
-            Paddleboat_destroy(jni_env_);
-        }
     }
 
     auto AndroidPlatformInput::update(float delta_time) -> void {

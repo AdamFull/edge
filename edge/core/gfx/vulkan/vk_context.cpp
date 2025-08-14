@@ -1,10 +1,13 @@
 #include "vk_context.h"
 
+#include "../../platform/platform.h"
+
 #include <spdlog/spdlog.h>
 
 #include <volk.h>
 #include <vulkan/vulkan.h>
 
+#include <cstddef>
 #include <cstdlib>
 
 #define VK_CHECK_RESULT(result, error_text) \
@@ -128,7 +131,7 @@ namespace edge::gfx {
 		};
 	}
 
-	inline auto vkmemalloc(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) -> void* {
+    extern "C" void* VKAPI_CALL vkmemalloc(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) {
 		auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
 
 		void* ptr = nullptr;
@@ -155,7 +158,7 @@ namespace edge::gfx {
 		return ptr;
 	}
 
-	inline auto vkmemfree(void* user_data, void* mem) -> void {
+    extern "C" void VKAPI_CALL vkmemfree(void* user_data, void* mem) {
 		if (!mem) {
 			return;
 		}
@@ -184,7 +187,7 @@ namespace edge::gfx {
 #endif
 	}
 
-	inline auto vkmemrealloc(void* user_data, void* old, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) -> void* {
+    extern "C" void* VKAPI_CALL vkmemrealloc(void* user_data, void* old, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) {
 		if (!old) {
 			return vkmemalloc(user_data, size, alignment, allocation_scope);
 		}
@@ -220,8 +223,15 @@ namespace edge::gfx {
 		return new_ptr;
 	}
 
+    extern "C" void VKAPI_CALL vkinternalmemalloc(void* user_data, size_t size, VkInternalAllocationType allocation_type, VkSystemAllocationScope allocation_scope) {
 
-	VulkanGraphicsContext::~VulkanGraphicsContext() {
+    }
+
+    extern "C" void VKAPI_CALL vkinternalmemfree(void* user_data, size_t size, VkInternalAllocationType allocation_type, VkSystemAllocationScope allocation_scope) {
+
+    }
+
+    VulkanGraphicsContext::~VulkanGraphicsContext() {
 		if (vk_debug_utils_messenger_) {
 			vkDestroyDebugUtilsMessengerEXT(vk_instance_, vk_debug_utils_messenger_, &vk_alloc_callbacks_);
 		}
@@ -250,31 +260,22 @@ namespace edge::gfx {
 		}
 	}
 
-	auto VulkanGraphicsContext::construct(const GraphicsContextCreateInfo create_info) -> std::unique_ptr<VulkanGraphicsContext> {
+	auto VulkanGraphicsContext::construct() -> std::unique_ptr<VulkanGraphicsContext> {
 		auto self = std::make_unique<VulkanGraphicsContext>();
-		self->_construct(create_info);
 		return self;
 	}
 
-	auto VulkanGraphicsContext::initialize() -> bool {
-		return true;
-	}
-
-	auto VulkanGraphicsContext::shutdown() -> void {
-
-	}
-
-	auto VulkanGraphicsContext::_construct(const GraphicsContextCreateInfo create_info) -> bool {
+	auto VulkanGraphicsContext::create(const GraphicsContextCreateInfo& create_info) -> bool {
 		memalloc_stats_.total_bytes_allocated = 0ull;
 		memalloc_stats_.allocation_count = 0ull;
 		memalloc_stats_.deallocation_count = 0ull;
 
 		// Create allocation callbacks
-		vk_alloc_callbacks_.pfnAllocation = vkmemalloc;
-		vk_alloc_callbacks_.pfnFree = vkmemfree;
-		vk_alloc_callbacks_.pfnReallocation = vkmemrealloc;
-		vk_alloc_callbacks_.pfnInternalAllocation = [](void* user_data, size_t size, VkInternalAllocationType allocation_type, VkSystemAllocationScope allocation_scope) -> void {};
-		vk_alloc_callbacks_.pfnInternalFree = [](void* user_data, size_t size, VkInternalAllocationType allocation_type, VkSystemAllocationScope allocation_scope) -> void {};
+		vk_alloc_callbacks_.pfnAllocation = (PFN_vkAllocationFunction)vkmemalloc;
+		vk_alloc_callbacks_.pfnFree = (PFN_vkFreeFunction)vkmemfree;
+		vk_alloc_callbacks_.pfnReallocation = (PFN_vkReallocationFunction)vkmemrealloc;
+		vk_alloc_callbacks_.pfnInternalAllocation = (PFN_vkInternalAllocationNotification) vkinternalmemalloc;
+		vk_alloc_callbacks_.pfnInternalFree = (PFN_vkInternalFreeNotification)vkinternalmemfree;
 		vk_alloc_callbacks_.pUserData = &memalloc_stats_;
 
 		VK_CHECK_RESULT(volkInitialize(), "Failed to initialize volk.");
@@ -497,18 +498,72 @@ namespace edge::gfx {
 #if EDGE_PLATFORM_ANDROID
 		VkAndroidSurfaceCreateInfoKHR surface_create_info{};
 		surface_create_info.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
-		surface_create_info.window = create_info.window;
+		surface_create_info.window = static_cast<ANativeWindow*>(create_info.window->get_native_handle());
 		VK_CHECK_RESULT(vkCreateAndroidSurfaceKHR(vk_instance_ , &surface_create_info, &vk_alloc_callbacks_, &vk_surface_), 
 			"Failed to create surface.");
 #elif EDGE_PLATFORM_WINDOWS
+		auto hWnd = static_cast<HWND>(create_info.window->get_native_handle());
+		HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hWnd, GWLP_HINSTANCE);
+
 		VkWin32SurfaceCreateInfoKHR surface_create_info{};
 		surface_create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		surface_create_info.hwnd = create_info.hwnd;
-		surface_create_info.hinstance = create_info.hinst;
+		surface_create_info.hwnd = hWnd;
+		surface_create_info.hinstance = hInstance;
 
 		VK_CHECK_RESULT(vkCreateWin32SurfaceKHR(vk_instance_, &surface_create_info, &vk_alloc_callbacks_, &vk_surface_), 
 			"Failed to create surface.");
 #endif
+
+		std::vector<const char*> device_extensions{};
+		// Apply required device extensions
+		device_extensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+		device_extensions.push_back(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
+		device_extensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+		device_extensions.push_back(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
+		device_extensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
+		device_extensions.push_back(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME);
+
+#ifndef EDGE_PLATFORM_ANDROID
+		device_extensions.push_back(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
+#endif
+
+#ifdef VULKAN_ENABLE_PORTABILITY
+		// VK_KHR_portability_subset must be enabled if present in the implementation (e.g on macOS/iOS with beta extensions enabled)
+		// Optional
+		device_extensions.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+#endif
+
+		// Enable extensions for use nsight aftermath
+#if USE_NSIGHT_AFTERMATH
+		device_extensions.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
+		device_extensions.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
+#endif
+
+		if (create_info.require_features.ray_tracing) {
+			device_extensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+			device_extensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+			device_extensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+			device_extensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+		}
+
+		// Select suitable gpu
 
 		//for (auto& physical_device : physical_devices) {
 		//	VkPhysicalDeviceVulkan12Features features_vk12{};

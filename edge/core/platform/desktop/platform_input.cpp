@@ -263,7 +263,7 @@ namespace edge::platform {
 	}
 
 	DesktopPlatformInput::~DesktopPlatformInput() {
-
+		glfwSetJoystickCallback(nullptr);
 	}
 
 	auto DesktopPlatformInput::construct(DesktopPlatformWindow* window) -> std::unique_ptr<DesktopPlatformInput> {
@@ -283,10 +283,6 @@ namespace edge::platform {
 		glfwSetJoystickCallback(&DesktopPlatformInput::gamepad_connected_callback);
 
 		return true;
-	}
-
-	auto DesktopPlatformInput::destroy() -> void {
-
 	}
 
 	auto DesktopPlatformInput::update(float delta_time) -> void {

@@ -1,10 +1,11 @@
-#pragma once 
+#pragma once
+
+#include <vector>
+#include <unordered_map>
 
 #include "../context.h"
 
 #include <vulkan/vulkan.h>
-
-#include <unordered_map>
 
 namespace edge::gfx {
 	struct VkMemoryAllocationDesc {
@@ -34,12 +35,10 @@ namespace edge::gfx {
 	public:
 		~VulkanGraphicsContext() override;
 
-		static auto construct(const GraphicsContextCreateInfo create_info) -> std::unique_ptr<VulkanGraphicsContext>;
+		static auto construct() -> std::unique_ptr<VulkanGraphicsContext>;
 
-		auto initialize() -> bool override;
-		auto shutdown() -> void override;
+		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
 	private:
-		auto _construct(const GraphicsContextCreateInfo create_info) -> bool;
 
 		bool volk_initialized_{ false };
 

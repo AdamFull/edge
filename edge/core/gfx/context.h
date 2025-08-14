@@ -2,10 +2,9 @@
 
 #include <memory>
 
-#if EDGE_PLATFORM_ANDROID
-#elif EDGE_PLATFORM_WINDOWS
-#include <Windows.h>
-#endif
+namespace edge::platform {
+	class PlatformWindowInterface;
+}
 
 namespace edge::gfx {
 	enum class GraphicsDeviceType {
@@ -16,20 +15,19 @@ namespace edge::gfx {
 
 	struct GraphicsContextCreateInfo {
 		GraphicsDeviceType physical_device_type;
-#if EDGE_PLATFORM_ANDROID
-		AWindowHandle* window;
-#elif EDGE_PLATFORM_WINDOWS
-		HWND hwnd;
-		HINSTANCE hinst;
-#endif
+		platform::PlatformWindowInterface* window;
+
+		struct RequireFeatures {
+			bool mesh_shading{};
+			bool ray_tracing{};
+		} require_features{};
 	};
 
 	class GraphicsContextInterface {
 	public:
 		virtual ~GraphicsContextInterface() = default;
 
-		virtual auto initialize() -> bool = 0;
-		virtual auto shutdown() -> void = 0;
+		virtual auto create(const GraphicsContextCreateInfo& create_info) -> bool = 0;
 
 
 	};

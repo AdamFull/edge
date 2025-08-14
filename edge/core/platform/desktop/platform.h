@@ -14,7 +14,6 @@ namespace edge::platform {
 		static auto construct(DesktopPlatformWindow* window) -> std::unique_ptr<DesktopPlatformInput>;
 
 		auto create() -> bool override;
-		auto destroy() -> void override;
 
 		auto update(float delta_time) -> void override;
 
@@ -41,7 +40,6 @@ namespace edge::platform {
 		static auto construct(PlatformContextInterface* platform_context) -> std::unique_ptr<DesktopPlatformWindow>;
 
 		[[nodiscard]] auto create(const window::Properties& props) -> bool override;
-		auto destroy() -> void override;
 		auto show() -> void override;
 		auto hide() -> void override;
 		[[nodiscard]] auto is_visible() const -> bool override;
@@ -49,6 +47,8 @@ namespace edge::platform {
 
 		[[nodiscard]] auto get_dpi_factor() const noexcept -> float override;
 		[[nodiscard]] auto get_content_scale_factor() const noexcept -> float override;
+
+		[[nodiscard]] auto get_native_handle() -> void* override;
 
 		auto set_title(std::string_view title) -> void override;
 

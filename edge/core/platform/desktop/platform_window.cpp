@@ -72,10 +72,18 @@ namespace edge::platform {
 	}
 
 	DesktopPlatformWindow::~DesktopPlatformWindow() {
+		if (handle_) {
+			glfwSetWindowShouldClose(handle_, GLFW_TRUE);
+			glfwDestroyWindow(handle_);
+			handle_ = nullptr;
+		}
+
 		if (--g_glfw_context_init_counter <= 0) {
 			spdlog::debug("[Desktop Window]: GLFW context terminated.");
 			glfwTerminate();
 		}
+
+		glfwSetErrorCallback(nullptr);
 	}
 
 	auto DesktopPlatformWindow::construct(PlatformContextInterface* platform_context) -> std::unique_ptr<DesktopPlatformWindow> {
@@ -133,14 +141,6 @@ namespace edge::platform {
 		return true;
 	}
 
-	auto DesktopPlatformWindow::destroy() -> void {
-		if (handle_) {
-			glfwSetWindowShouldClose(handle_, GLFW_TRUE);
-			glfwDestroyWindow(handle_);
-			handle_ = nullptr;
-		}
-	}
-
 	auto DesktopPlatformWindow::show() -> void {
 		if (!handle_) {
 			return;
@@ -158,7 +158,7 @@ namespace edge::platform {
 	}
 
 	auto DesktopPlatformWindow::is_visible() const -> bool {
-		return false;
+		return true;
 	}
 
 	auto DesktopPlatformWindow::poll_events() -> void {
@@ -205,5 +205,9 @@ namespace edge::platform {
 			glfwSetWindowTitle(handle_, title.data());
 			properties_.title = title;
 		}
+	}
+
+	auto DesktopPlatformWindow::get_native_handle() -> void* {
+		return glfwGetWin32Window(handle_);
 	}
 }

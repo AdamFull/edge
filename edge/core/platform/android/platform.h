@@ -21,7 +21,6 @@ namespace edge::platform {
         static auto construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformInput>;
 
         auto create() -> bool override;
-        auto destroy() -> void override;
 
         auto update(float delta_time) -> void override;
 
@@ -50,11 +49,10 @@ namespace edge::platform {
 
     class AndroidPlatformWindow final : public PlatformWindowInterface {
     public:
-        ~AndroidPlatformWindow() override = default;
+        ~AndroidPlatformWindow() override;
         static auto construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformWindow>;
 
         auto create(const window::Properties& props) -> bool override;
-        auto destroy() -> void override;
         [[maybe_unused]] auto show() -> void override {}
         [[maybe_unused]] auto hide() -> void override {}
         [[nodiscard]] auto is_visible() const -> bool override { return surface_ready_; }
@@ -64,6 +62,8 @@ namespace edge::platform {
         auto get_content_scale_factor() const noexcept -> float override;
 
         auto set_title(std::string_view title) -> void override;
+
+        [[nodiscard]] auto get_native_handle() -> void* override;
     private:
         static auto on_app_cmd(android_app* app, int32_t cmd) -> void;
         auto _process_commands(android_app* app, int32_t cmd) -> void;

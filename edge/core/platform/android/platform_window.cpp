@@ -8,6 +8,11 @@
 #include "jni_helper.h"
 
 namespace edge::platform {
+    AndroidPlatformWindow::~AndroidPlatformWindow() {
+        GameActivity_finish(android_app_->activity);
+        requested_close_ = true;
+    }
+
     auto AndroidPlatformWindow::construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformWindow> {
         auto window = std::make_unique<AndroidPlatformWindow>();
         window->android_app_ = platform_context->get_android_app();
@@ -22,11 +27,6 @@ namespace edge::platform {
         // TODO: Setup filters here
 
         return true;
-    }
-
-    auto AndroidPlatformWindow::destroy() -> void {
-        GameActivity_finish(android_app_->activity);
-        requested_close_ = true;
     }
 
     auto AndroidPlatformWindow::poll_events() -> void {
@@ -63,6 +63,10 @@ namespace edge::platform {
 
     auto AndroidPlatformWindow::set_title(std::string_view title) -> void {
         properties_.title = title;
+    }
+
+    auto AndroidPlatformWindow::get_native_handle() -> void* {
+        return android_app_->window;
     }
 
     auto AndroidPlatformWindow::on_app_cmd(android_app* app, int32_t cmd) -> void {

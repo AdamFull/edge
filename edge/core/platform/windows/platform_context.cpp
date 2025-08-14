@@ -62,19 +62,13 @@ namespace edge::platform {
 			return false;
 		}
 
-		auto* desktop_window = static_cast<DesktopPlatformWindow*>(window_.get());
-
-		input_ = DesktopPlatformInput::construct(desktop_window);
+		input_ = DesktopPlatformInput::construct(static_cast<DesktopPlatformWindow*>(window_.get()));
 		if (!input_) {
 			spdlog::error("[Windows Runtime Context]: Input construction failed");
 			return false;
 		}
 
-		graphics_ = gfx::VulkanGraphicsContext::construct({
-			.physical_device_type = gfx::GraphicsDeviceType::eDiscrete,
-			//.hwnd = glfwGetWin32Window(desktop_window->get_handle()),
-			.hinst = hInstance
-			});
+		graphics_ = gfx::VulkanGraphicsContext::construct();
 		if (!graphics_) {
 			spdlog::error("[Windows Runtime Context]: Graphics construction failed");
 			return false;
@@ -89,7 +83,6 @@ namespace edge::platform {
 
 	auto WindowsPlatformContext::shutdown() -> void {
 		if (window_) {
-			window_->destroy();
 			window_.reset();
 		}
 	}

@@ -33,8 +33,6 @@ namespace edge::platform {
     }
 
 	auto AndroidPlatformContext::shutdown() -> void {
-        input_->destroy();
-        window_->destroy();
 	}
 
     auto AndroidPlatformContext::get_platform_name() const -> std::string_view {
@@ -61,13 +59,13 @@ namespace edge::platform {
         logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
         spdlog::set_default_logger(logger);
 
-        window_ = DesktopPlatformWindow::construct(this);
+        window_ = AndroidPlatformWindow::construct(this);
         if (!window_) {
             spdlog::error("[Android Runtime Context]: Window construction failed");
             return false;
         }
 
-        input_ = DesktopPlatformInput::construct(static_cast<DesktopPlatformWindow*>(window_.get()));
+        input_ = AndroidPlatformInput::construct(this);
         if (!input_) {
             spdlog::error("[Android Runtime Context]: Input construction failed");
             return false;
@@ -78,8 +76,6 @@ namespace edge::platform {
             spdlog::error("[Android Runtime Context]: Graphics construction failed");
             return false;
         }
-
-        
 
         return true;
     }

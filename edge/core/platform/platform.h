@@ -57,7 +57,6 @@ namespace edge::platform {
         virtual ~PlatformInputInterface() = default;
 
         virtual auto create() -> bool = 0;
-        virtual auto destroy() -> void = 0;
 
         virtual auto update(float delta_time) -> void = 0;
 
@@ -75,11 +74,6 @@ namespace edge::platform {
 		 * @brief Creates window and return result of creation
 		 */
 		virtual auto create(const window::Properties& props) -> bool = 0;
-
-		/**
-		 * @brief Requests to close and destroy the window
-		 */
-		virtual auto destroy() -> void = 0;
 
 		/**
 		 * @brief Requests to show the window
@@ -104,12 +98,14 @@ namespace edge::platform {
 		/**
 		 * @return The dot-per-inch scale factor
 		 */
-		[[nodiscard]]  virtual auto get_dpi_factor() const noexcept -> float = 0;
+		[[nodiscard]] virtual auto get_dpi_factor() const noexcept -> float = 0;
 
 		/**
 		 * @return The scale factor for systems with heterogeneous window and pixel coordinates
 		 */
-		[[nodiscard]]  virtual auto get_content_scale_factor() const noexcept -> float = 0;
+		[[nodiscard]] virtual auto get_content_scale_factor() const noexcept -> float = 0;
+
+		[[nodiscard]] virtual auto get_native_handle() -> void* = 0;
 
 		/**
 		 * @brief Checks if the window should be closed

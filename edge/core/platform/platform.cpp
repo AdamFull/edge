@@ -25,6 +25,7 @@ namespace edge::platform {
 
 		if (!window_->create(create_info.window_props)) {
 			window_.reset();
+			spdlog::error("[Platform Context]: Failed to create window context.");
 			return false;
 		}
 
@@ -33,8 +34,19 @@ namespace edge::platform {
         } while (!window_->is_visible());
 
         if(!input_->create()) {
+			input_.reset();
+			spdlog::error("[Platform Context]: Failed to create input context.");
             return false;
         }
+
+		if (!graphics_->create({
+			.physical_device_type = gfx::GraphicsDeviceType::eDiscrete,
+			.window = window_.get()
+			})) {
+			graphics_.reset();
+			spdlog::error("[Platform Context]: Failed to create graphics context.");
+			return false;
+		}
 
 		return true;
 	}
