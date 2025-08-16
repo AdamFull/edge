@@ -52,27 +52,27 @@ namespace edge::gfx {
 		VkAllocationCallbacks vk_alloc_callbacks_{};
 		VkMemoryAllocationStats memalloc_stats_{};
 
-		VkInstance vk_instance_;
+		VkInstance vk_instance_{ VK_NULL_HANDLE };
         std::vector<const char*> instance_extensions_;
 
 #if defined(ENGINE_DEBUG) || defined(VULKAN_VALIDATION_LAYERS)
 		/**
 		 * @brief Debug utils messenger callback for VK_EXT_Debug_Utils
 		 */
-		VkDebugUtilsMessengerEXT vk_debug_utils_messenger_;
+		VkDebugUtilsMessengerEXT vk_debug_utils_messenger_{ VK_NULL_HANDLE };
 
 		/**
 		 * @brief The debug report callback
 		 */
-		VkDebugReportCallbackEXT vk_debug_report_callback_;
+		VkDebugReportCallbackEXT vk_debug_report_callback_{ VK_NULL_HANDLE };
 #endif
 
-		std::vector<VkPhysicalDevice> physical_devices_;
+		std::vector<VkPhysicalDevice> physical_devices_{};
 
-		VkSurfaceKHR vk_surface_;
+		VkSurfaceKHR vk_surface_{ VK_NULL_HANDLE };
 
-        VkDevice logical_device_;
-        std::vector<const char*> device_extensions_;
-
+        int32_t selected_device_index_{ -1 };
+        VkDevice logical_device_{ VK_NULL_HANDLE };
+        std::vector<const char*> device_extensions_{};
 	};
 }

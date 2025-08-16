@@ -12,7 +12,7 @@
 
 #define VK_CHECK_RESULT(result, error_text) \
 if(result != VK_SUCCESS) { \
-	spdlog::error("[Vulkan Graphics Context]: {}. Reason: {}", error_text, get_error_string(result)); \
+	spdlog::error("[Vulkan Graphics Context]: {} Reason: {}", error_text, get_error_string(result)); \
 	return false; \
 }
 
@@ -618,6 +618,87 @@ namespace edge::gfx {
 		}
 
 		// Select suitable gpu
+        int32_t fallback_device_index{ -1 };
+        for(int32_t device_index = 0; device_index < physical_device_count; ++device_index) {
+            auto& physical_device = physical_devices_[device_index];
+
+            VkPhysicalDeviceProperties properties{};
+            vkGetPhysicalDeviceProperties(physical_device, &properties);
+
+            if(properties.apiVersion < VK_API_VERSION_1_2) {
+                spdlog::warn("[Vulkan Graphics Context]: Device is not supported. Required API version: {}, but device supporting {}.", VK_API_VERSION_1_2, properties.apiVersion);
+                fallback_device_index = device_index;
+                continue;
+            }
+
+            // Enumerate device extensions
+            uint32_t device_extension_count{0u};
+            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &device_extension_count, nullptr),
+                            "Failed to request device extension count.");
+
+            std::vector<VkExtensionProperties> device_extensions(device_extension_count);
+            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &device_extension_count, device_extensions.data()),
+                            "Failed to request device extensions.");
+
+            // Check device extension support
+            bool all_extension_supported{ true };
+            for (const auto& extension_name : device_extensions_) {
+                auto supported = std::find_if(device_extensions.begin(), device_extensions.end(),
+                             [extension_name](auto& device_extension) {
+                    return std::strcmp(device_extension.extensionName, extension_name) == 0;
+                }) != device_extensions.end();
+
+                if (!supported) {
+                    spdlog::warn("[Vulkan Graphics Context]: Device {} is not supporting required extension: {}.", properties.deviceName, extension_name);
+                    all_extension_supported = false;
+                    break;
+                }
+            }
+
+            // Looke like that current device is not supporting some extensions
+            if(!all_extension_supported) {
+                fallback_device_index = device_index;
+                continue;
+            }
+
+            VkPhysicalDeviceType requested_device_type{ VK_PHYSICAL_DEVICE_TYPE_OTHER };
+            switch (create_info.physical_device_type) {
+                case GraphicsDeviceType::eDiscrete: requested_device_type = VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU; break;
+                case GraphicsDeviceType::eIntegrated: requested_device_type = VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU; break;
+                case GraphicsDeviceType::eSoftware: requested_device_type = VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU; break;
+            }
+
+            // Check that device is same that requested type
+            if(requested_device_type != properties.deviceType) {
+                spdlog::warn("[Vulkan Graphics Context]: Device {} is not required type extension.", properties.deviceName);
+                fallback_device_index = device_index;
+                continue;
+            }
+
+            // Check that any device queue family is support present
+            if (vk_surface_) {
+                VkBool32 support_present{ VK_FALSE };
+
+                uint32_t queue_family_properties_count{ 0u };
+                vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_properties_count, nullptr);
+
+                std::vector<VkQueueFamilyProperties> queue_family_properties(queue_family_properties_count);
+                vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_properties_count, queue_family_properties.data());
+
+                for(int32_t family_index = 0; family_index < queue_family_properties_count; ++family_index) {
+                    VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, family_index, vk_surface_, &support_present),
+                                    "Failed to get physical device surface support.");
+                    if(support_present) {
+                        break;
+                    }
+                }
+
+                // This device is not support present. Check next one
+                if(!support_present) {
+                    continue;
+                }
+            }
+        }
 
 		//for (auto& physical_device : physical_devices) {
 		//	VkPhysicalDeviceVulkan12Features features_vk12{};
