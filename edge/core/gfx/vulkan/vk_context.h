@@ -1,6 +1,8 @@
 #pragma once
 
+#include <atomic>
 #include <vector>
+#include <thread>
 #include <unordered_map>
 
 #include "../context.h"
@@ -12,12 +14,14 @@ namespace edge::gfx {
 		size_t size;
 		size_t align;
 		VkSystemAllocationScope scope;
+        std::thread::id thread_id;
 	};
 
 	struct VkMemoryAllocationStats {
-		size_t total_bytes_allocated;
-		size_t allocation_count;
-		size_t deallocation_count;
+        std::atomic<size_t> total_bytes_allocated;
+        std::atomic<size_t> allocation_count;
+        std::atomic<size_t> deallocation_count;
+        std::mutex mutex;
 		std::unordered_map<void*, VkMemoryAllocationDesc> allocation_map;
 	};
 
@@ -38,6 +42,9 @@ namespace edge::gfx {
 		static auto construct() -> std::unique_ptr<VulkanGraphicsContext>;
 
 		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
+
+        auto is_instance_extension_enabled(const char* extension_name) const noexcept -> bool;
+        auto is_device_extension_enabled(const char* extension_name) const noexcept -> bool;
 	private:
 
 		bool volk_initialized_{ false };
@@ -46,6 +53,7 @@ namespace edge::gfx {
 		VkMemoryAllocationStats memalloc_stats_{};
 
 		VkInstance vk_instance_;
+        std::vector<const char*> instance_extensions_;
 
 #if defined(ENGINE_DEBUG) || defined(VULKAN_VALIDATION_LAYERS)
 		/**
@@ -62,5 +70,9 @@ namespace edge::gfx {
 		std::vector<VkPhysicalDevice> physical_devices_;
 
 		VkSurfaceKHR vk_surface_;
+
+        VkDevice logical_device_;
+        std::vector<const char*> device_extensions_;
+
 	};
 }

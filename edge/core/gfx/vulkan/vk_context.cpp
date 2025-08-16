@@ -12,7 +12,7 @@
 
 #define VK_CHECK_RESULT(result, error_text) \
 if(result != VK_SUCCESS) { \
-	spdlog::error("[Vulkan Graphics Context]: {}", error_text); \
+	spdlog::error("[Vulkan Graphics Context]: {}. Reason: {}", error_text, get_error_string(result)); \
 	return false; \
 }
 
@@ -67,6 +67,63 @@ namespace edge::gfx {
 		}
 #endif
 	}
+
+    auto get_error_string(VkResult result) -> const char* {
+#define MAKE_FLAG_CASE(flag_name) case flag_name: return #flag_name;
+        switch (result) {
+            MAKE_FLAG_CASE(VK_SUCCESS);
+            MAKE_FLAG_CASE(VK_NOT_READY);
+            MAKE_FLAG_CASE(VK_TIMEOUT);
+            MAKE_FLAG_CASE(VK_EVENT_SET);
+            MAKE_FLAG_CASE(VK_EVENT_RESET);
+            MAKE_FLAG_CASE(VK_INCOMPLETE);
+            MAKE_FLAG_CASE(VK_ERROR_OUT_OF_HOST_MEMORY);
+            MAKE_FLAG_CASE(VK_ERROR_OUT_OF_DEVICE_MEMORY);
+            MAKE_FLAG_CASE(VK_ERROR_INITIALIZATION_FAILED);
+            MAKE_FLAG_CASE(VK_ERROR_DEVICE_LOST);
+            MAKE_FLAG_CASE(VK_ERROR_MEMORY_MAP_FAILED);
+            MAKE_FLAG_CASE(VK_ERROR_LAYER_NOT_PRESENT);
+            MAKE_FLAG_CASE(VK_ERROR_EXTENSION_NOT_PRESENT);
+            MAKE_FLAG_CASE(VK_ERROR_FEATURE_NOT_PRESENT);
+            MAKE_FLAG_CASE(VK_ERROR_INCOMPATIBLE_DRIVER);
+            MAKE_FLAG_CASE(VK_ERROR_TOO_MANY_OBJECTS);
+            MAKE_FLAG_CASE(VK_ERROR_FORMAT_NOT_SUPPORTED);
+            MAKE_FLAG_CASE(VK_ERROR_FRAGMENTED_POOL);
+            MAKE_FLAG_CASE(VK_ERROR_UNKNOWN);
+            MAKE_FLAG_CASE(VK_ERROR_OUT_OF_POOL_MEMORY);
+            MAKE_FLAG_CASE(VK_ERROR_INVALID_EXTERNAL_HANDLE);
+            MAKE_FLAG_CASE(VK_ERROR_FRAGMENTATION);
+            MAKE_FLAG_CASE(VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS);
+            MAKE_FLAG_CASE(VK_PIPELINE_COMPILE_REQUIRED);
+            MAKE_FLAG_CASE(VK_ERROR_NOT_PERMITTED);
+            MAKE_FLAG_CASE(VK_ERROR_SURFACE_LOST_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_NATIVE_WINDOW_IN_USE_KHR);
+            MAKE_FLAG_CASE(VK_SUBOPTIMAL_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_OUT_OF_DATE_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_INCOMPATIBLE_DISPLAY_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_VALIDATION_FAILED_EXT);
+            MAKE_FLAG_CASE(VK_ERROR_INVALID_SHADER_NV);
+            MAKE_FLAG_CASE(VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
+            MAKE_FLAG_CASE(VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT);
+            MAKE_FLAG_CASE(VK_THREAD_IDLE_KHR);
+            MAKE_FLAG_CASE(VK_THREAD_DONE_KHR);
+            MAKE_FLAG_CASE(VK_OPERATION_DEFERRED_KHR);
+            MAKE_FLAG_CASE(VK_OPERATION_NOT_DEFERRED_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_COMPRESSION_EXHAUSTED_EXT);
+            MAKE_FLAG_CASE(VK_INCOMPATIBLE_SHADER_BINARY_EXT);
+            MAKE_FLAG_CASE(VK_PIPELINE_BINARY_MISSING_KHR);
+            MAKE_FLAG_CASE(VK_ERROR_NOT_ENOUGH_SPACE_KHR);
+            default: return "unknown"; break;
+        }
+#undef MAKE_FLAG_CASE
+    }
 
 	auto validate_layers(const std::vector<const char*>& required, const std::vector<VkLayerProperties>& available) -> bool {
 		for (auto layer : required) {
@@ -139,20 +196,35 @@ namespace edge::gfx {
 #ifdef EDGE_PLATFORM_WINDOWS
 		ptr = _aligned_malloc(size, alignment);
 #else
+        // Ensure alignment meets POSIX requirements
+        if (alignment < sizeof(void*)) {
+            alignment = sizeof(void*);
+        }
+
+        // Ensure alignment is power of 2
+        if (alignment & (alignment - 1)) {
+            alignment = 1;
+            while (alignment < size) alignment <<= 1;
+        }
+
 		// POSIX aligned allocation
 		if (posix_memalign(&ptr, alignment, size) != 0) {
+            spdlog::error("[Vulkan Graphics Context]: Failed to allocate {} bytes with {} bytes alignment in {} scope.",
+                          size, alignment, get_allocation_scope_str(allocation_scope));
 			ptr = nullptr;
 		}
 #endif
 		if (stats && ptr) {
-			stats->total_bytes_allocated += size;
-			stats->allocation_count += 1ull;
-			stats->allocation_map[ptr] = { size, alignment, allocation_scope };
+			stats->total_bytes_allocated.fetch_add(size);
+			stats->allocation_count.fetch_add(1ull);
 
-//#if VULKAN_DEBUG
-//			spdlog::trace("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {})",
-//				reinterpret_cast<intptr_t>(ptr), size, alignment, get_allocation_scope_str(allocation_scope));
-//#endif
+            std::lock_guard<std::mutex> lock(stats->mutex);
+			stats->allocation_map[ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
+
+#if VULKAN_DEBUG
+			spdlog::trace("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
+				reinterpret_cast<uintptr_t>(ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
+#endif
 		}
 
 		return ptr;
@@ -165,18 +237,19 @@ namespace edge::gfx {
 
 		auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
 		if (stats) {
+            std::lock_guard<std::mutex> lock(stats->mutex);
 			if (auto found = stats->allocation_map.find(mem); found != stats->allocation_map.end()) {
-				stats->total_bytes_allocated -= found->second.size;
-				stats->deallocation_count += 1ull;
+				stats->total_bytes_allocated.fetch_sub(found->second.size);
+				stats->deallocation_count.fetch_add(1ull);
 
-//#if VULKAN_DEBUG
-//				spdlog::trace("[Vulkan Graphics Context]: Deallocation({:#010x}, {} bytes, {} byte alignment, scope - {})",
-//					reinterpret_cast<intptr_t>(mem), found->second.size, found->second.align, get_allocation_scope_str(found->second.scope));
-//#endif
+#if VULKAN_DEBUG
+				spdlog::trace("[Vulkan Graphics Context]: Deallocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
+					reinterpret_cast<uintptr_t>(mem), found->second.size, found->second.align, get_allocation_scope_str(found->second.scope), std::this_thread::get_id());
+#endif
 				stats->allocation_map.erase(found);
 			}
 			else {
-				spdlog::error("[Vulkan Graphics Context]: Found invalid memory allocation: {:#010x}.", reinterpret_cast<intptr_t>(mem));
+				spdlog::error("[Vulkan Graphics Context]: Found invalid memory allocation: {:#010x}.", reinterpret_cast<uintptr_t>(mem));
 			}
 		}
 
@@ -198,26 +271,9 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
-		size_t old_size{ size };
-
-		auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
-		if (stats) {
-			if (auto found = stats->allocation_map.find(old); found != stats->allocation_map.end()) {
-				old_size = found->second.size;
-
-//#if VULKAN_DEBUG
-//				spdlog::trace("[Vulkan Graphics Context]: Reallocation({:#010x}, {} bytes, {} byte alignment, scope - {})",
-//					reinterpret_cast<intptr_t>(old), found->second.size, found->second.align, get_allocation_scope_str(found->second.scope));
-//#endif
-			}
-			else {
-				spdlog::error("[Vulkan Graphics Context]: Found invalid memory allocation: {:#010x}.", reinterpret_cast<intptr_t>(old));
-			}
-		}
-
 		void* new_ptr = vkmemalloc(user_data, size, alignment, allocation_scope);
 		if (new_ptr && old) {
-			memcpy(new_ptr, old, std::min(size, old_size));
+			memcpy(new_ptr, old, size);
 			vkmemfree(user_data, old);
 		}
 		return new_ptr;
@@ -251,11 +307,11 @@ namespace edge::gfx {
 		// Check that all allocated vulkan objects was deallocated
 		if (memalloc_stats_.allocation_count != memalloc_stats_.deallocation_count) {
 			spdlog::error("[Vulkan Graphics Context]: Memory leaks detected!\n Allocated: {}, Deallocated: {} objects. Leaked {} bytes.",
-				memalloc_stats_.allocation_count, memalloc_stats_.deallocation_count, memalloc_stats_.total_bytes_allocated);
+				memalloc_stats_.allocation_count.load(), memalloc_stats_.deallocation_count.load(), memalloc_stats_.total_bytes_allocated.load());
 
 			for (const auto& allocation : memalloc_stats_.allocation_map) {
 				spdlog::warn("{:#010x} : {} bytes, {} byte alignment, {} scope", 
-					reinterpret_cast<intptr_t>(allocation.first), allocation.second.size, allocation.second.align, get_allocation_scope_str(allocation.second.scope));
+					reinterpret_cast<uintptr_t>(allocation.first), allocation.second.size, allocation.second.align, get_allocation_scope_str(allocation.second.scope));
 			}
 		}
 	}
@@ -281,54 +337,53 @@ namespace edge::gfx {
 		VK_CHECK_RESULT(volkInitialize(), "Failed to initialize volk.");
 
 		// Enumerate instance extensions
-		uint32_t instance_property_count{ 0u };
-		VK_CHECK_RESULT(vkEnumerateInstanceExtensionProperties(nullptr, &instance_property_count, nullptr),
+		uint32_t instance_extension_property_count{ 0u };
+		VK_CHECK_RESULT(vkEnumerateInstanceExtensionProperties(nullptr, &instance_extension_property_count, nullptr),
 			"Failed to request instance extension properties count.");
 
-		std::vector<VkExtensionProperties> ext_props(instance_property_count);
-		VK_CHECK_RESULT(vkEnumerateInstanceExtensionProperties(nullptr, &instance_property_count, ext_props.data()),
+		std::vector<VkExtensionProperties> instance_extension_properties(instance_extension_property_count);
+		VK_CHECK_RESULT(vkEnumerateInstanceExtensionProperties(nullptr, &instance_extension_property_count, instance_extension_properties.data()),
 			"Failed to request instance extension properties.");
 
 		// Collect all required instance extensions
-		std::vector<const char*> instance_required_extensions{};
-		instance_required_extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+        instance_extensions_.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 
 		// Add platform dependent surface extensions
 #if EDGE_PLATFORM_ANDROID
-		instance_required_extensions.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+        instance_extensions_.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
 #elif EDGE_PLATFORM_WINDOWS
-		instance_required_extensions.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+        instance_extensions_.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
 #endif
 
 #if defined(VULKAN_DEBUG) && defined(USE_VALIDATION_LAYERS)
 		bool VK_EXT_debug_utils_enabled{ false };
-		auto debug_extension_it = std::find_if(ext_props.begin(), ext_props.end(), [](VkExtensionProperties const& ep) {
+		auto debug_extension_it = std::find_if(instance_extension_properties.begin(), instance_extension_properties.end(), [](VkExtensionProperties const& ep) {
 			return strcmp(ep.extensionName, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0;
 			});
 
-		if (debug_extension_it != ext_props.end()) {
+		if (debug_extension_it != instance_extension_properties.end()) {
 			spdlog::info("[Vulkan Graphics Context]: Vulkan debug utils enabled ({})", VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-			instance_required_extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+            instance_extensions_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 			VK_EXT_debug_utils_enabled = true;
 		}
 
 		bool VK_EXT_debug_report_enabled{ false };
-		debug_extension_it = std::find_if(ext_props.begin(), ext_props.end(), [](VkExtensionProperties const& ep) {
+		debug_extension_it = std::find_if(instance_extension_properties.begin(), instance_extension_properties.end(), [](VkExtensionProperties const& ep) {
 			return strcmp(ep.extensionName, VK_EXT_DEBUG_REPORT_EXTENSION_NAME) == 0;
 			});
 
-		if (!VK_EXT_debug_utils_enabled && debug_extension_it != ext_props.end()) {
+		if (!VK_EXT_debug_utils_enabled && debug_extension_it != instance_extension_properties.end()) {
 			spdlog::info("[Vulkan Graphics Context]: Vulkan debug report enabled ({})", VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-			instance_required_extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+            instance_extensions_.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
 			VK_EXT_debug_report_enabled = true;
 		}
 #endif
 
 #if defined(VULKAN_ENABLE_PORTABILITY)
-		instance_required_extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-		instance_required_extensions.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-		enable_extension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, available_instance_extensions, enabled_extensions);
-		bool portability_enumeration_available = enable_extension(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, available_instance_extensions, enabled_extensions);
+        instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+		instance_extensions_.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+		instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+		bool portability_enumeration_available = instance_extensions_.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)ж
 #endif
 
 #ifdef USE_VALIDATION_LAYER_FEATURES
@@ -346,7 +401,7 @@ namespace edge::gfx {
 				if (strcmp(available_extension.extensionName, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME) == 0) {
 					validation_features = true;
 					spdlog::info("[Vulkan Graphics Context]: {} is available, enabling it", VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
-					instance_required_extensions.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+					instance_extensions_.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
 				}
 			}
 		}
@@ -354,7 +409,7 @@ namespace edge::gfx {
 
 		// VK_KHR_get_physical_device_properties2 is a prerequisite of VK_KHR_performance_query
 		// which will be used for stats gathering where available.
-		instance_required_extensions.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
+        instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
 		uint32_t supported_validation_layer_count{ 0u };
 		vkEnumerateInstanceLayerProperties(&supported_validation_layer_count, nullptr);
@@ -396,8 +451,8 @@ namespace edge::gfx {
 		VkInstanceCreateInfo instance_create_info{};
 		instance_create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 		instance_create_info.pApplicationInfo = &application_info;
-		instance_create_info.enabledExtensionCount = static_cast<uint32_t>(instance_required_extensions.size());
-		instance_create_info.ppEnabledExtensionNames = instance_required_extensions.data();
+		instance_create_info.enabledExtensionCount = static_cast<uint32_t>(instance_extensions_.size());
+		instance_create_info.ppEnabledExtensionNames = instance_extensions_.data();
 		instance_create_info.enabledLayerCount = static_cast<uint32_t>(requested_validation_layers.size());
 		instance_create_info.ppEnabledLayerNames = requested_validation_layers.data();
 
@@ -499,7 +554,7 @@ namespace edge::gfx {
 		VkAndroidSurfaceCreateInfoKHR surface_create_info{};
 		surface_create_info.sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR;
 		surface_create_info.window = static_cast<ANativeWindow*>(create_info.window->get_native_handle());
-		VK_CHECK_RESULT(vkCreateAndroidSurfaceKHR(vk_instance_ , &surface_create_info, &vk_alloc_callbacks_, &vk_surface_), 
+		VK_CHECK_RESULT(vkCreateAndroidSurfaceKHR(vk_instance_ , &surface_create_info, &vk_alloc_callbacks_, &vk_surface_),
 			"Failed to create surface.");
 #elif EDGE_PLATFORM_WINDOWS
 		auto hWnd = static_cast<HWND>(create_info.window->get_native_handle());
@@ -514,53 +569,52 @@ namespace edge::gfx {
 			"Failed to create surface.");
 #endif
 
-		std::vector<const char*> device_extensions{};
 		// Apply required device extensions
-		device_extensions.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-		device_extensions.push_back(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
-		device_extensions.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
-		device_extensions.push_back(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
-		device_extensions.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
-		device_extensions.push_back(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME);
+		device_extensions_.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+		device_extensions_.push_back(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
+		device_extensions_.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
+		device_extensions_.push_back(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_COPY_COMMANDS_2_EXTENSION_NAME);
+		device_extensions_.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME);
 
 #ifndef EDGE_PLATFORM_ANDROID
-		device_extensions.push_back(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
+        device_extensions_.push_back(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
 #endif
 
 #ifdef VULKAN_ENABLE_PORTABILITY
 		// VK_KHR_portability_subset must be enabled if present in the implementation (e.g on macOS/iOS with beta extensions enabled)
 		// Optional
-		device_extensions.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_PORTABILITY_SUBSET_EXTENSION_NAME);
 #endif
 
 		// Enable extensions for use nsight aftermath
 #if USE_NSIGHT_AFTERMATH
-		device_extensions.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
-		device_extensions.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
+        device_extensions_.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
+		device_extensions_.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
 #endif
 
 		if (create_info.require_features.ray_tracing) {
-			device_extensions.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
-			device_extensions.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-			device_extensions.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-			device_extensions.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+			device_extensions_.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
+			device_extensions_.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+			device_extensions_.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+			device_extensions_.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
 		}
 
 		// Select suitable gpu
@@ -598,4 +652,20 @@ namespace edge::gfx {
 
 		return true;
 	}
+
+    auto VulkanGraphicsContext::is_instance_extension_enabled(const char* extension_name) const noexcept -> bool {
+        if(auto found = std::find(instance_extensions_.begin(), instance_extensions_.end(), extension_name);
+        found != instance_extensions_.end()) {
+            return true;
+        }
+        return false;
+    }
+
+    auto VulkanGraphicsContext::is_device_extension_enabled(const char* extension_name) const noexcept -> bool {
+        if(auto found = std::find(device_extensions_.begin(), device_extensions_.end(), extension_name);
+                found != device_extensions_.end()) {
+            return true;
+        }
+        return false;
+    }
 }
