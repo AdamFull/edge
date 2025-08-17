@@ -25,6 +25,15 @@ namespace edge::gfx {
 		std::unordered_map<void*, VkMemoryAllocationDesc> allocation_map;
 	};
 
+    struct VkDeviceHandle {
+        VkPhysicalDevice physical;
+        VkDevice logical;
+
+        VkPhysicalDeviceProperties properties;
+        std::vector<VkExtensionProperties> extensions;
+        std::vector<VkQueueFamilyProperties> queue_family_props;
+    };
+
 	struct VkPhysicalDeviceDesc {
 		VkPhysicalDevice handle;
 
@@ -46,7 +55,7 @@ namespace edge::gfx {
         auto is_instance_extension_enabled(const char* extension_name) const noexcept -> bool;
         auto is_device_extension_enabled(const char* extension_name) const noexcept -> bool;
 	private:
-
+        auto is_device_extension_supported(const VkDeviceHandle& device, const char* extension_name) const -> bool;
 		bool volk_initialized_{ false };
 
 		VkAllocationCallbacks vk_alloc_callbacks_{};
@@ -67,12 +76,11 @@ namespace edge::gfx {
 		VkDebugReportCallbackEXT vk_debug_report_callback_{ VK_NULL_HANDLE };
 #endif
 
-		std::vector<VkPhysicalDevice> physical_devices_{};
-
 		VkSurfaceKHR vk_surface_{ VK_NULL_HANDLE };
 
+        // Device
         int32_t selected_device_index_{ -1 };
-        VkDevice logical_device_{ VK_NULL_HANDLE };
         std::vector<const char*> device_extensions_{};
+        std::vector<VkDeviceHandle> devices_{};
 	};
 }

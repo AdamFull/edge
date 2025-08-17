@@ -545,9 +545,14 @@ namespace edge::gfx {
 		VK_CHECK_RESULT(vkEnumeratePhysicalDevices(vk_instance_, &physical_device_count, nullptr), 
 			"Failed to get physical device count.");
 
-		physical_devices_.resize(physical_device_count);
-		VK_CHECK_RESULT(vkEnumeratePhysicalDevices(vk_instance_, &physical_device_count, physical_devices_.data()),
+		std::vector<VkPhysicalDevice> physical_devices(physical_device_count);
+		VK_CHECK_RESULT(vkEnumeratePhysicalDevices(vk_instance_, &physical_device_count, physical_devices.data()),
 			"Failed to get physical devices.");
+
+        devices_.resize(physical_device_count);
+        for(int32_t i = 0; i < physical_device_count; ++i) {
+            devices_[i].physical = physical_devices[i];
+        }
 
 		// Create surface
 #if EDGE_PLATFORM_ANDROID
@@ -574,9 +579,6 @@ namespace edge::gfx {
 		device_extensions_.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
-		device_extensions_.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-		device_extensions_.push_back(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
-		device_extensions_.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME);
 		device_extensions_.push_back(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_SHADER_DRAW_PARAMETERS_EXTENSION_NAME);
@@ -607,49 +609,44 @@ namespace edge::gfx {
 		// Enable extensions for use nsight aftermath
 #if USE_NSIGHT_AFTERMATH
         device_extensions_.push_back(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
-		device_extensions_.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
 #endif
 
 		if (create_info.require_features.ray_tracing) {
 			device_extensions_.push_back(VK_KHR_DEFERRED_HOST_OPERATIONS_EXTENSION_NAME);
-			device_extensions_.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-			device_extensions_.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-			device_extensions_.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
 		}
 
 		// Select suitable gpu
         int32_t fallback_device_index{ -1 };
         for(int32_t device_index = 0; device_index < physical_device_count; ++device_index) {
-            auto& physical_device = physical_devices_[device_index];
+            auto& device = devices_[device_index];
 
-            VkPhysicalDeviceProperties properties{};
-            vkGetPhysicalDeviceProperties(physical_device, &properties);
+            vkGetPhysicalDeviceProperties(device.physical, &device.properties);
 
-            if(properties.apiVersion < VK_API_VERSION_1_2) {
-                spdlog::warn("[Vulkan Graphics Context]: Device is not supported. Required API version: {}, but device supporting {}.", VK_API_VERSION_1_2, properties.apiVersion);
+            if(device.properties.apiVersion < VK_API_VERSION_1_2) {
+                spdlog::warn("[Vulkan Graphics Context]: Device is not supported. Required API version: {}, but device supporting {}.", VK_API_VERSION_1_2, device.properties.apiVersion);
                 fallback_device_index = device_index;
                 continue;
             }
 
             // Enumerate device extensions
             uint32_t device_extension_count{0u};
-            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &device_extension_count, nullptr),
+            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(device.physical, nullptr, &device_extension_count, nullptr),
                             "Failed to request device extension count.");
 
-            std::vector<VkExtensionProperties> device_extensions(device_extension_count);
-            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(physical_device, nullptr, &device_extension_count, device_extensions.data()),
+            device.extensions.resize(device_extension_count);
+            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(device.physical, nullptr, &device_extension_count, device.extensions.data()),
                             "Failed to request device extensions.");
 
             // Check device extension support
             bool all_extension_supported{ true };
             for (const auto& extension_name : device_extensions_) {
-                auto supported = std::find_if(device_extensions.begin(), device_extensions.end(),
+                auto supported = std::find_if(device.extensions.begin(), device.extensions.end(),
                              [extension_name](auto& device_extension) {
                     return std::strcmp(device_extension.extensionName, extension_name) == 0;
-                }) != device_extensions.end();
+                }) != device.extensions.end();
 
                 if (!supported) {
-                    spdlog::warn("[Vulkan Graphics Context]: Device {} is not supporting required extension: {}.", properties.deviceName, extension_name);
+                    spdlog::warn("[Vulkan Graphics Context]: Device {} is not supporting required extension: {}.", device.properties.deviceName, extension_name);
                     all_extension_supported = false;
                     break;
                 }
@@ -668,25 +665,18 @@ namespace edge::gfx {
                 case GraphicsDeviceType::eSoftware: requested_device_type = VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU; break;
             }
 
-            // Check that device is same that requested type
-            if(requested_device_type != properties.deviceType) {
-                spdlog::warn("[Vulkan Graphics Context]: Device {} is not required type extension.", properties.deviceName);
-                fallback_device_index = device_index;
-                continue;
-            }
-
             // Check that any device queue family is support present
             if (vk_surface_) {
                 VkBool32 support_present{ VK_FALSE };
 
                 uint32_t queue_family_properties_count{ 0u };
-                vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_properties_count, nullptr);
+                vkGetPhysicalDeviceQueueFamilyProperties(device.physical, &queue_family_properties_count, nullptr);
 
-                std::vector<VkQueueFamilyProperties> queue_family_properties(queue_family_properties_count);
-                vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_properties_count, queue_family_properties.data());
+                device.queue_family_props.resize(queue_family_properties_count);
+                vkGetPhysicalDeviceQueueFamilyProperties(device.physical, &queue_family_properties_count, device.queue_family_props.data());
 
                 for(int32_t family_index = 0; family_index < queue_family_properties_count; ++family_index) {
-                    VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, family_index, vk_surface_, &support_present),
+                    VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceSupportKHR(device.physical, family_index, vk_surface_, &support_present),
                                     "Failed to get physical device surface support.");
                     if(support_present) {
                         break;
@@ -698,38 +688,262 @@ namespace edge::gfx {
                     continue;
                 }
             }
+
+            // Check that device is same that requested type
+            if(requested_device_type != device.properties.deviceType) {
+                spdlog::warn("[Vulkan Graphics Context]: Device {} is not required type extension.", device.properties.deviceName);
+                fallback_device_index = device_index;
+                continue;
+            }
+
+            // Found best device
+            selected_device_index_ = device_index;
+            break;
         }
 
-		//for (auto& physical_device : physical_devices) {
-		//	VkPhysicalDeviceVulkan12Features features_vk12{};
-		//	features_vk12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+        // No device found.
+        if(selected_device_index_ < 0) {
+            if (fallback_device_index < 0) {
+                spdlog::error("[Vulkan Graphics Context]: Couldn't find a physical device.");
+                return false;
+            }
+
+            // TODO: remove unsupported extensions
+
+            selected_device_index_ = fallback_device_index;
+        }
+
+        auto& device = devices_[selected_device_index_];
+
+#ifdef VULKAN_DEBUG
+        bool VK_EXT_debug_marker_enabled{ false };
+        if (!VK_EXT_debug_utils_enabled) {
+            auto debug_extension_it = std::find_if(device.extensions.begin(), device.extensions.end(),
+                                                 [](VkExtensionProperties const& ep) {
+                return strcmp(ep.extensionName, VK_EXT_DEBUG_MARKER_EXTENSION_NAME) == 0;
+            });
+
+            if (debug_extension_it != device.extensions.end()) {
+                spdlog::info("[Vulkan Graphics Context]: Vulkan debug utils enabled ({})", VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+                device_extensions_.emplace_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+                VK_EXT_debug_marker_enabled = true;
+            }
+        }
+#endif
+
+        // Create device
+        VkDeviceCreateInfo device_create_info{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+        device_create_info.enabledExtensionCount = static_cast<uint32_t>(device_extensions_.size());
+        device_create_info.ppEnabledExtensionNames = device_extensions_.data();
+
+        std::vector<VkDeviceQueueCreateInfo> queue_create_infos(device.queue_family_props.size());
+        std::vector<std::vector<float>> queue_priorities(device.queue_family_props.size());
+
+        // Prepare queues
+        for (uint32_t queue_family_index = 0U; queue_family_index < queue_create_infos.size(); ++queue_family_index) {
+            auto const& queue_family_property = device.queue_family_props[queue_family_index];
+            queue_priorities[queue_family_index].resize(queue_family_property.queueCount, 0.5f);
+
+            auto& queue_create_info = queue_create_infos[queue_family_index];
+            queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            queue_create_info.queueFamilyIndex = queue_family_index;
+            queue_create_info.queueCount = queue_family_property.queueCount;
+            queue_create_info.pQueuePriorities = queue_priorities[queue_family_index].data();
+        }
+
+        if(is_device_extension_supported(device, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME)) {
+            device_extensions_.emplace_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+        }
+
+        if(is_device_extension_supported(device, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME)) {
+            device_extensions_.emplace_back(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
+        }
+
+        VkPhysicalDevicePerformanceQueryFeaturesKHR physical_device_performance_query_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR };
+
+        if(is_device_extension_supported(device, VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_performance_query_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if (physical_device_performance_query_features.performanceCounterQueryPools) {
+                device_extensions_.push_back(VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME);
+                physical_device_performance_query_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_performance_query_features;
+            }
+        }
+
+        VkPhysicalDeviceHostQueryResetFeatures physical_device_host_query_reset_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR };
+        if(is_device_extension_supported(device, VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_host_query_reset_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if(physical_device_host_query_reset_features.hostQueryReset) {
+                device_extensions_.push_back(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
+                physical_device_host_query_reset_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_host_query_reset_features;
+            }
+        }
+
+        VkPhysicalDeviceSynchronization2Features physical_device_synchronization2_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
+        if(is_device_extension_supported(device, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_synchronization2_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if(physical_device_synchronization2_features.synchronization2) {
+                device_extensions_.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
+                physical_device_synchronization2_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_synchronization2_features;
+            }
+        }
+
+        VkPhysicalDeviceDynamicRenderingFeatures physical_device_dynamic_rendering_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES };
+        if(is_device_extension_supported(device, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_dynamic_rendering_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if(physical_device_dynamic_rendering_features.dynamicRendering) {
+                device_extensions_.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+                physical_device_dynamic_rendering_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_dynamic_rendering_features;
+            }
+        }
+
+        VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT physical_device_shader_demote_to_helper_invocation_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT };
+        if(is_device_extension_supported(device, VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_shader_demote_to_helper_invocation_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if(physical_device_shader_demote_to_helper_invocation_features.shaderDemoteToHelperInvocation) {
+                device_extensions_.push_back(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
+                physical_device_shader_demote_to_helper_invocation_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_shader_demote_to_helper_invocation_features;
+            }
+        }
+
+        VkPhysicalDevice16BitStorageFeaturesKHR physical_device_16_bit_storage_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES };
+        if(is_device_extension_supported(device, VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_16_bit_storage_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            device_extensions_.push_back(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
+            physical_device_16_bit_storage_features.pNext = (void*)device_create_info.pNext;
+            device_create_info.pNext = &physical_device_16_bit_storage_features;
+        }
+
+        VkPhysicalDeviceExtendedDynamicStateFeaturesEXT physical_device_extended_dynamic_state_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT };
+        if(is_device_extension_supported(device, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_extended_dynamic_state_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if(physical_device_extended_dynamic_state_features.extendedDynamicState) {
+                device_extensions_.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+                physical_device_extended_dynamic_state_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_extended_dynamic_state_features;
+            }
+        }
+
+        VkPhysicalDeviceRayQueryFeaturesKHR physical_device_ray_query_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR };
+        if(is_device_extension_supported(device, VK_KHR_RAY_QUERY_EXTENSION_NAME) && create_info.require_features.ray_tracing) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_ray_query_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if(physical_device_ray_query_features.rayQuery) {
+                device_extensions_.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
+                physical_device_ray_query_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_ray_query_features;
+            }
+        }
+
+        VkPhysicalDeviceAccelerationStructureFeaturesKHR physical_device_acceleration_structure_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
+        if(is_device_extension_supported(device, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) && create_info.require_features.ray_tracing) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_acceleration_structure_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if(physical_device_acceleration_structure_features.accelerationStructure) {
+                device_extensions_.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
+                physical_device_acceleration_structure_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_acceleration_structure_features;
+            }
+        }
+
+        VkPhysicalDeviceRayTracingPipelineFeaturesKHR physical_device_ray_tracing_pipeline_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
+        if(is_device_extension_supported(device, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME) && create_info.require_features.ray_tracing) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_ray_tracing_pipeline_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if(physical_device_ray_tracing_pipeline_features.rayTracingPipeline) {
+                device_extensions_.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
+                physical_device_ray_tracing_pipeline_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_ray_tracing_pipeline_features;
+            }
+        }
+
+
+#if USE_NSIGHT_AFTERMATH
+        VkPhysicalDeviceDiagnosticsConfigFeaturesNV physical_device_diagnostics_config_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV };
+        if(is_device_extension_supported(device, VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME)) {
+            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+            physical_device_features.pNext = &physical_device_diagnostics_config_features;
+            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+            if(physical_device_diagnostics_config_features.diagnosticsConfig) {
+                device_extensions_.push_back(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME);
+                physical_device_diagnostics_config_features.pNext = (void*)device_create_info.pNext;
+                device_create_info.pNext = &physical_device_diagnostics_config_features;
+            }
+        }
+
+        // Initialize Nsight Aftermath for this device.
 		//
-		//	VkPhysicalDeviceFeatures2 features{};
-		//	features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-		//	features.pNext = &features_vk12;
-		//	vkGetPhysicalDeviceFeatures2(physical_device, &features);
+		// * ENABLE_RESOURCE_TRACKING - this will include additional information about the
+		//   resource related to a GPU virtual address seen in case of a crash due to a GPU
+		//   page fault. This includes, for example, information about the size of the
+		//   resource, its format, and an indication if the resource has been deleted.
 		//
-		//	VkPhysicalDeviceProperties properties{};
-		//	vkGetPhysicalDeviceProperties(physical_device, &properties);
+		// * ENABLE_AUTOMATIC_CHECKPOINTS - this will enable automatic checkpoints for
+		//   all draw calls, compute dispatchs, and resource copy operations that capture
+		//   CPU call stacks for those event.
 		//
-		//	VkPhysicalDeviceMemoryProperties memory_properties{};
-		//	vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
+		//   Using this option should be considered carefully. It can cause very high CPU overhead.
 		//
-		//	std::stringstream uuid_ss;
-		//	for (uint8_t byte : properties.pipelineCacheUUID) {
-		//		uuid_ss << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(byte);
-		//	}
+		// * ENABLE_SHADER_DEBUG_INFO - this instructs the shader compiler to
+		//   generate debug information (line tables) for all shaders. Using this option
+		//   should be considered carefully. It may cause considerable shader compilation
+		//   overhead and additional overhead for handling the corresponding shader debug
+		//   information callbacks.
 		//
-		//	//spdlog::debug("[Vulkan Graphics Context]: Found GPU: {}\nDevice ID: {}\nVendor ID: {}\nDriver Version: {}\nAPI Version: {}\nDevice Type: {}\nPipeline Cache UUID: {}", 
-		//	//	properties.deviceName, properties.deviceID, properties.vendorID, properties.driverVersion,
-		//	//	properties.apiVersion, properties.deviceType, uuid_ss.str());
-		//
-		//	uint32_t queue_family_property_count{ 0u };
-		//	vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_property_count, nullptr);
-		//
-		//	std::vector<VkQueueFamilyProperties> queue_family_properties(queue_family_property_count);
-		//	vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &queue_family_property_count, queue_family_properties.data());
-		//}
+
+		VkDeviceDiagnosticsConfigCreateInfoNV aftermath_info{ VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV };
+		aftermath_info.flags =
+			VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_RESOURCE_TRACKING_BIT_NV |
+			VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_AUTOMATIC_CHECKPOINTS_BIT_NV |
+			VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_SHADER_DEBUG_INFO_BIT_NV;
+
+		if (is_device_extension_enabled(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME))
+		{
+            aftermath_info.pNext = (void*)device_create_info.pNext;
+            device_create_info.pNext = &aftermath_info;
+		}
+#endif
+
+        device_create_info.queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size());
+        device_create_info.pQueueCreateInfos = queue_create_infos.data();
+
+        VK_CHECK_RESULT(vkCreateDevice(device.physical, &device_create_info, &vk_alloc_callbacks_, &device.logical),
+                        "Failed to create logical device.");
+
+        // Need to load volk for all the not-yet Vulkan-Hpp calls
+        volkLoadDevice(device.logical);
 
 		return true;
 	}
@@ -748,5 +962,12 @@ namespace edge::gfx {
             return true;
         }
         return false;
+    }
+
+    auto VulkanGraphicsContext::is_device_extension_supported(const VkDeviceHandle& device, const char* extension_name) const -> bool {
+        return std::find_if(device.extensions.begin(), device.extensions.end(),
+                            [extension_name](auto& device_extension) {
+            return std::strcmp(device_extension.extensionName, extension_name) == 0;
+        }) != device.extensions.end();
     }
 }
