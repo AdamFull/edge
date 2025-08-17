@@ -231,7 +231,7 @@ namespace edge::gfx {
             std::lock_guard<std::mutex> lock(stats->mutex);
 			stats->allocation_map[ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
 
-#if VULKAN_DEBUG
+#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
 			spdlog::trace("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
 				reinterpret_cast<uintptr_t>(ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
 #endif
@@ -252,7 +252,7 @@ namespace edge::gfx {
 				stats->total_bytes_allocated.fetch_sub(found->second.size);
 				stats->deallocation_count.fetch_add(1ull);
 
-#if VULKAN_DEBUG
+#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
 				spdlog::trace("[Vulkan Graphics Context]: Deallocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
 					reinterpret_cast<uintptr_t>(mem), found->second.size, found->second.align, get_allocation_scope_str(found->second.scope), std::this_thread::get_id());
 #endif
@@ -281,11 +281,28 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
+#if EDGE_PLATFORM_WINDOWS
+        auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
+        auto* new_ptr = _aligned_realloc(old, size, alignment);
+        if (stats && new_ptr) {
+            stats->total_bytes_allocated.fetch_add(size);
+            stats->allocation_count.fetch_add(1ull);
+
+            std::lock_guard<std::mutex> lock(stats->mutex);
+            stats->allocation_map[new_ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
+
+#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
+            spdlog::trace("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
+                reinterpret_cast<uintptr_t>(new_ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
+#endif
+        }
+#else
 		void* new_ptr = vkmemalloc(user_data, size, alignment, allocation_scope);
 		if (new_ptr && old) {
 			memcpy(new_ptr, old, size);
 			vkmemfree(user_data, old);
 		}
+#endif
 		return new_ptr;
 	}
 
@@ -793,7 +810,7 @@ namespace edge::gfx {
             }
         }
 
-        VkPhysicalDeviceHostQueryResetFeatures physical_device_host_query_reset_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR };
+        VkPhysicalDeviceHostQueryResetFeatures physical_device_host_query_reset_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES };
         if(is_device_extension_supported(device, VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME)) {
             VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
             physical_device_features.pNext = &physical_device_host_query_reset_features;
