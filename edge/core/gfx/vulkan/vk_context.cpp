@@ -10,6 +10,9 @@
 #include <cstddef>
 #include <cstdlib>
 
+#define VMA_IMPLEMENTATION
+#include <vk_mem_alloc.h>
+
 #define VK_CHECK_RESULT(result, error_text) \
 if(result != VK_SUCCESS) { \
 	spdlog::error("[Vulkan Graphics Context]: {} Reason: {}", error_text, get_error_string(result)); \
@@ -177,6 +180,13 @@ namespace edge::gfx {
 		return {};
 	}
 
+    inline void make_color(uint32_t color, float out_color[4]) {
+        out_color[0] = ((color >> 24) & 0xFF) / 255.0f;
+        out_color[1] = ((color >> 16) & 0xFF) / 255.0f;
+        out_color[2] = ((color >> 8) & 0xFF) / 255.0f;
+        out_color[3] = (color & 0xFF) / 255.0f;
+    }
+
 	inline auto get_allocation_scope_str(VkSystemAllocationScope scope) -> const char* {
 		switch (scope) {
 		case VK_SYSTEM_ALLOCATION_SCOPE_COMMAND: return "command"; break;
@@ -288,6 +298,19 @@ namespace edge::gfx {
     }
 
     VulkanGraphicsContext::~VulkanGraphicsContext() {
+        if(vma_allocator_) {
+            vmaDestroyAllocator(vma_allocator_);
+        }
+
+        if(selected_device_index_ != -1) {
+            auto& device = devices_[selected_device_index_];
+            vkDestroyDevice(device.logical, &vk_alloc_callbacks_);
+        }
+
+        if(vk_surface_) {
+            vkDestroySurfaceKHR(vk_instance_, vk_surface_, &vk_alloc_callbacks_);
+        }
+
 		if (vk_debug_utils_messenger_) {
 			vkDestroyDebugUtilsMessengerEXT(vk_instance_, vk_debug_utils_messenger_, &vk_alloc_callbacks_);
 		}
@@ -356,7 +379,6 @@ namespace edge::gfx {
 #endif
 
 #if defined(VULKAN_DEBUG) && defined(USE_VALIDATION_LAYERS)
-		bool VK_EXT_debug_utils_enabled{ false };
 		auto debug_extension_it = std::find_if(instance_extension_properties.begin(), instance_extension_properties.end(), [](VkExtensionProperties const& ep) {
 			return strcmp(ep.extensionName, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0;
 			});
@@ -716,7 +738,6 @@ namespace edge::gfx {
         auto& device = devices_[selected_device_index_];
 
 #ifdef VULKAN_DEBUG
-        bool VK_EXT_debug_marker_enabled{ false };
         if (!VK_EXT_debug_utils_enabled) {
             auto debug_extension_it = std::find_if(device.extensions.begin(), device.extensions.end(),
                                                  [](VkExtensionProperties const& ep) {
@@ -760,7 +781,6 @@ namespace edge::gfx {
         }
 
         VkPhysicalDevicePerformanceQueryFeaturesKHR physical_device_performance_query_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR };
-
         if(is_device_extension_supported(device, VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME)) {
             VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
             physical_device_features.pNext = &physical_device_performance_query_features;
@@ -945,6 +965,50 @@ namespace edge::gfx {
         // Need to load volk for all the not-yet Vulkan-Hpp calls
         volkLoadDevice(device.logical);
 
+        // Create vulkan memory allocator
+        VmaVulkanFunctions vma_vulkan_func{};
+        vma_vulkan_func.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+        vma_vulkan_func.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+        VmaAllocatorCreateInfo vma_allocator_create_info{};
+        vma_allocator_create_info.pVulkanFunctions = &vma_vulkan_func;
+        vma_allocator_create_info.physicalDevice = device.physical;
+        vma_allocator_create_info.device = device.logical;
+        vma_allocator_create_info.instance = vk_instance_;
+        vma_allocator_create_info.pAllocationCallbacks = &vk_alloc_callbacks_;
+
+        // NOTE: Nsight graphics using VkImportMemoryHostPointerEXT that cannot be used with dedicated memory allocation
+        bool can_get_memory_requirements = is_device_extension_supported(device, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+        //bool has_dedicated_allocation = is_device_extension_supported(device, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
+        bool has_dedicated_allocation = false;
+        if (can_get_memory_requirements && has_dedicated_allocation && is_device_extension_enabled(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
+        }
+
+        if (is_device_extension_supported(device, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) && is_device_extension_enabled(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+        }
+
+        if (is_device_extension_supported(device, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) && is_device_extension_enabled(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+        }
+
+        if (is_device_extension_supported(device, VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME) && is_device_extension_enabled(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT;
+        }
+
+        if (is_device_extension_supported(device, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME) && is_device_extension_enabled(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT;
+        }
+
+        if (is_device_extension_supported(device, VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME) && is_device_extension_enabled(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_AMD_DEVICE_COHERENT_MEMORY_BIT;
+        }
+
+        VK_CHECK_RESULT(vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator_),
+                        "Failed to create memory allocator.");
+
+
 		return true;
 	}
 
@@ -962,6 +1026,84 @@ namespace edge::gfx {
             return true;
         }
         return false;
+    }
+
+    void VulkanGraphicsContext::set_debug_name(VkObjectType object_type, uint64_t object_handle, std::string_view name) const {
+        auto& device = devices_[selected_device_index_];
+        if(VK_EXT_debug_utils_enabled) {
+            VkDebugUtilsObjectNameInfoEXT object_name_info{ VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT };
+            object_name_info.objectType = object_type;
+            object_name_info.objectHandle = object_handle;
+            object_name_info.pObjectName = name.data();
+            vkSetDebugUtilsObjectNameEXT(device.logical, &object_name_info);
+        }
+        else if(VK_EXT_debug_marker_enabled) {
+            VkDebugMarkerObjectNameInfoEXT object_name_info{ VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT };
+            object_name_info.objectType = (VkDebugReportObjectTypeEXT)object_type;
+            object_name_info.object = object_handle;
+            object_name_info.pObjectName = name.data();
+            vkDebugMarkerSetObjectNameEXT(device.logical, &object_name_info);
+        }
+    }
+
+    void VulkanGraphicsContext::set_debug_tag(VkObjectType object_type, uint64_t object_handle, uint64_t tag_name, const void* tag_data, size_t tag_data_size) const {
+        auto& device = devices_[selected_device_index_];
+        if(VK_EXT_debug_utils_enabled) {
+            VkDebugUtilsObjectTagInfoEXT object_tag_info{ VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_TAG_INFO_EXT };
+            object_tag_info.objectHandle = object_handle;
+            object_tag_info.tagName = tag_name;
+            object_tag_info.pTag = tag_data;
+            object_tag_info.tagSize = tag_data_size;
+            vkSetDebugUtilsObjectTagEXT(device.logical, &object_tag_info);
+        }
+        else if(VK_EXT_debug_marker_enabled) {
+            VkDebugMarkerObjectTagInfoEXT object_tag_info{ VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_TAG_INFO_EXT };
+            object_tag_info.objectType = (VkDebugReportObjectTypeEXT)object_type;
+            object_tag_info.object = object_handle;
+            object_tag_info.tagName = tag_name;
+            object_tag_info.pTag = tag_data;
+            object_tag_info.tagSize = tag_data_size;
+            vkDebugMarkerSetObjectTagEXT(device.logical, &object_tag_info);
+        }
+    }
+
+    void VulkanGraphicsContext::begin_label(VkCommandBuffer command_buffer, std::string_view name, uint32_t color) const {
+        if(VK_EXT_debug_utils_enabled) {
+            VkDebugUtilsLabelEXT debug_label{ VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT };
+            debug_label.pLabelName = name.data();
+            make_color(color, debug_label.color);
+            vkCmdBeginDebugUtilsLabelEXT(command_buffer, &debug_label);
+        }
+        else if(VK_EXT_debug_marker_enabled) {
+            VkDebugMarkerMarkerInfoEXT debug_marker{ VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT };
+            debug_marker.pMarkerName = name.data();
+            make_color(color, debug_marker.color);
+            vkCmdDebugMarkerBeginEXT(command_buffer, &debug_marker);
+        }
+    }
+
+    void VulkanGraphicsContext::end_label(VkCommandBuffer command_buffer) const {
+        if(VK_EXT_debug_utils_enabled) {
+            vkCmdEndDebugUtilsLabelEXT(command_buffer);
+        }
+        else if(VK_EXT_debug_marker_enabled) {
+            vkCmdDebugMarkerEndEXT(command_buffer);
+        }
+    }
+
+    void VulkanGraphicsContext::insert_label(VkCommandBuffer command_buffer, std::string_view name, uint32_t color) const {
+        if(VK_EXT_debug_utils_enabled) {
+            VkDebugUtilsLabelEXT debug_label{ VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT };
+            debug_label.pLabelName = name.data();
+            make_color(color, debug_label.color);
+            vkCmdInsertDebugUtilsLabelEXT(command_buffer, &debug_label);
+        }
+        else if(VK_EXT_debug_marker_enabled) {
+            VkDebugMarkerMarkerInfoEXT debug_marker{ VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT };
+            debug_marker.pMarkerName = name.data();
+            make_color(color, debug_marker.color);
+            vkCmdDebugMarkerInsertEXT(command_buffer, &debug_marker);
+        }
     }
 
     auto VulkanGraphicsContext::is_device_extension_supported(const VkDeviceHandle& device, const char* extension_name) const -> bool {

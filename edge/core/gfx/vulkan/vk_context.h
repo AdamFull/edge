@@ -9,6 +9,8 @@
 
 #include <vulkan/vulkan.h>
 
+#include <vk_mem_alloc.h>
+
 namespace edge::gfx {
 	struct VkMemoryAllocationDesc {
 		size_t size;
@@ -54,6 +56,12 @@ namespace edge::gfx {
 
         auto is_instance_extension_enabled(const char* extension_name) const noexcept -> bool;
         auto is_device_extension_enabled(const char* extension_name) const noexcept -> bool;
+
+        void set_debug_name(VkObjectType object_type, uint64_t object_handle, std::string_view name) const;
+        void set_debug_tag(VkObjectType object_type, uint64_t object_handle, uint64_t tag_name, const void* tag_data, size_t tag_data_size) const;
+        void begin_label(VkCommandBuffer command_buffer, std::string_view name, uint32_t color) const;
+        void end_label(VkCommandBuffer command_buffer) const;
+        void insert_label(VkCommandBuffer command_buffer, std::string_view name, uint32_t color) const;
 	private:
         auto is_device_extension_supported(const VkDeviceHandle& device, const char* extension_name) const -> bool;
 		bool volk_initialized_{ false };
@@ -76,11 +84,18 @@ namespace edge::gfx {
 		VkDebugReportCallbackEXT vk_debug_report_callback_{ VK_NULL_HANDLE };
 #endif
 
+#if defined(VULKAN_DEBUG)
+        bool VK_EXT_debug_utils_enabled{ false };
+        bool VK_EXT_debug_marker_enabled{ false };
+#endif
+
 		VkSurfaceKHR vk_surface_{ VK_NULL_HANDLE };
 
         // Device
         int32_t selected_device_index_{ -1 };
         std::vector<const char*> device_extensions_{};
         std::vector<VkDeviceHandle> devices_{};
+
+        VmaAllocator vma_allocator_{ VK_NULL_HANDLE };
 	};
 }
