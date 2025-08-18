@@ -422,7 +422,7 @@ namespace edge::gfx {
         instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 		instance_extensions_.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 		instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-		bool portability_enumeration_available = instance_extensions_.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME)ж
+        bool portability_enumeration_available = instance_extensions_.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
 #endif
 
 #ifdef USE_VALIDATION_LAYER_FEATURES
@@ -763,7 +763,7 @@ namespace edge::gfx {
 
             if (debug_extension_it != device.extensions.end()) {
                 spdlog::info("[Vulkan Graphics Context]: Vulkan debug utils enabled ({})", VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
-                device_extensions_.emplace_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+                device_extensions_.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
                 VK_EXT_debug_marker_enabled = true;
             }
         }
@@ -771,8 +771,6 @@ namespace edge::gfx {
 
         // Create device
         VkDeviceCreateInfo device_create_info{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
-        device_create_info.enabledExtensionCount = static_cast<uint32_t>(device_extensions_.size());
-        device_create_info.ppEnabledExtensionNames = device_extensions_.data();
 
         std::vector<VkDeviceQueueCreateInfo> queue_create_infos(device.queue_family_props.size());
         std::vector<std::vector<float>> queue_priorities(device.queue_family_props.size());
@@ -973,6 +971,8 @@ namespace edge::gfx {
 		}
 #endif
 
+        device_create_info.enabledExtensionCount = static_cast<uint32_t>(device_extensions_.size());
+        device_create_info.ppEnabledExtensionNames = device_extensions_.data();
         device_create_info.queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size());
         device_create_info.pQueueCreateInfos = queue_create_infos.data();
 
