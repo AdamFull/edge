@@ -88,6 +88,7 @@ namespace edge::gfx {
 
 #if defined(VULKAN_DEBUG)
         bool VK_EXT_debug_utils_enabled{ false };
+		bool VK_EXT_debug_report_enabled{ false };
         bool VK_EXT_debug_marker_enabled{ false };
 #endif
 

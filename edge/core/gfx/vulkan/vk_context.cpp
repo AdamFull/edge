@@ -285,10 +285,15 @@ namespace edge::gfx {
         auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
         auto* new_ptr = _aligned_realloc(old, size, alignment);
         if (stats && new_ptr) {
+            std::lock_guard<std::mutex> lock(stats->mutex);
+            if (auto found = stats->allocation_map.find(old); found != stats->allocation_map.end()) {
+                stats->total_bytes_allocated.fetch_sub(found->second.size);
+                stats->deallocation_count.fetch_add(1ull);
+                stats->allocation_map.erase(found);
+            }
+
             stats->total_bytes_allocated.fetch_add(size);
             stats->allocation_count.fetch_add(1ull);
-
-            std::lock_guard<std::mutex> lock(stats->mutex);
             stats->allocation_map[new_ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
 
 #if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
@@ -316,50 +321,138 @@ namespace edge::gfx {
 
     VulkanGraphicsContext::~VulkanGraphicsContext() {
         if(vma_allocator_) {
+            spdlog::debug("[Vulkan Graphics Context]: Destroying VMA allocator");
             vmaDestroyAllocator(vma_allocator_);
         }
 
         if(selected_device_index_ != -1) {
             auto& device = devices_[selected_device_index_];
+            spdlog::debug("[Vulkan Graphics Context]: Destroying logical device: {}", device.properties.deviceName);
             vkDestroyDevice(device.logical, &vk_alloc_callbacks_);
         }
 
         if(vk_surface_) {
+            spdlog::debug("[Vulkan Graphics Context]: Destroying surface");
             vkDestroySurfaceKHR(vk_instance_, vk_surface_, &vk_alloc_callbacks_);
         }
 
 		if (vk_debug_utils_messenger_) {
+            spdlog::debug("[Vulkan Graphics Context]: Destroying debug utils messenger");
 			vkDestroyDebugUtilsMessengerEXT(vk_instance_, vk_debug_utils_messenger_, &vk_alloc_callbacks_);
 		}
 
 		if (vk_debug_report_callback_) {
+            spdlog::debug("[Vulkan Graphics Context]: Destroying debug report callback");
 			vkDestroyDebugReportCallbackEXT(vk_instance_, vk_debug_report_callback_, &vk_alloc_callbacks_);
 		}
 
 		if (vk_instance_) {
+            spdlog::debug("[Vulkan Graphics Context]: Destroying Vulkan instance");
 			vkDestroyInstance(vk_instance_, &vk_alloc_callbacks_);
 		}
 
 		if (volk_initialized_) {
+            spdlog::debug("[Vulkan Graphics Context]: Finalizing Volk");
 			volkFinalize();
 		}
 
-		// Check that all allocated vulkan objects was deallocated
-		if (memalloc_stats_.allocation_count != memalloc_stats_.deallocation_count) {
-			spdlog::error("[Vulkan Graphics Context]: Memory leaks detected!\n Allocated: {}, Deallocated: {} objects. Leaked {} bytes.",
-				memalloc_stats_.allocation_count.load(), memalloc_stats_.deallocation_count.load(), memalloc_stats_.total_bytes_allocated.load());
+        // Check that all allocated vulkan objects was deallocated
+        if (memalloc_stats_.allocation_count != memalloc_stats_.deallocation_count) {
+            spdlog::error("[Vulkan Graphics Context]: Memory leaks detected!\n Allocated: {}, Deallocated: {} objects. Leaked {} bytes.",
+                memalloc_stats_.allocation_count.load(), memalloc_stats_.deallocation_count.load(), memalloc_stats_.total_bytes_allocated.load());
 
-			for (const auto& allocation : memalloc_stats_.allocation_map) {
-				spdlog::warn("{:#010x} : {} bytes, {} byte alignment, {} scope", 
-					reinterpret_cast<uintptr_t>(allocation.first), allocation.second.size, allocation.second.align, get_allocation_scope_str(allocation.second.scope));
-			}
-		}
+            for (const auto& allocation : memalloc_stats_.allocation_map) {
+                spdlog::warn("{:#010x} : {} bytes, {} byte alignment, {} scope",
+                    reinterpret_cast<uintptr_t>(allocation.first), allocation.second.size, allocation.second.align, get_allocation_scope_str(allocation.second.scope));
+            }
+        }
+        else {
+            spdlog::info("[Vulkan Graphics Context]: All memory correctly deallocated");
+        }
 	}
 
 	auto VulkanGraphicsContext::construct() -> std::unique_ptr<VulkanGraphicsContext> {
 		auto self = std::make_unique<VulkanGraphicsContext>();
 		return self;
 	}
+
+    // Helper function to add instance extensions with logging
+    auto add_instance_extension(std::vector<const char*>& extensions, const char* extension_name, const std::vector<VkExtensionProperties>& available_extensions, bool required = true) -> bool {
+        auto found = std::find_if(available_extensions.begin(), available_extensions.end(),
+            [extension_name](const VkExtensionProperties& prop) {
+                return strcmp(prop.extensionName, extension_name) == 0;
+            });
+
+        if (found != available_extensions.end()) {
+            extensions.push_back(extension_name);
+            spdlog::debug("[Vulkan Graphics Context]: Added instance extension: {}", extension_name);
+            return true;
+        }
+        else if (required) {
+            spdlog::error("[Vulkan Graphics Context]: Required instance extension not available: {}", extension_name);
+            return false;
+        }
+        else {
+            spdlog::warn("[Vulkan Graphics Context]: Optional instance extension not available: {}", extension_name);
+            return false;
+        }
+    }
+
+    // Helper function to add device extensions with logging
+    auto add_device_extension(std::vector<const char*>& extensions, const char* extension_name, const VkDeviceHandle& device, bool required = true) -> bool {
+        auto found = std::find_if(device.extensions.begin(), device.extensions.end(),
+            [extension_name](const VkExtensionProperties& prop) {
+                return strcmp(prop.extensionName, extension_name) == 0;
+            });
+
+        if (found != device.extensions.end()) {
+            extensions.push_back(extension_name);
+            spdlog::debug("[Vulkan Graphics Context]: Added device extension: {}", extension_name);
+            return true;
+        }
+        else if (required) {
+            spdlog::warn("[Vulkan Graphics Context]: Required device extension not available: {}", extension_name);
+            return false;
+        }
+        else {
+            spdlog::debug("[Vulkan Graphics Context]: Optional device extension not available: {}", extension_name);
+            return false;
+        }
+    }
+
+    template<typename FeatureType>
+    auto setup_device_feature(const VkDeviceHandle& device, const char* extension_name,
+        VkStructureType struct_type, FeatureType& feature_struct,
+        std::vector<const char*>& device_extensions, void*& pNext,
+        std::function<bool(const FeatureType&)> feature_checker) -> bool {
+
+        if (!VulkanGraphicsContext::is_device_extension_supported(device, extension_name)) {
+            spdlog::debug("[Vulkan Graphics Context]: Extension {} not supported", extension_name);
+            return false;
+        }
+
+        // Initialize feature structure
+        feature_struct = {};
+        feature_struct.sType = struct_type;
+
+        // Query device features
+        VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+        physical_device_features.pNext = &feature_struct;
+        vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+        // Check if the specific feature is supported
+        if (feature_checker(feature_struct)) {
+            device_extensions.push_back(extension_name);
+            feature_struct.pNext = pNext;
+            pNext = &feature_struct;
+            spdlog::info("[Vulkan Graphics Context]: Enabled feature extension: {}", extension_name);
+            return true;
+        }
+        else {
+            spdlog::debug("[Vulkan Graphics Context]: Feature not supported for extension: {}", extension_name);
+            return false;
+        }
+    }
 
 	auto VulkanGraphicsContext::create(const GraphicsContextCreateInfo& create_info) -> bool {
 		memalloc_stats_.total_bytes_allocated = 0ull;
@@ -386,69 +479,51 @@ namespace edge::gfx {
 			"Failed to request instance extension properties.");
 
 		// Collect all required instance extensions
-        instance_extensions_.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
+        if (!add_instance_extension(instance_extensions_, VK_KHR_SURFACE_EXTENSION_NAME, instance_extension_properties)) {
+            return false;
+        }
 
 		// Add platform dependent surface extensions
 #if EDGE_PLATFORM_ANDROID
-        instance_extensions_.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+        if (!add_instance_extension(instance_extensions_, VK_KHR_ANDROID_SURFACE_EXTENSION_NAME, instance_extension_properties)) {
+            return false;
+        }
 #elif EDGE_PLATFORM_WINDOWS
-        instance_extensions_.push_back(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+        if (!add_instance_extension(instance_extensions_, VK_KHR_WIN32_SURFACE_EXTENSION_NAME, instance_extension_properties)) {
+            return false;
+        }
 #endif
 
 #if defined(VULKAN_DEBUG) && defined(USE_VALIDATION_LAYERS)
-		auto debug_extension_it = std::find_if(instance_extension_properties.begin(), instance_extension_properties.end(), [](VkExtensionProperties const& ep) {
-			return strcmp(ep.extensionName, VK_EXT_DEBUG_UTILS_EXTENSION_NAME) == 0;
-			});
-
-		if (debug_extension_it != instance_extension_properties.end()) {
-			spdlog::info("[Vulkan Graphics Context]: Vulkan debug utils enabled ({})", VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-            instance_extensions_.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-			VK_EXT_debug_utils_enabled = true;
-		}
-
-		bool VK_EXT_debug_report_enabled{ false };
-		debug_extension_it = std::find_if(instance_extension_properties.begin(), instance_extension_properties.end(), [](VkExtensionProperties const& ep) {
-			return strcmp(ep.extensionName, VK_EXT_DEBUG_REPORT_EXTENSION_NAME) == 0;
-			});
-
-		if (!VK_EXT_debug_utils_enabled && debug_extension_it != instance_extension_properties.end()) {
-			spdlog::info("[Vulkan Graphics Context]: Vulkan debug report enabled ({})", VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-            instance_extensions_.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
-			VK_EXT_debug_report_enabled = true;
-		}
+        if (add_instance_extension(instance_extensions_, VK_EXT_DEBUG_UTILS_EXTENSION_NAME, instance_extension_properties, false)) {
+            VK_EXT_debug_utils_enabled = true;
+        }
+        else if (add_instance_extension(instance_extensions_, VK_EXT_DEBUG_REPORT_EXTENSION_NAME, instance_extension_properties, false)) {
+            VK_EXT_debug_report_enabled = true;
+        }
 #endif
 
 #if defined(VULKAN_ENABLE_PORTABILITY)
-        instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-		instance_extensions_.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
-		instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
-        bool portability_enumeration_available = instance_extensions_.push_back(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+        add_instance_extension(instance_extensions_, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, instance_extension_properties, false);
+        add_instance_extension(instance_extensions_, VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME, instance_extension_properties, false);
 #endif
+
+        // VK_KHR_get_physical_device_properties2 is a prerequisite of VK_KHR_performance_query
+        // which will be used for stats gathering where available.
+        add_instance_extension(instance_extensions_, VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME, instance_extension_properties, false);
 
 #ifdef USE_VALIDATION_LAYER_FEATURES
-		bool validation_features = false;
-		{
-			uint32_t available_layer_instance_extension_count{ 0u };
-			VK_CHECK_RESULT(vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &available_layer_instance_extension_count, nullptr),
-				"Failed to request VK_LAYER_KHRONOS_validation instance extension properties count.");
-
-			std::vector<VkExtensionProperties> available_layer_instance_extensions(available_layer_instance_extension_count);
-			VK_CHECK_RESULT(vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &available_layer_instance_extension_count, available_layer_instance_extensions.data()),
-				"Failed to request instance extension properties.");
-
-			for (auto& available_extension : available_layer_instance_extensions) {
-				if (strcmp(available_extension.extensionName, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME) == 0) {
-					validation_features = true;
-					spdlog::info("[Vulkan Graphics Context]: {} is available, enabling it", VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
-					instance_extensions_.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
-				}
-			}
-		}
+        bool validation_features = false;
+        uint32_t available_layer_instance_extension_count{ 0u };
+        if (vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &available_layer_instance_extension_count, nullptr) == VK_SUCCESS) {
+            std::vector<VkExtensionProperties> available_layer_instance_extensions(available_layer_instance_extension_count);
+            if (vkEnumerateInstanceExtensionProperties("VK_LAYER_KHRONOS_validation", &available_layer_instance_extension_count, available_layer_instance_extensions.data()) == VK_SUCCESS) {
+                if (add_instance_extension(instance_extensions_, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME, available_layer_instance_extensions, false)) {
+                    validation_features = true;
+                }
+            }
+        }
 #endif
-
-		// VK_KHR_get_physical_device_properties2 is a prerequisite of VK_KHR_performance_query
-		// which will be used for stats gathering where available.
-        instance_extensions_.push_back(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME);
 
 		uint32_t supported_validation_layer_count{ 0u };
 		vkEnumerateInstanceLayerProperties(&supported_validation_layer_count, nullptr);
@@ -497,25 +572,24 @@ namespace edge::gfx {
 
 #ifdef USE_VALIDATION_LAYERS
 		VkDebugUtilsMessengerCreateInfoEXT debug_utils_create_info{};
-		debug_utils_create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-
 		VkDebugReportCallbackCreateInfoEXT debug_report_create_info{};
-		debug_report_create_info.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
 
 		if (VK_EXT_debug_utils_enabled) {
-			debug_utils_create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-				VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
-			debug_utils_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT; // VK_DEBUG_UTILS_MESSAGE_TYPE_DEVICE_ADDRESS_BINDING_BIT_EXT
-			debug_utils_create_info.pfnUserCallback = debug_utils_messenger_callback;
-
-			instance_create_info.pNext = &debug_utils_create_info;
+            spdlog::debug("[Vulkan Graphics Context]: Setting up debug utils messenger");
+            debug_utils_create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+            debug_utils_create_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
+                VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+            debug_utils_create_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
+            debug_utils_create_info.pfnUserCallback = debug_utils_messenger_callback;
+            instance_create_info.pNext = &debug_utils_create_info;
 		}
 		else if (VK_EXT_debug_report_enabled)
 		{
-			debug_report_create_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
-			debug_report_create_info.pfnCallback = debug_callback;
-
-			instance_create_info.pNext = &debug_report_create_info;
+            spdlog::debug("[Vulkan Graphics Context]: Setting up debug report callback");
+            debug_report_create_info.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
+            debug_report_create_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+            debug_report_create_info.pfnCallback = debug_callback;
+            instance_create_info.pNext = &debug_report_create_info;
 		}
 #endif
 
@@ -533,6 +607,7 @@ namespace edge::gfx {
 		enable_features.emplace_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
 
 		if (validation_features) {
+            spdlog::debug("[Vulkan Graphics Context]: Enabling validation features");
 #if defined(VULKAN_VALIDATION_LAYERS_GPU_ASSISTED)
 			enable_features.emplace_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
 			enable_features.emplace_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
@@ -572,25 +647,61 @@ namespace edge::gfx {
 		if (VK_EXT_debug_utils_enabled) {
 			VK_CHECK_RESULT(vkCreateDebugUtilsMessengerEXT(vk_instance_, &debug_utils_create_info, &vk_alloc_callbacks_, &vk_debug_utils_messenger_), 
 				"Failed to create debug utils messager.");
+            spdlog::debug("[Vulkan Graphics Context]: Debug utils messenger created");
 		}
 		else if (VK_EXT_debug_report_enabled) {
 			VK_CHECK_RESULT(vkCreateDebugReportCallbackEXT(vk_instance_, &debug_report_create_info, &vk_alloc_callbacks_, &vk_debug_report_callback_), 
 				"Failed to create debug report callback.");
+            spdlog::debug("[Vulkan Graphics Context]: Debug report callback created");
 		}
 #endif
 
 		// Get available physical devices
-		uint32_t physical_device_count{ 0u };
-		VK_CHECK_RESULT(vkEnumeratePhysicalDevices(vk_instance_, &physical_device_count, nullptr), 
-			"Failed to get physical device count.");
+        spdlog::debug("[Vulkan Graphics Context]: Enumerating physical devices");
+        uint32_t physical_device_count{ 0u };
+        VK_CHECK_RESULT(vkEnumeratePhysicalDevices(vk_instance_, &physical_device_count, nullptr),
+            "Failed to get physical device count.");
+
+        if (physical_device_count == 0) {
+            spdlog::error("[Vulkan Graphics Context]: No Vulkan-capable devices found");
+            return false;
+        }
 
 		std::vector<VkPhysicalDevice> physical_devices(physical_device_count);
 		VK_CHECK_RESULT(vkEnumeratePhysicalDevices(vk_instance_, &physical_device_count, physical_devices.data()),
 			"Failed to get physical devices.");
 
+        spdlog::info("[Vulkan Graphics Context]: Found {} physical devices:", physical_device_count);
+
         devices_.resize(physical_device_count);
         for(int32_t i = 0; i < physical_device_count; ++i) {
-            devices_[i].physical = physical_devices[i];
+            auto& device = devices_[i];
+            device.physical = physical_devices[i];
+            vkGetPhysicalDeviceProperties(device.physical, &device.properties);
+            
+            // Get queue family properties
+            uint32_t queue_family_properties_count{ 0u };
+            vkGetPhysicalDeviceQueueFamilyProperties(device.physical, &queue_family_properties_count, nullptr);
+            device.queue_family_props.resize(queue_family_properties_count);
+            vkGetPhysicalDeviceQueueFamilyProperties(device.physical, &queue_family_properties_count, device.queue_family_props.data());
+
+            // Enumerate device extensions
+            uint32_t device_extension_count{ 0u };
+            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(device.physical, nullptr, &device_extension_count, nullptr),
+                "Failed to request device extension count.");
+            device.extensions.resize(device_extension_count);
+            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(device.physical, nullptr, &device_extension_count, device.extensions.data()),
+                "Failed to request device extensions.");
+
+            spdlog::info("  [{}] {} (API: {}.{}.{}, Type: {}, Extensions: {})",
+                i, device.properties.deviceName,
+                VK_VERSION_MAJOR(device.properties.apiVersion),
+                VK_VERSION_MINOR(device.properties.apiVersion),
+                VK_VERSION_PATCH(device.properties.apiVersion),
+                device.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU ? "Discrete" :
+                device.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU ? "Integrated" :
+                device.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU ? "Virtual" : "Other",
+                device_extension_count);
         }
 
 		// Create surface
@@ -613,8 +724,10 @@ namespace edge::gfx {
 			"Failed to create surface.");
 #endif
 
+        spdlog::debug("[Vulkan Graphics Context]: Surface created successfully");
+
 		// Apply required device extensions
-		device_extensions_.emplace_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
+		device_extensions_.push_back(VK_KHR_SWAPCHAIN_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_MAINTENANCE_4_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME);
@@ -659,22 +772,11 @@ namespace edge::gfx {
         for(int32_t device_index = 0; device_index < physical_device_count; ++device_index) {
             auto& device = devices_[device_index];
 
-            vkGetPhysicalDeviceProperties(device.physical, &device.properties);
-
             if(device.properties.apiVersion < VK_API_VERSION_1_2) {
                 spdlog::warn("[Vulkan Graphics Context]: Device is not supported. Required API version: {}, but device supporting {}.", VK_API_VERSION_1_2, device.properties.apiVersion);
                 fallback_device_index = device_index;
                 continue;
             }
-
-            // Enumerate device extensions
-            uint32_t device_extension_count{0u};
-            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(device.physical, nullptr, &device_extension_count, nullptr),
-                            "Failed to request device extension count.");
-
-            device.extensions.resize(device_extension_count);
-            VK_CHECK_RESULT(vkEnumerateDeviceExtensionProperties(device.physical, nullptr, &device_extension_count, device.extensions.data()),
-                            "Failed to request device extensions.");
 
             // Check device extension support
             bool all_extension_supported{ true };
@@ -742,28 +844,20 @@ namespace edge::gfx {
 
         // No device found.
         if(selected_device_index_ < 0) {
-            if (fallback_device_index < 0) {
-                spdlog::error("[Vulkan Graphics Context]: Couldn't find a physical device.");
+            if (fallback_device_index == -1) {
+                spdlog::error("[Vulkan Graphics Context]: No suitable physical device found");
                 return false;
             }
-
-            // TODO: remove unsupported extensions
-
             selected_device_index_ = fallback_device_index;
+            spdlog::warn("[Vulkan Graphics Context]: Using fallback device [{}]: {}", fallback_device_index, devices_[fallback_device_index].properties.deviceName);
         }
 
         auto& device = devices_[selected_device_index_];
 
 #ifdef VULKAN_DEBUG
         if (!VK_EXT_debug_utils_enabled) {
-            auto debug_extension_it = std::find_if(device.extensions.begin(), device.extensions.end(),
-                                                 [](VkExtensionProperties const& ep) {
-                return strcmp(ep.extensionName, VK_EXT_DEBUG_MARKER_EXTENSION_NAME) == 0;
-            });
-
-            if (debug_extension_it != device.extensions.end()) {
-                spdlog::info("[Vulkan Graphics Context]: Vulkan debug utils enabled ({})", VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
-                device_extensions_.push_back(VK_EXT_DEBUG_MARKER_EXTENSION_NAME);
+            add_device_extension(device_extensions_, VK_EXT_DEBUG_MARKER_EXTENSION_NAME, device, false);
+            if (is_device_extension_supported(device, VK_EXT_DEBUG_MARKER_EXTENSION_NAME)) {
                 VK_EXT_debug_marker_enabled = true;
             }
         }
@@ -787,13 +881,8 @@ namespace edge::gfx {
             queue_create_info.pQueuePriorities = queue_priorities[queue_family_index].data();
         }
 
-        if(is_device_extension_supported(device, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME)) {
-            device_extensions_.emplace_back(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        }
-
-        if(is_device_extension_supported(device, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME)) {
-            device_extensions_.emplace_back(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
-        }
+        add_device_extension(device_extensions_, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, device, false);
+        add_device_extension(device_extensions_, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, device, false);
 
         VkPhysicalDevicePerformanceQueryFeaturesKHR physical_device_performance_query_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR };
         if(is_device_extension_supported(device, VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME)) {
