@@ -1008,7 +1008,6 @@ namespace edge::gfx {
         VK_CHECK_RESULT(vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator_),
                         "Failed to create memory allocator.");
 
-
 		return true;
 	}
 

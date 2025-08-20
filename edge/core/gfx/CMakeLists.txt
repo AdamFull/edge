@@ -11,7 +11,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC nsight_aftermath_interface)
 endif()
 
 target_sources(${PROJECT_NAME} PRIVATE
-	"context.cpp"
+	"gfx_context.cpp"
 )
 
 if(WIN32 OR ANDROID)

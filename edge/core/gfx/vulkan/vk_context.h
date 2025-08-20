@@ -7,7 +7,7 @@
 #include <string_view>
 #include <unordered_map>
 
-#include "../context.h"
+#include "../gfx_context.h"
 
 #include <vulkan/vulkan.h>
 #include <volk.h>

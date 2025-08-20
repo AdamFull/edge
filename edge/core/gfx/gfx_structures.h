@@ -1,17 +1,15 @@
 #pragma once
 
-#include <memory>
+#include "gfx_enum.h"
 
 namespace edge::platform {
 	class PlatformWindowInterface;
 }
 
 namespace edge::gfx {
-	enum class GraphicsDeviceType {
-		eDiscrete,
-		eIntegrated,
-		eSoftware
-	};
+	class GraphicsSemaphoreInterface;
+	class GraphicsFenceInterface;
+	class GraphicsContextInterface;
 
 	struct GraphicsContextCreateInfo {
 		GraphicsDeviceType physical_device_type;
@@ -21,14 +19,5 @@ namespace edge::gfx {
 			bool mesh_shading{};
 			bool ray_tracing{};
 		} require_features{};
-	};
-
-	class GraphicsContextInterface {
-	public:
-		virtual ~GraphicsContextInterface() = default;
-
-		virtual auto create(const GraphicsContextCreateInfo& create_info) -> bool = 0;
-
-
 	};
 }

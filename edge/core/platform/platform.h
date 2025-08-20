@@ -11,7 +11,7 @@
 #include "../application.h"
 #include "../events.h"
 
-#include "../gfx/context.h"
+#include "../gfx/gfx_context.h"
 
 namespace edge::platform {
 	class PlatformWindowInterface;
