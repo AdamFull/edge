@@ -10,6 +10,7 @@
 #include "../context.h"
 
 #include <vulkan/vulkan.h>
+#include <volk.h>
 
 #include <vk_mem_alloc.h>
 
@@ -66,6 +67,22 @@ namespace edge::gfx {
         void insert_label(VkCommandBuffer command_buffer, std::string_view name, uint32_t color) const;
 	private:
         auto is_device_extension_supported(const VkDeviceHandle& device, const char* extension_name) const -> bool;
+
+		template<typename T, typename FeatureCheckFn>
+		auto try_enable_device_feature(const VkDeviceHandle& device, const char* feature_name, T& features, VkDeviceCreateInfo& device_create_info, FeatureCheckFn&& feature_check) -> bool {
+			VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
+			physical_device_features.pNext = &features;
+			vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+
+			if (feature_check(features)) {
+				device_extensions_.push_back(feature_name);
+				features.pNext = (void*)device_create_info.pNext;
+				device_create_info.pNext = &features;
+				return true;
+			}
+
+			return false;
+		}
 		bool volk_initialized_{ false };
 
 		VkAllocationCallbacks vk_alloc_callbacks_{};

@@ -4,9 +4,6 @@
 
 #include <spdlog/spdlog.h>
 
-#include <volk.h>
-#include <vulkan/vulkan.h>
-
 #include <cstddef>
 #include <cstdlib>
 
@@ -420,40 +417,6 @@ namespace edge::gfx {
         }
     }
 
-    template<typename FeatureType>
-    auto setup_device_feature(const VkDeviceHandle& device, const char* extension_name,
-        VkStructureType struct_type, FeatureType& feature_struct,
-        std::vector<const char*>& device_extensions, void*& pNext,
-        std::function<bool(const FeatureType&)> feature_checker) -> bool {
-
-        if (!VulkanGraphicsContext::is_device_extension_supported(device, extension_name)) {
-            spdlog::debug("[Vulkan Graphics Context]: Extension {} not supported", extension_name);
-            return false;
-        }
-
-        // Initialize feature structure
-        feature_struct = {};
-        feature_struct.sType = struct_type;
-
-        // Query device features
-        VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-        physical_device_features.pNext = &feature_struct;
-        vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-        // Check if the specific feature is supported
-        if (feature_checker(feature_struct)) {
-            device_extensions.push_back(extension_name);
-            feature_struct.pNext = pNext;
-            pNext = &feature_struct;
-            spdlog::info("[Vulkan Graphics Context]: Enabled feature extension: {}", extension_name);
-            return true;
-        }
-        else {
-            spdlog::debug("[Vulkan Graphics Context]: Feature not supported for extension: {}", extension_name);
-            return false;
-        }
-    }
-
 	auto VulkanGraphicsContext::create(const GraphicsContextCreateInfo& create_info) -> bool {
 		memalloc_stats_.total_bytes_allocated = 0ull;
 		memalloc_stats_.allocation_count = 0ull;
@@ -738,7 +701,6 @@ namespace edge::gfx {
 		device_extensions_.push_back(VK_KHR_8BIT_STORAGE_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME);
-		device_extensions_.push_back(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME);
 		device_extensions_.push_back(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_SPIRV_1_4_EXTENSION_NAME);
@@ -747,6 +709,7 @@ namespace edge::gfx {
 		device_extensions_.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME);
 		device_extensions_.push_back(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME);
+		device_extensions_.push_back(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME);
 
 #ifndef EDGE_PLATFORM_ANDROID
         device_extensions_.push_back(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME);
@@ -884,134 +847,65 @@ namespace edge::gfx {
         add_device_extension(device_extensions_, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, device, false);
         add_device_extension(device_extensions_, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, device, false);
 
-        VkPhysicalDevicePerformanceQueryFeaturesKHR physical_device_performance_query_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR };
-        if(is_device_extension_supported(device, VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME)) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_performance_query_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-            if (physical_device_performance_query_features.performanceCounterQueryPools) {
-                device_extensions_.push_back(VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME);
-                physical_device_performance_query_features.pNext = (void*)device_create_info.pNext;
-                device_create_info.pNext = &physical_device_performance_query_features;
-            }
+        VkPhysicalDeviceBufferDeviceAddressFeatures physical_device_buffer_device_address_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES };
+        if (!try_enable_device_feature(device, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, physical_device_buffer_device_address_features,
+            device_create_info, [](const VkPhysicalDeviceBufferDeviceAddressFeatures& features) -> bool { return features.bufferDeviceAddress == VK_TRUE; })) {
+            return false;
         }
+
+        VkPhysicalDevicePerformanceQueryFeaturesKHR physical_device_performance_query_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR };
+        try_enable_device_feature(device, VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME, physical_device_performance_query_features,
+            device_create_info, [](const VkPhysicalDevicePerformanceQueryFeaturesKHR& features) -> bool { return features.performanceCounterQueryPools == VK_TRUE; });
 
         VkPhysicalDeviceHostQueryResetFeatures physical_device_host_query_reset_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES };
-        if(is_device_extension_supported(device, VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME)) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_host_query_reset_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-            if(physical_device_host_query_reset_features.hostQueryReset) {
-                device_extensions_.push_back(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
-                physical_device_host_query_reset_features.pNext = (void*)device_create_info.pNext;
-                device_create_info.pNext = &physical_device_host_query_reset_features;
-            }
-        }
+        try_enable_device_feature(device, VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME, physical_device_host_query_reset_features,
+            device_create_info, [](const VkPhysicalDeviceHostQueryResetFeatures& features) -> bool { return features.hostQueryReset == VK_TRUE; });
 
         VkPhysicalDeviceSynchronization2Features physical_device_synchronization2_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
-        if(is_device_extension_supported(device, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME)) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_synchronization2_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-            if(physical_device_synchronization2_features.synchronization2) {
-                device_extensions_.push_back(VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME);
-                physical_device_synchronization2_features.pNext = (void*)device_create_info.pNext;
-                device_create_info.pNext = &physical_device_synchronization2_features;
-            }
+        if (!try_enable_device_feature(device, VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, physical_device_synchronization2_features,
+            device_create_info, [](const VkPhysicalDeviceSynchronization2Features& features) -> bool { return features.synchronization2 == VK_TRUE; })) {
+            return false;
         }
 
         VkPhysicalDeviceDynamicRenderingFeatures physical_device_dynamic_rendering_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES };
-        if(is_device_extension_supported(device, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME)) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_dynamic_rendering_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-            if(physical_device_dynamic_rendering_features.dynamicRendering) {
-                device_extensions_.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-                physical_device_dynamic_rendering_features.pNext = (void*)device_create_info.pNext;
-                device_create_info.pNext = &physical_device_dynamic_rendering_features;
-            }
+        if (!try_enable_device_feature(device, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, physical_device_dynamic_rendering_features,
+            device_create_info, [](const VkPhysicalDeviceDynamicRenderingFeatures& features) -> bool { return features.dynamicRendering == VK_TRUE; })) {
+            return false;
         }
 
         VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT physical_device_shader_demote_to_helper_invocation_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT };
-        if(is_device_extension_supported(device, VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME)) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_shader_demote_to_helper_invocation_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-            if(physical_device_shader_demote_to_helper_invocation_features.shaderDemoteToHelperInvocation) {
-                device_extensions_.push_back(VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME);
-                physical_device_shader_demote_to_helper_invocation_features.pNext = (void*)device_create_info.pNext;
-                device_create_info.pNext = &physical_device_shader_demote_to_helper_invocation_features;
-            }
-        }
+        try_enable_device_feature(device, VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME, physical_device_shader_demote_to_helper_invocation_features,
+            device_create_info, [](const VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT& features) -> bool { return features.shaderDemoteToHelperInvocation == VK_TRUE; });
 
         VkPhysicalDevice16BitStorageFeaturesKHR physical_device_16_bit_storage_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES };
-        if(is_device_extension_supported(device, VK_KHR_16BIT_STORAGE_EXTENSION_NAME)) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_16_bit_storage_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-            device_extensions_.push_back(VK_KHR_16BIT_STORAGE_EXTENSION_NAME);
-            physical_device_16_bit_storage_features.pNext = (void*)device_create_info.pNext;
-            device_create_info.pNext = &physical_device_16_bit_storage_features;
+        if (!try_enable_device_feature(device, VK_KHR_16BIT_STORAGE_EXTENSION_NAME, physical_device_16_bit_storage_features,
+            device_create_info, [](const VkPhysicalDevice16BitStorageFeaturesKHR& features) -> bool { return features.storagePushConstant16; })) {
+            return false;
         }
 
         VkPhysicalDeviceExtendedDynamicStateFeaturesEXT physical_device_extended_dynamic_state_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT };
-        if(is_device_extension_supported(device, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_extended_dynamic_state_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-            if(physical_device_extended_dynamic_state_features.extendedDynamicState) {
-                device_extensions_.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
-                physical_device_extended_dynamic_state_features.pNext = (void*)device_create_info.pNext;
-                device_create_info.pNext = &physical_device_extended_dynamic_state_features;
-            }
-        }
+        try_enable_device_feature(device, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, physical_device_extended_dynamic_state_features,
+            device_create_info, [](const VkPhysicalDeviceExtendedDynamicStateFeaturesEXT& features) -> bool { return features.extendedDynamicState; });
 
         VkPhysicalDeviceRayQueryFeaturesKHR physical_device_ray_query_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR };
-        if(is_device_extension_supported(device, VK_KHR_RAY_QUERY_EXTENSION_NAME) && create_info.require_features.ray_tracing) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_ray_query_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-            if(physical_device_ray_query_features.rayQuery) {
-                device_extensions_.push_back(VK_KHR_RAY_QUERY_EXTENSION_NAME);
-                physical_device_ray_query_features.pNext = (void*)device_create_info.pNext;
-                device_create_info.pNext = &physical_device_ray_query_features;
-            }
-        }
-
         VkPhysicalDeviceAccelerationStructureFeaturesKHR physical_device_acceleration_structure_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
-        if(is_device_extension_supported(device, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME) && create_info.require_features.ray_tracing) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_acceleration_structure_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-            if(physical_device_acceleration_structure_features.accelerationStructure) {
-                device_extensions_.push_back(VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME);
-                physical_device_acceleration_structure_features.pNext = (void*)device_create_info.pNext;
-                device_create_info.pNext = &physical_device_acceleration_structure_features;
-            }
-        }
-
         VkPhysicalDeviceRayTracingPipelineFeaturesKHR physical_device_ray_tracing_pipeline_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
-        if(is_device_extension_supported(device, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME) && create_info.require_features.ray_tracing) {
-            VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-            physical_device_features.pNext = &physical_device_ray_tracing_pipeline_features;
-            vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
+        if (create_info.require_features.ray_tracing) {
+            if (!try_enable_device_feature(device, VK_KHR_RAY_QUERY_EXTENSION_NAME, physical_device_ray_query_features,
+                device_create_info, [](const VkPhysicalDeviceRayQueryFeaturesKHR& features) -> bool { return features.rayQuery; })) {
+                return false;
+            }
 
-            if(physical_device_ray_tracing_pipeline_features.rayTracingPipeline) {
-                device_extensions_.push_back(VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME);
-                physical_device_ray_tracing_pipeline_features.pNext = (void*)device_create_info.pNext;
-                device_create_info.pNext = &physical_device_ray_tracing_pipeline_features;
+            if (!try_enable_device_feature(device, VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME, physical_device_acceleration_structure_features,
+                device_create_info, [](const VkPhysicalDeviceAccelerationStructureFeaturesKHR& features) -> bool { return features.accelerationStructure; })) {
+                return false;
+            }
+
+            if (!try_enable_device_feature(device, VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME, physical_device_ray_tracing_pipeline_features,
+                device_create_info, [](const VkPhysicalDeviceRayTracingPipelineFeaturesKHR& features) -> bool { return features.rayTracingPipeline; })) {
+                return false;
             }
         }
-
 
 #if USE_NSIGHT_AFTERMATH
         VkPhysicalDeviceDiagnosticsConfigFeaturesNV physical_device_diagnostics_config_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV };
@@ -1090,11 +984,11 @@ namespace edge::gfx {
         if (can_get_memory_requirements && has_dedicated_allocation && is_device_extension_enabled(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME)) {
             vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
         }
-
+        
         if (is_device_extension_supported(device, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) && is_device_extension_enabled(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
             vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
         }
-
+        
         if (is_device_extension_supported(device, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) && is_device_extension_enabled(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
             vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
         }
@@ -1119,19 +1013,17 @@ namespace edge::gfx {
 	}
 
     auto VulkanGraphicsContext::is_instance_extension_enabled(const char* extension_name) const noexcept -> bool {
-        if(auto found = std::find(instance_extensions_.begin(), instance_extensions_.end(), extension_name);
-        found != instance_extensions_.end()) {
-            return true;
-        }
-        return false;
+        return std::find_if(instance_extensions_.begin(), instance_extensions_.end(),
+            [extension_name](auto& instance_extension) {
+                return std::strcmp(instance_extension, extension_name) == 0;
+            }) != instance_extensions_.end();
     }
 
     auto VulkanGraphicsContext::is_device_extension_enabled(const char* extension_name) const noexcept -> bool {
-        if(auto found = std::find(device_extensions_.begin(), device_extensions_.end(), extension_name);
-                found != device_extensions_.end()) {
-            return true;
-        }
-        return false;
+        return std::find_if(device_extensions_.begin(), device_extensions_.end(),
+            [extension_name](auto& device_extension) {
+                return std::strcmp(device_extension, extension_name) == 0;
+            }) != device_extensions_.end();
     }
 
     void VulkanGraphicsContext::set_debug_name(VkObjectType object_type, uint64_t object_handle, std::string_view name) const {
