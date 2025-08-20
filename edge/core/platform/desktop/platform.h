@@ -8,7 +8,7 @@ namespace edge::platform {
 	class DesktopPlatformInput;
 	class DesktopPlatformWindow;
 
-	class DesktopPlatformInput final : public PlatformInputInterface {
+	class DesktopPlatformInput final : public IPlatformInput {
 	public:
 		~DesktopPlatformInput() override;
 		static auto construct(DesktopPlatformWindow* window) -> std::unique_ptr<DesktopPlatformInput>;
@@ -30,14 +30,14 @@ namespace edge::platform {
 		static auto gamepad_connected_callback(int jid, int event) -> void;
 
 		DesktopPlatformWindow* platform_window_{ nullptr };
-		static PlatformContextInterface* platform_context_;
+		static IPlatformContext* platform_context_;
 	};
 
-	class DesktopPlatformWindow final : public PlatformWindowInterface {
+	class DesktopPlatformWindow final : public IPlatformWindow {
 	public:
 		DesktopPlatformWindow();
 		~DesktopPlatformWindow() override;
-		static auto construct(PlatformContextInterface* platform_context) -> std::unique_ptr<DesktopPlatformWindow>;
+		static auto construct(IPlatformContext* platform_context) -> std::unique_ptr<DesktopPlatformWindow>;
 
 		[[nodiscard]] auto create(const window::Properties& props) -> bool override;
 		auto show() -> void override;
@@ -60,11 +60,11 @@ namespace edge::platform {
 			return handle_;
 		}
 
-		auto get_context() -> PlatformContextInterface* {
+		auto get_context() -> IPlatformContext* {
 			return platform_context_;
 		}
 
-		auto get_context() const -> PlatformContextInterface const* {
+		auto get_context() const -> IPlatformContext const* {
 			return platform_context_;
 		}
 	private:
@@ -73,7 +73,7 @@ namespace edge::platform {
 		static auto window_focus_callback(GLFWwindow* window, int focused) -> void;
 
 		GLFWwindow* handle_{ nullptr };
-		PlatformContextInterface* platform_context_;
+		IPlatformContext* platform_context_;
 	};
 
 	using Window = DesktopPlatformWindow;

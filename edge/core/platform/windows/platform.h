@@ -5,7 +5,7 @@
 #include <Windows.h>
 
 namespace edge::platform {
-	class WindowsPlatformContext final : public PlatformContextInterface {
+	class WindowsPlatformContext final : public IPlatformContext {
 	public:
 		~WindowsPlatformContext() override = default;
 		static auto construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) -> std::unique_ptr<WindowsPlatformContext>;

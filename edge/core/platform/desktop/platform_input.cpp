@@ -4,7 +4,7 @@
 #include <GLFW/glfw3.h>
 
 namespace edge::platform {
-	PlatformContextInterface* DesktopPlatformInput::platform_context_{ nullptr };
+	IPlatformContext* DesktopPlatformInput::platform_context_{ nullptr };
 
 	inline constexpr auto trnaslate_key_action(int action) -> KeyAction {
 		if (action == GLFW_PRESS)

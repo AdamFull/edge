@@ -4,22 +4,22 @@
 #include <thread>
 
 namespace edge::platform {
-	PlatformContextInterface::~PlatformContextInterface() {
+	IPlatformContext::~IPlatformContext() {
 		event_dispatcher_->clear_events();
 	}
 
-	auto PlatformContextInterface::initialize(const PlatformCreateInfo& create_info) -> bool {
+	auto IPlatformContext::initialize(const PlatformCreateInfo& create_info) -> bool {
         event_dispatcher_ = std::make_unique<events::Dispatcher>();
 
         any_window_event_listener_ = event_dispatcher_->add_listener<events::EventTag::eWindow>(
                 [](const events::Dispatcher::event_variant_t& e, void* user_ptr) {
-                    auto* self = static_cast<PlatformContextInterface*>(user_ptr);
+                    auto* self = static_cast<IPlatformContext*>(user_ptr);
                     self->on_any_window_event(e);
                 }, this);
 
         frame_handler_.set_limit(60);
         frame_handler_.setup_callback([](float delta_time, void* user_data) -> int32_t {
-            auto* self = static_cast<PlatformContextInterface*>(user_data);
+            auto* self = static_cast<IPlatformContext*>(user_data);
             return self->main_loop_tick(delta_time);
         }, this);
 
@@ -51,7 +51,7 @@ namespace edge::platform {
 		return true;
 	}
 
-	auto PlatformContextInterface::setup_application(void(*app_setup_func)(std::unique_ptr<ApplicationInterface>&)) -> bool {
+	auto IPlatformContext::setup_application(void(*app_setup_func)(std::unique_ptr<ApplicationInterface>&)) -> bool {
 		app_setup_func(application_);
 
 		if (!application_) {
@@ -61,7 +61,7 @@ namespace edge::platform {
 		return application_->initialize();
 	}
 
-	auto PlatformContextInterface::terminate(int32_t code) -> void {
+	auto IPlatformContext::terminate(int32_t code) -> void {
 		if (application_) {
 			application_->finish();
 		}
@@ -71,7 +71,7 @@ namespace edge::platform {
 		event_dispatcher_.reset();
 	}
 
-	auto PlatformContextInterface::main_loop() -> int32_t {
+	auto IPlatformContext::main_loop() -> int32_t {
 		int32_t exit_code = 0;
 		while (!window_->requested_close()) {
 			exit_code = frame_handler_.process();
@@ -80,7 +80,7 @@ namespace edge::platform {
 		return exit_code;
 	}
 
-	auto PlatformContextInterface::main_loop_tick(float delta_time) -> int32_t {
+	auto IPlatformContext::main_loop_tick(float delta_time) -> int32_t {
 		spdlog::trace("[Android Platform] Frame time: {:.2f}", delta_time * 1000.f);
 		auto new_windows_name = std::format("{} [{} fps; {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time());
 		window_->set_title(new_windows_name);
@@ -105,7 +105,7 @@ namespace edge::platform {
 		return 0;
 	}
 
-	auto PlatformContextInterface::on_any_window_event(const events::Dispatcher::event_variant_t& event) -> void {
+	auto IPlatformContext::on_any_window_event(const events::Dispatcher::event_variant_t& event) -> void {
 		std::visit([this](const auto& e) {
 			using EventType = std::decay_t<decltype(e)>;
 			if constexpr (std::same_as<EventType, events::WindowShouldCloseEvent>) {

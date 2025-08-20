@@ -14,8 +14,8 @@
 #include "../gfx/gfx_context.h"
 
 namespace edge::platform {
-	class PlatformWindowInterface;
-	class PlatformContextInterface;
+	class IPlatformWindow;
+	class IPlatformContext;
 }
 
 namespace edge::platform::window {
@@ -51,10 +51,10 @@ namespace edge::platform {
 		window::Properties window_props;
 	};
 
-    class PlatformInputInterface {
+    class IPlatformInput {
     public:
         static constexpr size_t k_max_gamepad_supported{ 8 };
-        virtual ~PlatformInputInterface() = default;
+        virtual ~IPlatformInput() = default;
 
         virtual auto create() -> bool = 0;
 
@@ -66,9 +66,9 @@ namespace edge::platform {
         virtual auto set_gamepad_color(int32_t gamepad_id, uint32_t color) -> bool = 0;
     };
 
-	class PlatformWindowInterface {
+	class IPlatformWindow {
 	public:
-		virtual ~PlatformWindowInterface() = default;
+		virtual ~IPlatformWindow() = default;
 
 		/**
 		 * @brief Creates window and return result of creation
@@ -140,9 +140,9 @@ namespace edge::platform {
 		bool requested_close_{ false };
 	};
 
-	class PlatformContextInterface {
+	class IPlatformContext {
 	public:
-		virtual ~PlatformContextInterface();
+		virtual ~IPlatformContext();
 
 		auto initialize(const PlatformCreateInfo& create_info) -> bool;
 		virtual auto shutdown() -> void = 0;
@@ -158,19 +158,19 @@ namespace edge::platform {
 
 		auto on_any_window_event(const events::Dispatcher::event_variant_t& e) -> void;
 
-		auto get_window() -> PlatformWindowInterface& {
+		auto get_window() -> IPlatformWindow& {
 			return *window_;
 		}
 
-		auto get_window() const -> PlatformWindowInterface const& {
+		auto get_window() const -> IPlatformWindow const& {
 			return *window_;
 		}
 
-        auto get_input() -> PlatformInputInterface& {
+        auto get_input() -> IPlatformInput& {
             return *input_;
         }
 
-        auto get_input() const -> PlatformInputInterface const& {
+        auto get_input() const -> IPlatformInput const& {
             return *input_;
         }
 
@@ -187,9 +187,9 @@ namespace edge::platform {
 
 		std::unique_ptr<ApplicationInterface> application_;
 
-		std::unique_ptr<PlatformWindowInterface> window_;
-        std::unique_ptr<PlatformInputInterface> input_;
-		std::unique_ptr<gfx::GraphicsContextInterface> graphics_;
+		std::unique_ptr<IPlatformWindow> window_;
+        std::unique_ptr<IPlatformInput> input_;
+		std::unique_ptr<gfx::IGFXContext> graphics_;
 		std::unique_ptr<events::Dispatcher> event_dispatcher_;
 
 		bool window_focused_{ true };

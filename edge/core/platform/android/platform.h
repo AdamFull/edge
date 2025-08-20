@@ -15,7 +15,7 @@ namespace edge::platform {
     class AndroidPlatformWindow;
     class AndroidPlatformContext;
 
-    class AndroidPlatformInput final : public PlatformInputInterface {
+    class AndroidPlatformInput final : public IPlatformInput {
     public:
         ~AndroidPlatformInput() override;
         static auto construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformInput>;
@@ -47,7 +47,7 @@ namespace edge::platform {
         std::string input_string_{};
     };
 
-    class AndroidPlatformWindow final : public PlatformWindowInterface {
+    class AndroidPlatformWindow final : public IPlatformWindow {
     public:
         ~AndroidPlatformWindow() override;
         static auto construct(AndroidPlatformContext* platform_context) -> std::unique_ptr<AndroidPlatformWindow>;
@@ -75,7 +75,7 @@ namespace edge::platform {
 
     using Window = AndroidPlatformWindow;
 
-	class AndroidPlatformContext final : public PlatformContextInterface {
+	class AndroidPlatformContext final : public IPlatformContext {
 	public:
 		static auto construct(android_app* app) -> std::unique_ptr<AndroidPlatformContext>;
 

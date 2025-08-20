@@ -14,7 +14,7 @@ namespace edge::platform {
 	}
 
 	auto DesktopPlatformWindow::window_close_callback(GLFWwindow* window) -> void {
-		auto* platform_context = static_cast<PlatformContextInterface*>(glfwGetWindowUserPointer(window));
+		auto* platform_context = static_cast<IPlatformContext*>(glfwGetWindowUserPointer(window));
 		if (!platform_context) {
 			return;
 		}
@@ -27,7 +27,7 @@ namespace edge::platform {
 	}
 
 	auto DesktopPlatformWindow::window_size_callback(GLFWwindow* window, int width, int height) -> void {
-		auto* platform_context = static_cast<PlatformContextInterface*>(glfwGetWindowUserPointer(window));
+		auto* platform_context = static_cast<IPlatformContext*>(glfwGetWindowUserPointer(window));
 		if (!platform_context) {
 			return;
 		}
@@ -43,7 +43,7 @@ namespace edge::platform {
 	}
 
 	auto DesktopPlatformWindow::window_focus_callback(GLFWwindow* window, int focused) -> void {
-		auto* platform_context = static_cast<PlatformContextInterface*>(glfwGetWindowUserPointer(window));
+		auto* platform_context = static_cast<IPlatformContext*>(glfwGetWindowUserPointer(window));
 		if (!platform_context) {
 			return;
 		}
@@ -86,7 +86,7 @@ namespace edge::platform {
 		glfwSetErrorCallback(nullptr);
 	}
 
-	auto DesktopPlatformWindow::construct(PlatformContextInterface* platform_context) -> std::unique_ptr<DesktopPlatformWindow> {
+	auto DesktopPlatformWindow::construct(IPlatformContext* platform_context) -> std::unique_ptr<DesktopPlatformWindow> {
 		auto window = std::make_unique<DesktopPlatformWindow>();
 		window->platform_context_ = platform_context;
 		return window;
