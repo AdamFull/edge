@@ -1,5 +1,6 @@
 
 option(USE_NSIGHT_AFTERMATH OFF)
+option(USE_VULKAN OFF)
 
 if (USE_NSIGHT_AFTERMATH)
 find_package(NsightAftermath REQUIRED)
@@ -14,7 +15,13 @@ target_sources(${PROJECT_NAME} PRIVATE
 	"gfx_context.cpp"
 )
 
-if(WIN32 OR ANDROID)
+if(WIN32 AND USE_VULKAN)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE EDGE_GFX_BACKEND_VULKAN=1)
+	add_subdirectory("vulkan")
+elseif(WIN32)
+	target_compile_definitions(${PROJECT_NAME} PRIVATE EDGE_GFX_BACKEND_DIRECTX12=1)
+	add_subdirectory("directx12")
+elseif(ANDROID)
 	target_compile_definitions(${PROJECT_NAME} PRIVATE EDGE_GFX_BACKEND_VULKAN=1)
 	add_subdirectory("vulkan")
 endif()
