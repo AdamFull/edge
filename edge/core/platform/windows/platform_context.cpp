@@ -4,7 +4,11 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
+#if EDGE_GFX_BACKEND_DIRECTX12
+#include "../../gfx/directx12/dx12_context.h"
+#elif EDGE_GFX_BACKEND_VULKAN
 #include "../../gfx/vulkan/vk_context.h"
+#endif
 
 namespace edge::platform {
 	auto WindowsPlatformContext::construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
@@ -68,7 +72,11 @@ namespace edge::platform {
 			return false;
 		}
 
+#if EDGE_GFX_BACKEND_DIRECTX12
+		graphics_ = gfx::DirectX12GraphicsContext::construct();
+#elif #if EDGE_GFX_BACKEND_VULKAN
 		graphics_ = gfx::VulkanGraphicsContext::construct();
+#endif
 		if (!graphics_) {
 			spdlog::error("[Windows Runtime Context]: Graphics construction failed");
 			return false;

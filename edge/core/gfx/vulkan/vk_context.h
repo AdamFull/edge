@@ -49,7 +49,27 @@ namespace edge::gfx {
 		VkPhysicalDeviceMemoryProperties memory_properties;
 	};
 
-	class VulkanGraphicsContext final : public GraphicsContextInterface {
+	class VulkanSemaphore final : public IGFXSemaphore {
+	public:
+		~VulkanSemaphore() override = default;
+	};
+
+	class VulkanFence final : public IGFXFence {
+	public:
+		~VulkanFence() override = default;
+
+		auto wait(uint64_t timeout = std::numeric_limits<uint64_t>::max()) -> void override;
+		auto reset() -> void override;
+	};
+
+	class VulkanQueue final : public IGFXQueue {
+	public:
+		auto submit(const SubmitInfo& submit_info, IGFXFence* fence) const -> void override;
+		auto present(const PresentInfo& present_info) const -> void override;
+		auto wait_idle() const -> void override;
+	};
+
+	class VulkanGraphicsContext final : public IGFXContext {
 	public:
 		~VulkanGraphicsContext() override;
 

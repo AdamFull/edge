@@ -10,6 +10,7 @@
 
 #include "jni_helper.h"
 
+
 #include "../../gfx/vulkan/vk_context.h"
 
 namespace edge::platform {
