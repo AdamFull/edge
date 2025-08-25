@@ -2,25 +2,7 @@
 
 #include "../../platform/platform.h"
 
-#include <spdlog/spdlog.h>
-
-#include <comdef.h>
-
-#ifdef _WIN32
-#include <Windows.h>
-#endif
-
-#define D3D12_CHECK_RESULT(result, error_text) \
-    if(FAILED(result)) { \
-        spdlog::error("[D3D12 Graphics Context]: {} Reason: {:#010x}", error_text, static_cast<uint32_t>(result)); \
-        return false; \
-    }
-
-#define D3D12_CHECK_RESULT_VOID(result, error_text) \
-    if(FAILED(result)) { \
-        spdlog::error("[D3D12 Graphics Context]: {} Reason: {:#010x}", error_text, static_cast<uint32_t>(result)); \
-        return; \
-    }
+#include "dx12_util.h"
 
 #if defined(ENGINE_DEBUG) || defined(D3D12_VALIDATION)
 #define USE_DEBUG_LAYER
@@ -33,49 +15,6 @@
 #endif
 
 namespace edge::gfx {
-	auto get_error_string(HRESULT hr) -> const char* {
-		switch (hr) {
-		case S_OK: return "S_OK";
-		case E_FAIL: return "E_FAIL";
-		case E_INVALIDARG: return "E_INVALIDARG";
-		case E_OUTOFMEMORY: return "E_OUTOFMEMORY";
-		case E_NOTIMPL: return "E_NOTIMPL";
-		case DXGI_ERROR_INVALID_CALL: return "DXGI_ERROR_INVALID_CALL";
-		case DXGI_ERROR_DEVICE_REMOVED: return "DXGI_ERROR_DEVICE_REMOVED";
-		case DXGI_ERROR_DEVICE_HUNG: return "DXGI_ERROR_DEVICE_HUNG";
-		case DXGI_ERROR_DEVICE_RESET: return "DXGI_ERROR_DEVICE_RESET";
-		case DXGI_ERROR_DRIVER_INTERNAL_ERROR: return "DXGI_ERROR_DRIVER_INTERNAL_ERROR";
-		case D3D12_ERROR_ADAPTER_NOT_FOUND: return "D3D12_ERROR_ADAPTER_NOT_FOUND";
-		case D3D12_ERROR_DRIVER_VERSION_MISMATCH: return "D3D12_ERROR_DRIVER_VERSION_MISMATCH";
-		default: return "Unknown Error";
-		}
-	}
-
-	auto get_feature_level_string(D3D_FEATURE_LEVEL level) -> const char* {
-		switch (level) {
-		case D3D_FEATURE_LEVEL_12_2: return "12.2";
-		case D3D_FEATURE_LEVEL_12_1: return "12.1";
-		case D3D_FEATURE_LEVEL_12_0: return "12.0";
-		case D3D_FEATURE_LEVEL_11_1: return "11.1";
-		case D3D_FEATURE_LEVEL_11_0: return "11.0";
-		default: return "Unknown";
-		}
-	}
-
-	auto get_adapter_type_string(const DXGI_ADAPTER_DESC3& desc) -> const char* {
-		if (desc.Flags & DXGI_ADAPTER_FLAG3_SOFTWARE) {
-			return "Software";
-		}
-
-		// Check for integrated vs discrete based on dedicated video memory
-		if (desc.DedicatedVideoMemory > 512 * 1024 * 1024) { // > 512MB
-			return "Discrete";
-		}
-		else {
-			return "Integrated";
-		}
-	}
-
 	auto string_to_wstring(std::string_view str) -> std::wstring {
 		if (str.empty()) return {};
 
@@ -247,7 +186,7 @@ namespace edge::gfx {
 			spdlog::info("  [{}] {} (Feature Level: {}, Type: {}, VRAM: {} MB, RT: {}, MS: {}, VRS: {})",
 				adapter_index, adapter_name,
 				get_feature_level_string(D3D_FEATURE_LEVEL_12_0),
-				get_adapter_type_string(new_device.desc),
+				(new_device.device_type == GraphicsDeviceType::eSoftware) ? "Software" : (new_device.device_type == GraphicsDeviceType::eDiscrete ? "Discrete" : "Integrated"),
 				new_device.desc.DedicatedVideoMemory / (1024 * 1024),
 				new_device.supports_ray_tracing ? "Yes" : "No",
 				new_device.supports_mesh_shaders ? "Yes" : "No",
@@ -364,6 +303,23 @@ namespace edge::gfx {
 		D3D12_CHECK_RESULT(D3D12MA::CreateAllocator(&allocator_desc, &d3d12ma_allocator_), "Failed to create D3D12MA allocator");
 
 		return true;
+	}
+
+	auto DirectX12GraphicsContext::get_queue_count(QueueType queue_type) -> uint32_t {
+		return 0u;
+	}
+
+	auto DirectX12GraphicsContext::get_queue(QueueType queue_type, uint32_t queue_index) -> std::expected<std::shared_ptr<IGFXQueue>, bool> {
+		return nullptr;
+	}
+
+	auto DirectX12GraphicsContext::create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> {
+		return D3D12Semaphore::construct(*this, value);
+	}
+
+	auto DirectX12GraphicsContext::get_device() const -> Microsoft::WRL::ComPtr<ID3D12Device> {
+		auto& device = devices_[selected_adapter_index_];
+		return device.logical;
 	}
 
 	auto DirectX12GraphicsContext::set_debug_name(ID3D12Object* object, std::string_view name) const -> void {

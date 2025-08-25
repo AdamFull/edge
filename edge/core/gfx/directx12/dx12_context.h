@@ -16,6 +16,8 @@
 #include <D3D12MemAlloc.h>
 
 namespace edge::gfx {
+	class DirectX12GraphicsContext;
+
 	struct D3D12DeviceHandle {
 		Microsoft::WRL::ComPtr<IDXGIAdapter4> physical;
 		Microsoft::WRL::ComPtr<ID3D12Device> logical;
@@ -30,6 +32,49 @@ namespace edge::gfx {
 		bool supports_variable_rate_shading{ false };
 	};
 
+	class D3D12Semaphore final : public IGFXSemaphore {
+	public:
+		~D3D12Semaphore() override;
+
+		static auto construct(const DirectX12GraphicsContext& ctx, uint64_t initial_value) -> std::unique_ptr<D3D12Semaphore>;
+
+		auto signal(uint64_t value) -> SyncResult override;
+		auto wait(uint64_t value, std::chrono::nanoseconds timeout = std::chrono::nanoseconds::max()) -> SyncResult override;
+
+		auto is_completed(uint64_t value) const -> bool override;
+		auto get_value() const -> uint64_t override;
+
+		auto set_value(uint64_t value) -> void {
+			value_ = std::max(value_, value);
+		}
+
+		auto get_handle() const -> Microsoft::WRL::ComPtr<ID3D12Fence> {
+			return handle_;
+		}
+	private:
+		auto _construct(const DirectX12GraphicsContext& ctx, uint64_t initial_value) -> bool;
+
+		Microsoft::WRL::ComPtr<ID3D12Fence> handle_;
+		HANDLE event_;
+		uint64_t value_{ 0ull };
+	};
+
+	class D3D12Queue final : public IGFXQueue {
+	public:
+		~D3D12Queue() override;
+
+		static auto construct(const DirectX12GraphicsContext& ctx) -> std::unique_ptr<D3D12Queue>;
+
+		auto submit(const SignalQueueInfo& submit_info) -> SyncResult override;
+		auto wait_idle() -> void override;
+
+		//auto get_handle() const -> VkQueue {
+		//	return handle_;
+		//}
+	private:
+		auto _construct(const DirectX12GraphicsContext& ctx) -> bool;
+	};
+
 	class DirectX12GraphicsContext final : public IGFXContext {
 	public:
 		~DirectX12GraphicsContext() override;
@@ -37,6 +82,13 @@ namespace edge::gfx {
 		static auto construct() -> std::unique_ptr<DirectX12GraphicsContext>;
 
 		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
+
+		auto get_queue_count(QueueType queue_type) -> uint32_t override;
+		auto get_queue(QueueType queue_type, uint32_t queue_index) -> std::expected<std::shared_ptr<IGFXQueue>, bool> override;
+
+		auto create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> override;
+
+		auto get_device() const -> Microsoft::WRL::ComPtr<ID3D12Device>;
 
 		auto set_debug_name(ID3D12Object* object, std::string_view name) const -> void;
 		auto begin_event(ID3D12CommandList* command_list, std::string_view name, uint32_t color) const -> void;

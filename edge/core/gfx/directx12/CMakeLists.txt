@@ -27,4 +27,5 @@ target_link_libraries(${PROJECT_NAME}
 
 target_sources(${PROJECT_NAME} PRIVATE
 	"dx12_context.cpp"
+    "dx12_primitives.cpp"
 )
