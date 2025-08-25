@@ -74,7 +74,7 @@ namespace edge::platform {
 
 #if EDGE_GFX_BACKEND_DIRECTX12
 		graphics_ = gfx::DirectX12GraphicsContext::construct();
-#elif #if EDGE_GFX_BACKEND_VULKAN
+#elif EDGE_GFX_BACKEND_VULKAN
 		graphics_ = gfx::VulkanGraphicsContext::construct();
 #endif
 		if (!graphics_) {

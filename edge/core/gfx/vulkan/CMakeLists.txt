@@ -54,6 +54,7 @@ target_link_libraries(${PROJECT_NAME}
 
 target_sources(${PROJECT_NAME} PRIVATE
 	"vk_context.cpp"
+	"vk_primitives.cpp"
 )
 
 target_compile_definitions(${PROJECT_NAME}

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <array>
 #include <vector>
 #include <thread>
 #include <mutex>
@@ -15,6 +16,9 @@
 #include <vk_mem_alloc.h>
 
 namespace edge::gfx {
+	class VulkanGraphicsContext;
+	class VulkanQueue;
+
 	struct VkMemoryAllocationDesc {
 		size_t size;
 		size_t align;
@@ -30,6 +34,11 @@ namespace edge::gfx {
 		std::unordered_map<void*, VkMemoryAllocationDesc> allocation_map;
 	};
 
+	struct VkQueueFamily {
+		uint32_t index;
+		std::vector<std::shared_ptr<VulkanQueue>> queues;
+	};
+
     struct VkDeviceHandle {
         VkPhysicalDevice physical;
         VkDevice logical;
@@ -37,6 +46,8 @@ namespace edge::gfx {
         VkPhysicalDeviceProperties properties;
         std::vector<VkExtensionProperties> extensions;
         std::vector<VkQueueFamilyProperties> queue_family_props;
+
+		std::array<std::vector<VkQueueFamily>, 3ull> queue_families{};
     };
 
 	struct VkPhysicalDeviceDesc {
@@ -49,24 +60,54 @@ namespace edge::gfx {
 		VkPhysicalDeviceMemoryProperties memory_properties;
 	};
 
+
 	class VulkanSemaphore final : public IGFXSemaphore {
 	public:
-		~VulkanSemaphore() override = default;
-	};
+		~VulkanSemaphore() override;
 
-	class VulkanFence final : public IGFXFence {
-	public:
-		~VulkanFence() override = default;
+		static auto construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> std::unique_ptr<VulkanSemaphore>;
 
-		auto wait(uint64_t timeout = std::numeric_limits<uint64_t>::max()) -> void override;
-		auto reset() -> void override;
+		auto signal(uint64_t value) -> SyncResult override;
+		auto wait(uint64_t value, std::chrono::nanoseconds timeout = std::chrono::nanoseconds::max()) -> SyncResult override;
+
+		auto is_completed(uint64_t value) const -> bool override;
+		auto get_value() const -> uint64_t override;
+
+		auto set_value(uint64_t value) -> void {
+			value_ = std::max(value_, value);
+		}
+
+		auto get_handle() const -> VkSemaphore {
+			return handle_;
+		}
+	private:
+		auto _construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> bool;
+
+		VkDevice device_{ VK_NULL_HANDLE };
+		VkAllocationCallbacks const* allocator_{ nullptr };
+		VkSemaphore handle_{ VK_NULL_HANDLE };
+		uint64_t value_{ 0ull };
 	};
 
 	class VulkanQueue final : public IGFXQueue {
 	public:
-		auto submit(const SubmitInfo& submit_info, IGFXFence* fence) const -> void override;
-		auto present(const PresentInfo& present_info) const -> void override;
-		auto wait_idle() const -> void override;
+		~VulkanQueue() override;
+
+		static auto construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> std::unique_ptr<VulkanQueue>;
+
+		auto submit(const SignalQueueInfo& submit_info) -> SyncResult override;
+		auto wait_idle() -> void override;
+
+		auto get_handle() const -> VkQueue {
+			return handle_;
+		}
+	private:
+		auto _construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool;
+
+		VkDevice device_{ VK_NULL_HANDLE };
+		VkQueue handle_{ VK_NULL_HANDLE };
+		uint32_t family_index_{ 0u };
+		uint32_t queue_index_{ 0u };
 	};
 
 	class VulkanGraphicsContext final : public IGFXContext {
@@ -77,6 +118,11 @@ namespace edge::gfx {
 
 		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
 
+		auto get_queue_count(QueueType queue_type) -> uint32_t override;
+		auto get_queue(QueueType queue_type, uint32_t queue_index) -> std::expected<std::shared_ptr<IGFXQueue>, bool> override;
+
+		auto create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> override;
+
         auto is_instance_extension_enabled(const char* extension_name) const noexcept -> bool;
         auto is_device_extension_enabled(const char* extension_name) const noexcept -> bool;
 
@@ -85,6 +131,18 @@ namespace edge::gfx {
         void begin_label(VkCommandBuffer command_buffer, std::string_view name, uint32_t color) const;
         void end_label(VkCommandBuffer command_buffer) const;
         void insert_label(VkCommandBuffer command_buffer, std::string_view name, uint32_t color) const;
+
+		auto get_physical_device() const -> VkPhysicalDevice {
+			return devices_[selected_device_index_].physical;
+		}
+
+		auto get_logical_device() const -> VkDevice {
+			return devices_[selected_device_index_].logical;
+		}
+
+		auto get_allocation_callbacks() const -> VkAllocationCallbacks const* {
+			return &vk_alloc_callbacks_;
+		}
 	private:
         auto is_device_extension_supported(const VkDeviceHandle& device, const char* extension_name) const -> bool;
 

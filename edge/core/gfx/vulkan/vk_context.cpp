@@ -2,19 +2,12 @@
 
 #include "../../platform/platform.h"
 
-#include <spdlog/spdlog.h>
-
-#include <cstddef>
 #include <cstdlib>
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
 
-#define VK_CHECK_RESULT(result, error_text) \
-if(result != VK_SUCCESS) { \
-	spdlog::error("[Vulkan Graphics Context]: {} Reason: {}", error_text, get_error_string(result)); \
-	return false; \
-}
+#include "vk_util.h"
 
 #if defined(ENGINE_DEBUG) || defined(VULKAN_VALIDATION_LAYERS)
 #define USE_VALIDATION_LAYERS
@@ -68,63 +61,6 @@ namespace edge::gfx {
 #endif
 	}
 
-    auto get_error_string(VkResult result) -> const char* {
-#define MAKE_FLAG_CASE(flag_name) case flag_name: return #flag_name;
-        switch (result) {
-            MAKE_FLAG_CASE(VK_SUCCESS);
-            MAKE_FLAG_CASE(VK_NOT_READY);
-            MAKE_FLAG_CASE(VK_TIMEOUT);
-            MAKE_FLAG_CASE(VK_EVENT_SET);
-            MAKE_FLAG_CASE(VK_EVENT_RESET);
-            MAKE_FLAG_CASE(VK_INCOMPLETE);
-            MAKE_FLAG_CASE(VK_ERROR_OUT_OF_HOST_MEMORY);
-            MAKE_FLAG_CASE(VK_ERROR_OUT_OF_DEVICE_MEMORY);
-            MAKE_FLAG_CASE(VK_ERROR_INITIALIZATION_FAILED);
-            MAKE_FLAG_CASE(VK_ERROR_DEVICE_LOST);
-            MAKE_FLAG_CASE(VK_ERROR_MEMORY_MAP_FAILED);
-            MAKE_FLAG_CASE(VK_ERROR_LAYER_NOT_PRESENT);
-            MAKE_FLAG_CASE(VK_ERROR_EXTENSION_NOT_PRESENT);
-            MAKE_FLAG_CASE(VK_ERROR_FEATURE_NOT_PRESENT);
-            MAKE_FLAG_CASE(VK_ERROR_INCOMPATIBLE_DRIVER);
-            MAKE_FLAG_CASE(VK_ERROR_TOO_MANY_OBJECTS);
-            MAKE_FLAG_CASE(VK_ERROR_FORMAT_NOT_SUPPORTED);
-            MAKE_FLAG_CASE(VK_ERROR_FRAGMENTED_POOL);
-            MAKE_FLAG_CASE(VK_ERROR_UNKNOWN);
-            MAKE_FLAG_CASE(VK_ERROR_OUT_OF_POOL_MEMORY);
-            MAKE_FLAG_CASE(VK_ERROR_INVALID_EXTERNAL_HANDLE);
-            MAKE_FLAG_CASE(VK_ERROR_FRAGMENTATION);
-            MAKE_FLAG_CASE(VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS);
-            MAKE_FLAG_CASE(VK_PIPELINE_COMPILE_REQUIRED);
-            MAKE_FLAG_CASE(VK_ERROR_NOT_PERMITTED);
-            MAKE_FLAG_CASE(VK_ERROR_SURFACE_LOST_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_NATIVE_WINDOW_IN_USE_KHR);
-            MAKE_FLAG_CASE(VK_SUBOPTIMAL_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_OUT_OF_DATE_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_INCOMPATIBLE_DISPLAY_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_VALIDATION_FAILED_EXT);
-            MAKE_FLAG_CASE(VK_ERROR_INVALID_SHADER_NV);
-            MAKE_FLAG_CASE(VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT);
-            MAKE_FLAG_CASE(VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT);
-            MAKE_FLAG_CASE(VK_THREAD_IDLE_KHR);
-            MAKE_FLAG_CASE(VK_THREAD_DONE_KHR);
-            MAKE_FLAG_CASE(VK_OPERATION_DEFERRED_KHR);
-            MAKE_FLAG_CASE(VK_OPERATION_NOT_DEFERRED_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_COMPRESSION_EXHAUSTED_EXT);
-            MAKE_FLAG_CASE(VK_INCOMPATIBLE_SHADER_BINARY_EXT);
-            MAKE_FLAG_CASE(VK_PIPELINE_BINARY_MISSING_KHR);
-            MAKE_FLAG_CASE(VK_ERROR_NOT_ENOUGH_SPACE_KHR);
-            default: return "unknown"; break;
-        }
-#undef MAKE_FLAG_CASE
-    }
-
 	auto validate_layers(const std::vector<const char*>& required, const std::vector<VkLayerProperties>& available) -> bool {
 		for (auto layer : required) {
 			bool found = false;
@@ -175,24 +111,6 @@ namespace edge::gfx {
 
 		// Else return nothing
 		return {};
-	}
-
-    inline void make_color(uint32_t color, float out_color[4]) {
-        out_color[0] = ((color >> 24) & 0xFF) / 255.0f;
-        out_color[1] = ((color >> 16) & 0xFF) / 255.0f;
-        out_color[2] = ((color >> 8) & 0xFF) / 255.0f;
-        out_color[3] = (color & 0xFF) / 255.0f;
-    }
-
-	inline auto get_allocation_scope_str(VkSystemAllocationScope scope) -> const char* {
-		switch (scope) {
-		case VK_SYSTEM_ALLOCATION_SCOPE_COMMAND: return "command"; break;
-		case VK_SYSTEM_ALLOCATION_SCOPE_OBJECT: return "object"; break;
-		case VK_SYSTEM_ALLOCATION_SCOPE_CACHE: return "cache"; break;
-		case VK_SYSTEM_ALLOCATION_SCOPE_DEVICE: return "device"; break;
-		case VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE: return "instance"; break;
-		default: return "unknown"; break;
-		};
 	}
 
     extern "C" void* VKAPI_CALL vkmemalloc(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) {
@@ -1008,8 +926,99 @@ namespace edge::gfx {
         VK_CHECK_RESULT(vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator_),
                         "Failed to create memory allocator.");
 
+        // Create device queue handles
+
+        for (uint32_t queue_family_index = 0U; queue_family_index < static_cast<uint32_t>(device.queue_family_props.size()); ++queue_family_index) {
+            VkQueueFamilyProperties const& queue_family_property = device.queue_family_props[queue_family_index];
+
+            VkBool32 present_supported;
+            if (vkGetPhysicalDeviceSurfaceSupportKHR(device.physical, queue_family_index, vk_surface_, &present_supported) != VK_SUCCESS) {
+                present_supported = VK_FALSE;
+            }
+
+            bool is_graphics_commands_supported = (queue_family_property.queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT;
+            bool is_compute_commands_supported = (queue_family_property.queueFlags & VK_QUEUE_COMPUTE_BIT) == VK_QUEUE_COMPUTE_BIT;
+            bool is_copy_commands_supported = (queue_family_property.queueFlags & VK_QUEUE_TRANSFER_BIT) == VK_QUEUE_TRANSFER_BIT;
+
+            QueueType queue_family_type{};
+            if (present_supported &&
+                is_graphics_commands_supported &&
+                is_compute_commands_supported &&
+                is_copy_commands_supported) {
+                queue_family_type = QueueType::eDirect;
+            }
+            else if (present_supported &&
+                is_compute_commands_supported &&
+                is_copy_commands_supported) {
+                queue_family_type = QueueType::eCompute;
+            }
+            else if (is_copy_commands_supported) {
+                queue_family_type = QueueType::eCopy;
+            }
+
+            auto& family_group = device.queue_families[static_cast<uint32_t>(queue_family_type)];
+            auto& new_family = family_group.emplace_back();
+            new_family.index = queue_family_index;
+
+            for (uint32_t queue_index = 0U; queue_index < queue_family_property.queueCount; ++queue_index) {
+                new_family.queues.push_back(VulkanQueue::construct(*this, new_family.index, queue_index));
+            }
+
+#ifndef NDEBUG
+            std::string supported_commands;
+
+            if (present_supported)
+                supported_commands += "present|";
+            if (is_graphics_commands_supported)
+                supported_commands += "graphics|";
+            if (is_compute_commands_supported)
+                supported_commands += "compute|";
+            if (is_copy_commands_supported)
+                supported_commands += "transfer|";
+
+            if (!supported_commands.empty())
+                supported_commands.pop_back();
+
+            spdlog::debug("[VulkanGraphicsContext] Found {} \"{}\" queue{} that support: {} commands.",
+                queue_family_property.queueCount,
+                (queue_family_type == QueueType::eDirect) ? "Direct" : (queue_family_type == QueueType::eCompute) ? "Compute" : "Copy",
+                queue_family_property.queueCount > 1 ? "s" : "",
+                supported_commands);
+#endif
+        }
+
 		return true;
 	}
+
+    auto VulkanGraphicsContext::get_queue_count(QueueType queue_type) -> uint32_t {
+        auto& device = devices_[selected_device_index_];
+        auto& family_group = device.queue_families[static_cast<uint32_t>(queue_type)];
+        if (family_group.empty()) {
+            return 0u;
+        }
+
+        uint32_t queue_count{ 0u };
+        for (auto& family : family_group) {
+            queue_count += static_cast<uint32_t>(family.queues.size());
+        }
+
+        return queue_count;
+    }
+
+    auto VulkanGraphicsContext::get_queue(QueueType queue_type, uint32_t queue_index) -> std::expected<std::shared_ptr<IGFXQueue>, bool> {
+        auto& device = devices_[selected_device_index_];
+        auto& family_group = device.queue_families[static_cast<uint32_t>(queue_type)];
+        if (family_group.empty()) {
+            return std::unexpected(false);
+        }
+
+        // TODO: Check that index is in queue range
+        return family_group.front().queues[queue_index];
+    }
+
+    auto VulkanGraphicsContext::create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> {
+        return VulkanSemaphore::construct(*this, value);
+    }
 
     auto VulkanGraphicsContext::is_instance_extension_enabled(const char* extension_name) const noexcept -> bool {
         return std::find_if(instance_extensions_.begin(), instance_extensions_.end(),
