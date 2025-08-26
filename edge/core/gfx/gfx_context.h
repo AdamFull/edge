@@ -42,8 +42,8 @@ namespace edge::gfx {
 
 		virtual auto reset() -> void = 0;
 
-		virtual auto begin() -> void = 0;
-		virtual auto end() -> void = 0;
+		virtual auto begin() -> bool = 0;
+		virtual auto end() -> bool = 0;
 
 		virtual auto set_viewport(float x, float y, float width, float height, float min_depth, float max_depth) const -> void = 0;
 		virtual auto set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const -> void = 0;

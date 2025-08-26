@@ -91,19 +91,80 @@ namespace edge::gfx {
 
 		static auto construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> std::unique_ptr<VulkanQueue>;
 
-		auto submit(const SignalQueueInfo& submit_info) -> SyncResult override;
-		auto wait_idle() -> void override;
+		auto create_command_allocator() const -> std::shared_ptr<IGFXCommandAllocator> override;
+
+		auto submit(const SignalQueueInfo& submit_info) -> void override;
+		auto wait_idle() -> SyncResult override;
 
 		auto get_handle() const -> VkQueue {
 			return handle_;
+		}
+
+		auto get_family_index() const -> uint32_t {
+			return family_index_;
 		}
 	private:
 		auto _construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool;
 
 		VkDevice device_{ VK_NULL_HANDLE };
+		VkAllocationCallbacks const* allocator_{ nullptr };
 		VkQueue handle_{ VK_NULL_HANDLE };
 		uint32_t family_index_{ 0u };
 		uint32_t queue_index_{ 0u };
+	};
+
+	class VulkanCommandAllocator final : public IGFXCommandAllocator {
+	public:
+		~VulkanCommandAllocator() override;
+
+		static auto construct(VkDevice device, VkAllocationCallbacks const* allocator, uint32_t family_index) -> std::unique_ptr<VulkanCommandAllocator>;
+
+		auto allocate_command_list() const -> std::shared_ptr<IGFXCommandList> override;
+		auto reset() -> void override;
+
+		auto get_handle() const -> VkCommandPool {
+			return handle_;
+		}
+	private:
+		auto _construct(VkDevice device, VkAllocationCallbacks const* allocator, uint32_t family_index) -> bool;
+
+		VkDevice device_{ VK_NULL_HANDLE };
+		VkAllocationCallbacks const* allocator_{ nullptr };
+		uint32_t family_index_{ 0u };
+		VkCommandPool handle_{ VK_NULL_HANDLE };
+	};
+
+	class VulkanCommandList final : public IGFXCommandList {
+	public:
+		~VulkanCommandList() override;
+
+		static auto construct(VkDevice device, VkCommandPool command_pool) -> std::unique_ptr<VulkanCommandList>;
+
+		auto reset() -> void override;
+
+		auto begin() -> bool override;
+		auto end() -> bool override;
+
+		auto set_viewport(float x, float y, float width, float height, float min_depth, float max_depth) const -> void override;
+		auto set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const -> void override;
+
+		auto draw(uint32_t vertex_count, uint32_t first_vertex, uint32_t first_instance, uint32_t instance_count) const -> void override;
+		auto draw_indexed(uint32_t index_count, uint32_t first_index, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) const -> void override;
+
+		auto dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) const -> void override;
+
+		auto begin_marker(std::string_view name, uint32_t color) const -> void override;
+		auto insert_marker(std::string_view name, uint32_t color) const -> void override;
+		auto end_marker() const -> void override;
+
+		auto get_handle() const -> VkCommandBuffer {
+			return handle_;
+		}
+	private:
+		auto _construct(VkDevice device, VkCommandPool command_pool) -> bool;
+
+		VkCommandBuffer handle_;
+		VkCommandPool command_pool_;
 	};
 
 	class VulkanGraphicsContext final : public IGFXContext {

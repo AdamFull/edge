@@ -166,7 +166,6 @@ namespace edge::gfx {
 	}
 
 	// Command allocator
-
 	D3D12CommandAllocator::~D3D12CommandAllocator() {
 
 	}
@@ -215,32 +214,40 @@ namespace edge::gfx {
 		assert(false && "NOT IMPLEMENTED");
 	}
 
-	auto D3D12CommandList::begin() -> void {
-		assert(false && "NOT IMPLEMENTED");
+	auto D3D12CommandList::begin() -> bool {
+		D3D12_CHECK_RESULT(handle_->Reset(allocator_.Get(), nullptr),
+			"Failed to reset command list.");
+
+		return true;
 	}
 
-	auto D3D12CommandList::end() -> void {
-		assert(false && "NOT IMPLEMENTED");
+	auto D3D12CommandList::end() -> bool {
+		D3D12_CHECK_RESULT(handle_->Close(),
+			"Failed to close command list.");
+
+		return true;
 	}
 
 	auto D3D12CommandList::set_viewport(float x, float y, float width, float height, float min_depth, float max_depth) const -> void {
-		assert(false && "NOT IMPLEMENTED");
+		D3D12_VIEWPORT viewport{ x, y, width, height, min_depth, max_depth };
+		handle_->RSSetViewports(1, &viewport);
 	}
 
 	auto D3D12CommandList::set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const -> void {
-		assert(false && "NOT IMPLEMENTED");
+		D3D12_RECT scissor{ x, y, x + width, y + height };
+		handle_->RSSetScissorRects(1, &scissor);
 	}
 
 	auto D3D12CommandList::draw(uint32_t vertex_count, uint32_t first_vertex, uint32_t first_instance, uint32_t instance_count) const -> void {
-		assert(false && "NOT IMPLEMENTED");
+		handle_->DrawInstanced(vertex_count, instance_count, first_vertex, first_instance);
 	}
 
 	auto D3D12CommandList::draw_indexed(uint32_t index_count, uint32_t first_index, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) const -> void {
-		assert(false && "NOT IMPLEMENTED");
+		handle_->DrawIndexedInstanced(index_count, instance_count, first_index, first_vertex, first_instance);
 	}
 
 	auto D3D12CommandList::dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) const -> void {
-		assert(false && "NOT IMPLEMENTED");
+		handle_->Dispatch(group_x, group_y, group_z);
 	}
 
 	auto D3D12CommandList::begin_marker(std::string_view name, uint32_t color) const -> void {
@@ -256,16 +263,16 @@ namespace edge::gfx {
 	}
 	
 	auto D3D12CommandList::_construct(const D3D12CommandAllocator& cmd_alloc) -> bool {
-		auto command_allocator = cmd_alloc.get_handle();
+		allocator_ = cmd_alloc.get_handle();
 		auto command_queue = cmd_alloc.get_queue();
 
 		Microsoft::WRL::ComPtr<ID3D12Device> device;
-		D3D12_CHECK_RESULT(command_allocator->GetDevice(IID_PPV_ARGS(&device)),
+		D3D12_CHECK_RESULT(allocator_->GetDevice(IID_PPV_ARGS(&device)),
 			"Failed to get device.");
 
 		D3D12_COMMAND_QUEUE_DESC queue_desc = command_queue->GetDesc();
 
-		D3D12_CHECK_RESULT(device->CreateCommandList(0, queue_desc.Type, command_allocator.Get(), nullptr, IID_PPV_ARGS(&handle_)),
+		D3D12_CHECK_RESULT(device->CreateCommandList(0, queue_desc.Type, allocator_.Get(), nullptr, IID_PPV_ARGS(&handle_)),
 			"Failed to allocate command list.");
 
 		return true;

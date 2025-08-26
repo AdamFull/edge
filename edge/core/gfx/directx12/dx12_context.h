@@ -112,8 +112,8 @@ namespace edge::gfx {
 
 		auto reset() -> void override;
 
-		auto begin() -> void override;
-		auto end() -> void override;
+		auto begin() -> bool override;
+		auto end() -> bool override;
 
 		auto set_viewport(float x, float y, float width, float height, float min_depth, float max_depth) const -> void override;
 		auto set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const -> void override;
@@ -133,7 +133,8 @@ namespace edge::gfx {
 	private:
 		auto _construct(const D3D12CommandAllocator& cmd_alloc) -> bool;
 
-		Microsoft::WRL::ComPtr<ID3D12CommandList> handle_;
+		Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList1> handle_;
+		Microsoft::WRL::ComPtr<ID3D12CommandAllocator> allocator_;
 	};
 
 	class DirectX12GraphicsContext final : public IGFXContext {
