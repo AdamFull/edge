@@ -34,11 +34,6 @@ namespace edge::gfx {
 		std::unordered_map<void*, VkMemoryAllocationDesc> allocation_map;
 	};
 
-	struct VkQueueFamily {
-		uint32_t index;
-		std::vector<std::shared_ptr<VulkanQueue>> queues;
-	};
-
     struct VkDeviceHandle {
         VkPhysicalDevice physical;
         VkDevice logical;
@@ -47,7 +42,8 @@ namespace edge::gfx {
         std::vector<VkExtensionProperties> extensions;
         std::vector<VkQueueFamilyProperties> queue_family_props;
 
-		std::array<std::vector<VkQueueFamily>, 3ull> queue_families{};
+		std::array<std::vector<uint32_t>, 3ull> queue_type_to_family_map{};
+		std::vector<uint32_t> queue_family_queue_usages{};
     };
 
 	struct VkPhysicalDeviceDesc {
@@ -118,9 +114,7 @@ namespace edge::gfx {
 
 		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
 
-		auto get_queue_count(QueueType queue_type) -> uint32_t override;
-		auto get_queue(QueueType queue_type, uint32_t queue_index) -> std::expected<std::shared_ptr<IGFXQueue>, bool> override;
-
+		auto create_queue(QueueType queue_type) -> std::shared_ptr<IGFXQueue> override;
 		auto create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> override;
 
         auto is_instance_extension_enabled(const char* extension_name) const noexcept -> bool;

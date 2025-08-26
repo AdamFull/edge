@@ -63,16 +63,77 @@ namespace edge::gfx {
 	public:
 		~D3D12Queue() override;
 
-		static auto construct(const DirectX12GraphicsContext& ctx) -> std::unique_ptr<D3D12Queue>;
+		static auto construct(const DirectX12GraphicsContext& ctx, D3D12_COMMAND_LIST_TYPE list_type) -> std::unique_ptr<D3D12Queue>;
 
-		auto submit(const SignalQueueInfo& submit_info) -> SyncResult override;
-		auto wait_idle() -> void override;
+		auto create_command_allocator() const -> std::shared_ptr<IGFXCommandAllocator> override;
 
-		//auto get_handle() const -> VkQueue {
-		//	return handle_;
-		//}
+		auto submit(const SignalQueueInfo& submit_info) -> void override;
+		auto wait_idle() -> SyncResult override;
+
+		auto get_handle() const -> Microsoft::WRL::ComPtr<ID3D12CommandQueue> {
+			return handle_;
+		}
 	private:
-		auto _construct(const DirectX12GraphicsContext& ctx) -> bool;
+		auto _construct(const DirectX12GraphicsContext& ctx, D3D12_COMMAND_LIST_TYPE list_type) -> bool;
+
+		Microsoft::WRL::ComPtr<ID3D12CommandQueue> handle_;
+		Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
+		HANDLE fence_event_;
+	};
+
+	class D3D12CommandAllocator final : public IGFXCommandAllocator {
+	public:
+		~D3D12CommandAllocator() override;
+
+		static auto construct(const D3D12Queue& queue) -> std::unique_ptr<D3D12CommandAllocator>;
+
+		auto allocate_command_list() const -> std::shared_ptr<IGFXCommandList> override;
+		auto reset() -> void override;
+
+		auto get_handle() const -> Microsoft::WRL::ComPtr<ID3D12CommandAllocator> {
+			return handle_;
+		}
+
+		auto get_queue() const -> Microsoft::WRL::ComPtr<ID3D12CommandQueue> {
+			return queue_;
+		}
+	private:
+		auto _construct(const D3D12Queue& queue) -> bool;
+
+		Microsoft::WRL::ComPtr<ID3D12CommandAllocator> handle_;
+		Microsoft::WRL::ComPtr<ID3D12CommandQueue> queue_;
+	};
+
+	class D3D12CommandList final : public IGFXCommandList {
+	public:
+		~D3D12CommandList() override;
+
+		static auto construct(const D3D12CommandAllocator& cmd_alloc) -> std::unique_ptr<D3D12CommandList>;
+
+		auto reset() -> void override;
+
+		auto begin() -> void override;
+		auto end() -> void override;
+
+		auto set_viewport(float x, float y, float width, float height, float min_depth, float max_depth) const -> void override;
+		auto set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const -> void override;
+
+		 auto draw(uint32_t vertex_count, uint32_t first_vertex, uint32_t first_instance, uint32_t instance_count) const -> void override;
+		auto draw_indexed(uint32_t index_count, uint32_t first_index, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) const -> void override;
+
+		auto dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) const -> void override;
+
+		auto begin_marker(std::string_view name, uint32_t color) const -> void override;
+		auto insert_marker(std::string_view name, uint32_t color) const -> void override;
+		auto end_marker() const -> void override;
+
+		auto get_handle() const -> Microsoft::WRL::ComPtr<ID3D12CommandList> {
+			return handle_;
+		}
+	private:
+		auto _construct(const D3D12CommandAllocator& cmd_alloc) -> bool;
+
+		Microsoft::WRL::ComPtr<ID3D12CommandList> handle_;
 	};
 
 	class DirectX12GraphicsContext final : public IGFXContext {
@@ -83,9 +144,7 @@ namespace edge::gfx {
 
 		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
 
-		auto get_queue_count(QueueType queue_type) -> uint32_t override;
-		auto get_queue(QueueType queue_type, uint32_t queue_index) -> std::expected<std::shared_ptr<IGFXQueue>, bool> override;
-
+		auto create_queue(QueueType queue_type) -> std::shared_ptr<IGFXQueue> override;
 		auto create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> override;
 
 		auto get_device() const -> Microsoft::WRL::ComPtr<ID3D12Device>;

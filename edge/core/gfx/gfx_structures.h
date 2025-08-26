@@ -12,8 +12,9 @@ namespace edge::gfx {
 	class IGFXContext;
 
 	class IGFXSemaphore;
-	class IGFXCommandList;
 	class IGFXQueue;
+	class IGFXCommandAllocator;
+	class IGFXCommandList;
 
 	struct GraphicsContextCreateInfo {
 		GraphicsDeviceType physical_device_type;

@@ -305,12 +305,9 @@ namespace edge::gfx {
 		return true;
 	}
 
-	auto DirectX12GraphicsContext::get_queue_count(QueueType queue_type) -> uint32_t {
-		return 0u;
-	}
-
-	auto DirectX12GraphicsContext::get_queue(QueueType queue_type, uint32_t queue_index) -> std::expected<std::shared_ptr<IGFXQueue>, bool> {
-		return nullptr;
+	auto DirectX12GraphicsContext::create_queue(QueueType queue_type) -> std::shared_ptr<IGFXQueue> {
+		return D3D12Queue::construct(*this, (queue_type == QueueType::eDirect) ? D3D12_COMMAND_LIST_TYPE_DIRECT : 
+			(queue_type == QueueType::eCompute) ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_COPY);
 	}
 
 	auto DirectX12GraphicsContext::create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> {

@@ -564,7 +564,62 @@ namespace edge::gfx {
             uint32_t queue_family_properties_count{ 0u };
             vkGetPhysicalDeviceQueueFamilyProperties(device.physical, &queue_family_properties_count, nullptr);
             device.queue_family_props.resize(queue_family_properties_count);
+            device.queue_family_queue_usages.resize(queue_family_properties_count);
             vkGetPhysicalDeviceQueueFamilyProperties(device.physical, &queue_family_properties_count, device.queue_family_props.data());
+
+            // Map queue type to families
+            for (uint32_t queue_family_index = 0U; queue_family_index < static_cast<uint32_t>(device.queue_family_props.size()); ++queue_family_index) {
+                VkQueueFamilyProperties const& queue_family_property = device.queue_family_props[queue_family_index];
+
+                VkBool32 present_supported;
+                if (vkGetPhysicalDeviceSurfaceSupportKHR(device.physical, queue_family_index, vk_surface_, &present_supported) != VK_SUCCESS) {
+                    present_supported = VK_FALSE;
+                }
+
+                bool is_graphics_commands_supported = (queue_family_property.queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT;
+                bool is_compute_commands_supported = (queue_family_property.queueFlags & VK_QUEUE_COMPUTE_BIT) == VK_QUEUE_COMPUTE_BIT;
+                bool is_copy_commands_supported = (queue_family_property.queueFlags & VK_QUEUE_TRANSFER_BIT) == VK_QUEUE_TRANSFER_BIT;
+
+                QueueType queue_family_type{};
+                if (present_supported &&
+                    is_graphics_commands_supported &&
+                    is_compute_commands_supported &&
+                    is_copy_commands_supported) {
+                    queue_family_type = QueueType::eDirect;
+                }
+                else if (present_supported &&
+                    is_compute_commands_supported &&
+                    is_copy_commands_supported) {
+                    queue_family_type = QueueType::eCompute;
+                }
+                else if (is_copy_commands_supported) {
+                    queue_family_type = QueueType::eCopy;
+                }
+
+                device.queue_type_to_family_map[static_cast<uint32_t>(queue_family_type)].push_back(queue_family_index);
+
+#ifndef NDEBUG
+                std::string supported_commands;
+
+                if (present_supported)
+                    supported_commands += "present|";
+                if (is_graphics_commands_supported)
+                    supported_commands += "graphics|";
+                if (is_compute_commands_supported)
+                    supported_commands += "compute|";
+                if (is_copy_commands_supported)
+                    supported_commands += "transfer|";
+
+                if (!supported_commands.empty())
+                    supported_commands.pop_back();
+
+                spdlog::debug("[VulkanGraphicsContext] Found {} \"{}\" queue{} that support: {} commands.",
+                    queue_family_property.queueCount,
+                    (queue_family_type == QueueType::eDirect) ? "Direct" : (queue_family_type == QueueType::eCompute) ? "Compute" : "Copy",
+                    queue_family_property.queueCount > 1 ? "s" : "",
+                    supported_commands);
+#endif
+            }
 
             // Enumerate device extensions
             uint32_t device_extension_count{ 0u };
@@ -926,94 +981,27 @@ namespace edge::gfx {
         VK_CHECK_RESULT(vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator_),
                         "Failed to create memory allocator.");
 
-        // Create device queue handles
-
-        for (uint32_t queue_family_index = 0U; queue_family_index < static_cast<uint32_t>(device.queue_family_props.size()); ++queue_family_index) {
-            VkQueueFamilyProperties const& queue_family_property = device.queue_family_props[queue_family_index];
-
-            VkBool32 present_supported;
-            if (vkGetPhysicalDeviceSurfaceSupportKHR(device.physical, queue_family_index, vk_surface_, &present_supported) != VK_SUCCESS) {
-                present_supported = VK_FALSE;
-            }
-
-            bool is_graphics_commands_supported = (queue_family_property.queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT;
-            bool is_compute_commands_supported = (queue_family_property.queueFlags & VK_QUEUE_COMPUTE_BIT) == VK_QUEUE_COMPUTE_BIT;
-            bool is_copy_commands_supported = (queue_family_property.queueFlags & VK_QUEUE_TRANSFER_BIT) == VK_QUEUE_TRANSFER_BIT;
-
-            QueueType queue_family_type{};
-            if (present_supported &&
-                is_graphics_commands_supported &&
-                is_compute_commands_supported &&
-                is_copy_commands_supported) {
-                queue_family_type = QueueType::eDirect;
-            }
-            else if (present_supported &&
-                is_compute_commands_supported &&
-                is_copy_commands_supported) {
-                queue_family_type = QueueType::eCompute;
-            }
-            else if (is_copy_commands_supported) {
-                queue_family_type = QueueType::eCopy;
-            }
-
-            auto& family_group = device.queue_families[static_cast<uint32_t>(queue_family_type)];
-            auto& new_family = family_group.emplace_back();
-            new_family.index = queue_family_index;
-
-            for (uint32_t queue_index = 0U; queue_index < queue_family_property.queueCount; ++queue_index) {
-                new_family.queues.push_back(VulkanQueue::construct(*this, new_family.index, queue_index));
-            }
-
-#ifndef NDEBUG
-            std::string supported_commands;
-
-            if (present_supported)
-                supported_commands += "present|";
-            if (is_graphics_commands_supported)
-                supported_commands += "graphics|";
-            if (is_compute_commands_supported)
-                supported_commands += "compute|";
-            if (is_copy_commands_supported)
-                supported_commands += "transfer|";
-
-            if (!supported_commands.empty())
-                supported_commands.pop_back();
-
-            spdlog::debug("[VulkanGraphicsContext] Found {} \"{}\" queue{} that support: {} commands.",
-                queue_family_property.queueCount,
-                (queue_family_type == QueueType::eDirect) ? "Direct" : (queue_family_type == QueueType::eCompute) ? "Compute" : "Copy",
-                queue_family_property.queueCount > 1 ? "s" : "",
-                supported_commands);
-#endif
-        }
-
 		return true;
 	}
 
-    auto VulkanGraphicsContext::get_queue_count(QueueType queue_type) -> uint32_t {
+    auto VulkanGraphicsContext::create_queue(QueueType queue_type) -> std::shared_ptr<IGFXQueue> {
         auto& device = devices_[selected_device_index_];
-        auto& family_group = device.queue_families[static_cast<uint32_t>(queue_type)];
-        if (family_group.empty()) {
-            return 0u;
+        auto& family_groups = device.queue_type_to_family_map[static_cast<uint32_t>(queue_type)];
+
+        // Lookup for free queue slots
+        for (auto family_index : family_groups) {
+            auto& family_properties = device.queue_family_props[family_index];
+            auto& queues_used = device.queue_family_queue_usages[family_index];
+
+            if (queues_used >= family_properties.queueCount) {
+                // TODO: try to check freed indices
+                return nullptr;
+            }
+
+            return VulkanQueue::construct(*this, family_index, queues_used++);
         }
 
-        uint32_t queue_count{ 0u };
-        for (auto& family : family_group) {
-            queue_count += static_cast<uint32_t>(family.queues.size());
-        }
-
-        return queue_count;
-    }
-
-    auto VulkanGraphicsContext::get_queue(QueueType queue_type, uint32_t queue_index) -> std::expected<std::shared_ptr<IGFXQueue>, bool> {
-        auto& device = devices_[selected_device_index_];
-        auto& family_group = device.queue_families[static_cast<uint32_t>(queue_type)];
-        if (family_group.empty()) {
-            return std::unexpected(false);
-        }
-
-        // TODO: Check that index is in queue range
-        return family_group.front().queues[queue_index];
+        return nullptr;
     }
 
     auto VulkanGraphicsContext::create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> {
