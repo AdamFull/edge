@@ -5,6 +5,8 @@
 #include <string_view>
 #include <vector>
 #include <memory>
+#include <cstdlib>
+#include <span>
 
 #include <volk.h>
 #include <vk_mem_alloc.h>
@@ -23,137 +25,230 @@
 
 namespace vkw {
 	class Instance;
+	class PhysicalDevice;
 	class Device;
 
 	template<typename T>
 	using Result = std::expected<T, VkResult>;
 
+	template<typename T>
+	class Allocator {
+	public:
+		using value_type = T;
+		using size_type = std::size_t;
+		using difference_type = std::ptrdiff_t;
+		using pointer = T*;
+		using const_pointer = const T*;
+		using reference = T&;
+		using const_reference = const T&;
+
+		Allocator(VkAllocationCallbacks const* callbacks = nullptr) noexcept
+			: callbacks_(callbacks) {
+		}
+
+		template<typename U>
+		Allocator(const Allocator<U>& other) noexcept
+			: callbacks_(other.get_callbacks()) {
+		}
+
+		auto allocate(size_type n) -> pointer {
+			if (callbacks_ && callbacks_->pfnAllocation) {
+				void* ptr = callbacks_->pfnAllocation(
+					callbacks_->pUserData,
+					n * sizeof(T),
+					alignof(T),
+					VK_SYSTEM_ALLOCATION_SCOPE_OBJECT
+				);
+				if (!ptr) {
+					throw std::bad_alloc();
+				}
+				return static_cast<pointer>(ptr);
+			}
+			else {
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+				return static_cast<pointer>(_aligned_malloc(n * sizeof(T), alignof(T)));
+#else
+				return static_cast<pointer>(aligned_alloc(alignof(T), n * sizeof(T)));
+#endif
+			}
+		}
+
+		void deallocate(pointer p, size_type) noexcept {
+			if (callbacks_ && callbacks_->pfnFree) {
+				callbacks_->pfnFree(callbacks_->pUserData, p);
+			}
+			else {
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+				_aligned_free(p);
+#else
+				std::free(p);
+#endif
+			}
+		}
+
+		template<typename U>
+		auto operator==(const Allocator<U>& other) const noexcept -> bool {
+			return callbacks_ == other.get_callbacks();
+		}
+
+		template<typename U>
+		auto operator!=(const Allocator<U>& other) const noexcept -> bool {
+			return !(*this == other);
+		}
+
+		auto get_callbacks() const noexcept -> VkAllocationCallbacks const* {
+			return callbacks_;
+		}
+	private:
+		VkAllocationCallbacks const* callbacks_;
+	};
+
+	template<typename T>
+	using Vector = std::vector<T, Allocator<T>>;
+
 	inline auto to_string(VkResult result) -> std::string_view {
 		switch (result)
 		{
-		case VK_SUCCESS: return "VK_SUCCESS";
-		case VK_NOT_READY: return "VK_NOT_READY";
-		case VK_TIMEOUT: return "VK_TIMEOUT";
-		case VK_EVENT_SET: return "VK_EVENT_SET";
-		case VK_EVENT_RESET: return "VK_EVENT_RESET";
-		case VK_INCOMPLETE: return "VK_INCOMPLETE";
-		case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
-		case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
-		case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
-		case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
-		case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
-		case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
-		case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
-		case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
-		case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
-		case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
-		case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
-		case VK_ERROR_FRAGMENTED_POOL: return "VK_ERROR_FRAGMENTED_POOL";
-		case VK_ERROR_UNKNOWN: return "VK_ERROR_UNKNOWN";
-		case VK_ERROR_OUT_OF_POOL_MEMORY: return "VK_ERROR_OUT_OF_POOL_MEMORY";
-		case VK_ERROR_INVALID_EXTERNAL_HANDLE: return "VK_ERROR_INVALID_EXTERNAL_HANDLE";
-		case VK_ERROR_FRAGMENTATION: return "VK_ERROR_FRAGMENTATION";
-		case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS: return "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
-		case VK_PIPELINE_COMPILE_REQUIRED: return "VK_PIPELINE_COMPILE_REQUIRED";
-		case VK_ERROR_NOT_PERMITTED: return "VK_ERROR_NOT_PERMITTED";
-		case VK_ERROR_SURFACE_LOST_KHR: return "VK_ERROR_SURFACE_LOST_KHR";
-		case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
-		case VK_SUBOPTIMAL_KHR: return "VK_SUBOPTIMAL_KHR";
-		case VK_ERROR_OUT_OF_DATE_KHR: return "VK_ERROR_OUT_OF_DATE_KHR";
-		case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: return "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR";
-		case VK_ERROR_VALIDATION_FAILED_EXT: return "VK_ERROR_VALIDATION_FAILED_EXT";
-		case VK_ERROR_INVALID_SHADER_NV: return "VK_ERROR_INVALID_SHADER_NV";
-		case VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR: return "VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR";
-		case VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR: return "VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR";
-		case VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR: return "VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR";
-		case VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR: return "VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR";
-		case VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR: return "VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR";
-		case VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR: return "VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR";
-		case VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT: return "VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT";
-		case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT: 		return "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT";
-		case VK_THREAD_IDLE_KHR: return "VK_THREAD_IDLE_KHR";
-		case VK_THREAD_DONE_KHR: return "VK_THREAD_DONE_KHR";
-		case VK_OPERATION_DEFERRED_KHR: return "VK_OPERATION_DEFERRED_KHR";
-		case VK_OPERATION_NOT_DEFERRED_KHR: return "VK_OPERATION_NOT_DEFERRED_KHR";
-		case VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR: return "VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR";
-		case VK_ERROR_COMPRESSION_EXHAUSTED_EXT: return "VK_ERROR_COMPRESSION_EXHAUSTED_EXT";
-		case VK_INCOMPATIBLE_SHADER_BINARY_EXT: return "VK_INCOMPATIBLE_SHADER_BINARY_EXT";
-		case VK_PIPELINE_BINARY_MISSING_KHR: return "VK_PIPELINE_BINARY_MISSING_KHR";
-		case VK_ERROR_NOT_ENOUGH_SPACE_KHR: return "VK_ERROR_NOT_ENOUGH_SPACE_KHR";
-		default: return "UNKNOWN_ENUMERATOR";
+		case VK_SUCCESS: return "Success";
+		case VK_NOT_READY: return "NotReady";
+		case VK_TIMEOUT: return "Timeout";
+		case VK_EVENT_SET: return "EventSet";
+		case VK_EVENT_RESET: return "EventReset";
+		case VK_INCOMPLETE: return "Incomplete";
+		case VK_ERROR_OUT_OF_HOST_MEMORY: return "OutOfHostMemory";
+		case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "OutOfDeviceMemory";
+		case VK_ERROR_INITIALIZATION_FAILED: return "InitializationFailed";
+		case VK_ERROR_DEVICE_LOST: return "DeviceLost";
+		case VK_ERROR_MEMORY_MAP_FAILED: return "MemoryMapFailed";
+		case VK_ERROR_LAYER_NOT_PRESENT: return "LayerNotPresent";
+		case VK_ERROR_EXTENSION_NOT_PRESENT: return "ExtensionNotPresent";
+		case VK_ERROR_FEATURE_NOT_PRESENT: return "FeatureNotPresent";
+		case VK_ERROR_INCOMPATIBLE_DRIVER: return "IncompatibleDriver";
+		case VK_ERROR_TOO_MANY_OBJECTS: return "TooManyObjects";
+		case VK_ERROR_FORMAT_NOT_SUPPORTED: return "FormatNotSupported";
+		case VK_ERROR_FRAGMENTED_POOL: return "FragmentedPool";
+		case VK_ERROR_UNKNOWN: return "Unknown";
+		case VK_ERROR_OUT_OF_POOL_MEMORY: return "OutOfPoolMemory";
+		case VK_ERROR_INVALID_EXTERNAL_HANDLE: return "InvalidExternalHandle";
+		case VK_ERROR_FRAGMENTATION: return "Fragmentation";
+		case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS: return "InvalidOpaqueCaptureAddress";
+		case VK_PIPELINE_COMPILE_REQUIRED: return "PipelineCompileRequired";
+		case VK_ERROR_NOT_PERMITTED: return "NotPermitted";
+		case VK_ERROR_SURFACE_LOST_KHR: return "SurfaceLost";
+		case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "NativeWindowInUse";
+		case VK_SUBOPTIMAL_KHR: return "Suboptimal";
+		case VK_ERROR_OUT_OF_DATE_KHR: return "OutOfDate";
+		case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: return "IncompatibleDisplay";
+		case VK_ERROR_VALIDATION_FAILED_EXT: return "ValidationFailed";
+		case VK_ERROR_INVALID_SHADER_NV: return "InvalidShader";
+		case VK_ERROR_IMAGE_USAGE_NOT_SUPPORTED_KHR: return "ImageUsageNotSupported";
+		case VK_ERROR_VIDEO_PICTURE_LAYOUT_NOT_SUPPORTED_KHR: return "VideoPictureLayoutNotSupported";
+		case VK_ERROR_VIDEO_PROFILE_OPERATION_NOT_SUPPORTED_KHR: return "VideoProfileOperationNotSupported";
+		case VK_ERROR_VIDEO_PROFILE_FORMAT_NOT_SUPPORTED_KHR: return "VideoProfileFormatNotSupported";
+		case VK_ERROR_VIDEO_PROFILE_CODEC_NOT_SUPPORTED_KHR: return "VideoProfileCodecNotSupported";
+		case VK_ERROR_VIDEO_STD_VERSION_NOT_SUPPORTED_KHR: return "VideoStdVersionNotSupported";
+		case VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT: return "InvalidDrmFormatModifierPlaneLayout";
+		case VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT: return "FullScreenExclusiveModeLost";
+		case VK_THREAD_IDLE_KHR: return "ThreadIdle";
+		case VK_THREAD_DONE_KHR: return "ThreadDone";
+		case VK_OPERATION_DEFERRED_KHR: return "OperationDeferred";
+		case VK_OPERATION_NOT_DEFERRED_KHR: return "OperationNotDeferred";
+		case VK_ERROR_INVALID_VIDEO_STD_PARAMETERS_KHR: return "InvalidVideoStdParameters";
+		case VK_ERROR_COMPRESSION_EXHAUSTED_EXT: return "CompressionExhausted";
+		case VK_INCOMPATIBLE_SHADER_BINARY_EXT: return "IncompatibleShaderBinary";
+		case VK_PIPELINE_BINARY_MISSING_KHR: return "PipelineBinaryMissing";
+		case VK_ERROR_NOT_ENOUGH_SPACE_KHR: return "NotEnoughSpace";
+		default: return "Undefined";
 		}
 	}
 
 	inline auto to_string(VkObjectType object_type) -> std::string_view {
 		switch (object_type)
 		{
-		case VK_OBJECT_TYPE_UNKNOWN:  return "UNKNOWN";
-		case VK_OBJECT_TYPE_INSTANCE:  return "INSTANCE";
-		case VK_OBJECT_TYPE_PHYSICAL_DEVICE:  return "PHYSICAL DEVICE";
-		case VK_OBJECT_TYPE_DEVICE:  return "DEVICE";
-		case VK_OBJECT_TYPE_QUEUE: return "QUEUE";
-		case VK_OBJECT_TYPE_SEMAPHORE:  return "SEMAPHORE";
-		case VK_OBJECT_TYPE_COMMAND_BUFFER: return "COMMAND BUFFER";
-		case VK_OBJECT_TYPE_FENCE:  return "FENCE";
-		case VK_OBJECT_TYPE_DEVICE_MEMORY: return "DEVICE MEMORY";
-		case VK_OBJECT_TYPE_BUFFER: return "BUFFER";
-		case VK_OBJECT_TYPE_IMAGE: return "IMAGE";
-		case VK_OBJECT_TYPE_EVENT: return "EVENT";
-		case VK_OBJECT_TYPE_QUERY_POOL: return "QUERY POOL";
-		case VK_OBJECT_TYPE_BUFFER_VIEW: return "BUFFER VIEW";
-		case VK_OBJECT_TYPE_IMAGE_VIEW: return "IMAGE VIEW";
-		case VK_OBJECT_TYPE_SHADER_MODULE: return "SHADER MODULE";
-		case VK_OBJECT_TYPE_PIPELINE_CACHE: return "PIPELINE CACHE";
-		case VK_OBJECT_TYPE_PIPELINE_LAYOUT: return "PIPELINE LAYOUT";
-		case VK_OBJECT_TYPE_RENDER_PASS: return "RENDER PASS";
-		case VK_OBJECT_TYPE_PIPELINE: return "PIPELINE";
-		case VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT: return "DESCRIPTOR SET LAYOUT";
-		case VK_OBJECT_TYPE_SAMPLER: return "SAMPLER";
-		case VK_OBJECT_TYPE_DESCRIPTOR_POOL: return "DESCRIPTOR POOL";
-		case VK_OBJECT_TYPE_DESCRIPTOR_SET: return "DESCRIPTOR SET";
-		case VK_OBJECT_TYPE_FRAMEBUFFER: return "FRAMEBUFFER";
-		case VK_OBJECT_TYPE_COMMAND_POOL: return "COMMAND POOL";
-		case VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION: return "SAMPLER YCBCR CONVERSION";
-		case VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE: return "DESCRIPTOR UPDATE TEMPLATE";
-		case VK_OBJECT_TYPE_PRIVATE_DATA_SLOT: return "PRIVATE DATA SLOT";
-		case VK_OBJECT_TYPE_SURFACE_KHR: return "SURFACE KHR";
-		case VK_OBJECT_TYPE_SWAPCHAIN_KHR: return "SWAPCHAIN";
-		case VK_OBJECT_TYPE_DISPLAY_KHR: return "DISPLAY KHR";
-		case VK_OBJECT_TYPE_DISPLAY_MODE_KHR: return "DISPLAY MODE KHR";
-		case VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT: return "DEBUG REPORT CALLBACK EXT";
-		case VK_OBJECT_TYPE_VIDEO_SESSION_KHR: return "VIDEO SESSION KHR";
-		case VK_OBJECT_TYPE_VIDEO_SESSION_PARAMETERS_KHR: return "VIDEO SESSION PARAMETERS KHR";
-		case VK_OBJECT_TYPE_CU_MODULE_NVX: return "CU MODULE NVX";
-		case VK_OBJECT_TYPE_CU_FUNCTION_NVX: return "CU FUNCTION NVX";
-		case VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT: return "DEBUG UTILS MESSENGER";
-		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR: return "ACCELERATION STRUCTURE KHR";
-		case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT: return "VALIDATION CACKE EXT";
-		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV: return "ACCELERATION STRUCTURE NV";
-		case VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL: return "PERFORMANCE CONFIGURATION INTEL";
-		case VK_OBJECT_TYPE_DEFERRED_OPERATION_KHR: return "DEFERRED OPERATION KHR";
-		case VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV: return "INDIRECT COMMANDS LAYOUT NV";
-		case VK_OBJECT_TYPE_CUDA_MODULE_NV: return "CUDA MODULE NV";
-		case VK_OBJECT_TYPE_CUDA_FUNCTION_NV: return "CUDA FUNCTION NV";
-		case VK_OBJECT_TYPE_BUFFER_COLLECTION_FUCHSIA: return "BUFFER COLLECTION FUCHSIA";
-		case VK_OBJECT_TYPE_MICROMAP_EXT: return "MICROMAP EXT";
-		case VK_OBJECT_TYPE_OPTICAL_FLOW_SESSION_NV: return "OPTICAL FLOW SESSION NV";
-		case VK_OBJECT_TYPE_SHADER_EXT: return "SHADER EXT";
-		case VK_OBJECT_TYPE_PIPELINE_BINARY_KHR: return "PIPELINE BINARY KHR";
-		case VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_EXT: return "INDIRECT COMMANDS LAYOUT EXT";
-		case VK_OBJECT_TYPE_INDIRECT_EXECUTION_SET_EXT: return "INDIRECT EXECUTION SET EXT";
-		default: return "UNKNOWN_ENUMERATOR";
+		case VK_OBJECT_TYPE_UNKNOWN:  return "Unknown";
+		case VK_OBJECT_TYPE_INSTANCE:  return "Instance";
+		case VK_OBJECT_TYPE_PHYSICAL_DEVICE:  return "PhysicalDevice";
+		case VK_OBJECT_TYPE_DEVICE:  return "Device";
+		case VK_OBJECT_TYPE_QUEUE: return "Queue";
+		case VK_OBJECT_TYPE_SEMAPHORE:  return "Semaphore";
+		case VK_OBJECT_TYPE_COMMAND_BUFFER: return "CommandBuffer";
+		case VK_OBJECT_TYPE_FENCE:  return "Fence";
+		case VK_OBJECT_TYPE_DEVICE_MEMORY: return "DeviceMemory";
+		case VK_OBJECT_TYPE_BUFFER: return "Buffer";
+		case VK_OBJECT_TYPE_IMAGE: return "Image";
+		case VK_OBJECT_TYPE_EVENT: return "Event";
+		case VK_OBJECT_TYPE_QUERY_POOL: return "QueryPool";
+		case VK_OBJECT_TYPE_BUFFER_VIEW: return "BufferView";
+		case VK_OBJECT_TYPE_IMAGE_VIEW: return "ImageView";
+		case VK_OBJECT_TYPE_SHADER_MODULE: return "ShaderModule";
+		case VK_OBJECT_TYPE_PIPELINE_CACHE: return "PipelineCache";
+		case VK_OBJECT_TYPE_PIPELINE_LAYOUT: return "PipelineLayout";
+		case VK_OBJECT_TYPE_RENDER_PASS: return "RenderPass";
+		case VK_OBJECT_TYPE_PIPELINE: return "Pipeline";
+		case VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT: return "DescriptorSetLayout";
+		case VK_OBJECT_TYPE_SAMPLER: return "Sampler";
+		case VK_OBJECT_TYPE_DESCRIPTOR_POOL: return "DescriptorPool";
+		case VK_OBJECT_TYPE_DESCRIPTOR_SET: return "DescriptorSet";
+		case VK_OBJECT_TYPE_FRAMEBUFFER: return "Framebuffer";
+		case VK_OBJECT_TYPE_COMMAND_POOL: return "CommandPool";
+		case VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION: return "SamplerYcbcrConversion";
+		case VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE: return "DescriptorUpdateTemplate";
+		case VK_OBJECT_TYPE_PRIVATE_DATA_SLOT: return "PrivateDataSlot";
+		case VK_OBJECT_TYPE_SURFACE_KHR: return "SurfaceKHR";
+		case VK_OBJECT_TYPE_SWAPCHAIN_KHR: return "SwapchainKHR";
+		case VK_OBJECT_TYPE_DISPLAY_KHR: return "DisplayKHR";
+		case VK_OBJECT_TYPE_DISPLAY_MODE_KHR: return "DisplayModeKHR";
+		case VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT: return "DebugReportCallbackEXT";
+		case VK_OBJECT_TYPE_VIDEO_SESSION_KHR: return "VideoSessionKHR";
+		case VK_OBJECT_TYPE_VIDEO_SESSION_PARAMETERS_KHR: return "VideoSessionParametersKHR";
+		case VK_OBJECT_TYPE_CU_MODULE_NVX: return "CuModuleNVX";
+		case VK_OBJECT_TYPE_CU_FUNCTION_NVX: return "CuFunctionNVX";
+		case VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT: return "DebugUtilsMessengerEXT";
+		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR: return "AccelerationStructureKHR";
+		case VK_OBJECT_TYPE_VALIDATION_CACHE_EXT: return "ValidationCacheEXT";
+		case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_NV: return "AccelerationStructureNV";
+		case VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL: return "PerformanceConfigurationINTEL";
+		case VK_OBJECT_TYPE_DEFERRED_OPERATION_KHR: return "DeferredOperationKHR";
+		case VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV: return "IndirectCommandsLayoutNV";
+		case VK_OBJECT_TYPE_CUDA_MODULE_NV: return "CudaModuleNV";
+		case VK_OBJECT_TYPE_CUDA_FUNCTION_NV: return "CudaFunctionNV";
+		case VK_OBJECT_TYPE_BUFFER_COLLECTION_FUCHSIA: return "BufferCollectionFUCHSIA";
+		case VK_OBJECT_TYPE_MICROMAP_EXT: return "MicromapEXT";
+		case VK_OBJECT_TYPE_OPTICAL_FLOW_SESSION_NV: return "OpticalFlowSessionNV";
+		case VK_OBJECT_TYPE_SHADER_EXT: return "ShaderEXT";
+		case VK_OBJECT_TYPE_PIPELINE_BINARY_KHR: return "PipelineBinaryKHR";
+		case VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_EXT: return "IndirectCommandsLayoutEXT";
+		case VK_OBJECT_TYPE_INDIRECT_EXECUTION_SET_EXT: return "IndirectExecutionSetEXT";
+		default: return "Undefined";
 		}
 	}
 
-	auto enumerate_instance_extension_properties(const char* layer_name = nullptr) -> std::expected<std::vector<VkExtensionProperties>, VkResult>;
-	auto enumerate_instance_layer_properties() -> std::expected<std::vector<VkLayerProperties>, VkResult>;
+	inline auto to_string(VkPhysicalDeviceType type) -> std::string_view {
+		switch (type)
+		{
+		case VK_PHYSICAL_DEVICE_TYPE_OTHER: return "Other";
+		case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU: return "Integrated";
+		case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU: return "Discrete";
+		case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU: return "Virtual";
+		case VK_PHYSICAL_DEVICE_TYPE_CPU: return "CPU";
+		default: return "Undefined";
+		}
+	}
+
+	auto enumerate_instance_extension_properties(const char* layer_name = nullptr, VkAllocationCallbacks const* allocator = nullptr) -> Result<Vector<VkExtensionProperties>>;
+	auto enumerate_instance_layer_properties(VkAllocationCallbacks const* allocator = nullptr) -> Result<Vector<VkLayerProperties>>;
+	auto enumerate_instance_version() -> Result<uint32_t>;
 
 	class Instance {
 	public:
 		static constexpr auto object_type{ VK_OBJECT_TYPE_INSTANCE };
 		static constexpr std::string_view object_name{ "VkInstance" };
 
-		Instance();
+		Instance() = default;
+		Instance(VkInstance handle, const VkAllocationCallbacks* allocator = nullptr) :
+			handle_{ handle }, allocator_{ allocator } {
+		}
+
 		~Instance();
 
 		Instance(const Instance& other) = delete;
@@ -164,38 +259,355 @@ namespace vkw {
 			allocator_{ std::exchange(other.allocator_, nullptr) } {}
 
 		Instance& operator=(Instance&& other) {
+			if (this != &other) {
+				handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+				allocator_ = std::exchange(other.allocator_, nullptr);
+			}
+			return *this;
+		}
+
+		// Core Vulkan 1.0 functions
+		auto enumerate_physical_devices() const -> Result<Vector<PhysicalDevice>>;
+		auto get_proc_addr(const char* name) const -> PFN_vkVoidFunction;
+
+		// Vulkan 1.1 functions
+		auto enumerate_physical_device_groups() const -> Result<Vector<VkPhysicalDeviceGroupProperties>>;
+
+		// Extension functions
+		auto create_debug_utils_messenger_ext(const VkDebugUtilsMessengerCreateInfoEXT& create_info) const -> Result<VkDebugUtilsMessengerEXT>;
+		auto destroy_debug_utils_messenger_ext(VkDebugUtilsMessengerEXT messenger) const -> void;
+		auto submit_debug_utils_message_ext(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+			VkDebugUtilsMessageTypeFlagsEXT message_types,
+			const VkDebugUtilsMessengerCallbackDataEXT& callback_data) const -> void;
+
+		// Debug report (legacy)
+		auto create_debug_report_callback_ext(const VkDebugReportCallbackCreateInfoEXT& create_info) const -> Result<VkDebugReportCallbackEXT>;
+		auto destroy_debug_report_callback_ext(VkDebugReportCallbackEXT callback) const -> void;
+		auto debug_report_message_ext(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT object_type,
+			uint64_t object, size_t location, int32_t message_code,
+			const char* layer_prefix, const char* message) const -> void;
+
+		// Surface creation functions
+		auto destroy_surface_khr(VkSurfaceKHR surface) const -> void;
+
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+		auto create_surface_khr(const VkWin32SurfaceCreateInfoKHR& create_info) const -> Result<VkSurfaceKHR>;
+#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+		auto create_surface_khr(const VkXlibSurfaceCreateInfoKHR& create_info) const -> Result<VkSurfaceKHR>;
+#elif defined(VK_USE_PLATFORM_XCB_KHR)
+		auto create_surface_khr(const VkXcbSurfaceCreateInfoKHR& create_info) const -> Result<VkSurfaceKHR>;
+#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
+		auto create_surface_khr(const VkWaylandSurfaceCreateInfoKHR& create_info) const -> Result<VkSurfaceKHR>;
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+		auto create_surface_khr(const VkAndroidSurfaceCreateInfoKHR& create_info) const -> Result<VkSurfaceKHR>;
+#elif defined(VK_USE_PLATFORM_MACOS_MVK)
+		auto create_surface_mvk(const VkMacOSSurfaceCreateInfoMVK& create_info) const -> Result<VkSurfaceKHR>;
+#elif defined(VK_USE_PLATFORM_IOS_MVK)
+		auto create_surface_mvk(const VkIOSSurfaceCreateInfoMVK& create_info) const -> Result<VkSurfaceKHR>;
+#elif defined(VK_USE_PLATFORM_METAL_EXT)
+		auto create_surface_ext(const VkMetalSurfaceCreateInfoEXT& create_info) const -> Result<VkSurfaceKHR>;
+#endif
+
+		// Display functions
+		auto create_display_mode_khr(VkDisplayKHR display, const VkDisplayModeCreateInfoKHR& create_info) const -> Result<VkDisplayModeKHR>;
+		auto get_display_plane_capabilities_khr(VkDisplayModeKHR mode, uint32_t plane_index) const -> Result<VkDisplayPlaneCapabilitiesKHR>;
+		auto create_display_plane_surface_khr(const VkDisplaySurfaceCreateInfoKHR& create_info) const -> Result<VkSurfaceKHR>;
+
+		// Headless surface
+		auto create_headless_surface_ext(const VkHeadlessSurfaceCreateInfoEXT& create_info) const -> Result<VkSurfaceKHR>;
+
+		// Handle and conversion operators
+		auto get_handle() const noexcept -> VkInstance { return handle_; }
+		auto get_allocator() const noexcept -> const VkAllocationCallbacks* { return allocator_; }
+
+		explicit operator VkInstance() const noexcept { return handle_; }
+		explicit operator uint64_t() const noexcept { return reinterpret_cast<uint64_t>(handle_); }
+	private:
+		VkInstance handle_{ VK_NULL_HANDLE };
+		VkAllocationCallbacks const* allocator_{ nullptr };
+	};
+
+	class InstanceBuilder {
+	public:
+		InstanceBuilder(VkAllocationCallbacks const* allocator);
+
+		// Application info setters
+		auto set_app_name(const char* name) -> InstanceBuilder& {
+			app_info_.pApplicationName = name;
+			return *this;
+		}
+
+		auto set_app_version(uint32_t version) -> InstanceBuilder& {
+			app_info_.applicationVersion = version;
+			return *this;
+		}
+
+		auto set_app_version(uint32_t major, uint32_t minor, uint32_t patch) -> InstanceBuilder& {
+			app_info_.applicationVersion = VK_MAKE_VERSION(major, minor, patch);
+			return *this;
+		}
+
+		auto set_engine_name(const char* name) -> InstanceBuilder& {
+			app_info_.pEngineName = name;
+			return *this;
+		}
+
+		auto set_engine_version(uint32_t version) -> InstanceBuilder& {
+			app_info_.engineVersion = version;
+			return *this;
+		}
+
+		auto set_engine_version(uint32_t major, uint32_t minor, uint32_t patch) -> InstanceBuilder& {
+			app_info_.engineVersion = VK_MAKE_VERSION(major, minor, patch);
+			return *this;
+		}
+
+		auto set_api_version(uint32_t version) -> InstanceBuilder& {
+			app_info_.apiVersion = version;
+			return *this;
+		}
+
+		auto set_api_version(uint32_t major, uint32_t minor, uint32_t patch) -> InstanceBuilder& {
+			app_info_.apiVersion = VK_MAKE_API_VERSION(0, major, minor, patch);
+			return *this;
+		}
+
+		// Extension management
+		auto add_extension(const char* extension_name, bool required = false) -> InstanceBuilder& {
+			enabled_extensions_.emplace_back(extension_name);
+			return *this;
+		}
+
+		auto add_extensions(std::span<const char* const> extensions) -> InstanceBuilder& {
+			enabled_extensions_.reserve(enabled_extensions_.size() + extensions.size());
+			for (const char* ext : extensions) {
+				enabled_extensions_.emplace_back(ext);
+			}
+			return *this;
+		}
+
+		auto remove_extension(const char* extension_name) -> InstanceBuilder& {
+			enabled_extensions_.erase(
+				std::remove_if(enabled_extensions_.begin(), enabled_extensions_.end(),
+					[extension_name](const char* ext) { return std::strcmp(ext, extension_name) == 0; }),
+				enabled_extensions_.end()
+			);
+			return *this;
+		}
+
+		auto clear_extensions() -> InstanceBuilder& {
+			enabled_extensions_.clear();
+			return *this;
+		}
+
+		// Layer management
+		auto add_layer(const char* layer_name) -> InstanceBuilder& {
+			enabled_layers_.emplace_back(layer_name);
+			return *this;
+		}
+
+		auto add_layers(std::span<const char* const> layers) -> InstanceBuilder& {
+			enabled_layers_.reserve(enabled_layers_.size() + layers.size());
+			for (const char* layer : layers) {
+				enabled_layers_.emplace_back(layer);
+			}
+			return *this;
+		}
+
+		auto remove_layer(const char* layer_name) -> InstanceBuilder& {
+			enabled_layers_.erase(
+				std::remove_if(enabled_layers_.begin(), enabled_layers_.end(),
+					[layer_name](const char* layer) { return std::strcmp(layer, layer_name) == 0; }),
+				enabled_layers_.end()
+			);
+			return *this;
+		}
+
+		auto clear_layers() -> InstanceBuilder& {
+			enabled_layers_.clear();
+			return *this;
+		}
+
+		// Debug utilities convenience methods
+		auto enable_debug_utils() -> InstanceBuilder& {
+			add_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+			return *this;
+		}
+
+		auto enable_validation_layers() -> InstanceBuilder&;
+
+		auto enable_debug_report() -> InstanceBuilder& {
+			add_extension(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+			return *this;
+		}
+
+		// Surface extension convenience methods
+		auto enable_surface() -> InstanceBuilder& {
+			add_extension(VK_KHR_SURFACE_EXTENSION_NAME);
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+			add_extension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+			add_extension(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_XCB_KHR)
+			add_extension(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
+			add_extension(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+			add_extension(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_MACOS_MVK)
+			add_extension(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_IOS_MVK)
+			add_extension(VK_MVK_IOS_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_METAL_EXT)
+			add_extension(VK_EXT_METAL_SURFACE_EXTENSION_NAME);
+#else
+#error "Unsipported platform"
+#endif
+			return *this;
+		}
+
+		auto enable_headless_surface() -> InstanceBuilder& {
+			enable_surface();
+			add_extension(VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME);
+			return *this;
+		}
+
+		// Flags and pNext chain
+		auto set_flags(VkInstanceCreateFlags flags) -> InstanceBuilder& {
+			create_info_.flags = flags;
+			return *this;
+		}
+
+		auto set_next_chain(const void* next) -> InstanceBuilder& {
+			create_info_.pNext = next;
+			return *this;
+		}
+
+		// Set allocator
+		auto set_allocator(const VkAllocationCallbacks* allocator) -> InstanceBuilder& {
+			allocator_ = allocator;
+			return *this;
+		}
+
+		// Validation methods
+		auto check_extensions_supported() const -> Result<bool>;
+		auto check_layers_supported() const -> Result<bool>;
+
+		// Build the instance
+		auto build() -> Result<Instance>;
+
+		// Get current configuration for inspection
+		auto get_enabled_extensions() const -> const Vector<const char*>& { return enabled_extensions_; }
+		auto get_enabled_layers() const -> const Vector<const char*>& { return enabled_layers_; }
+		auto get_app_info() const -> const VkApplicationInfo& { return app_info_; }
+
+	private:
+		VkApplicationInfo app_info_{};
+		VkInstanceCreateInfo create_info_{};
+		Vector<const char*> enabled_extensions_;
+		Vector<const char*> enabled_layers_;
+		const VkAllocationCallbacks* allocator_{ nullptr };
+
+		void update_create_info() {
+			create_info_.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions_.size());
+			create_info_.ppEnabledExtensionNames = enabled_extensions_.empty() ? nullptr : enabled_extensions_.data();
+			create_info_.enabledLayerCount = static_cast<uint32_t>(enabled_layers_.size());
+			create_info_.ppEnabledLayerNames = enabled_layers_.empty() ? nullptr : enabled_layers_.data();
+		}
+	};
+
+	class PhysicalDevice {
+	public:
+		static constexpr auto object_type{ VK_OBJECT_TYPE_PHYSICAL_DEVICE };
+		static constexpr std::string_view object_name{ "VkPhysicalDevice" };
+
+		PhysicalDevice(VkPhysicalDevice handle, const VkAllocationCallbacks* allocator = nullptr) :
+			handle_{ handle }, allocator_{ allocator } {}
+		~PhysicalDevice() = default;
+
+		PhysicalDevice(const PhysicalDevice& other) = delete;
+		PhysicalDevice& operator=(const PhysicalDevice& other) = delete;
+
+		PhysicalDevice(PhysicalDevice&& other) :
+			handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) },
+			allocator_{ std::exchange(other.allocator_, nullptr) } {
+		}
+
+		PhysicalDevice& operator=(PhysicalDevice&& other) {
 			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
 			allocator_ = std::exchange(other.allocator_, nullptr);
 			return *this;
 		}
 
-		auto get_handle() const noexcept -> VkInstance { return handle_; }
-		explicit operator VkInstance() const noexcept { return handle_; }
+		// Core Vulkan 1.0 functions
+		auto get_features() const -> VkPhysicalDeviceFeatures;
+		auto get_format_properties(VkFormat format) const -> VkFormatProperties;
+		auto get_image_format_properties(VkFormat format, VkImageType type, VkImageTiling tiling,
+			VkImageUsageFlags usage, VkImageCreateFlags flags) const -> Result<VkImageFormatProperties>;
+		auto get_queue_family_properties() const -> Vector<VkQueueFamilyProperties>;
+		auto get_memory_properties() const -> VkPhysicalDeviceMemoryProperties;
+		auto get_properties() const -> VkPhysicalDeviceProperties;
+		auto get_sparse_image_format_properties(VkFormat format, VkImageType type, VkSampleCountFlagBits samples,
+			VkImageUsageFlags usage, VkImageTiling tiling) const -> Vector<VkSparseImageFormatProperties>;
+
+		// Vulkan 1.1 functions
+		auto get_features2() const -> VkPhysicalDeviceFeatures2;
+		auto get_properties2() const -> VkPhysicalDeviceProperties2;
+		auto get_format_properties2(VkFormat format) const -> VkFormatProperties2;
+		auto get_image_format_properties2(const VkPhysicalDeviceImageFormatInfo2& image_format_info) const -> Result<VkImageFormatProperties2>;
+		auto get_queue_family_properties2() const -> Vector<VkQueueFamilyProperties2>;
+		auto get_memory_properties2() const -> VkPhysicalDeviceMemoryProperties2;
+		auto get_sparse_image_format_properties2(const VkPhysicalDeviceSparseImageFormatInfo2& format_info) const -> Vector<VkSparseImageFormatProperties2>;
+
+		// Extension query functions
+		auto enumerate_device_extension_properties(const char* layer_name = nullptr) const -> Result<Vector<VkExtensionProperties>>;
+		auto enumerate_device_layer_properties() const -> Result<Vector<VkLayerProperties>>;
+
+		// Surface support functions (VK_KHR_surface)
+		auto get_surface_support_khr(uint32_t queue_family_index, VkSurfaceKHR surface) const -> Result<VkBool32>;
+		auto get_surface_capabilities_khr(VkSurfaceKHR surface) const -> Result<VkSurfaceCapabilitiesKHR>;
+		auto get_surface_formats_khr(VkSurfaceKHR surface) const -> Result<Vector<VkSurfaceFormatKHR>>;
+		auto get_surface_present_modes_khr(VkSurfaceKHR surface) const -> Result<Vector<VkPresentModeKHR>>;
+
+		// Display functions (VK_KHR_display)
+		auto get_display_properties_khr() const -> Result<Vector<VkDisplayPropertiesKHR>>;
+		auto get_display_plane_properties_khr() const -> Result<Vector<VkDisplayPlanePropertiesKHR>>;
+		auto get_display_planes_supported_displays_khr(uint32_t plane_index) const -> Result<Vector<VkDisplayKHR>>;
+
+		// Tool properties (Vulkan 1.3)
+		auto get_tool_properties() const -> Result<Vector<VkPhysicalDeviceToolProperties>>;
+
+		// External memory/fence/semaphore properties
+		auto get_external_buffer_properties(const VkPhysicalDeviceExternalBufferInfo& external_buffer_info) const -> VkExternalBufferProperties;
+		auto get_external_fence_properties(const VkPhysicalDeviceExternalFenceInfo& external_fence_info) const -> VkExternalFenceProperties;
+		auto get_external_semaphore_properties(const VkPhysicalDeviceExternalSemaphoreInfo& external_semaphore_info) const -> VkExternalSemaphoreProperties;
+
+		// Multisample properties
+		auto get_multisample_properties_ext(VkSampleCountFlagBits samples) const -> VkMultisamplePropertiesEXT;
+
+		// Calibrateable time domains (VK_EXT_calibrated_timestamps)
+		auto get_calibrateable_time_domains_ext() const -> Result<Vector<VkTimeDomainEXT>>;
+
+		// Fragment shading rate properties (VK_KHR_fragment_shading_rate)
+		auto get_fragment_shading_rates_khr() const -> Result<Vector<VkPhysicalDeviceFragmentShadingRateKHR>>;
+
+		// Cooperative matrix properties (VK_NV_cooperative_matrix)
+		auto get_cooperative_matrix_properties_nv() const -> Result<Vector<VkCooperativeMatrixPropertiesNV>>;
+
+		// Supported framebuffer mixed samples combinations (VK_NV_coverage_reduction_mode)
+		auto get_supported_framebuffer_mixed_samples_combinations_nv() const -> Result<std::vector<VkFramebufferMixedSamplesCombinationNV>>;
+
+		auto get_handle() const noexcept -> VkPhysicalDevice { return handle_; }
+		auto get_allocator() const noexcept -> const VkAllocationCallbacks* { return allocator_; }
+
+		explicit operator VkPhysicalDevice() const noexcept { return handle_; }
 		explicit operator uint64_t() const noexcept { return reinterpret_cast<uint64_t>(handle_); }
 
-		auto get_allocator() const noexcept -> VkAllocationCallbacks const* { return allocator_; }
+		auto is_valid() const noexcept -> bool { return handle_ != VK_NULL_HANDLE; }
 
-		auto create(const VkApplicationInfo& app_info, VkAllocationCallbacks const* allocator) -> VkResult;
-
-		auto enumerate_devices() const -> Result<std::vector<Device>>;
-
-		auto is_extension_enabled(const char* extension_name) const noexcept -> bool;
-		auto is_extension_supported(const char* extension_name) const noexcept -> bool;
-		auto try_enable_extension(const char* extension_name) -> bool;
-
-		auto is_layer_enabled(const char* layer_name) const noexcept -> bool;
-		auto try_enable_layer(const char* layer_name) -> bool;
 	private:
-		VkInstance handle_{ VK_NULL_HANDLE };
+		VkPhysicalDevice handle_{ VK_NULL_HANDLE };
 		VkAllocationCallbacks const* allocator_{ nullptr };
-
-		std::vector<VkExtensionProperties> available_extensions_;
-		std::vector<const char*> enabled_extensions_;
-
-		std::vector<VkLayerProperties> available_layers_;
-		std::vector<const char*> enabled_layers_;
-
-		std::vector<VkValidationFeatureEnableEXT> enabled_validation_features_;
 	};
 
 	class Device {
@@ -219,15 +631,31 @@ namespace vkw {
 			return *this;
 		}
 
+		auto create() -> VkResult;
+
 		auto is_extension_enabled(const char* extension_name) const noexcept -> bool;
 		auto is_extension_supported(const char* extension_name) const noexcept -> bool;
 		auto try_enable_extension(const char* extension_name) -> bool;
 
-		auto create() -> VkResult;
+		auto check_api_version(uint32_t version) const noexcept -> bool;
+
+		auto get_name() const noexcept -> std::string_view;
 	private:
 		VkPhysicalDevice physical_{ VK_NULL_HANDLE };
 		VkDevice logical_{ VK_NULL_HANDLE };
 		VkAllocationCallbacks const* allocator_{ nullptr };
+
+		VkPhysicalDeviceFeatures device_features_;
+		VkPhysicalDeviceVulkan11Features device_features_11_{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+		VkPhysicalDeviceVulkan12Features device_features_12_{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+
+		VkPhysicalDeviceProperties device_properties_;
+		VkPhysicalDeviceMemoryProperties device_memory_properties_;
+
+		std::vector<VkQueueFamilyProperties> queue_family_properties_;
+
+		std::vector<VkExtensionProperties> available_extensions_;
+		std::vector<const char*> enabled_extensions_;
 	};
 
 	class DebugInterface {
