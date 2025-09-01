@@ -32,6 +32,83 @@ namespace vkw {
 	using Result = std::expected<T, VkResult>;
 
 	template<typename T>
+	struct FeatureTraits {
+		static_assert(sizeof(T) == 0, "Unsupported feature.");
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceBufferDeviceAddressFeatures> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES };
+		static constexpr const char* extension_name{ VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDevicePerformanceQueryFeaturesKHR> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PERFORMANCE_QUERY_FEATURES_KHR };
+		static constexpr const char* extension_name{ VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceHostQueryResetFeatures> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES };
+		static constexpr const char* extension_name{ VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceSynchronization2Features> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES };
+		static constexpr const char* extension_name{ VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceDynamicRenderingFeatures> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES };
+		static constexpr const char* extension_name{ VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT };
+		static constexpr const char* extension_name{ VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDevice16BitStorageFeaturesKHR> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES };
+		static constexpr const char* extension_name{ VK_KHR_16BIT_STORAGE_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT };
+		static constexpr const char* extension_name{ VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceRayQueryFeaturesKHR> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_QUERY_FEATURES_KHR };
+		static constexpr const char* extension_name{ VK_KHR_RAY_QUERY_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceAccelerationStructureFeaturesKHR> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ACCELERATION_STRUCTURE_FEATURES_KHR };
+		static constexpr const char* extension_name{ VK_KHR_ACCELERATION_STRUCTURE_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceRayTracingPipelineFeaturesKHR> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_RAY_TRACING_PIPELINE_FEATURES_KHR };
+		static constexpr const char* extension_name{ VK_KHR_RAY_TRACING_PIPELINE_EXTENSION_NAME };
+	};
+
+	template<>
+	struct FeatureTraits<VkPhysicalDeviceDiagnosticsConfigFeaturesNV> {
+		static constexpr VkStructureType structure_type{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV };
+		static constexpr const char* extension_name{ VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME };
+	};
+
+	template<typename T>
 	class Allocator {
 	public:
 		using value_type = T;
@@ -239,15 +316,51 @@ namespace vkw {
 	auto enumerate_instance_layer_properties(VkAllocationCallbacks const* allocator = nullptr) -> Result<Vector<VkLayerProperties>>;
 	auto enumerate_instance_version() -> Result<uint32_t>;
 
-	class Instance {
+	template<typename T>
+	class BaseHandle {
+	public:
+		BaseHandle(T handle = VK_NULL_HANDLE, VkAllocationCallbacks const* allocator = nullptr) :
+			handle_{ handle },
+			allocator_{ allocator } {
+		}
+
+		BaseHandle(const BaseHandle& other) = delete;
+		BaseHandle& operator=(const BaseHandle& other) = delete;
+
+		BaseHandle(BaseHandle&& other) :
+			handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) },
+			allocator_{ std::exchange(other.allocator_, nullptr) }
+		{
+		}
+
+		BaseHandle& operator=(BaseHandle&& other) {
+			if (this != &other) {
+				handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+				allocator_ = std::exchange(other.allocator_, nullptr);
+			}
+			return *this;
+		}
+
+		auto get_handle() const noexcept -> T { return handle_; }
+		auto get_allocator() const noexcept -> const VkAllocationCallbacks* { return allocator_; }
+
+		explicit operator bool() const noexcept { return is_valid(); }
+		explicit operator T() const noexcept { return handle_; }
+		explicit operator uint64_t() const noexcept { return reinterpret_cast<uint64_t>(handle_); }
+
+		auto is_valid() const noexcept -> bool { return handle_ != VK_NULL_HANDLE; }
+	protected:
+		T handle_{ VK_NULL_HANDLE };
+		VkAllocationCallbacks const* allocator_{ nullptr };
+	};
+
+	class Instance : public BaseHandle<VkInstance> {
 	public:
 		static constexpr auto object_type{ VK_OBJECT_TYPE_INSTANCE };
 		static constexpr std::string_view object_name{ "VkInstance" };
 
-		Instance() = default;
-		Instance(VkInstance handle, const VkAllocationCallbacks* allocator = nullptr) :
-			handle_{ handle }, allocator_{ allocator } {
-		}
+		Instance(VkInstance instance = VK_NULL_HANDLE, VkAllocationCallbacks const* allocator = nullptr) :
+			BaseHandle(instance, allocator) {}
 
 		~Instance();
 
@@ -255,14 +368,10 @@ namespace vkw {
 		Instance& operator=(const Instance& other) = delete;
 
 		Instance(Instance&& other) :
-			handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) },
-			allocator_{ std::exchange(other.allocator_, nullptr) } {}
+			BaseHandle(std::move(other)) {}
 
 		Instance& operator=(Instance&& other) {
-			if (this != &other) {
-				handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
-				allocator_ = std::exchange(other.allocator_, nullptr);
-			}
+			BaseHandle::operator=(std::move(other));
 			return *this;
 		}
 
@@ -315,16 +424,6 @@ namespace vkw {
 
 		// Headless surface
 		auto create_headless_surface_ext(const VkHeadlessSurfaceCreateInfoEXT& create_info) const -> Result<VkSurfaceKHR>;
-
-		// Handle and conversion operators
-		auto get_handle() const noexcept -> VkInstance { return handle_; }
-		auto get_allocator() const noexcept -> const VkAllocationCallbacks* { return allocator_; }
-
-		explicit operator VkInstance() const noexcept { return handle_; }
-		explicit operator uint64_t() const noexcept { return reinterpret_cast<uint64_t>(handle_); }
-	private:
-		VkInstance handle_{ VK_NULL_HANDLE };
-		VkAllocationCallbacks const* allocator_{ nullptr };
 	};
 
 	class InstanceBuilder {
@@ -379,10 +478,7 @@ namespace vkw {
 		}
 
 		auto add_extensions(std::span<const char* const> extensions) -> InstanceBuilder& {
-			enabled_extensions_.reserve(enabled_extensions_.size() + extensions.size());
-			for (const char* ext : extensions) {
-				enabled_extensions_.emplace_back(ext);
-			}
+			enabled_extensions_.insert(enabled_extensions_.end(), extensions.begin(), extensions.end());
 			return *this;
 		}
 
@@ -407,10 +503,7 @@ namespace vkw {
 		}
 
 		auto add_layers(std::span<const char* const> layers) -> InstanceBuilder& {
-			enabled_layers_.reserve(enabled_layers_.size() + layers.size());
-			for (const char* layer : layers) {
-				enabled_layers_.emplace_back(layer);
-			}
+			enabled_layers_.insert(enabled_layers_.end(), layers.begin(), layers.end());
 			return *this;
 		}
 
@@ -428,51 +521,39 @@ namespace vkw {
 			return *this;
 		}
 
-		// Debug utilities convenience methods
-		auto enable_debug_utils() -> InstanceBuilder& {
-			add_extension(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		auto add_validation_feature_enable(VkValidationFeatureEnableEXT enables) -> InstanceBuilder& {
+			validation_feature_enables_.push_back(enables);
 			return *this;
 		}
 
-		auto enable_validation_layers() -> InstanceBuilder&;
+		auto add_validation_feature_disable(VkValidationFeatureDisableEXT disables) -> InstanceBuilder& {
+			validation_feature_disables_.push_back(disables);
+			return *this;
+		}
 
-		auto enable_debug_report() -> InstanceBuilder& {
-			add_extension(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+		// Debug utilities convenience methods
+		auto enable_debug_utils() -> InstanceBuilder& {
+			enable_debug_utils_ = true;
+			return *this;
+		}
+
+		auto enable_portability() -> InstanceBuilder& {
+			enable_portability_ = true;
 			return *this;
 		}
 
 		// Surface extension convenience methods
 		auto enable_surface() -> InstanceBuilder& {
-			add_extension(VK_KHR_SURFACE_EXTENSION_NAME);
-#if defined(VK_USE_PLATFORM_WIN32_KHR)
-			add_extension(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
-			add_extension(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
-#elif defined(VK_USE_PLATFORM_XCB_KHR)
-			add_extension(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
-#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
-			add_extension(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
-#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-			add_extension(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
-#elif defined(VK_USE_PLATFORM_MACOS_MVK)
-			add_extension(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
-#elif defined(VK_USE_PLATFORM_IOS_MVK)
-			add_extension(VK_MVK_IOS_SURFACE_EXTENSION_NAME);
-#elif defined(VK_USE_PLATFORM_METAL_EXT)
-			add_extension(VK_EXT_METAL_SURFACE_EXTENSION_NAME);
-#else
-#error "Unsipported platform"
-#endif
-			return *this;
-		}
-
-		auto enable_headless_surface() -> InstanceBuilder& {
-			enable_surface();
-			add_extension(VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME);
+			enable_surface_ = true;
 			return *this;
 		}
 
 		// Flags and pNext chain
+		auto add_flag(VkInstanceCreateFlagBits flags) -> InstanceBuilder& {
+			create_info_.flags |= flags;
+			return *this;
+		}
+
 		auto set_flags(VkInstanceCreateFlags flags) -> InstanceBuilder& {
 			create_info_.flags = flags;
 			return *this;
@@ -482,16 +563,6 @@ namespace vkw {
 			create_info_.pNext = next;
 			return *this;
 		}
-
-		// Set allocator
-		auto set_allocator(const VkAllocationCallbacks* allocator) -> InstanceBuilder& {
-			allocator_ = allocator;
-			return *this;
-		}
-
-		// Validation methods
-		auto check_extensions_supported() const -> Result<bool>;
-		auto check_layers_supported() const -> Result<bool>;
 
 		// Build the instance
 		auto build() -> Result<Instance>;
@@ -506,38 +577,37 @@ namespace vkw {
 		VkInstanceCreateInfo create_info_{};
 		Vector<const char*> enabled_extensions_;
 		Vector<const char*> enabled_layers_;
+		Vector<VkValidationFeatureEnableEXT> validation_feature_enables_;
+		Vector<VkValidationFeatureDisableEXT> validation_feature_disables_;
 		const VkAllocationCallbacks* allocator_{ nullptr };
 
-		void update_create_info() {
-			create_info_.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions_.size());
-			create_info_.ppEnabledExtensionNames = enabled_extensions_.empty() ? nullptr : enabled_extensions_.data();
-			create_info_.enabledLayerCount = static_cast<uint32_t>(enabled_layers_.size());
-			create_info_.ppEnabledLayerNames = enabled_layers_.empty() ? nullptr : enabled_layers_.data();
-		}
+		bool enable_debug_utils_{ false };
+		bool enable_surface_{ false };
+		bool enable_portability_{ false };
 	};
 
-	class PhysicalDevice {
+	class PhysicalDevice : public BaseHandle<VkPhysicalDevice> {
 	public:
 		static constexpr auto object_type{ VK_OBJECT_TYPE_PHYSICAL_DEVICE };
 		static constexpr std::string_view object_name{ "VkPhysicalDevice" };
 
-		PhysicalDevice(VkPhysicalDevice handle, const VkAllocationCallbacks* allocator = nullptr) :
-			handle_{ handle }, allocator_{ allocator } {}
+		PhysicalDevice(VkPhysicalDevice handle = VK_NULL_HANDLE, const VkAllocationCallbacks* allocator = nullptr) :
+			BaseHandle(handle, allocator) {}
+
 		~PhysicalDevice() = default;
 
 		PhysicalDevice(const PhysicalDevice& other) = delete;
 		PhysicalDevice& operator=(const PhysicalDevice& other) = delete;
 
 		PhysicalDevice(PhysicalDevice&& other) :
-			handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) },
-			allocator_{ std::exchange(other.allocator_, nullptr) } {
-		}
+			BaseHandle(std::move(other)) {}
 
 		PhysicalDevice& operator=(PhysicalDevice&& other) {
-			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
-			allocator_ = std::exchange(other.allocator_, nullptr);
+			BaseHandle::operator=(std::move(other));
 			return *this;
 		}
+
+		auto create_device(const VkDeviceCreateInfo& create_info) const -> Result<Device>;
 
 		// Core Vulkan 1.0 functions
 		auto get_features() const -> VkPhysicalDeviceFeatures;
@@ -551,7 +621,7 @@ namespace vkw {
 			VkImageUsageFlags usage, VkImageTiling tiling) const -> Vector<VkSparseImageFormatProperties>;
 
 		// Vulkan 1.1 functions
-		auto get_features2() const -> VkPhysicalDeviceFeatures2;
+		auto get_features2(void* chain = nullptr) const -> VkPhysicalDeviceFeatures2;
 		auto get_properties2() const -> VkPhysicalDeviceProperties2;
 		auto get_format_properties2(VkFormat format) const -> VkFormatProperties2;
 		auto get_image_format_properties2(const VkPhysicalDeviceImageFormatInfo2& image_format_info) const -> Result<VkImageFormatProperties2>;
@@ -596,66 +666,122 @@ namespace vkw {
 
 		// Supported framebuffer mixed samples combinations (VK_NV_coverage_reduction_mode)
 		auto get_supported_framebuffer_mixed_samples_combinations_nv() const -> Result<std::vector<VkFramebufferMixedSamplesCombinationNV>>;
-
-		auto get_handle() const noexcept -> VkPhysicalDevice { return handle_; }
-		auto get_allocator() const noexcept -> const VkAllocationCallbacks* { return allocator_; }
-
-		explicit operator VkPhysicalDevice() const noexcept { return handle_; }
-		explicit operator uint64_t() const noexcept { return reinterpret_cast<uint64_t>(handle_); }
-
-		auto is_valid() const noexcept -> bool { return handle_ != VK_NULL_HANDLE; }
-
-	private:
-		VkPhysicalDevice handle_{ VK_NULL_HANDLE };
-		VkAllocationCallbacks const* allocator_{ nullptr };
 	};
 
-	class Device {
+	class Device : public BaseHandle<VkDevice> {
 	public:
-		Device(Instance const& instance, VkPhysicalDevice physical);
+		static constexpr auto object_type{ VK_OBJECT_TYPE_DEVICE };
+		static constexpr std::string_view object_name{ "VkDevice" };
+
+		Device(VkDevice device = VK_NULL_HANDLE, VkAllocationCallbacks const* allocator = nullptr) :
+			BaseHandle(device, allocator) {}
+
 		~Device();
 
 		Device(const Device& other) = delete;
 		Device& operator=(const Device& other) = delete;
 
 		Device(Device&& other) :
-			physical_{ std::exchange(other.physical_, VK_NULL_HANDLE) },
-			logical_{ std::exchange(other.logical_, VK_NULL_HANDLE) },
-			allocator_{ std::exchange(other.allocator_, nullptr) } {
-		}
+			BaseHandle(std::move(other)) {}
 
 		Device& operator=(Device&& other) {
-			physical_ = std::exchange(other.physical_, VK_NULL_HANDLE);
-			logical_ = std::exchange(other.logical_, VK_NULL_HANDLE);
-			allocator_ = std::exchange(other.allocator_, nullptr);
+			BaseHandle::operator=(std::move(other));
+			return *this;
+		}
+	};
+
+	class DeviceConstructor {
+	public:
+		DeviceConstructor(PhysicalDevice&& physical_device, Vector<const char*>&& enabled_extensions);
+
+		template<typename StructureType, typename CheckFn>
+		auto add_feature(CheckFn&& check_feature, bool required = true) -> DeviceConstructor& {
+			StructureType feature{ FeatureTraits<StructureType>::structure_type };
+			feature.pNext = nullptr;
+
+			auto features = physical_device_.get_features2(&feature);
+
+			requested_features_.push_back(std::move(std::make_shared<StructureType>(feature)));
+
+			auto* extension_ptr = static_cast<StructureType*>(requested_features_.back().get());
+
+			if (check_feature(*extension_ptr)) {
+				if (last_feature_ptr_) {
+					extension_ptr->pNext = last_feature_ptr_;
+				}
+				last_feature_ptr_ = extension_ptr;
+
+				enabled_extensions_.push_back(FeatureTraits<StructureType>::extension_name);
+			}
+
 			return *this;
 		}
 
-		auto create() -> VkResult;
-
-		auto is_extension_enabled(const char* extension_name) const noexcept -> bool;
-		auto is_extension_supported(const char* extension_name) const noexcept -> bool;
-		auto try_enable_extension(const char* extension_name) -> bool;
-
-		auto check_api_version(uint32_t version) const noexcept -> bool;
-
-		auto get_name() const noexcept -> std::string_view;
+		auto construct() -> Result<Device>;
 	private:
-		VkPhysicalDevice physical_{ VK_NULL_HANDLE };
-		VkDevice logical_{ VK_NULL_HANDLE };
+		PhysicalDevice physical_device_;
+
+		Vector<const char*> enabled_extensions_;
+
+		Vector<std::shared_ptr<void>> requested_features_;
+		void* last_feature_ptr_{ nullptr };
+	};
+
+	class PhysicalDeviceSelector {
+	public:
+		PhysicalDeviceSelector(Instance const& instance);
+
+		auto set_surface(VkSurfaceKHR surface) -> PhysicalDeviceSelector& {
+			surface_ = surface;
+			return *this;
+		}
+
+		auto set_api_version(uint32_t version) -> PhysicalDeviceSelector& {
+			minimal_api_ver = version;
+			return *this;
+		}
+
+		auto set_api_version(uint32_t major, uint32_t minor, uint32_t patch) -> PhysicalDeviceSelector& {
+			minimal_api_ver = VK_MAKE_API_VERSION(0, major, minor, patch);
+			return *this;
+		}
+
+		auto set_preferred_device_type(VkPhysicalDeviceType type) -> PhysicalDeviceSelector& {
+			preferred_type_ = type;
+			return *this;
+		}
+
+		// Extension management
+		auto add_extension(const char* extension_name, bool required = true) -> PhysicalDeviceSelector& {
+			requested_extensions_.push_back(std::make_pair(extension_name, required));
+			return *this;
+		}
+
+		auto remove_extension(const char* extension_name) -> PhysicalDeviceSelector& {
+			requested_extensions_.erase(
+				std::remove_if(requested_extensions_.begin(), requested_extensions_.end(),
+					[extension_name](const std::pair<const char*, bool>& ext) { return std::strcmp(ext.first, extension_name) == 0; }),
+				requested_extensions_.end()
+			);
+			return *this;
+		}
+
+		auto clear_extensions() -> PhysicalDeviceSelector& {
+			requested_extensions_.clear();
+			return *this;
+		}
+
+		auto select() -> Result<DeviceConstructor>;
+
+	private:
+		Vector<PhysicalDevice> physical_devices_;
+
 		VkAllocationCallbacks const* allocator_{ nullptr };
+		VkSurfaceKHR surface_{ VK_NULL_HANDLE };
+		uint32_t minimal_api_ver{ VK_VERSION_1_0 };
+		VkPhysicalDeviceType preferred_type_{ VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU };
 
-		VkPhysicalDeviceFeatures device_features_;
-		VkPhysicalDeviceVulkan11Features device_features_11_{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
-		VkPhysicalDeviceVulkan12Features device_features_12_{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
-
-		VkPhysicalDeviceProperties device_properties_;
-		VkPhysicalDeviceMemoryProperties device_memory_properties_;
-
-		std::vector<VkQueueFamilyProperties> queue_family_properties_;
-
-		std::vector<VkExtensionProperties> available_extensions_;
-		std::vector<const char*> enabled_extensions_;
+		Vector<std::pair<const char*, bool>> requested_extensions_;
 	};
 
 	class DebugInterface {

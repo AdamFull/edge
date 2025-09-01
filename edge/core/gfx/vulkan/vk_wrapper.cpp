@@ -1,6 +1,7 @@
 #include "vk_wrapper.h"
 
 #include <atomic>
+#include <ranges>
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
@@ -205,7 +206,12 @@ namespace vkw {
 #define VKW_SCOPE "InstanceBuilder"
 
 	InstanceBuilder::InstanceBuilder(VkAllocationCallbacks const* allocator) :
-		allocator_{ allocator } {
+		allocator_{ allocator },
+		enabled_extensions_{ allocator },
+		enabled_layers_{ allocator },
+		validation_feature_enables_{ allocator },
+		validation_feature_disables_{ allocator } {
+
 		app_info_.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 		app_info_.pNext = nullptr;
 		app_info_.pApplicationName = nullptr;
@@ -224,113 +230,119 @@ namespace vkw {
 		create_info_.ppEnabledExtensionNames = nullptr;
 	}
 
-	auto InstanceBuilder::enable_validation_layers() -> InstanceBuilder& {
-		// Try enable validation layers
-#ifdef USE_VALIDATION_LAYERS
-		add_layer("VK_LAYER_KHRONOS_validation");
-#if defined(VKW_VALIDATION_LAYERS_SYNCHRONIZATION)
-		add_layer("VK_LAYER_KHRONOS_synchronization2");
-#endif // VULKAN_VALIDATION_LAYERS_SYNCHRONIZATION
-#endif // USE_VALIDATION_LAYERS
-		return *this;
-	}
-
-	auto InstanceBuilder::check_extensions_supported() const -> Result<bool> {
-		auto available_extensions = enumerate_instance_extension_properties(nullptr, allocator_);
-		if (!available_extensions) {
-			return std::unexpected(available_extensions.error());
-		}
-
-		for (const char* requested_ext : enabled_extensions_) {
-			bool found = false;
-			for (const auto& available_ext : available_extensions.value()) {
-				if (std::strcmp(requested_ext, available_ext.extensionName) == 0) {
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				VKW_LOGW("Extension \"{}\" is not supported by instance.", requested_ext);
-				return false;
-			}
-		}
-		return true;
-	}
-
-	auto InstanceBuilder::check_layers_supported() const -> Result<bool> {
-		auto available_layers = enumerate_instance_layer_properties(allocator_);
-		if (!available_layers) {
-			return std::unexpected(available_layers.error());
-		}
-
-		for (const char* requested_layer : enabled_layers_) {
-			bool found = false;
-			for (const auto& available_layer : available_layers.value()) {
-				if (std::strcmp(requested_layer, available_layer.layerName) == 0) {
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
-				VKW_LOGW("Layer \"{}\" is not supported by instance.", requested_layer);
-				return false;
-			}
-		}
-		return true;
-	}
-
 	auto InstanceBuilder::build() -> Result<Instance> {
-		// Check extension support
-		if (auto result = check_extensions_supported(); result.has_value() && !result.value()) {
-			return std::unexpected(VK_ERROR_EXTENSION_NOT_PRESENT);
+		// Request all validation layers supported
+		Vector<VkLayerProperties> all_layer_properties{ allocator_ };
+		if (auto request = enumerate_instance_layer_properties(allocator_); request.has_value()) {
+			all_layer_properties = std::move(request.value());
 		}
 
-		if (auto result = check_layers_supported(); result.has_value() && !result.value()) {
-			return std::unexpected(VK_ERROR_LAYER_NOT_PRESENT);
+		auto check_layer_support = [&all_layer_properties](const char* layer_name) {
+			return std::find_if(all_layer_properties.begin(), all_layer_properties.end(),
+				[layer_name](const VkLayerProperties& props) {
+					return std::strcmp(props.layerName, layer_name) == 0;
+				}) != all_layer_properties.end();
+			};
+
+		// Check enabled layers
+		for (auto it = enabled_layers_.begin(); it != enabled_layers_.end();) {
+			if (!check_layer_support(*it)) {
+				VKW_LOGW("Unsupported layer \"{}\" removed.", *it);
+				it = enabled_extensions_.erase(it);
+				continue;
+			}
+
+			++it;
 		}
 
-
-#ifdef USE_VALIDATION_LAYER_FEATURES
-		bool validation_features{ false };
-		{
-			if (auto request = enumerate_instance_extension_properties("VK_LAYER_KHRONOS_validation"); request.has_value()) {
-				for (auto& available_extension : *request) {
-					if (strcmp(available_extension.extensionName, VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME) == 0) {
-						validation_features = true;
-						enabled_extensions_.push_back(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
-					}
-				}
+		// Request all supported extensions including validation layers
+		Vector<VkExtensionProperties> all_extension_properties{ allocator_ };
+		for (int32_t layer_index = 0; layer_index < static_cast<int32_t>(enabled_layers_.size() + 1); ++layer_index) {
+			const char* layer_name = (layer_index == 0 ? nullptr : enabled_layers_[layer_index - 1]);
+			if (auto request = enumerate_instance_extension_properties(layer_name, allocator_); request.has_value()) {
+				auto layer_ext_props = std::move(request.value());
+				all_extension_properties.insert(all_extension_properties.end(), layer_ext_props.begin(), layer_ext_props.end());
 			}
 		}
 
-		VkValidationFeaturesEXT validation_features_info{ VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT };
-		Vector<VkValidationFeatureEnableEXT> validation_feature_lists(allocator_);
-		validation_feature_lists.push_back(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT);
+		// Helper function
+		auto check_ext_support = [&all_extension_properties](const char* extension_name) {
+			return std::find_if(all_extension_properties.begin(), all_extension_properties.end(),
+				[extension_name](const VkExtensionProperties& props) {
+					return std::strcmp(props.extensionName, extension_name) == 0;
+				}) != all_extension_properties.end();
+			};
 
-		if (validation_features) {
-			VKW_LOGD("Enabling validation features");
-#if defined(VKW_VALIDATION_LAYERS_GPU_ASSISTED)
-			validation_feature_lists.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT);
-			validation_feature_lists.push_back(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT);
+		// Check enabled extensions
+		for (auto it = enabled_extensions_.begin(); it != enabled_extensions_.end();) {
+			if (!check_ext_support(*it)) {
+				VKW_LOGW("Unsupported extension \"{}\" removed.", *it);
+				it = enabled_extensions_.erase(it);
+				continue;
+			}
+
+			++it;
+		}
+
+#define TRY_ENABLE_EXTENSION(ext) if(!check_ext_support(ext)) { VKW_LOGE("Extension \"{}\" not supported.", ext); return std::unexpected(VK_ERROR_EXTENSION_NOT_PRESENT); } add_extension(ext);
+
+		// Surface
+		if (enable_surface_) {
+			TRY_ENABLE_EXTENSION(VK_KHR_SURFACE_EXTENSION_NAME);
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+			TRY_ENABLE_EXTENSION(VK_KHR_WIN32_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+			TRY_ENABLE_EXTENSION(VK_KHR_XLIB_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_XCB_KHR)
+			TRY_ENABLE_EXTENSION(VK_KHR_XCB_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_WAYLAND_KHR)
+			TRY_ENABLE_EXTENSION(VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+			TRY_ENABLE_EXTENSION(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_MACOS_MVK)
+			TRY_ENABLE_EXTENSION(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_IOS_MVK)
+			TRY_ENABLE_EXTENSION(VK_MVK_IOS_SURFACE_EXTENSION_NAME);
+#elif defined(VK_USE_PLATFORM_METAL_EXT)
+			TRY_ENABLE_EXTENSION(VK_EXT_METAL_SURFACE_EXTENSION_NAME);
+#else
+#error "Unsipported platform"
 #endif
-#if defined(VKW_VALIDATION_LAYERS_BEST_PRACTICES)
-			validation_feature_lists.push_back(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT);
-#endif
-#if defined(VKW_VALIDATION_LAYERS_SYNCHRONIZATION)
-			validation_feature_lists.push_back(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT);
-#endif
-			validation_features_info.pEnabledValidationFeatures = validation_feature_lists.data();
-			validation_features_info.enabledValidationFeatureCount = static_cast<uint32_t>(validation_feature_lists.size());
+		}
+		else {
+			TRY_ENABLE_EXTENSION(VK_EXT_HEADLESS_SURFACE_EXTENSION_NAME);
+		}
+
+		// Debug utils
+		if (enable_debug_utils_) {
+			TRY_ENABLE_EXTENSION(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+		}
+
+		// Portability
+		if (enable_portability_) {
+			TRY_ENABLE_EXTENSION(VK_KHR_PORTABILITY_ENUMERATION_EXTENSION_NAME);
+			add_flag(VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR);
+		}
+
+#undef TRY_ENABLE_EXTENSION
+
+		// Enable validation features if possible
+		VkValidationFeaturesEXT validation_features_info{ VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT };
+		if ((!validation_feature_enables_.empty() || !validation_feature_disables_.empty()) && check_ext_support(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME)) {
+			add_extension(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME);
+
+			validation_features_info.enabledValidationFeatureCount = static_cast<uint32_t>(validation_feature_enables_.size());
+			validation_features_info.pEnabledValidationFeatures = validation_feature_enables_.data();
+			validation_features_info.disabledValidationFeatureCount = static_cast<uint32_t>(validation_feature_disables_.size());
+			validation_features_info.pDisabledValidationFeatures = validation_feature_disables_.data();
 			validation_features_info.pNext = create_info_.pNext;
 			create_info_.pNext = &validation_features_info;
 		}
-#endif
 
-		update_create_info();
-
-#if defined(VKW_ENABLE_PORTABILITY)
-		create_info_.flags |= VK_INSTANCE_CREATE_ENUMERATE_PORTABILITY_BIT_KHR;
-#endif
+		create_info_.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions_.size());
+		create_info_.ppEnabledExtensionNames = enabled_extensions_.empty() ? nullptr : enabled_extensions_.data();
+		create_info_.enabledLayerCount = static_cast<uint32_t>(enabled_layers_.size());
+		create_info_.ppEnabledLayerNames = enabled_layers_.empty() ? nullptr : enabled_layers_.data();
 
 		VkInstance instance_handle;
 		if (auto result = vkCreateInstance(&create_info_, allocator_, &instance_handle); result != VK_SUCCESS) {
@@ -345,6 +357,17 @@ namespace vkw {
 #undef VKW_SCOPE // InstanceBuilder
 
 #define VKW_SCOPE "PhysicalDevice"
+	auto PhysicalDevice::create_device(const VkDeviceCreateInfo& create_info) const -> Result<Device> {
+		VkDevice device;
+		if (auto result = vkCreateDevice(handle_, &create_info, allocator_, &device); result != VK_SUCCESS) {
+			return std::unexpected(result);
+		}
+
+		volkLoadDevice(device);
+
+		return Device{ device, allocator_ };
+	}
+
 	auto PhysicalDevice::get_features() const -> VkPhysicalDeviceFeatures {
 		VkPhysicalDeviceFeatures features{};
 		vkGetPhysicalDeviceFeatures(handle_, &features);
@@ -395,8 +418,9 @@ namespace vkw {
 		return output;
 	}
 
-	auto PhysicalDevice::get_features2() const -> VkPhysicalDeviceFeatures2 {
+	auto PhysicalDevice::get_features2(void* chain) const -> VkPhysicalDeviceFeatures2 {
 		VkPhysicalDeviceFeatures2 result{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
+		result.pNext = chain;
 		vkGetPhysicalDeviceFeatures2(handle_, &result);
 		return result;
 	}
@@ -655,90 +679,190 @@ namespace vkw {
 #undef VKW_SCOPE // PhysicalDevice
 
 #define VKW_SCOPE "Device"
-	Device::Device(Instance const& instance, VkPhysicalDevice physical) {
-
-		physical_ = physical;
-		allocator_ = instance.get_allocator();
-
-		VkPhysicalDeviceFeatures2 features2{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2 };
-		features2.pNext = &device_features_11_;
-		device_features_11_.pNext = &device_features_12_;
-
-		vkGetPhysicalDeviceFeatures2(physical_, &features2);
-
-		// Copy base device features
-		memcpy(&device_features_, &features2.features, sizeof(device_features_));
-
-		vkGetPhysicalDeviceProperties(physical_, &device_properties_);
-		vkGetPhysicalDeviceMemoryProperties(physical_, &device_memory_properties_);
-
-		uint32_t family_count{ 0u };
-		vkGetPhysicalDeviceQueueFamilyProperties(physical_, &family_count, nullptr);
-
-		queue_family_properties_.resize(family_count);
-		vkGetPhysicalDeviceQueueFamilyProperties(physical_, &family_count, queue_family_properties_.data());
-
-		uint32_t extension_property_count_{ 0u };
-		vkEnumerateDeviceExtensionProperties(physical_, nullptr, &extension_property_count_, nullptr);
-
-		available_extensions_.resize(extension_property_count_);
-		vkEnumerateDeviceExtensionProperties(physical_, nullptr, &extension_property_count_, available_extensions_.data());
-
-		VKW_LOGD("{} device \"{}\" with Vulkan {}.{}.{} support found.",
-			to_string(device_properties_.deviceType),
-			device_properties_.deviceName,
-			VK_VERSION_MAJOR(device_properties_.apiVersion),
-			VK_VERSION_MINOR(device_properties_.apiVersion),
-			VK_VERSION_PATCH(device_properties_.apiVersion));
-	}
-
 	Device::~Device() {
-		if (logical_) {
-			vkDestroyDevice(logical_, allocator_);
+		if (handle_) {
+			vkDestroyDevice(handle_, allocator_);
 		}
-	}
-
-	auto Device::is_extension_enabled(const char* extension_name) const noexcept -> bool {
-		return std::find_if(enabled_extensions_.begin(), enabled_extensions_.end(),
-			[extension_name](auto& instance_extension) {
-				return std::strcmp(instance_extension, extension_name) == 0;
-			}) != enabled_extensions_.end();
-	}
-
-	auto Device::is_extension_supported(const char* extension_name) const noexcept -> bool {
-		return std::find_if(available_extensions_.begin(), available_extensions_.end(),
-			[extension_name](auto& extension_props) {
-				return std::strcmp(extension_props.extensionName, extension_name) == 0;
-			}) != available_extensions_.end();
-	}
-
-	auto Device::try_enable_extension(const char* extension_name) -> bool {
-		for (const auto& extension_props : available_extensions_) {
-			if (strcmp(extension_props.extensionName, extension_name) == 0) {
-				if (is_extension_enabled(extension_name)) {
-					VKW_LOGW("Extension \"{}\" is already enabled.", extension_name);
-				}
-				else {
-					VKW_LOGD("Extension \"{}\" is supported and enabled.", extension_name);
-					enabled_extensions_.push_back(extension_name);
-				}
-
-				return true;
-			}
-		}
-
-		VKW_LOGE("Extension \"{}\" is not supported and can't be enabled.", extension_name);
-		return false;
-	}
-
-	auto Device::check_api_version(uint32_t version) const noexcept -> bool {
-		return device_properties_.apiVersion >= version;
-	}
-
-	auto Device::get_name() const noexcept -> std::string_view {
-		return device_properties_.deviceName;
 	}
 #undef VKW_SCOPE // Device
+
+#define VKW_SCOPE "PhysicalDeviceSelector"
+
+	PhysicalDeviceSelector::PhysicalDeviceSelector(Instance const& instance) :
+		allocator_{ instance.get_allocator() },
+		requested_extensions_{ allocator_ } {
+
+		if (auto result = instance.enumerate_physical_devices(); result.has_value()) {
+			physical_devices_ = std::move(result.value());
+		}
+	}
+
+	auto PhysicalDeviceSelector::select() -> Result<DeviceConstructor> {
+		int32_t best_candidate_index{ -1 };
+		int32_t fallback_index{ -1 };
+
+		Vector<Vector<const char*>> per_device_extensions(physical_devices_.size(), Vector<const char*>(allocator_), allocator_);
+		for (int32_t device_idx = 0; device_idx < static_cast<int32_t>(physical_devices_.size()); ++device_idx) {
+			auto& physical_device = physical_devices_[device_idx];
+
+			auto properties = physical_device.get_properties();
+
+			Vector<VkExtensionProperties> available_extensions{ allocator_ };
+			if (auto result = physical_device.enumerate_device_extension_properties(); result.has_value()) {
+				available_extensions = std::move(result.value());
+			}
+
+			// No extensions found. Bug?
+			if (available_extensions.empty()) {
+				VKW_LOGE("Device \"{}\" have no supported extensions. Check driver.", properties.deviceName);
+				continue;
+			}
+
+			auto check_ext_support = [&available_extensions](const char* extension_name) {
+				return std::find_if(available_extensions.begin(), available_extensions.end(),
+					[extension_name](const VkExtensionProperties& props) {
+						return std::strcmp(props.extensionName, extension_name) == 0;
+					}) != available_extensions.end();
+				};
+
+			// Check for all required extension support
+			bool all_extension_supported{ true };
+			auto& requested_extensions = per_device_extensions[device_idx];
+			for (auto& ext : requested_extensions_) {
+				if (!check_ext_support(ext.first)) {
+					if (ext.second) {
+						VKW_LOGE("Device \"{}\" is not support required extension \"{}\"", properties.deviceName, ext.first);
+						all_extension_supported = false;
+					}
+
+					VKW_LOGW("Device \"{}\" is not support optional extension \"{}\"", properties.deviceName, ext.first);
+					continue;
+				}
+
+				requested_extensions.push_back(ext.first);
+			}
+
+			// Can't use this device, because some extensions is not supported
+			if (!all_extension_supported) {
+				continue;
+			}
+
+			// Check that device have queue with present support
+			if (surface_) {
+				auto queue_family_props = physical_device.get_queue_family_properties();
+
+				bool surface_supported{ false };
+				for (uint32_t queue_family_index = 0; queue_family_index < static_cast<uint32_t>(queue_family_props.size()); ++queue_family_index) {
+					if (physical_device.get_surface_support_khr(queue_family_index, surface_) == VK_TRUE) {
+						surface_supported = true;
+						break;
+					}
+				}
+
+				// We requested surface check, but device is not support it
+				if (!surface_supported) {
+					continue;
+				}
+			}
+
+			// Not critical requirements, save as fallback
+			if (properties.apiVersion < minimal_api_ver || properties.deviceType != preferred_type_) {
+				fallback_index = device_idx;
+				continue;
+			}
+
+			best_candidate_index = device_idx;
+			break;
+		}
+
+		int32_t selected_device_index = best_candidate_index;
+		if (selected_device_index == -1) {
+			if (fallback_index == -1) {
+				return std::unexpected(VK_ERROR_INCOMPATIBLE_DRIVER);
+			}
+			selected_device_index = fallback_index;
+		}
+
+		return DeviceConstructor{ std::move(physical_devices_[selected_device_index]), std::move(per_device_extensions[selected_device_index]) };
+	}
+
+#undef VKW_SCOPE // PhysicalDeviceSelector
+
+#define VKW_SCOPE "DeviceConstructor"
+
+	DeviceConstructor::DeviceConstructor(PhysicalDevice&& physical_device, Vector<const char*>&& enabled_extensions) :
+		physical_device_{ std::move(physical_device) },
+		enabled_extensions_{ std::move(enabled_extensions) } {
+	}
+
+	auto DeviceConstructor::construct() -> Result<Device> {
+		auto properties = physical_device_.get_properties();
+		auto queue_family_properties = physical_device_.get_queue_family_properties();
+		auto* allocator = physical_device_.get_allocator();
+
+		VKW_LOGD("{} device \"{}\" selected.", to_string(properties.deviceType), properties.deviceName);
+
+		Vector<VkDeviceQueueCreateInfo> queue_create_infos(queue_family_properties.size(), allocator);
+		Vector<Vector<float>> family_queue_priorities(queue_family_properties.size(), Vector<float>(allocator), allocator);
+		for (uint32_t family_index = 0u; family_index < static_cast<uint32_t>(queue_create_infos.size()); ++family_index) {
+			auto& family_props = queue_family_properties[family_index];
+
+			auto& queue_priorities = family_queue_priorities[family_index];
+			queue_priorities.resize(family_props.queueCount, 0.5f);
+
+			auto& queue_create_info = queue_create_infos[family_index];
+			queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+			queue_create_info.queueFamilyIndex = family_index;
+			queue_create_info.queueCount = family_props.queueCount;
+			queue_create_info.pQueuePriorities = queue_priorities.data();
+		}
+
+		VkDeviceCreateInfo create_info{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
+		create_info.queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size());
+		create_info.pQueueCreateInfos = queue_create_infos.data();
+		create_info.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions_.size());
+		create_info.ppEnabledExtensionNames = enabled_extensions_.data();
+		create_info.enabledLayerCount = 0u;
+		create_info.ppEnabledLayerNames = nullptr;
+		create_info.pNext = nullptr;
+
+		VkPhysicalDeviceVulkan11Features features11{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
+		features11.pNext = nullptr;
+		VkPhysicalDeviceVulkan12Features features12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
+		features12.pNext = nullptr;
+		VkPhysicalDeviceVulkan13Features features13{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES };
+		features13.pNext = nullptr;
+		VkPhysicalDeviceVulkan14Features features14{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES };
+		features14.pNext = nullptr;
+
+		void* feature_chain{ nullptr };
+		if (properties.apiVersion >= VK_API_VERSION_1_4) {
+			feature_chain = &features14;
+			features14.pNext = &features13;
+			features13.pNext = &features12;
+			features12.pNext = &features11;
+		}
+		else if (properties.apiVersion >= VK_API_VERSION_1_3) {
+			feature_chain = &features13;
+			features13.pNext = &features12;
+			features12.pNext = &features11;
+		}
+		else if (properties.apiVersion >= VK_API_VERSION_1_2) {
+			feature_chain = &features12;
+			features12.pNext = &features11;
+		}
+		else if (properties.apiVersion >= VK_API_VERSION_1_1) {
+			feature_chain = &features11;
+		}
+
+		auto features2 = physical_device_.get_features2(feature_chain);
+		create_info.pEnabledFeatures = &features2.features;
+		create_info.pNext = feature_chain;
+
+		return physical_device_.create_device(create_info);
+	}
+
+#undef VKW_SCOPE // DeviceConstructor
 
 #define VKW_SCOPE "DebugUtils"
 	DebugUtils::~DebugUtils() {
