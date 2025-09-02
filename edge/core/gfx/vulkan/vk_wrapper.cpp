@@ -686,18 +686,19 @@ namespace vkw {
 	}
 #undef VKW_SCOPE // Device
 
-#define VKW_SCOPE "PhysicalDeviceSelector"
+#define VKW_SCOPE "DeviceSelector"
 
-	PhysicalDeviceSelector::PhysicalDeviceSelector(Instance const& instance) :
+	DeviceSelector::DeviceSelector(Instance const& instance) :
 		allocator_{ instance.get_allocator() },
-		requested_extensions_{ allocator_ } {
+		requested_extensions_{ allocator_ },
+		requested_features_{ allocator_ } {
 
 		if (auto result = instance.enumerate_physical_devices(); result.has_value()) {
 			physical_devices_ = std::move(result.value());
 		}
 	}
 
-	auto PhysicalDeviceSelector::select() -> Result<DeviceConstructor> {
+	auto DeviceSelector::select() -> Result<Device> {
 		int32_t best_candidate_index{ -1 };
 		int32_t fallback_index{ -1 };
 
@@ -783,27 +784,16 @@ namespace vkw {
 			selected_device_index = fallback_index;
 		}
 
-		return DeviceConstructor{ std::move(physical_devices_[selected_device_index]), std::move(per_device_extensions[selected_device_index]) };
-	}
+		auto& selected_device = physical_devices_[selected_device_index];
+		auto& enabled_extensions = per_device_extensions[selected_device_index];
 
-#undef VKW_SCOPE // PhysicalDeviceSelector
-
-#define VKW_SCOPE "DeviceConstructor"
-
-	DeviceConstructor::DeviceConstructor(PhysicalDevice&& physical_device, Vector<const char*>&& enabled_extensions) :
-		physical_device_{ std::move(physical_device) },
-		enabled_extensions_{ std::move(enabled_extensions) } {
-	}
-
-	auto DeviceConstructor::construct() -> Result<Device> {
-		auto properties = physical_device_.get_properties();
-		auto queue_family_properties = physical_device_.get_queue_family_properties();
-		auto* allocator = physical_device_.get_allocator();
+		auto properties = selected_device.get_properties();
+		auto queue_family_properties = selected_device.get_queue_family_properties();
 
 		VKW_LOGD("{} device \"{}\" selected.", to_string(properties.deviceType), properties.deviceName);
 
-		Vector<VkDeviceQueueCreateInfo> queue_create_infos(queue_family_properties.size(), allocator);
-		Vector<Vector<float>> family_queue_priorities(queue_family_properties.size(), Vector<float>(allocator), allocator);
+		Vector<VkDeviceQueueCreateInfo> queue_create_infos(queue_family_properties.size(), allocator_);
+		Vector<Vector<float>> family_queue_priorities(queue_family_properties.size(), Vector<float>(allocator_), allocator_);
 		for (uint32_t family_index = 0u; family_index < static_cast<uint32_t>(queue_create_infos.size()); ++family_index) {
 			auto& family_props = queue_family_properties[family_index];
 
@@ -820,12 +810,13 @@ namespace vkw {
 		VkDeviceCreateInfo create_info{ VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO };
 		create_info.queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size());
 		create_info.pQueueCreateInfos = queue_create_infos.data();
-		create_info.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions_.size());
-		create_info.ppEnabledExtensionNames = enabled_extensions_.data();
+		create_info.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions.size());
+		create_info.ppEnabledExtensionNames = enabled_extensions.data();
 		create_info.enabledLayerCount = 0u;
 		create_info.ppEnabledLayerNames = nullptr;
 		create_info.pNext = nullptr;
 
+		// Enable all possible features
 		VkPhysicalDeviceVulkan11Features features11{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES };
 		features11.pNext = nullptr;
 		VkPhysicalDeviceVulkan12Features features12{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES };
@@ -841,28 +832,35 @@ namespace vkw {
 			features14.pNext = &features13;
 			features13.pNext = &features12;
 			features12.pNext = &features11;
+			features11.pNext = last_feature_ptr_;
 		}
 		else if (properties.apiVersion >= VK_API_VERSION_1_3) {
 			feature_chain = &features13;
 			features13.pNext = &features12;
 			features12.pNext = &features11;
+			features11.pNext = last_feature_ptr_;
 		}
 		else if (properties.apiVersion >= VK_API_VERSION_1_2) {
 			feature_chain = &features12;
 			features12.pNext = &features11;
+			features11.pNext = last_feature_ptr_;
 		}
 		else if (properties.apiVersion >= VK_API_VERSION_1_1) {
 			feature_chain = &features11;
+			features11.pNext = last_feature_ptr_;
+		}
+		else {
+			feature_chain = last_feature_ptr_;
 		}
 
-		auto features2 = physical_device_.get_features2(feature_chain);
+		auto features2 = selected_device.get_features2(feature_chain);
 		create_info.pEnabledFeatures = &features2.features;
 		create_info.pNext = feature_chain;
 
-		return physical_device_.create_device(create_info);
+		return selected_device.create_device(create_info);
 	}
 
-#undef VKW_SCOPE // DeviceConstructor
+#undef VKW_SCOPE // DeviceSelector
 
 #define VKW_SCOPE "DebugUtils"
 	DebugUtils::~DebugUtils() {

@@ -7,6 +7,7 @@
 #include <memory>
 #include <cstdlib>
 #include <span>
+#include <functional>
 
 #include <volk.h>
 #include <vk_mem_alloc.h>
@@ -690,74 +691,37 @@ namespace vkw {
 		}
 	};
 
-	class DeviceConstructor {
+	class DeviceSelector {
 	public:
-		DeviceConstructor(PhysicalDevice&& physical_device, Vector<const char*>&& enabled_extensions);
+		DeviceSelector(Instance const& instance);
 
-		template<typename StructureType, typename CheckFn>
-		auto add_feature(CheckFn&& check_feature, bool required = true) -> DeviceConstructor& {
-			StructureType feature{ FeatureTraits<StructureType>::structure_type };
-			feature.pNext = nullptr;
-
-			auto features = physical_device_.get_features2(&feature);
-
-			requested_features_.push_back(std::move(std::make_shared<StructureType>(feature)));
-
-			auto* extension_ptr = static_cast<StructureType*>(requested_features_.back().get());
-
-			if (check_feature(*extension_ptr)) {
-				if (last_feature_ptr_) {
-					extension_ptr->pNext = last_feature_ptr_;
-				}
-				last_feature_ptr_ = extension_ptr;
-
-				enabled_extensions_.push_back(FeatureTraits<StructureType>::extension_name);
-			}
-
-			return *this;
-		}
-
-		auto construct() -> Result<Device>;
-	private:
-		PhysicalDevice physical_device_;
-
-		Vector<const char*> enabled_extensions_;
-
-		Vector<std::shared_ptr<void>> requested_features_;
-		void* last_feature_ptr_{ nullptr };
-	};
-
-	class PhysicalDeviceSelector {
-	public:
-		PhysicalDeviceSelector(Instance const& instance);
-
-		auto set_surface(VkSurfaceKHR surface) -> PhysicalDeviceSelector& {
+		auto set_surface(VkSurfaceKHR surface) -> DeviceSelector& {
 			surface_ = surface;
 			return *this;
 		}
 
-		auto set_api_version(uint32_t version) -> PhysicalDeviceSelector& {
+		auto set_api_version(uint32_t version) -> DeviceSelector& {
 			minimal_api_ver = version;
 			return *this;
 		}
 
-		auto set_api_version(uint32_t major, uint32_t minor, uint32_t patch) -> PhysicalDeviceSelector& {
+		auto set_api_version(uint32_t major, uint32_t minor, uint32_t patch) -> DeviceSelector& {
 			minimal_api_ver = VK_MAKE_API_VERSION(0, major, minor, patch);
 			return *this;
 		}
 
-		auto set_preferred_device_type(VkPhysicalDeviceType type) -> PhysicalDeviceSelector& {
+		auto set_preferred_device_type(VkPhysicalDeviceType type) -> DeviceSelector& {
 			preferred_type_ = type;
 			return *this;
 		}
 
 		// Extension management
-		auto add_extension(const char* extension_name, bool required = true) -> PhysicalDeviceSelector& {
+		auto add_extension(const char* extension_name, bool required = true) -> DeviceSelector& {
 			requested_extensions_.push_back(std::make_pair(extension_name, required));
 			return *this;
 		}
 
-		auto remove_extension(const char* extension_name) -> PhysicalDeviceSelector& {
+		auto remove_extension(const char* extension_name) -> DeviceSelector& {
 			requested_extensions_.erase(
 				std::remove_if(requested_extensions_.begin(), requested_extensions_.end(),
 					[extension_name](const std::pair<const char*, bool>& ext) { return std::strcmp(ext.first, extension_name) == 0; }),
@@ -766,12 +730,29 @@ namespace vkw {
 			return *this;
 		}
 
-		auto clear_extensions() -> PhysicalDeviceSelector& {
+		auto clear_extensions() -> DeviceSelector& {
 			requested_extensions_.clear();
 			return *this;
 		}
 
-		auto select() -> Result<DeviceConstructor>;
+		template<typename StructureType>
+		auto add_feature(bool required = true) -> DeviceSelector& {
+			StructureType feature{ FeatureTraits<StructureType>::structure_type };
+			feature.pNext = nullptr;
+
+			requested_features_.push_back(std::move(std::make_shared<StructureType>(feature)));
+			auto* extension_ptr = static_cast<StructureType*>(requested_features_.back().get());
+
+			if (last_feature_ptr_) {
+				extension_ptr->pNext = last_feature_ptr_;
+			}
+			last_feature_ptr_ = extension_ptr;
+			requested_extensions_.push_back(std::make_pair(FeatureTraits<StructureType>::extension_name, required));
+
+			return *this;
+		}
+
+		auto select() -> Result<Device>;
 
 	private:
 		Vector<PhysicalDevice> physical_devices_;
@@ -782,6 +763,43 @@ namespace vkw {
 		VkPhysicalDeviceType preferred_type_{ VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU };
 
 		Vector<std::pair<const char*, bool>> requested_extensions_;
+
+		Vector<std::shared_ptr<void>> requested_features_;
+		void* last_feature_ptr_{ nullptr };
+	};
+
+	template<typename T>
+	class DeviceHandle : public BaseHandle<T> {
+	public:
+		DeviceHandle(Device const& device, T handle) :
+			BaseHandle(handle, device.get_allocator()),
+			device_{ device } {}
+
+		~DeviceHandle() {
+			if (handle_) {
+				device_.destroy(handle);
+			}
+		}
+
+		DeviceHandle(const DeviceHandle& other) = delete;
+		DeviceHandle& operator=(const DeviceHandle& other) = delete;
+
+		DeviceHandle(DeviceHandle&& other) :
+			BaseHandle(std::move(other)),
+			device_{other.device_} {}
+
+		DeviceHandle& operator=(DeviceHandle&& other) {
+			BaseHandle::operator=(std::move(other));
+			device_ = other.device_;
+
+			return *this;
+		}
+
+		auto get_device() const -> Device const& {
+			return device_;
+		}
+	protected:
+		Device const& device_;
 	};
 
 	class DebugInterface {
