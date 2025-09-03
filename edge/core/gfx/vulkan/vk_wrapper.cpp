@@ -869,9 +869,9 @@ namespace vkw {
 		}
 	}
 
-	auto DebugUtils::create_unique(Instance const& instance) -> Result<std::unique_ptr<DebugUtils>> {
+	auto DebugUtils::create_unique(Instance const& instance, Device const& device) -> Result<std::unique_ptr<DebugUtils>> {
 		auto self = std::make_unique<DebugUtils>();
-		if (auto result = self->_create(instance); result != VK_SUCCESS) {
+		if (auto result = self->_create(instance, device); result != VK_SUCCESS) {
 			return std::unexpected(result);
 		}
 		return self;
@@ -920,8 +920,9 @@ namespace vkw {
 		vkCmdInsertDebugUtilsLabelEXT(command_buffer, &debug_label);
 	}
 
-	auto DebugUtils::_create(Instance const& instance) -> VkResult {
+	auto DebugUtils::_create(Instance const& instance, Device const& device) -> VkResult {
 		instance_ = instance.get_handle();
+		device_ = device.get_handle();
 		allocator_ = instance.get_allocator();
 
 		VkDebugUtilsMessengerCreateInfoEXT create_info{ VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT };
@@ -940,15 +941,15 @@ namespace vkw {
 			vkDestroyDebugReportCallbackEXT(instance_, handle_, allocator_);
 		}
 	}
-
-	auto DebugReport::create_unique(Instance const& instance) -> Result< std::unique_ptr<DebugReport>> {
+	
+	auto DebugReport::create_unique(Instance const& instance, Device const& device) -> Result< std::unique_ptr<DebugReport>> {
 		auto self = std::make_unique<DebugReport>();
-		if (auto result = self->_create(instance); result != VK_SUCCESS) {
+		if (auto result = self->_create(instance, device); result != VK_SUCCESS) {
 			return std::unexpected(result);
 		}
 		return self;
 	}
-
+	
 	auto DebugReport::set_name(VkObjectType object_type, uint64_t object_handle, std::string_view name) const -> void {
 		VkDebugMarkerObjectNameInfoEXT object_name_info{ VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_NAME_INFO_EXT };
 		object_name_info.objectType = (VkDebugReportObjectTypeEXT)object_type;
@@ -960,7 +961,7 @@ namespace vkw {
 				name, object_handle, to_string(object_type), to_string(result));
 		}
 	}
-
+	
 	auto DebugReport::set_tag(VkObjectType object_type, uint64_t object_handle, uint64_t tag_name, const void* tag_data, size_t tag_data_size) const -> void {
 		VkDebugMarkerObjectTagInfoEXT object_tag_info{ VK_STRUCTURE_TYPE_DEBUG_MARKER_OBJECT_TAG_INFO_EXT };
 		object_tag_info.objectType = (VkDebugReportObjectTypeEXT)object_type;
@@ -974,33 +975,34 @@ namespace vkw {
 				tag_name, reinterpret_cast<uintptr_t>(tag_data), object_handle, to_string(object_type), to_string(result));
 		}
 	}
-
+	
 	auto DebugReport::push_label(VkCommandBuffer command_buffer, std::string_view name, std::array<float, 4ull> color) const -> void {
 		VkDebugMarkerMarkerInfoEXT debug_marker{ VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT };
 		debug_marker.pMarkerName = name.data();
 		memcpy(debug_marker.color, color.data(), sizeof(float) * color.size());
 		vkCmdDebugMarkerBeginEXT(command_buffer, &debug_marker);
 	}
-
+	
 	auto DebugReport::pop_label(VkCommandBuffer command_buffer) const -> void {
 		vkCmdDebugMarkerEndEXT(command_buffer);
 	}
-
+	
 	auto DebugReport::insert_label(VkCommandBuffer command_buffer, std::string_view name, std::array<float, 4ull> color) const -> void {
 		VkDebugMarkerMarkerInfoEXT debug_marker{ VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT };
 		debug_marker.pMarkerName = name.data();
 		memcpy(debug_marker.color, color.data(), sizeof(float) * color.size());
 		vkCmdDebugMarkerInsertEXT(command_buffer, &debug_marker);
 	}
-
-	auto DebugReport::_create(Instance const& instance) -> VkResult {
+	
+	auto DebugReport::_create(Instance const& instance, Device const& device) -> VkResult {
 		instance_ = instance.get_handle();
+		device_ = device.get_handle();
 		allocator_ = instance.get_allocator();
-
+	
 		VkDebugReportCallbackCreateInfoEXT create_info{ VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT };
 		create_info.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
 		create_info.pfnCallback = debug_report_callback;
-
+	
 		return vkCreateDebugReportCallbackEXT(instance_, &create_info, allocator_, &handle_);
 	}
 

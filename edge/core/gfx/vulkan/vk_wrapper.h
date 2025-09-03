@@ -811,8 +811,6 @@ namespace vkw {
 		virtual auto push_label(VkCommandBuffer command_buffer, std::string_view name, std::array<float, 4ull> color) const -> void = 0;
 		virtual auto pop_label(VkCommandBuffer command_buffer) const -> void = 0;
 		virtual auto insert_label(VkCommandBuffer command_buffer, std::string_view name, std::array<float, 4ull> color) const -> void = 0;
-	protected:
-		VkDevice device_{ VK_NULL_HANDLE };
 	};
 
 	class DebugUtils final : public DebugInterface {
@@ -828,18 +826,20 @@ namespace vkw {
 
 		DebugUtils(DebugUtils&& other) :
 			instance_{ std::exchange(other.instance_, VK_NULL_HANDLE) },
+			device_{ std::exchange(other.device_, VK_NULL_HANDLE) },
 			allocator_{ std::exchange(other.allocator_, nullptr) },
 			handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) } {
 		}
 
 		DebugUtils& operator=(DebugUtils&& other) {
 			instance_ = std::exchange(other.instance_, VK_NULL_HANDLE);
+			device_ = std::exchange(other.device_, VK_NULL_HANDLE);
 			allocator_ = std::exchange(other.allocator_, nullptr);
 			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
 			return *this;
 		}
 
-		static auto create_unique(Instance const& instance) -> Result<std::unique_ptr<DebugUtils>>;
+		static auto create_unique(Instance const& instance, Device const& device) -> Result<std::unique_ptr<DebugUtils>>;
 
 		auto set_name(VkObjectType object_type, uint64_t object_handle, std::string_view name) const -> void override;
 		auto set_tag(VkObjectType object_type, uint64_t object_handle, uint64_t tag_name, const void* tag_data, size_t tag_data_size) const -> void override;
@@ -847,9 +847,10 @@ namespace vkw {
 		auto pop_label(VkCommandBuffer command_buffer) const -> void override;
 		auto insert_label(VkCommandBuffer command_buffer, std::string_view name, std::array<float, 4ull> color) const -> void override;
 	private:
-		auto _create(Instance const& instance) -> VkResult;
+		auto _create(Instance const& instance, Device const& device) -> VkResult;
 
 		VkInstance instance_{ VK_NULL_HANDLE };
+		VkDevice device_{ VK_NULL_HANDLE };
 		VkAllocationCallbacks const* allocator_{ nullptr };
 		VkDebugUtilsMessengerEXT handle_{ VK_NULL_HANDLE };
 	};
@@ -858,20 +859,40 @@ namespace vkw {
 	public:
 		static constexpr auto object_type{ VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT };
 		static constexpr std::string_view object_name{ "VkDebugReportCallbackEXT" };
-
+	
 		~DebugReport() override;
 
-		static auto create_unique(Instance const& instance) -> Result< std::unique_ptr<DebugReport>>;
+		DebugReport() = default;
+		DebugReport(const DebugReport& other) = delete;
+		DebugReport& operator=(const DebugReport& other) = delete;
 
+		DebugReport(DebugReport&& other) :
+			instance_{ std::exchange(other.instance_, VK_NULL_HANDLE) },
+			device_{ std::exchange(other.device_, VK_NULL_HANDLE) },
+			allocator_{ std::exchange(other.allocator_, nullptr) },
+			handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) } {
+		}
+
+		DebugReport& operator=(DebugReport&& other) {
+			instance_ = std::exchange(other.instance_, VK_NULL_HANDLE);
+			device_ = std::exchange(other.device_, VK_NULL_HANDLE);
+			allocator_ = std::exchange(other.allocator_, nullptr);
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			return *this;
+		}
+	
+		static auto create_unique(Instance const& instance, Device const& device) -> Result< std::unique_ptr<DebugReport>>;
+	
 		auto set_name(VkObjectType object_type, uint64_t object_handle, std::string_view name) const -> void override;
 		auto set_tag(VkObjectType object_type, uint64_t object_handle, uint64_t tag_name, const void* tag_data, size_t tag_data_size) const -> void override;
 		auto push_label(VkCommandBuffer command_buffer, std::string_view name, std::array<float, 4ull> color) const -> void override;
 		auto pop_label(VkCommandBuffer command_buffer) const -> void override;
 		auto insert_label(VkCommandBuffer command_buffer, std::string_view name, std::array<float, 4ull> color) const -> void override;
 	private:
-		auto _create(Instance const& instance) -> VkResult;
-
+		auto _create(Instance const& instance, Device const& device) -> VkResult;
+	
 		VkInstance instance_{ VK_NULL_HANDLE };
+		VkDevice device_{ VK_NULL_HANDLE };
 		VkAllocationCallbacks const* allocator_{ nullptr };
 		VkDebugReportCallbackEXT handle_{ VK_NULL_HANDLE };
 	};
