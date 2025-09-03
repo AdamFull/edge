@@ -8,27 +8,27 @@ set(ENABLE_VULKAN_DEBUG ON CACHE BOOL "Enable VK_EXT_debug_utils or VK_EXT_debug
 
 if(${ENABLE_VULKAN_DEBUG})
     if(${ENABLE_VULKAN_VALIDATION_LAYERS})
-        target_compile_definitions(${PROJECT_NAME} PUBLIC VULKAN_VALIDATION_LAYERS)
+        target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_VALIDATION_LAYERS)
 
            # GPU assisted validation layers are not available on macOS.
         if(${ENABLE_VULKAN_VALIDATION_LAYERS_GPU_ASSISTED})
             if (APPLE)
                 message(WARNING "GPU assisted validation layers are not currently available on macOS.")
             else()
-                target_compile_definitions(${PROJECT_NAME} PUBLIC VULKAN_VALIDATION_LAYERS_GPU_ASSISTED)
+                target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_VALIDATION_LAYERS_GPU_ASSISTED)
             endif()
         endif()
         
         if(${ENABLE_VULKAN_VALIDATION_LAYERS_BEST_PRACTICES})
-            target_compile_definitions(${PROJECT_NAME} PUBLIC VULKAN_VALIDATION_LAYERS_BEST_PRACTICES)
+            target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_VALIDATION_LAYERS_BEST_PRACTICES)
         endif()
         
         if(${ENABLE_VULKAN_VALIDATION_LAYERS_SYNCHRONIZATION} AND NOT ANDROID)
-            target_compile_definitions(${PROJECT_NAME} PUBLIC VULKAN_VALIDATION_LAYERS_SYNCHRONIZATION)
+            target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_VALIDATION_LAYERS_SYNCHRONIZATION)
         endif()
     endif()
 
-    target_compile_definitions(${PROJECT_NAME} PUBLIC VULKAN_DEBUG)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_DEBUG)
 endif()
 
 if(${ENABLE_VULKAN_PORTABILITY})
@@ -55,6 +55,7 @@ target_link_libraries(${PROJECT_NAME}
 target_sources(${PROJECT_NAME} PRIVATE
 	"vk_context.cpp"
 	"vk_primitives.cpp"
+	"vk_wrapper.cpp"
 )
 
 target_compile_definitions(${PROJECT_NAME}
