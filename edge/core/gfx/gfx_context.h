@@ -24,7 +24,7 @@ namespace edge::gfx {
 
 		virtual auto create_command_allocator() const -> std::shared_ptr<IGFXCommandAllocator> = 0;
 
-		virtual auto submit(const SignalQueueInfo& submit_info) -> void = 0;
+		virtual auto submit(const SubmitQueueInfo& submit_info) -> void = 0;
 		virtual auto wait_idle() -> SyncResult = 0;
 	};
 
@@ -58,11 +58,16 @@ namespace edge::gfx {
 		virtual auto end_marker() const -> void = 0;
 	};
 
-	class IGFXPresentationEngine {
+	class IGFXSwapchain {
 	public:
-		virtual ~IGFXPresentationEngine() = default;
+		virtual ~IGFXSwapchain() = default;
 
-		virtual auto get_queue() const -> std::shared_ptr<IGFXQueue> = 0;
+		virtual auto get_current_image_index() const -> uint32_t = 0;
+		virtual auto get_current_image() const -> std::shared_ptr<IGFXImage> = 0;
+
+		virtual auto acquire_next_image(uint32_t* next_image_index) -> bool = 0;
+
+		virtual auto reset() -> bool = 0;
 	};
 
 	class IGFXContext {
@@ -71,7 +76,9 @@ namespace edge::gfx {
 
 		virtual auto create(const GraphicsContextCreateInfo& create_info) -> bool = 0;
 
-		virtual auto create_queue(QueueType queue_type) -> std::shared_ptr<IGFXQueue> = 0;
+		virtual auto create_queue(QueueType queue_type) const -> std::shared_ptr<IGFXQueue> = 0;
 		virtual auto create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> = 0;
+
+		virtual auto create_swapchain(const SwapchainCreateInfo& create_info) -> std::shared_ptr<IGFXSemaphore> = 0;
 	};
 }

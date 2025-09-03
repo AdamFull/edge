@@ -90,7 +90,7 @@ namespace edge::gfx {
 		return D3D12CommandAllocator::construct(*this);
 	}
 
-	auto D3D12Queue::submit(const SignalQueueInfo& submit_info) -> void {
+	auto D3D12Queue::submit(const SubmitQueueInfo& submit_info) -> void {
 		std::array<ID3D12CommandList*, 16ull> command_lists{};
 		uint32_t command_list_count{ static_cast<uint32_t>(submit_info.command_lists.size()) };
 

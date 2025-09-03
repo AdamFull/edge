@@ -67,7 +67,7 @@ namespace edge::gfx {
 
 		auto create_command_allocator() const -> std::shared_ptr<IGFXCommandAllocator> override;
 
-		auto submit(const SignalQueueInfo& submit_info) -> void override;
+		auto submit(const SubmitQueueInfo& submit_info) -> void override;
 		auto wait_idle() -> SyncResult override;
 
 		auto get_handle() const -> Microsoft::WRL::ComPtr<ID3D12CommandQueue> {
