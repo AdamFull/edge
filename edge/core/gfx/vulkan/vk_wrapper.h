@@ -313,6 +313,17 @@ namespace vkw {
 		}
 	}
 
+	inline auto to_string(VkSystemAllocationScope scope) -> std::string_view {
+		switch (scope) {
+		case VK_SYSTEM_ALLOCATION_SCOPE_COMMAND: return "Command"; break;
+		case VK_SYSTEM_ALLOCATION_SCOPE_OBJECT: return "Object"; break;
+		case VK_SYSTEM_ALLOCATION_SCOPE_CACHE: return "Cache"; break;
+		case VK_SYSTEM_ALLOCATION_SCOPE_DEVICE: return "Device"; break;
+		case VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE: return "Instance"; break;
+		default: return "Undefined"; break;
+		};
+	}
+
 	auto enumerate_instance_extension_properties(const char* layer_name = nullptr, VkAllocationCallbacks const* allocator = nullptr) -> Result<Vector<VkExtensionProperties>>;
 	auto enumerate_instance_layer_properties(VkAllocationCallbacks const* allocator = nullptr) -> Result<Vector<VkLayerProperties>>;
 	auto enumerate_instance_version() -> Result<uint32_t>;
@@ -768,39 +779,39 @@ namespace vkw {
 		void* last_feature_ptr_{ nullptr };
 	};
 
-	template<typename T>
-	class DeviceHandle : public BaseHandle<T> {
-	public:
-		DeviceHandle(Device const& device, T handle) :
-			BaseHandle(handle, device.get_allocator()),
-			device_{ device } {}
-
-		~DeviceHandle() {
-			if (handle_) {
-				device_.destroy(handle);
-			}
-		}
-
-		DeviceHandle(const DeviceHandle& other) = delete;
-		DeviceHandle& operator=(const DeviceHandle& other) = delete;
-
-		DeviceHandle(DeviceHandle&& other) :
-			BaseHandle(std::move(other)),
-			device_{other.device_} {}
-
-		DeviceHandle& operator=(DeviceHandle&& other) {
-			BaseHandle::operator=(std::move(other));
-			device_ = other.device_;
-
-			return *this;
-		}
-
-		auto get_device() const -> Device const& {
-			return device_;
-		}
-	protected:
-		Device const& device_;
-	};
+	//template<typename T>
+	//class DeviceHandle : public BaseHandle<T> {
+	//public:
+	//	DeviceHandle(Device const& device, T handle) :
+	//		BaseHandle(handle, device.get_allocator()),
+	//		device_{ device } {}
+	//
+	//	~DeviceHandle() {
+	//		if (handle_) {
+	//			device_.destroy(handle);
+	//		}
+	//	}
+	//
+	//	DeviceHandle(const DeviceHandle& other) = delete;
+	//	DeviceHandle& operator=(const DeviceHandle& other) = delete;
+	//
+	//	DeviceHandle(DeviceHandle&& other) :
+	//		BaseHandle(std::move(other)),
+	//		device_{other.device_} {}
+	//
+	//	DeviceHandle& operator=(DeviceHandle&& other) {
+	//		BaseHandle::operator=(std::move(other));
+	//		device_ = other.device_;
+	//
+	//		return *this;
+	//	}
+	//
+	//	auto get_device() const -> Device const& {
+	//		return device_;
+	//	}
+	//protected:
+	//	Device const& device_;
+	//};
 
 	class DebugInterface {
 	public:

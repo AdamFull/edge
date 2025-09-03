@@ -1,16 +1,169 @@
 #include "vk_context.h"
-#include "vk_util.h"
-
-#include <volk.h>
 
 namespace edge::gfx {
-	// Semaphore 
-	VulkanSemaphore::~VulkanSemaphore() {
-		if (handle_) {
-			vkDestroySemaphore(device_, handle_, allocator_);
+	// Helper functions
+	auto choose_extent(VkExtent2D request_extent, const VkExtent2D& min_image_extent,
+		const VkExtent2D& max_image_extent, const VkExtent2D& current_extent) -> VkExtent2D {
+		if (current_extent.width == 0xFFFFFFFF) {
+			return request_extent;
+		}
+
+		if (request_extent.width < 1 || request_extent.height < 1) {
+			spdlog::warn("[Vulkan Presentation Engine] Image extent ({}, {}) not supported. Selecting ({}, {}).",
+				request_extent.width, request_extent.height,
+				current_extent.width, current_extent.height);
+			return current_extent;
+		}
+
+		request_extent.width = std::clamp(request_extent.width, min_image_extent.width, max_image_extent.width);
+		request_extent.height = std::clamp(request_extent.height, min_image_extent.height, max_image_extent.height);
+
+		return request_extent;
+	}
+
+	auto choose_present_mode(VkPresentModeKHR request_present_mode, std::span<const VkPresentModeKHR> available_present_modes,
+		std::span<const VkPresentModeKHR> present_mode_priority_list) -> VkPresentModeKHR {
+		// Try to find the requested present mode in the available present modes
+		auto const present_mode_it = std::find(available_present_modes.begin(), available_present_modes.end(), request_present_mode);
+		if (present_mode_it == available_present_modes.end()) {
+			// If the requested present mode isn't found, then try to find a mode from the priority list
+			auto const chosen_present_mode_it =
+				std::find_if(present_mode_priority_list.begin(), present_mode_priority_list.end(),
+					[&available_present_modes](VkPresentModeKHR present_mode) {
+						return std::find(available_present_modes.begin(), available_present_modes.end(), present_mode) != available_present_modes.end();
+					});
+
+			// If nothing found, always default to FIFO
+			VkPresentModeKHR const chosen_present_mode = (chosen_present_mode_it != present_mode_priority_list.end()) ? *chosen_present_mode_it : VK_PRESENT_MODE_FIFO_KHR;
+
+			//spdlog::warn("[VkSwapchain] Present mode '{}' not supported. Selecting '{}'.", vk::to_string(request_present_mode), vk::to_string(chosen_present_mode));
+			return chosen_present_mode;
+		}
+		else {
+			//spdlog::debug("[VkSwapchain] Present mode selected: {}", to_string(request_present_mode));
+			return request_present_mode;
 		}
 	}
 
+	auto choose_surface_format(const VkSurfaceFormatKHR requested_surface_format, std::span<const VkSurfaceFormatKHR> available_surface_formats,
+		std::span<const VkSurfaceFormatKHR> surface_format_priority_list) -> VkSurfaceFormatKHR {
+		// Try to find the requested surface format in the available surface formats
+		//auto const surface_format_it = std::find(available_surface_formats.begin(), available_surface_formats.end(), requested_surface_format);
+		//
+		//// If the requested surface format isn't found, then try to request a format from the priority list
+		//if (surface_format_it == available_surface_formats.end()) {
+		//	auto const chosen_surface_format_it =
+		//		std::find_if(surface_format_priority_list.begin(), surface_format_priority_list.end(),
+		//			[&available_surface_formats](VkSurfaceFormatKHR surface_format) {
+		//				return std::find(available_surface_formats.begin(), available_surface_formats.end(), surface_format) != available_surface_formats.end();
+		//			});
+		//
+		//	// If nothing found, default to the first available format
+		//	VkSurfaceFormatKHR const& chosen_surface_format = (chosen_surface_format_it != surface_format_priority_list.end()) ? *chosen_surface_format_it : available_surface_formats[0];
+		//
+		//	//spdlog::warn("[VkSwapchain] Surface format ({}) not supported. Selecting ({}).",
+		//	//	vk::to_string(requested_surface_format.format) + ", " + vk::to_string(requested_surface_format.colorSpace),
+		//	//	vk::to_string(chosen_surface_format.format) + ", " + vk::to_string(chosen_surface_format.colorSpace));
+		//	return chosen_surface_format;
+		//}
+		//else {
+		//	//spdlog::debug("[VkSwapchain] Surface format selected: {}", vk::to_string(requested_surface_format.format) + ", " + vk::to_string(requested_surface_format.colorSpace));
+		//	return requested_surface_format;
+		//}
+		return {};
+	}
+
+	auto choose_transform(VkSurfaceTransformFlagBitsKHR request_transform, VkSurfaceTransformFlagsKHR supported_transform,
+		VkSurfaceTransformFlagBitsKHR current_transform) -> VkSurfaceTransformFlagBitsKHR {
+		if (request_transform & supported_transform) {
+			return request_transform;
+		}
+
+		//spdlog::warn("[VkSwapchain] Surface transform '{}' not supported. Selecting '{}'.", vk::to_string(request_transform), vk::to_string(current_transform));
+		return current_transform;
+	}
+
+	auto choose_composite_alpha(VkCompositeAlphaFlagBitsKHR request_composite_alpha,
+		VkCompositeAlphaFlagsKHR supported_composite_alpha) -> VkCompositeAlphaFlagBitsKHR {
+		if (request_composite_alpha & supported_composite_alpha) {
+			return request_composite_alpha;
+		}
+
+		static const std::array<VkCompositeAlphaFlagBitsKHR, 4ull> composite_alpha_priority_list = {
+			VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+			VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR, VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR
+		};
+
+		auto const chosen_composite_alpha_it = std::find_if(composite_alpha_priority_list.begin(), composite_alpha_priority_list.end(),
+			[&supported_composite_alpha](VkCompositeAlphaFlagBitsKHR composite_alpha) { return composite_alpha & supported_composite_alpha; });
+
+		if (chosen_composite_alpha_it == composite_alpha_priority_list.end()) {
+			spdlog::error("[VkSwapchain] No compatible composite alpha found.");
+		}
+		else {
+			//spdlog::warn("[VkSwapchain] Composite alpha '{}' not supported. Selecting '{}.", vk::to_string(request_composite_alpha), vk::to_string(*chosen_composite_alpha_it));
+			return *chosen_composite_alpha_it;
+		}
+
+		return {};
+	}
+
+	auto validate_format_feature(VkImageUsageFlagBits image_usage, VkFormatFeatureFlags supported_features) -> bool {
+		return (image_usage != VK_IMAGE_USAGE_STORAGE_BIT) || ((supported_features & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) == VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
+	}
+
+	auto choose_image_usage(const std::set<VkImageUsageFlagBits>& requested_image_usage_flags,
+		VkImageUsageFlags supported_image_usage, VkFormatFeatureFlags supported_features) -> std::set<VkImageUsageFlagBits> {
+		std::set<VkImageUsageFlagBits> validated_image_usage_flags;
+		for (auto flag : requested_image_usage_flags) {
+			if ((flag & supported_image_usage) && validate_format_feature(flag, supported_features)) {
+				validated_image_usage_flags.insert(flag);
+			}
+			else {
+				//spdlog::warn("[VkSwapchain] Image usage ({}) requested but not supported.", vk::to_string(flag));
+			}
+		}
+
+		if (validated_image_usage_flags.empty()) {
+			// Pick the first format from list of defaults, if supported
+			static const std::array<VkImageUsageFlagBits, 4ull> image_usage_priority_list = {
+				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_USAGE_TRANSFER_DST_BIT
+			};
+
+			auto const priority_list_it = std::find_if(image_usage_priority_list.begin(), image_usage_priority_list.end(),
+				[&supported_image_usage, &supported_features](auto const image_usage) {
+					return ((image_usage & supported_image_usage) && validate_format_feature(image_usage, supported_features));
+				});
+
+			if (priority_list_it != image_usage_priority_list.end()) {
+				validated_image_usage_flags.insert(*priority_list_it);
+			}
+		}
+
+		if (validated_image_usage_flags.empty()) {
+			spdlog::error("[VkSwapchain] No compatible image usage found.");
+		}
+		else {
+			// Log image usage flags used
+			//std::string usage_list;
+			//for (VkImageUsageFlagBits image_usage : validated_image_usage_flags) {
+			//	usage_list += to_string(image_usage) + " ";
+			//}
+			//spdlog::debug("[VkSwapchain] Image usage flags: {}", usage_list);
+		}
+
+		return validated_image_usage_flags;
+	}
+
+	auto composite_image_flags(std::set<VkImageUsageFlagBits>& image_usage_flags) -> VkImageUsageFlags {
+		VkImageUsageFlags image_usage;
+		for (auto flag : image_usage_flags) {
+			image_usage |= flag;
+		}
+		return image_usage;
+	}
+
+	// Semaphore 
 	auto VulkanSemaphore::construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> std::unique_ptr<VulkanSemaphore> {
 		auto self = std::make_unique<VulkanSemaphore>();
 		self->_construct(ctx, initial_value);
@@ -28,7 +181,7 @@ namespace edge::gfx {
 			return SyncResult::eSuccess;
 		}
 
-		spdlog::error("[VulkanSemaphore]: Failed while signaling semaphore from cpu. Reason: {}.", get_error_string(result));
+		spdlog::error("[VulkanSemaphore]: Failed while signaling semaphore from cpu. Reason: {}.", vkw::to_string(result));
 		return (result == VK_ERROR_DEVICE_LOST) ? SyncResult::eDeviceLost : SyncResult::eError;
 	}
 
@@ -46,7 +199,7 @@ namespace edge::gfx {
 		case VK_TIMEOUT: return SyncResult::eTimeout;
 		case VK_ERROR_DEVICE_LOST: return SyncResult::eDeviceLost;
 		default: {
-			spdlog::error("[VulkanSync]: Failed while waiting semaphore on cpu. Reason: {}.", get_error_string(result));
+			spdlog::error("[VulkanSync]: Failed while waiting semaphore on cpu. Reason: {}.", vkw::to_string(result));
 			return SyncResult::eError;
 		}
 		}
@@ -63,7 +216,7 @@ namespace edge::gfx {
 	}
 
 	auto VulkanSemaphore::_construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> bool {
-		device_ = ctx.get_logical_device();
+		//device_ = ctx.get_logical_device();
 		allocator_ = ctx.get_allocation_callbacks();
 
 		VkSemaphoreTypeCreateInfo timeline_create_info{ VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
@@ -73,8 +226,8 @@ namespace edge::gfx {
 		VkSemaphoreCreateInfo create_info{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 		create_info.pNext = &timeline_create_info;
 
-		VK_CHECK_RESULT(vkCreateSemaphore(device_, &create_info, allocator_, &handle_),
-			"Failed to create semaphore.");
+		//VK_CHECK_RESULT(vkCreateSemaphore(device_, &create_info, allocator_, &handle_),
+		//	"Failed to create semaphore.");
 
 		return true;
 	}
@@ -94,7 +247,7 @@ namespace edge::gfx {
 		return VulkanCommandAllocator::construct(device_, allocator_, family_index_);
 	}
 
-	auto VulkanQueue::submit(const SignalQueueInfo& submit_info) -> void {
+	auto VulkanQueue::submit(const SubmitQueueInfo& submit_info) -> void {
 		std::array<VkSemaphoreSubmitInfo, 16ull> wait_semaphores{};
 		std::array<VkSemaphoreSubmitInfo, 16ull> signal_semaphores{};
 		std::array<VkCommandBufferSubmitInfo, 16ull> command_buffers{};
@@ -138,7 +291,7 @@ namespace edge::gfx {
 			return;
 		}
 
-		spdlog::error("[VulkanQueue]: Failed while signaling semaphore from gpu. Reason: {}.", get_error_string(result));
+		spdlog::error("[VulkanQueue]: Failed while signaling semaphore from gpu. Reason: {}.", vkw::to_string(result));
 	}
 
 	// TODO: Implement present
@@ -149,7 +302,7 @@ namespace edge::gfx {
 	}
 
 	auto VulkanQueue::_construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool {
-		device_ = ctx.get_logical_device();
+		//device_ = ctx.get_logical_device();
 		allocator_ = ctx.get_allocation_callbacks();
 		family_index_ = family_index;
 		queue_index_ = queue_index;
@@ -194,8 +347,8 @@ namespace edge::gfx {
 		create_info.queueFamilyIndex = family_index_;
 		create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-		VK_CHECK_RESULT(vkCreateCommandPool(device_, &create_info, allocator_, &handle_),
-			"Failed to create command pool");
+		//VK_CHECK_RESULT(vkCreateCommandPool(device_, &create_info, allocator_, &handle_),
+		//	"Failed to create command pool");
 
 		return true;
 	}
@@ -220,15 +373,15 @@ namespace edge::gfx {
 		VkCommandBufferBeginInfo begin_info{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 		
-		VK_CHECK_RESULT(vkBeginCommandBuffer(handle_, &begin_info),
-			"Failed to begin command buffer.");
+		//VK_CHECK_RESULT(vkBeginCommandBuffer(handle_, &begin_info),
+		//	"Failed to begin command buffer.");
 
 		return true;
 	}
 
 	auto VulkanCommandList::end() -> bool {
-		VK_CHECK_RESULT(vkEndCommandBuffer(handle_),
-			"Failed to end command buffer.");
+		//VK_CHECK_RESULT(vkEndCommandBuffer(handle_),
+		//	"Failed to end command buffer.");
 		
 		return true;
 	}
@@ -275,9 +428,200 @@ namespace edge::gfx {
 		allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		allocate_info.commandBufferCount = 1;
 
-		VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocate_info, &handle_), 
-			"Failed to allocate command buffers.");
+		//VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocate_info, &handle_), 
+		//	"Failed to allocate command buffers.");
 
 		return true;
 	}
+
+	// Swapchain
+	VulkanSwapchain::~VulkanSwapchain() {
+		if (handle_) {
+			vkDestroySwapchainKHR(device_, handle_, allocator_);
+		}
+	}
+
+	auto VulkanSwapchain::construct(const VulkanGraphicsContext& ctx, const SwapchainCreateInfo& create_info) -> std::unique_ptr<VulkanSwapchain> {
+		auto self = std::make_unique<VulkanSwapchain>();
+		self->_construct(ctx, create_info);
+		return self;
+	}
+
+	auto VulkanSwapchain::get_current_image_index() const -> uint32_t {
+		return current_image_;
+	}
+
+	auto VulkanSwapchain::get_current_image() const -> std::shared_ptr<IGFXImage> {
+		return nullptr;
+	}
+
+	auto VulkanSwapchain::acquire_next_image(uint32_t* next_image_index) -> bool {
+		auto prev_frame_index = get_prev_frame_index();
+		auto& prev_frame = frames_in_flight_[prev_frame_index];
+		
+		// Wait end of 
+		//VK_CHECK_RESULT(vkWaitForFences(device_, 1u, &prev_frame.fence_, VK_TRUE, UINT64_MAX),
+		//	"Failed waiting on previous frame fence.");
+
+		VkAcquireNextImageInfoKHR acquire_info{ VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR };
+		//acquire_info.semaphore = current_frame.image_available_;
+
+
+		vkAcquireNextImage2KHR(device_, &acquire_info, &current_image_);
+
+		if (next_image_index) {
+			*next_image_index = current_image_;
+		}
+
+		return false;
+	}
+
+	auto VulkanSwapchain::reset() -> bool {
+		return false;
+	}
+	
+	auto VulkanSwapchain::_construct(const VulkanGraphicsContext& ctx, const SwapchainCreateInfo& create_info) -> bool {
+		return false;
+	}
+
+	auto VulkanSwapchain::get_prev_frame_index() const -> uint32_t {
+		return current_image_ == 0u ? create_info_.minImageCount - 1u : current_image_ - 1u;
+	}
+
+
+	// Presentation engine
+//	auto VulkanPresentationEngine::construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> std::unique_ptr<VulkanPresentationEngine> {
+//		auto self = std::make_unique<VulkanPresentationEngine>();
+//		self->_construct(ctx, queue_type, frames_in_flight);
+//		return self;
+//	}
+//
+//	auto VulkanPresentationEngine::next_frame() -> void {
+//
+//	}
+//
+//	auto VulkanPresentationEngine::present(const PresentInfo& present_info) -> void {
+//		// End all command lists 
+//		for (auto& command_list : command_lists_) {
+//			command_list->end();
+//		}
+//
+//		SubmitQueueInfo submit_info{};
+//		submit_info.command_lists = command_lists_;
+//		submit_info.wait_semaphores = present_info.wait_semaphores;
+//		submit_info.signal_semaphores = present_info.signal_semaphores;
+//		queue_->submit(submit_info);
+//
+//
+//	}
+//
+//	auto VulkanPresentationEngine::get_frame_index() const -> uint32_t {
+//		return 0;
+//	}
+//
+//	auto VulkanPresentationEngine::_construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> bool {
+//		device_ = ctx.get_logical_device();
+//		physical_ = ctx.get_physical_device();
+//		surface_ = ctx.get_surface();
+//		allocator_ = ctx.get_allocation_callbacks();
+//
+//		queue_ = std::static_pointer_cast<VulkanQueue>(ctx.create_queue(queue_type));
+//		command_allocator_ = std::static_pointer_cast<VulkanCommandAllocator>(queue_->create_command_allocator());
+//		
+//		if (!update_swapchain()) {
+//			return false;
+//		}
+//
+//		return true;
+//	}
+//
+//	auto VulkanPresentationEngine::update_swapchain() -> bool {
+//#ifdef EDGE_PLATFORM_ANDROID
+//		VkPresentModeKHR present_mode = vsync_ ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_MAILBOX_KHR;
+//		static constexpr std::array<VkPresentModeKHR, 3ull> present_mode_priority_list{ VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR };
+//#else
+//		VkPresentModeKHR present_mode = vsync_ ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_MAILBOX_KHR;
+//		static constexpr std::array<VkPresentModeKHR, 3ull> present_mode_priority_list{ VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR };
+//#endif
+//
+//		uint32_t surface_format_count;
+//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_, surface_, &surface_format_count, nullptr), 
+//			"Failed to request surface supported format count.");
+//
+//		std::vector<VkSurfaceFormatKHR> surface_formats(surface_format_count);
+//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_, surface_, &surface_format_count, surface_formats.data()),
+//			"Failed to request surface supported formats.");
+//
+//		uint32_t present_mode_count;
+//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_, surface_, &present_mode_count, nullptr),
+//			"Failed to request surface supported mode count.");
+//
+//		std::vector<VkPresentModeKHR> present_modes(present_mode_count);
+//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_, surface_, &present_mode_count, present_modes.data()),
+//			"Failed to request surface supported modes.");
+//
+//		VkSurfaceCapabilitiesKHR surface_caps;
+//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_, surface_, &surface_caps),
+//			"Failed to request surface caps.");
+//
+//		auto potential_extent = requested_extent_;
+//		if (potential_extent.width == 1 || potential_extent.height == 1) {
+//			potential_extent = surface_caps.currentExtent;
+//		}
+//
+//		VkSwapchainKHR old_swapchain{ handle_ };
+//		swapchain_create_info.oldSwapchain = old_swapchain;
+//		swapchain_create_info.minImageCount = std::clamp(requested_image_count_, surface_caps.minImageCount, surface_caps.maxImageCount ? surface_caps.maxImageCount : std::numeric_limits<uint32_t>::max());
+//		swapchain_create_info.imageExtent = choose_extent(potential_extent, surface_caps.minImageExtent, surface_caps.maxImageExtent, surface_caps.currentExtent);
+//		swapchain_create_info.imageArrayLayers = 1;
+//
+//		static const std::array<VkSurfaceFormatKHR, 2ull> surface_format_priority_list = {
+//			VkSurfaceFormatKHR(VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR),
+//			VkSurfaceFormatKHR(VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+//		};
+//
+//		auto surface_format = choose_surface_format({}, surface_formats, surface_format_priority_list);
+//		swapchain_create_info.imageFormat = surface_format.format;
+//
+//		VkFormatProperties format_properties;
+//		vkGetPhysicalDeviceFormatProperties(physical_, swapchain_create_info.imageFormat, &format_properties);
+//
+//		std::set<VkImageUsageFlagBits> image_usage_flags{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
+//		image_usage_flags = choose_image_usage(image_usage_flags, surface_caps.supportedUsageFlags, format_properties.optimalTilingFeatures);
+//
+//		swapchain_create_info.imageUsage = composite_image_flags(image_usage_flags);
+//		swapchain_create_info.preTransform = choose_transform(requested_transform_, surface_caps.supportedTransforms, surface_caps.currentTransform);
+//		swapchain_create_info.compositeAlpha = choose_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surface_caps.supportedCompositeAlpha);
+//		swapchain_create_info.presentMode = choose_present_mode(present_mode, present_modes, present_mode_priority_list);
+//
+//		swapchain_create_info.surface = surface_;
+//		swapchain_create_info.imageFormat = surface_format.format;
+//		swapchain_create_info.imageColorSpace = surface_format.colorSpace;
+//		swapchain_create_info.clipped = VK_TRUE;
+//		swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+//
+//		//auto queue_families = device.get_queue_family_indices();
+//		//if (queue_families.size() > 1) {
+//		//	swapchain_create_info.queueFamilyIndexCount = static_cast<uint32_t>(queue_families.size());
+//		//	swapchain_create_info.pQueueFamilyIndices = &queue_families[0];
+//		//	swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+//		//}
+//
+//		VK_CHECK_RESULT(vkCreateSwapchainKHR(device_, &swapchain_create_info, allocator_, &handle_),
+//			"Failed to create swapchain.");
+//
+//		uint32_t swapchain_image_count;
+//		VK_CHECK_RESULT(vkGetSwapchainImagesKHR(device_, handle_, &swapchain_image_count, nullptr),
+//			"Failed to request number of swapchain images.");
+//
+//		std::vector<VkImage> swapchain_images(swapchain_image_count);
+//		VK_CHECK_RESULT(vkGetSwapchainImagesKHR(device_, handle_, &swapchain_image_count, swapchain_images.data()),
+//			"Failed to request swapchain images.");
+//
+//		// TODO: create images and update them
+//
+//#ifdef NDEBUG
+//		
+//#endif
+//	}
 }

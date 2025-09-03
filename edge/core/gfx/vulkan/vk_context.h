@@ -7,13 +7,19 @@
 #include <mutex>
 #include <string_view>
 #include <unordered_map>
+#include <set>
 
 #include "../gfx_context.h"
 
-#include <vulkan/vulkan.h>
-#include <volk.h>
+#include "vk_wrapper.h"
 
-#include <vk_mem_alloc.h>
+#include <spdlog/spdlog.h>
+
+#define GFX_LOGI(...) spdlog::info("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
+#define GFX_LOGD(...) spdlog::debug("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
+#define GFX_LOGT(...) spdlog::trace("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
+#define GFX_LOGW(...) spdlog::warn("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
+#define GFX_LOGE(...) spdlog::error("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
 
 namespace edge::gfx {
 	class VulkanGraphicsContext;
@@ -56,10 +62,9 @@ namespace edge::gfx {
 		VkPhysicalDeviceMemoryProperties memory_properties;
 	};
 
-
 	class VulkanSemaphore final : public IGFXSemaphore {
 	public:
-		~VulkanSemaphore() override;
+		~VulkanSemaphore() override = default;
 
 		static auto construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> std::unique_ptr<VulkanSemaphore>;
 
@@ -93,7 +98,7 @@ namespace edge::gfx {
 
 		auto create_command_allocator() const -> std::shared_ptr<IGFXCommandAllocator> override;
 
-		auto submit(const SignalQueueInfo& submit_info) -> void override;
+		auto submit(const SubmitQueueInfo& submit_info) -> void override;
 		auto wait_idle() -> SyncResult override;
 
 		auto get_handle() const -> VkQueue {
@@ -167,6 +172,88 @@ namespace edge::gfx {
 		VkCommandPool command_pool_;
 	};
 
+	class VulkanSwapchain final : public IGFXSwapchain {
+	public:
+		~VulkanSwapchain() override;
+
+		static auto construct(const VulkanGraphicsContext& ctx, const SwapchainCreateInfo& create_info) -> std::unique_ptr<VulkanSwapchain>;
+
+		auto get_current_image_index() const -> uint32_t override;
+		auto get_current_image() const -> std::shared_ptr<IGFXImage> override;
+
+		auto acquire_next_image(uint32_t* next_image_index) -> bool override;
+
+		auto reset() -> bool override;
+	private:
+		auto _construct(const VulkanGraphicsContext& ctx, const SwapchainCreateInfo& create_info) -> bool;
+		auto get_prev_frame_index() const -> uint32_t;
+
+		VkDevice device_{ VK_NULL_HANDLE };
+		VkPhysicalDevice physical_{ VK_NULL_HANDLE };
+		VkSurfaceKHR surface_{ VK_NULL_HANDLE };
+		VkAllocationCallbacks const* allocator_{ nullptr };
+
+		VkSwapchainKHR handle_{ VK_NULL_HANDLE };
+		VkSwapchainCreateInfoKHR create_info_;
+
+		struct Frame {
+			VkSemaphore image_available_{ VK_NULL_HANDLE };
+			VkFence fence_;
+		};
+
+		std::vector<Frame> frames_in_flight_;
+		uint32_t current_image_{ 0u };
+
+	};
+
+	//class VulkanPresentationEngine final : public IGFXPresentationEngine {
+	//public:
+	//	class Frame {
+	//	public:
+	//		~Frame();
+	//
+	//		//std::shared_ptr<VulkanImage> image_;
+	//		//std::shared_ptr<VulkanImageView> image_view_;
+	//
+	//		VkSemaphore image_available_{ VK_NULL_HANDLE };
+	//		VkSemaphore execution_finished_{ VK_NULL_HANDLE };
+	//		VkFence fence_{ VK_NULL_HANDLE };
+	//	};
+	//
+	//	~VulkanPresentationEngine() override;
+	//
+	//	static auto construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> std::unique_ptr<VulkanPresentationEngine>;
+	//
+	//	auto get_queue() const -> std::shared_ptr<IGFXQueue> override {
+	//		return queue_;
+	//	}
+	//
+	//	auto next_frame() -> void override;
+	//	auto present(const PresentInfo& present_info) -> void override;
+	//
+	//	auto get_frame_index() const -> uint32_t override;
+	//private:
+	//	auto _construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> bool;
+	//	auto update_swapchain() -> bool;
+	//
+	//	VkDevice device_{ VK_NULL_HANDLE };
+	//	VkPhysicalDevice physical_{ VK_NULL_HANDLE };
+	//	VkSurfaceKHR surface_{ VK_NULL_HANDLE };
+	//	VkAllocationCallbacks const* allocator_{ nullptr };
+	//	VkSwapchainKHR handle_{ VK_NULL_HANDLE };
+	//	VkSwapchainCreateInfoKHR swapchain_create_info;
+	//
+	//	std::shared_ptr<VulkanQueue> queue_;
+	//	std::shared_ptr<VulkanCommandAllocator> command_allocator_;
+	//	std::vector<std::shared_ptr<IGFXCommandList>> command_lists_;
+	//
+	//	// Swapchain settings
+	//	bool vsync_{ false };
+	//	uint32_t requested_image_count_{ 1u };
+	//	VkExtent2D requested_extent_{ 1u, 1u };
+	//	VkSurfaceTransformFlagBitsKHR requested_transform_{ VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR };
+	//};
+
 	class VulkanGraphicsContext final : public IGFXContext {
 	public:
 		~VulkanGraphicsContext() override;
@@ -175,79 +262,28 @@ namespace edge::gfx {
 
 		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
 
-		auto create_queue(QueueType queue_type) -> std::shared_ptr<IGFXQueue> override;
+		auto create_queue(QueueType queue_type) const -> std::shared_ptr<IGFXQueue> override;
 		auto create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> override;
 
-        auto is_instance_extension_enabled(const char* extension_name) const noexcept -> bool;
-        auto is_device_extension_enabled(const char* extension_name) const noexcept -> bool;
-
-        void set_debug_name(VkObjectType object_type, uint64_t object_handle, std::string_view name) const;
-        void set_debug_tag(VkObjectType object_type, uint64_t object_handle, uint64_t tag_name, const void* tag_data, size_t tag_data_size) const;
-        void begin_label(VkCommandBuffer command_buffer, std::string_view name, uint32_t color) const;
-        void end_label(VkCommandBuffer command_buffer) const;
-        void insert_label(VkCommandBuffer command_buffer, std::string_view name, uint32_t color) const;
-
-		auto get_physical_device() const -> VkPhysicalDevice {
-			return devices_[selected_device_index_].physical;
-		}
-
-		auto get_logical_device() const -> VkDevice {
-			return devices_[selected_device_index_].logical;
-		}
+		auto create_swapchain(const SwapchainCreateInfo& create_info) -> std::shared_ptr<IGFXSemaphore> override;
 
 		auto get_allocation_callbacks() const -> VkAllocationCallbacks const* {
 			return &vk_alloc_callbacks_;
 		}
-	private:
-        auto is_device_extension_supported(const VkDeviceHandle& device, const char* extension_name) const -> bool;
 
-		template<typename T, typename FeatureCheckFn>
-		auto try_enable_device_feature(const VkDeviceHandle& device, const char* feature_name, T& features, VkDeviceCreateInfo& device_create_info, FeatureCheckFn&& feature_check) -> bool {
-			VkPhysicalDeviceFeatures2KHR physical_device_features{ VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR };
-			physical_device_features.pNext = &features;
-			vkGetPhysicalDeviceFeatures2KHR(device.physical, &physical_device_features);
-
-			if (feature_check(features)) {
-				device_extensions_.push_back(feature_name);
-				features.pNext = (void*)device_create_info.pNext;
-				device_create_info.pNext = &features;
-				return true;
-			}
-
-			return false;
+		auto get_surface() const -> VkSurfaceKHR {
+			return vk_surface_;
 		}
-		bool volk_initialized_{ false };
-
+	private:
 		VkAllocationCallbacks vk_alloc_callbacks_{};
 		VkMemoryAllocationStats memalloc_stats_{};
 
-		VkInstance vk_instance_{ VK_NULL_HANDLE };
-        std::vector<const char*> instance_extensions_;
-
-#if defined(ENGINE_DEBUG) || defined(VULKAN_VALIDATION_LAYERS)
-		/**
-		 * @brief Debug utils messenger callback for VK_EXT_Debug_Utils
-		 */
-		VkDebugUtilsMessengerEXT vk_debug_utils_messenger_{ VK_NULL_HANDLE };
-
-		/**
-		 * @brief The debug report callback
-		 */
-		VkDebugReportCallbackEXT vk_debug_report_callback_{ VK_NULL_HANDLE };
-#endif
-
-#if defined(VULKAN_DEBUG)
-        bool VK_EXT_debug_utils_enabled{ false };
-		bool VK_EXT_debug_report_enabled{ false };
-        bool VK_EXT_debug_marker_enabled{ false };
-#endif
-
+		vkw::Instance instance_;
 		VkSurfaceKHR vk_surface_{ VK_NULL_HANDLE };
 
-        // Device
-        int32_t selected_device_index_{ -1 };
-        std::vector<const char*> device_extensions_{};
-        std::vector<VkDeviceHandle> devices_{};
+		vkw::Device device_;
+
+		std::unique_ptr<vkw::DebugInterface> debug_interface_;
 
         VmaAllocator vma_allocator_{ VK_NULL_HANDLE };
 	};
