@@ -2,8 +2,8 @@
 
 namespace edge::gfx {
 	// Helper functions
-	auto choose_extent(VkExtent2D request_extent, const VkExtent2D& min_image_extent,
-		const VkExtent2D& max_image_extent, const VkExtent2D& current_extent) -> VkExtent2D {
+	auto choose_extent(vk::Extent2D request_extent, const vk::Extent2D& min_image_extent,
+		const vk::Extent2D& max_image_extent, const vk::Extent2D& current_extent) -> vk::Extent2D {
 		if (current_extent.width == 0xFFFFFFFF) {
 			return request_extent;
 		}
@@ -21,113 +21,113 @@ namespace edge::gfx {
 		return request_extent;
 	}
 
-	auto choose_present_mode(VkPresentModeKHR request_present_mode, std::span<const VkPresentModeKHR> available_present_modes,
-		std::span<const VkPresentModeKHR> present_mode_priority_list) -> VkPresentModeKHR {
+	auto choose_present_mode(vk::PresentModeKHR request_present_mode, std::span<const vk::PresentModeKHR> available_present_modes,
+		std::span<const vk::PresentModeKHR> present_mode_priority_list) -> vk::PresentModeKHR {
 		// Try to find the requested present mode in the available present modes
 		auto const present_mode_it = std::find(available_present_modes.begin(), available_present_modes.end(), request_present_mode);
 		if (present_mode_it == available_present_modes.end()) {
 			// If the requested present mode isn't found, then try to find a mode from the priority list
 			auto const chosen_present_mode_it =
 				std::find_if(present_mode_priority_list.begin(), present_mode_priority_list.end(),
-					[&available_present_modes](VkPresentModeKHR present_mode) {
+					[&available_present_modes](vk::PresentModeKHR present_mode) {
 						return std::find(available_present_modes.begin(), available_present_modes.end(), present_mode) != available_present_modes.end();
 					});
 
 			// If nothing found, always default to FIFO
-			VkPresentModeKHR const chosen_present_mode = (chosen_present_mode_it != present_mode_priority_list.end()) ? *chosen_present_mode_it : VK_PRESENT_MODE_FIFO_KHR;
+			vk::PresentModeKHR const chosen_present_mode = (chosen_present_mode_it != present_mode_priority_list.end()) ? *chosen_present_mode_it : vk::PresentModeKHR::eFifo;
 
-			//spdlog::warn("[VkSwapchain] Present mode '{}' not supported. Selecting '{}'.", vk::to_string(request_present_mode), vk::to_string(chosen_present_mode));
+			spdlog::warn("[VkSwapchain] Present mode '{}' not supported. Selecting '{}'.", vk::to_string(request_present_mode), vk::to_string(chosen_present_mode));
 			return chosen_present_mode;
 		}
 		else {
-			//spdlog::debug("[VkSwapchain] Present mode selected: {}", to_string(request_present_mode));
+			spdlog::debug("[VkSwapchain] Present mode selected: {}", vk::to_string(request_present_mode));
 			return request_present_mode;
 		}
 	}
 
-	auto choose_surface_format(const VkSurfaceFormatKHR requested_surface_format, std::span<const VkSurfaceFormatKHR> available_surface_formats,
-		std::span<const VkSurfaceFormatKHR> surface_format_priority_list) -> VkSurfaceFormatKHR {
+	auto choose_surface_format(const vk::SurfaceFormatKHR requested_surface_format, std::span<const vk::SurfaceFormatKHR> available_surface_formats,
+		std::span<const vk::SurfaceFormatKHR> surface_format_priority_list) -> vk::SurfaceFormatKHR {
 		// Try to find the requested surface format in the available surface formats
-		//auto const surface_format_it = std::find(available_surface_formats.begin(), available_surface_formats.end(), requested_surface_format);
-		//
-		//// If the requested surface format isn't found, then try to request a format from the priority list
-		//if (surface_format_it == available_surface_formats.end()) {
-		//	auto const chosen_surface_format_it =
-		//		std::find_if(surface_format_priority_list.begin(), surface_format_priority_list.end(),
-		//			[&available_surface_formats](VkSurfaceFormatKHR surface_format) {
-		//				return std::find(available_surface_formats.begin(), available_surface_formats.end(), surface_format) != available_surface_formats.end();
-		//			});
-		//
-		//	// If nothing found, default to the first available format
-		//	VkSurfaceFormatKHR const& chosen_surface_format = (chosen_surface_format_it != surface_format_priority_list.end()) ? *chosen_surface_format_it : available_surface_formats[0];
-		//
-		//	//spdlog::warn("[VkSwapchain] Surface format ({}) not supported. Selecting ({}).",
-		//	//	vk::to_string(requested_surface_format.format) + ", " + vk::to_string(requested_surface_format.colorSpace),
-		//	//	vk::to_string(chosen_surface_format.format) + ", " + vk::to_string(chosen_surface_format.colorSpace));
-		//	return chosen_surface_format;
-		//}
-		//else {
-		//	//spdlog::debug("[VkSwapchain] Surface format selected: {}", vk::to_string(requested_surface_format.format) + ", " + vk::to_string(requested_surface_format.colorSpace));
-		//	return requested_surface_format;
-		//}
+		auto const surface_format_it = std::find(available_surface_formats.begin(), available_surface_formats.end(), requested_surface_format);
+		
+		// If the requested surface format isn't found, then try to request a format from the priority list
+		if (surface_format_it == available_surface_formats.end()) {
+			auto const chosen_surface_format_it =
+				std::find_if(surface_format_priority_list.begin(), surface_format_priority_list.end(),
+					[&available_surface_formats](vk::SurfaceFormatKHR surface_format) {
+						return std::find(available_surface_formats.begin(), available_surface_formats.end(), surface_format) != available_surface_formats.end();
+					});
+		
+			// If nothing found, default to the first available format
+			vk::SurfaceFormatKHR const& chosen_surface_format = (chosen_surface_format_it != surface_format_priority_list.end()) ? *chosen_surface_format_it : available_surface_formats[0];
+		
+			spdlog::warn("[VkSwapchain] Surface format ({}) not supported. Selecting ({}).",
+				vk::to_string(requested_surface_format.format) + ", " + vk::to_string(requested_surface_format.colorSpace),
+				vk::to_string(chosen_surface_format.format) + ", " + vk::to_string(chosen_surface_format.colorSpace));
+			return chosen_surface_format;
+		}
+		else {
+			spdlog::debug("[VkSwapchain] Surface format selected: {}", vk::to_string(requested_surface_format.format) + ", " + vk::to_string(requested_surface_format.colorSpace));
+			return requested_surface_format;
+		}
 		return {};
 	}
 
-	auto choose_transform(VkSurfaceTransformFlagBitsKHR request_transform, VkSurfaceTransformFlagsKHR supported_transform,
-		VkSurfaceTransformFlagBitsKHR current_transform) -> VkSurfaceTransformFlagBitsKHR {
+	auto choose_transform(vk::SurfaceTransformFlagBitsKHR request_transform, vk::SurfaceTransformFlagsKHR supported_transform,
+		vk::SurfaceTransformFlagBitsKHR current_transform) -> vk::SurfaceTransformFlagBitsKHR {
 		if (request_transform & supported_transform) {
 			return request_transform;
 		}
 
-		//spdlog::warn("[VkSwapchain] Surface transform '{}' not supported. Selecting '{}'.", vk::to_string(request_transform), vk::to_string(current_transform));
+		spdlog::warn("[VkSwapchain] Surface transform '{}' not supported. Selecting '{}'.", vk::to_string(request_transform), vk::to_string(current_transform));
 		return current_transform;
 	}
 
-	auto choose_composite_alpha(VkCompositeAlphaFlagBitsKHR request_composite_alpha,
-		VkCompositeAlphaFlagsKHR supported_composite_alpha) -> VkCompositeAlphaFlagBitsKHR {
+	auto choose_composite_alpha(vk::CompositeAlphaFlagBitsKHR request_composite_alpha,
+		vk::CompositeAlphaFlagsKHR supported_composite_alpha) -> vk::CompositeAlphaFlagBitsKHR {
 		if (request_composite_alpha & supported_composite_alpha) {
 			return request_composite_alpha;
 		}
 
-		static const std::array<VkCompositeAlphaFlagBitsKHR, 4ull> composite_alpha_priority_list = {
-			VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
-			VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR, VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR
+		static const std::array<vk::CompositeAlphaFlagBitsKHR, 4ull> composite_alpha_priority_list = {
+			vk::CompositeAlphaFlagBitsKHR::eOpaque, vk::CompositeAlphaFlagBitsKHR::ePreMultiplied,
+			vk::CompositeAlphaFlagBitsKHR::ePostMultiplied, vk::CompositeAlphaFlagBitsKHR::eInherit
 		};
 
 		auto const chosen_composite_alpha_it = std::find_if(composite_alpha_priority_list.begin(), composite_alpha_priority_list.end(),
-			[&supported_composite_alpha](VkCompositeAlphaFlagBitsKHR composite_alpha) { return composite_alpha & supported_composite_alpha; });
+			[&supported_composite_alpha](vk::CompositeAlphaFlagBitsKHR composite_alpha) { return composite_alpha & supported_composite_alpha; });
 
 		if (chosen_composite_alpha_it == composite_alpha_priority_list.end()) {
 			spdlog::error("[VkSwapchain] No compatible composite alpha found.");
 		}
 		else {
-			//spdlog::warn("[VkSwapchain] Composite alpha '{}' not supported. Selecting '{}.", vk::to_string(request_composite_alpha), vk::to_string(*chosen_composite_alpha_it));
+			spdlog::warn("[VkSwapchain] Composite alpha '{}' not supported. Selecting '{}.", vk::to_string(request_composite_alpha), vk::to_string(*chosen_composite_alpha_it));
 			return *chosen_composite_alpha_it;
 		}
 
 		return {};
 	}
 
-	auto validate_format_feature(VkImageUsageFlagBits image_usage, VkFormatFeatureFlags supported_features) -> bool {
-		return (image_usage != VK_IMAGE_USAGE_STORAGE_BIT) || ((supported_features & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) == VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
+	auto validate_format_feature(vk::ImageUsageFlagBits image_usage, vk::FormatFeatureFlags supported_features) -> bool {
+		return (image_usage != vk::ImageUsageFlagBits::eStorage) || ((supported_features & vk::FormatFeatureFlagBits::eStorageImage) == vk::FormatFeatureFlagBits::eStorageImage);
 	}
 
-	auto choose_image_usage(const std::set<VkImageUsageFlagBits>& requested_image_usage_flags,
-		VkImageUsageFlags supported_image_usage, VkFormatFeatureFlags supported_features) -> std::set<VkImageUsageFlagBits> {
-		std::set<VkImageUsageFlagBits> validated_image_usage_flags;
+	auto choose_image_usage(const std::set<vk::ImageUsageFlagBits>& requested_image_usage_flags,
+		vk::ImageUsageFlags supported_image_usage, vk::FormatFeatureFlags supported_features) -> std::set<vk::ImageUsageFlagBits> {
+		std::set<vk::ImageUsageFlagBits> validated_image_usage_flags;
 		for (auto flag : requested_image_usage_flags) {
 			if ((flag & supported_image_usage) && validate_format_feature(flag, supported_features)) {
 				validated_image_usage_flags.insert(flag);
 			}
 			else {
-				//spdlog::warn("[VkSwapchain] Image usage ({}) requested but not supported.", vk::to_string(flag));
+				spdlog::warn("[VkSwapchain] Image usage ({}) requested but not supported.", vk::to_string(flag));
 			}
 		}
 
 		if (validated_image_usage_flags.empty()) {
 			// Pick the first format from list of defaults, if supported
-			static const std::array<VkImageUsageFlagBits, 4ull> image_usage_priority_list = {
-				VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_USAGE_STORAGE_BIT, VK_IMAGE_USAGE_SAMPLED_BIT, VK_IMAGE_USAGE_TRANSFER_DST_BIT
+			static const std::array<vk::ImageUsageFlagBits, 4ull> image_usage_priority_list = {
+				vk::ImageUsageFlagBits::eColorAttachment, vk::ImageUsageFlagBits::eStorage, vk::ImageUsageFlagBits::eSampled, vk::ImageUsageFlagBits::eTransferDst
 			};
 
 			auto const priority_list_it = std::find_if(image_usage_priority_list.begin(), image_usage_priority_list.end(),
@@ -145,18 +145,18 @@ namespace edge::gfx {
 		}
 		else {
 			// Log image usage flags used
-			//std::string usage_list;
-			//for (VkImageUsageFlagBits image_usage : validated_image_usage_flags) {
-			//	usage_list += to_string(image_usage) + " ";
-			//}
-			//spdlog::debug("[VkSwapchain] Image usage flags: {}", usage_list);
+			std::string usage_list;
+			for (vk::ImageUsageFlagBits image_usage : validated_image_usage_flags) {
+				usage_list += to_string(image_usage) + " ";
+			}
+			spdlog::debug("[VkSwapchain] Image usage flags: {}", usage_list);
 		}
 
 		return validated_image_usage_flags;
 	}
 
-	auto composite_image_flags(std::set<VkImageUsageFlagBits>& image_usage_flags) -> VkImageUsageFlags {
-		VkImageUsageFlags image_usage;
+	auto composite_image_flags(std::set<vk::ImageUsageFlagBits>& image_usage_flags) -> vk::ImageUsageFlags {
+		vk::ImageUsageFlags image_usage;
 		for (auto flag : image_usage_flags) {
 			image_usage |= flag;
 		}
@@ -171,35 +171,35 @@ namespace edge::gfx {
 	}
 
 	auto VulkanSemaphore::signal(uint64_t value) -> SyncResult {
-		VkSemaphoreSignalInfo signal_info{ VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO };
+		vk::SemaphoreSignalInfo signal_info{};
 		signal_info.semaphore = handle_;
 		signal_info.value = value;
 
-		VkResult result = vkSignalSemaphore(device_, &signal_info);
-		if (result == VK_SUCCESS) {
+		vk::Result result = device_.signalSemaphore(&signal_info);
+		if (result == vk::Result::eSuccess) {
 			value_ = std::max(value_, value);
 			return SyncResult::eSuccess;
 		}
 
-		spdlog::error("[VulkanSemaphore]: Failed while signaling semaphore from cpu. Reason: {}.", vkw::to_string(result));
-		return (result == VK_ERROR_DEVICE_LOST) ? SyncResult::eDeviceLost : SyncResult::eError;
+		spdlog::error("[VulkanSemaphore]: Failed while signaling semaphore from cpu. Reason: {}.", vk::to_string(result));
+		return (result == vk::Result::eErrorDeviceLost) ? SyncResult::eDeviceLost : SyncResult::eError;
 	}
 
 	auto VulkanSemaphore::wait(uint64_t value, std::chrono::nanoseconds timeout) -> SyncResult {
-		VkSemaphoreWaitInfo wait_info{ VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO };
+		vk::SemaphoreWaitInfo wait_info{};
 		wait_info.semaphoreCount = 1;
 		wait_info.pSemaphores = &handle_;
 		wait_info.pValues = &value;
 
 		uint64_t timeout_ns = (timeout == std::chrono::nanoseconds::max()) ? UINT64_MAX : timeout.count();
 
-		VkResult result = vkWaitSemaphores(device_, &wait_info, timeout_ns);
+		vk::Result result = device_.waitSemaphores(&wait_info, timeout_ns);
 		switch (result) {
-		case VK_SUCCESS: return SyncResult::eSuccess;
-		case VK_TIMEOUT: return SyncResult::eTimeout;
-		case VK_ERROR_DEVICE_LOST: return SyncResult::eDeviceLost;
+		case vk::Result::eSuccess: return SyncResult::eSuccess;
+		case vk::Result::eTimeout: return SyncResult::eTimeout;
+		case vk::Result::eErrorDeviceLost: return SyncResult::eDeviceLost;
 		default: {
-			spdlog::error("[VulkanSync]: Failed while waiting semaphore on cpu. Reason: {}.", vkw::to_string(result));
+			spdlog::error("[VulkanSync]: Failed while waiting semaphore on cpu. Reason: {}.", vk::to_string(result));
 			return SyncResult::eError;
 		}
 		}
@@ -211,8 +211,8 @@ namespace edge::gfx {
 
 	auto VulkanSemaphore::get_value() const -> uint64_t {
 		uint64_t value;
-		VkResult result = vkGetSemaphoreCounterValue(device_, handle_, &value);
-		return (result == VK_SUCCESS) ? value : 0;
+		vk::Result result = device_.getSemaphoreCounterValue(handle_, &value);
+		return (result == vk::Result::eSuccess) ? value : 0;
 	}
 
 	auto VulkanSemaphore::_construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> bool {
@@ -248,11 +248,11 @@ namespace edge::gfx {
 	}
 
 	auto VulkanQueue::submit(const SubmitQueueInfo& submit_info) -> void {
-		std::array<VkSemaphoreSubmitInfo, 16ull> wait_semaphores{};
-		std::array<VkSemaphoreSubmitInfo, 16ull> signal_semaphores{};
-		std::array<VkCommandBufferSubmitInfo, 16ull> command_buffers{};
+		std::array<vk::SemaphoreSubmitInfo, 16ull> wait_semaphores{};
+		std::array<vk::SemaphoreSubmitInfo, 16ull> signal_semaphores{};
+		std::array<vk::CommandBufferSubmitInfo, 16ull> command_buffers{};
 
-		VkSubmitInfo2KHR vk_submit_info{ VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR };
+		vk::SubmitInfo2KHR vk_submit_info{};
 		vk_submit_info.pWaitSemaphoreInfos = wait_semaphores.data();
 		vk_submit_info.pSignalSemaphoreInfos = signal_semaphores.data();
 		vk_submit_info.pCommandBufferInfos = command_buffers.data();
@@ -263,7 +263,7 @@ namespace edge::gfx {
 				auto& semaphore_submit_info = wait_semaphores[vk_submit_info.waitSemaphoreInfoCount++];
 				semaphore_submit_info.semaphore = std::static_pointer_cast<VulkanSemaphore>(semaphore_info.semaphore)->get_handle();
 				semaphore_submit_info.value = semaphore_info.value;
-				semaphore_submit_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+				semaphore_submit_info.stageMask = vk::PipelineStageFlagBits2::eAllCommands;
 			}
 		}
 
@@ -273,7 +273,7 @@ namespace edge::gfx {
 				auto& semaphore_submit_info = wait_semaphores[vk_submit_info.signalSemaphoreInfoCount++];
 				semaphore_submit_info.semaphore = std::static_pointer_cast<VulkanSemaphore>(semaphore_info.semaphore)->get_handle();
 				semaphore_submit_info.value = semaphore_info.value;
-				semaphore_submit_info.stageMask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+				semaphore_submit_info.stageMask = vk::PipelineStageFlagBits2::eAllCommands;
 			}
 		}
 
@@ -282,8 +282,8 @@ namespace edge::gfx {
 			cmd_list_submit_info.commandBuffer = std::static_pointer_cast<VulkanCommandList>(submit_info.command_lists[i])->get_handle();
 		}
 
-		VkResult result = vkQueueSubmit2KHR(handle_, 1, &vk_submit_info, VK_NULL_HANDLE);
-		if (result == VK_SUCCESS) {
+		vk::Result result = handle_.submit2(1, &vk_submit_info, VK_NULL_HANDLE);
+		if (result == vk::Result::eSuccess) {
 			for (auto& semaphore_submit_info : submit_info.signal_semaphores) {
 				auto semaphore = std::static_pointer_cast<VulkanSemaphore>(semaphore_submit_info.semaphore);
 				semaphore->set_value(semaphore_submit_info.value);
@@ -291,7 +291,7 @@ namespace edge::gfx {
 			return;
 		}
 
-		spdlog::error("[VulkanQueue]: Failed while signaling semaphore from gpu. Reason: {}.", vkw::to_string(result));
+		spdlog::error("[VulkanQueue]: Failed while signaling semaphore from gpu. Reason: {}.", vk::to_string(result));
 	}
 
 	// TODO: Implement present
@@ -307,11 +307,11 @@ namespace edge::gfx {
 		family_index_ = family_index;
 		queue_index_ = queue_index;
 
-		VkDeviceQueueInfo2 device_queue_info{ VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2 };
+		vk::DeviceQueueInfo2 device_queue_info{};
 		device_queue_info.queueFamilyIndex = family_index;
 		device_queue_info.queueIndex = queue_index;
 
-		vkGetDeviceQueue2(device_, &device_queue_info, &handle_);
+		device_.getQueue2(&device_queue_info, &handle_);
 
 		return true;
 	}
@@ -320,11 +320,11 @@ namespace edge::gfx {
 	
 	VulkanCommandAllocator::~VulkanCommandAllocator() {
 		if (handle_) {
-			vkDestroyCommandPool(device_, handle_, allocator_);
+			device_.destroyCommandPool(handle_, allocator_);
 		}
 	}
 
-	auto VulkanCommandAllocator::construct(VkDevice device, VkAllocationCallbacks const* allocator, uint32_t family_index) -> std::unique_ptr<VulkanCommandAllocator> {
+	auto VulkanCommandAllocator::construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> std::unique_ptr<VulkanCommandAllocator> {
 		auto self = std::make_unique<VulkanCommandAllocator>();
 		self->_construct(device, allocator, family_index);
 		return self;
@@ -338,7 +338,7 @@ namespace edge::gfx {
 		// TODO: Not sure do i need individual reset for this one
 	}
 
-	auto VulkanCommandAllocator::_construct(VkDevice device, VkAllocationCallbacks const* allocator, uint32_t family_index) -> bool {
+	auto VulkanCommandAllocator::_construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> bool {
 		device_ = device;
 		allocator_ = allocator;
 		family_index_ = family_index;
@@ -358,7 +358,7 @@ namespace edge::gfx {
 
 	}
 
-	auto VulkanCommandList::construct(VkDevice device, VkCommandPool command_pool) -> std::unique_ptr<VulkanCommandList> {
+	auto VulkanCommandList::construct(vk::Device device, vk::CommandPool command_pool) -> std::unique_ptr<VulkanCommandList> {
 		auto self = std::make_unique<VulkanCommandList>();
 		self->_construct(device, command_pool);
 		return self;
@@ -420,7 +420,7 @@ namespace edge::gfx {
 		assert(false && "NOT IMPLEMENTED");
 	}
 
-	auto VulkanCommandList::_construct(VkDevice device, VkCommandPool command_pool) -> bool {
+	auto VulkanCommandList::_construct(vk::Device device, vk::CommandPool command_pool) -> bool {
 		command_pool_ = command_pool;
 
 		VkCommandBufferAllocateInfo allocate_info{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
@@ -437,7 +437,7 @@ namespace edge::gfx {
 	// Swapchain
 	VulkanSwapchain::~VulkanSwapchain() {
 		if (handle_) {
-			vkDestroySwapchainKHR(device_, handle_, allocator_);
+			device_.destroySwapchainKHR(handle_, allocator_);
 		}
 	}
 
@@ -537,18 +537,18 @@ namespace edge::gfx {
 //
 //	auto VulkanPresentationEngine::update_swapchain() -> bool {
 //#ifdef EDGE_PLATFORM_ANDROID
-//		VkPresentModeKHR present_mode = vsync_ ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_MAILBOX_KHR;
-//		static constexpr std::array<VkPresentModeKHR, 3ull> present_mode_priority_list{ VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR };
+//		vk::PresentModeKHR present_mode = vsync_ ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_MAILBOX_KHR;
+//		static constexpr std::array<vk::PresentModeKHR, 3ull> present_mode_priority_list{ VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR };
 //#else
-//		VkPresentModeKHR present_mode = vsync_ ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_MAILBOX_KHR;
-//		static constexpr std::array<VkPresentModeKHR, 3ull> present_mode_priority_list{ VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR };
+//		vk::PresentModeKHR present_mode = vsync_ ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_MAILBOX_KHR;
+//		static constexpr std::array<vk::PresentModeKHR, 3ull> present_mode_priority_list{ VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR };
 //#endif
 //
 //		uint32_t surface_format_count;
 //		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_, surface_, &surface_format_count, nullptr), 
 //			"Failed to request surface supported format count.");
 //
-//		std::vector<VkSurfaceFormatKHR> surface_formats(surface_format_count);
+//		std::vector<vk::SurfaceFormatKHR> surface_formats(surface_format_count);
 //		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_, surface_, &surface_format_count, surface_formats.data()),
 //			"Failed to request surface supported formats.");
 //
@@ -556,7 +556,7 @@ namespace edge::gfx {
 //		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_, surface_, &present_mode_count, nullptr),
 //			"Failed to request surface supported mode count.");
 //
-//		std::vector<VkPresentModeKHR> present_modes(present_mode_count);
+//		std::vector<vk::PresentModeKHR> present_modes(present_mode_count);
 //		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_, surface_, &present_mode_count, present_modes.data()),
 //			"Failed to request surface supported modes.");
 //
@@ -575,9 +575,9 @@ namespace edge::gfx {
 //		swapchain_create_info.imageExtent = choose_extent(potential_extent, surface_caps.minImageExtent, surface_caps.maxImageExtent, surface_caps.currentExtent);
 //		swapchain_create_info.imageArrayLayers = 1;
 //
-//		static const std::array<VkSurfaceFormatKHR, 2ull> surface_format_priority_list = {
-//			VkSurfaceFormatKHR(VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR),
-//			VkSurfaceFormatKHR(VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
+//		static const std::array<vk::SurfaceFormatKHR, 2ull> surface_format_priority_list = {
+//			vk::SurfaceFormatKHR(VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR),
+//			vk::SurfaceFormatKHR(VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
 //		};
 //
 //		auto surface_format = choose_surface_format({}, surface_formats, surface_format_priority_list);
@@ -586,7 +586,7 @@ namespace edge::gfx {
 //		VkFormatProperties format_properties;
 //		vkGetPhysicalDeviceFormatProperties(physical_, swapchain_create_info.imageFormat, &format_properties);
 //
-//		std::set<VkImageUsageFlagBits> image_usage_flags{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
+//		std::set<vk::ImageUsageFlagBits> image_usage_flags{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
 //		image_usage_flags = choose_image_usage(image_usage_flags, surface_caps.supportedUsageFlags, format_properties.optimalTilingFeatures);
 //
 //		swapchain_create_info.imageUsage = composite_image_flags(image_usage_flags);

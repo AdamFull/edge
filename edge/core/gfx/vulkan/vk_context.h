@@ -28,7 +28,7 @@ namespace edge::gfx {
 	struct VkMemoryAllocationDesc {
 		size_t size;
 		size_t align;
-		VkSystemAllocationScope scope;
+		vk::SystemAllocationScope scope;
         std::thread::id thread_id;
 	};
 
@@ -38,28 +38,6 @@ namespace edge::gfx {
         std::atomic<size_t> deallocation_count;
         std::mutex mutex;
 		std::unordered_map<void*, VkMemoryAllocationDesc> allocation_map;
-	};
-
-    struct VkDeviceHandle {
-        VkPhysicalDevice physical;
-        VkDevice logical;
-
-        VkPhysicalDeviceProperties properties;
-        std::vector<VkExtensionProperties> extensions;
-        std::vector<VkQueueFamilyProperties> queue_family_props;
-
-		std::array<std::vector<uint32_t>, 3ull> queue_type_to_family_map{};
-		std::vector<uint32_t> queue_family_queue_usages{};
-    };
-
-	struct VkPhysicalDeviceDesc {
-		VkPhysicalDevice handle;
-
-		VkPhysicalDeviceVulkan12Features features_12;
-		VkPhysicalDeviceFeatures2 features;
-
-		VkPhysicalDeviceProperties properties;
-		VkPhysicalDeviceMemoryProperties memory_properties;
 	};
 
 	class VulkanSemaphore final : public IGFXSemaphore {
@@ -78,15 +56,15 @@ namespace edge::gfx {
 			value_ = std::max(value_, value);
 		}
 
-		auto get_handle() const -> VkSemaphore {
+		auto get_handle() const -> vk::Semaphore {
 			return handle_;
 		}
 	private:
 		auto _construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> bool;
 
-		VkDevice device_{ VK_NULL_HANDLE };
-		VkAllocationCallbacks const* allocator_{ nullptr };
-		VkSemaphore handle_{ VK_NULL_HANDLE };
+		vk::Device device_{ VK_NULL_HANDLE };
+		vk::AllocationCallbacks const* allocator_{ nullptr };
+		vk::Semaphore handle_{ VK_NULL_HANDLE };
 		uint64_t value_{ 0ull };
 	};
 
@@ -101,7 +79,7 @@ namespace edge::gfx {
 		auto submit(const SubmitQueueInfo& submit_info) -> void override;
 		auto wait_idle() -> SyncResult override;
 
-		auto get_handle() const -> VkQueue {
+		auto get_handle() const -> vk::Queue {
 			return handle_;
 		}
 
@@ -111,9 +89,9 @@ namespace edge::gfx {
 	private:
 		auto _construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool;
 
-		VkDevice device_{ VK_NULL_HANDLE };
-		VkAllocationCallbacks const* allocator_{ nullptr };
-		VkQueue handle_{ VK_NULL_HANDLE };
+		vk::Device device_{ VK_NULL_HANDLE };
+		vk::AllocationCallbacks const* allocator_{ nullptr };
+		vk::Queue handle_{ VK_NULL_HANDLE };
 		uint32_t family_index_{ 0u };
 		uint32_t queue_index_{ 0u };
 	};
@@ -122,28 +100,28 @@ namespace edge::gfx {
 	public:
 		~VulkanCommandAllocator() override;
 
-		static auto construct(VkDevice device, VkAllocationCallbacks const* allocator, uint32_t family_index) -> std::unique_ptr<VulkanCommandAllocator>;
+		static auto construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> std::unique_ptr<VulkanCommandAllocator>;
 
 		auto allocate_command_list() const -> std::shared_ptr<IGFXCommandList> override;
 		auto reset() -> void override;
 
-		auto get_handle() const -> VkCommandPool {
+		auto get_handle() const -> vk::CommandPool {
 			return handle_;
 		}
 	private:
-		auto _construct(VkDevice device, VkAllocationCallbacks const* allocator, uint32_t family_index) -> bool;
+		auto _construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> bool;
 
-		VkDevice device_{ VK_NULL_HANDLE };
-		VkAllocationCallbacks const* allocator_{ nullptr };
+		vk::Device device_{ VK_NULL_HANDLE };
+		vk::AllocationCallbacks const* allocator_{ nullptr };
 		uint32_t family_index_{ 0u };
-		VkCommandPool handle_{ VK_NULL_HANDLE };
+		vk::CommandPool handle_{ VK_NULL_HANDLE };
 	};
 
 	class VulkanCommandList final : public IGFXCommandList {
 	public:
 		~VulkanCommandList() override;
 
-		static auto construct(VkDevice device, VkCommandPool command_pool) -> std::unique_ptr<VulkanCommandList>;
+		static auto construct(vk::Device device, vk::CommandPool command_pool) -> std::unique_ptr<VulkanCommandList>;
 
 		auto reset() -> void override;
 
@@ -162,14 +140,14 @@ namespace edge::gfx {
 		auto insert_marker(std::string_view name, uint32_t color) const -> void override;
 		auto end_marker() const -> void override;
 
-		auto get_handle() const -> VkCommandBuffer {
+		auto get_handle() const -> vk::CommandBuffer {
 			return handle_;
 		}
 	private:
-		auto _construct(VkDevice device, VkCommandPool command_pool) -> bool;
+		auto _construct(vk::Device device, vk::CommandPool command_pool) -> bool;
 
-		VkCommandBuffer handle_;
-		VkCommandPool command_pool_;
+		vk::CommandBuffer handle_;
+		vk::CommandPool command_pool_;
 	};
 
 	class VulkanSwapchain final : public IGFXSwapchain {
@@ -188,17 +166,17 @@ namespace edge::gfx {
 		auto _construct(const VulkanGraphicsContext& ctx, const SwapchainCreateInfo& create_info) -> bool;
 		auto get_prev_frame_index() const -> uint32_t;
 
-		VkDevice device_{ VK_NULL_HANDLE };
-		VkPhysicalDevice physical_{ VK_NULL_HANDLE };
-		VkSurfaceKHR surface_{ VK_NULL_HANDLE };
-		VkAllocationCallbacks const* allocator_{ nullptr };
+		vk::Device device_{ VK_NULL_HANDLE };
+		vk::PhysicalDevice physical_{ VK_NULL_HANDLE };
+		vk::SurfaceKHR surface_{ VK_NULL_HANDLE };
+		vk::AllocationCallbacks const* allocator_{ nullptr };
 
-		VkSwapchainKHR handle_{ VK_NULL_HANDLE };
-		VkSwapchainCreateInfoKHR create_info_;
+		vk::SwapchainKHR handle_{ VK_NULL_HANDLE };
+		vk::SwapchainCreateInfoKHR create_info_;
 
 		struct Frame {
-			VkSemaphore image_available_{ VK_NULL_HANDLE };
-			VkFence fence_;
+			vk::Semaphore image_available_{ VK_NULL_HANDLE };
+			vk::Fence fence_;
 		};
 
 		std::vector<Frame> frames_in_flight_;
@@ -215,9 +193,9 @@ namespace edge::gfx {
 	//		//std::shared_ptr<VulkanImage> image_;
 	//		//std::shared_ptr<VulkanImageView> image_view_;
 	//
-	//		VkSemaphore image_available_{ VK_NULL_HANDLE };
-	//		VkSemaphore execution_finished_{ VK_NULL_HANDLE };
-	//		VkFence fence_{ VK_NULL_HANDLE };
+	//		vk::Semaphore image_available_{ VK_NULL_HANDLE };
+	//		vk::Semaphore execution_finished_{ VK_NULL_HANDLE };
+	//		vk::Fence fence_{ VK_NULL_HANDLE };
 	//	};
 	//
 	//	~VulkanPresentationEngine() override;
@@ -236,12 +214,12 @@ namespace edge::gfx {
 	//	auto _construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> bool;
 	//	auto update_swapchain() -> bool;
 	//
-	//	VkDevice device_{ VK_NULL_HANDLE };
-	//	VkPhysicalDevice physical_{ VK_NULL_HANDLE };
-	//	VkSurfaceKHR surface_{ VK_NULL_HANDLE };
-	//	VkAllocationCallbacks const* allocator_{ nullptr };
-	//	VkSwapchainKHR handle_{ VK_NULL_HANDLE };
-	//	VkSwapchainCreateInfoKHR swapchain_create_info;
+	//	vk::Device device_{ VK_NULL_HANDLE };
+	//	vk::PhysicalDevice physical_{ VK_NULL_HANDLE };
+	//	vk::SurfaceKHR surface_{ VK_NULL_HANDLE };
+	//	vk::AllocationCallbacks const* allocator_{ nullptr };
+	//	vk::SwapchainKHR handle_{ VK_NULL_HANDLE };
+	//	vk::SwapchainCreateInfoKHR swapchain_create_info;
 	//
 	//	std::shared_ptr<VulkanQueue> queue_;
 	//	std::shared_ptr<VulkanCommandAllocator> command_allocator_;
@@ -267,23 +245,24 @@ namespace edge::gfx {
 
 		auto create_swapchain(const SwapchainCreateInfo& create_info) -> std::shared_ptr<IGFXSemaphore> override;
 
-		auto get_allocation_callbacks() const -> VkAllocationCallbacks const* {
+		auto get_allocation_callbacks() const -> vk::AllocationCallbacks const* {
 			return &vk_alloc_callbacks_;
 		}
 
-		auto get_surface() const -> VkSurfaceKHR {
+		auto get_surface() const -> vk::SurfaceKHR {
 			return vk_surface_;
 		}
 	private:
-		VkAllocationCallbacks vk_alloc_callbacks_{};
+		vk::detail::DynamicLoader vk_dynamic_loader_;
+		vk::AllocationCallbacks vk_alloc_callbacks_{};
 		VkMemoryAllocationStats memalloc_stats_{};
 
-		vkw::Instance instance_;
-		VkSurfaceKHR vk_surface_{ VK_NULL_HANDLE };
+		vk::Instance instance_{ VK_NULL_HANDLE };
+		vk::SurfaceKHR vk_surface_{ VK_NULL_HANDLE };
 
-		vkw::Device device_;
+		vk::Device device_{ VK_NULL_HANDLE };
 
-		std::unique_ptr<vkw::DebugInterface> debug_interface_;
+		//std::unique_ptr<vkw::DebugInterface> debug_interface_;
 
         VmaAllocator vma_allocator_{ VK_NULL_HANDLE };
 	};

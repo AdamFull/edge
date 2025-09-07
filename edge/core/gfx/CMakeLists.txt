@@ -1,6 +1,6 @@
 
 option(USE_NSIGHT_AFTERMATH OFF)
-set(USE_VULKAN OFF)
+set(USE_VULKAN ON)
 
 if (USE_NSIGHT_AFTERMATH)
 find_package(NsightAftermath REQUIRED)

@@ -5,7 +5,7 @@
 #include <cstdlib>
 
 namespace edge::gfx {
-    extern "C" void* VKAPI_CALL vkmemalloc(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) {
+    extern "C" void* VKAPI_CALL vkmemalloc(void* user_data, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
 		auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
 
 		void* ptr = nullptr;
@@ -77,7 +77,7 @@ namespace edge::gfx {
 #endif
 	}
 
-    extern "C" void* VKAPI_CALL vkmemrealloc(void* user_data, void* old, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) {
+    extern "C" void* VKAPI_CALL vkmemrealloc(void* user_data, void* old, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
 		if (!old) {
 			return vkmemalloc(user_data, size, alignment, allocation_scope);
 		}
@@ -118,11 +118,11 @@ namespace edge::gfx {
 		return new_ptr;
 	}
 
-    extern "C" void VKAPI_CALL vkinternalmemalloc(void* user_data, size_t size, VkInternalAllocationType allocation_type, VkSystemAllocationScope allocation_scope) {
+    extern "C" void VKAPI_CALL vkinternalmemalloc(void* user_data, size_t size, vk::InternalAllocationType allocation_type, vk::SystemAllocationScope allocation_scope) {
 
     }
 
-    extern "C" void VKAPI_CALL vkinternalmemfree(void* user_data, size_t size, VkInternalAllocationType allocation_type, VkSystemAllocationScope allocation_scope) {
+    extern "C" void VKAPI_CALL vkinternalmemfree(void* user_data, size_t size, vk::InternalAllocationType allocation_type, vk::SystemAllocationScope allocation_scope) {
 
     }
 
@@ -141,7 +141,7 @@ namespace edge::gfx {
 
             for (const auto& allocation : memalloc_stats_.allocation_map) {
                 spdlog::warn("{:#010x} : {} bytes, {} byte alignment, {} scope",
-                    reinterpret_cast<uintptr_t>(allocation.first), allocation.second.size, allocation.second.align, vkw::to_string(allocation.second.scope));
+                    reinterpret_cast<uintptr_t>(allocation.first), allocation.second.size, allocation.second.align, vk::to_string(allocation.second.scope));
             }
         }
         else {
@@ -155,6 +155,7 @@ namespace edge::gfx {
         volkInitialize();
 
         auto self = std::make_unique<VulkanGraphicsContext>();
+        VULKAN_HPP_DEFAULT_DISPATCHER.init(self->vk_dynamic_loader_.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"));
         return self;
     }
 
@@ -164,11 +165,11 @@ namespace edge::gfx {
 		memalloc_stats_.deallocation_count = 0ull;
 
 		// Create allocation callbacks
-		vk_alloc_callbacks_.pfnAllocation = (PFN_vkAllocationFunction)vkmemalloc;
-		vk_alloc_callbacks_.pfnFree = (PFN_vkFreeFunction)vkmemfree;
-		vk_alloc_callbacks_.pfnReallocation = (PFN_vkReallocationFunction)vkmemrealloc;
-		vk_alloc_callbacks_.pfnInternalAllocation = (PFN_vkInternalAllocationNotification) vkinternalmemalloc;
-		vk_alloc_callbacks_.pfnInternalFree = (PFN_vkInternalFreeNotification)vkinternalmemfree;
+		vk_alloc_callbacks_.pfnAllocation = (vk::PFN_AllocationFunction)vkmemalloc;
+		vk_alloc_callbacks_.pfnFree = (vk::PFN_FreeFunction)vkmemfree;
+		vk_alloc_callbacks_.pfnReallocation = (vk::PFN_ReallocationFunction)vkmemrealloc;
+		vk_alloc_callbacks_.pfnInternalAllocation = (vk::PFN_InternalAllocationNotification) vkinternalmemalloc;
+		vk_alloc_callbacks_.pfnInternalFree = (vk::PFN_InternalFreeNotification)vkinternalmemfree;
 		vk_alloc_callbacks_.pUserData = &memalloc_stats_;
 
         auto instance_result = vkw::InstanceBuilder{ &vk_alloc_callbacks_ }
@@ -189,16 +190,16 @@ namespace edge::gfx {
 
             // Enable validation features
 #if defined(USE_VALIDATION_LAYER_FEATURES)
-            .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT)
+            .add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eDebugPrintf)
 #if defined(VKW_VALIDATION_LAYERS_GPU_ASSISTED)
-            .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT)
-            .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT)
+            .add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eGpuAssistedReserveBindingSlot)
+            .add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eGpuAssisted)
 #endif
 #if defined(VKW_VALIDATION_LAYERS_BEST_PRACTICES)
-            .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_BEST_PRACTICES_EXT)
+            .add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eBestPractices)
 #endif
 #if defined(VKW_VALIDATION_LAYERS_SYNCHRONIZATION)
-            .add_validation_feature_enable(VK_VALIDATION_FEATURE_ENABLE_SYNCHRONIZATION_VALIDATION_EXT)
+            .add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eSynchronizationValidation)
 #endif
 #endif
 
@@ -214,7 +215,7 @@ namespace edge::gfx {
             .build();
 
         if (!instance_result) {
-            GFX_LOGE("Failed to create instance. Reason: {}.", vkw::to_string(instance_result.error()));
+            GFX_LOGE("Failed to create instance. Reason: {}.", vk::to_string(instance_result.error()));
             return false;
         }
         
@@ -223,31 +224,29 @@ namespace edge::gfx {
         // Create surface
         {
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
-            VkAndroidSurfaceCreateInfoKHR surface_create_info{ VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR };
+            vk::AndroidSurfaceCreateInfoKHR surface_create_info{};
             surface_create_info.window = static_cast<ANativeWindow*>(create_info.window->get_native_handle());
+            auto result = instance_.createWin32SurfaceKHR(&surface_create_info, &vk_alloc_callbacks_, &vk_surface_);
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
             auto hWnd = static_cast<HWND>(create_info.window->get_native_handle());
             HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hWnd, GWLP_HINSTANCE);
 
-            VkWin32SurfaceCreateInfoKHR surface_create_info{ VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR };
+            vk::Win32SurfaceCreateInfoKHR surface_create_info{};
             surface_create_info.hwnd = hWnd;
             surface_create_info.hinstance = hInstance;
+            auto result = instance_.createWin32SurfaceKHR(&surface_create_info, &vk_alloc_callbacks_, &vk_surface_);
 #endif
-
-            auto result = instance_.create_surface_khr(surface_create_info);
-            if (!result.has_value()) {
+            if (result != vk::Result::eSuccess) {
                 GFX_LOGE("Failed to create surface.");
                 return false;
             }
-
-            vk_surface_ = std::move(result.value());
         }
 
         // Select device
-        auto device_selector = vkw::DeviceSelector{ instance_ }
+        auto device_selector = vkw::DeviceSelector{ instance_, &vk_alloc_callbacks_ }
             .set_surface(vk_surface_)
             .set_api_version(1, 2, 0)
-            .set_preferred_device_type(VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+            .set_preferred_device_type(vk::PhysicalDeviceType::eDiscreteGpu)
             .add_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME)
             .add_extension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)
             .add_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME)
@@ -283,17 +282,17 @@ namespace edge::gfx {
 #if USE_NSIGHT_AFTERMATH
             .add_extension(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)
 #endif
-            .add_feature<VkPhysicalDeviceSynchronization2FeaturesKHR>()
-            .add_feature<VkPhysicalDeviceDynamicRenderingFeaturesKHR>()
-            .add_feature<VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>()
-            .add_feature<VkPhysicalDevice16BitStorageFeaturesKHR>()
-            .add_feature<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>()
+            .add_feature<vk::PhysicalDeviceSynchronization2FeaturesKHR>()
+            .add_feature<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>()
+            .add_feature<vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>()
+            .add_feature<vk::PhysicalDevice16BitStorageFeaturesKHR>()
+            .add_feature<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>()
 #if USE_NSIGHT_AFTERMATH
-            .add_feature<VkPhysicalDeviceDiagnosticsConfigFeaturesNV>(false)
+            .add_feature<vk::PhysicalDeviceDiagnosticsConfigFeaturesNV>(false)
 #endif
-            .add_feature<VkPhysicalDeviceAccelerationStructureFeaturesKHR>(create_info.require_features.ray_tracing)
-            .add_feature<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>(create_info.require_features.ray_tracing)
-            .add_feature<VkPhysicalDeviceRayQueryFeaturesKHR>(create_info.require_features.ray_tracing)
+            .add_feature<vk::PhysicalDeviceAccelerationStructureFeaturesKHR>(create_info.require_features.ray_tracing)
+            .add_feature<vk::PhysicalDeviceRayTracingPipelineFeaturesKHR>(create_info.require_features.ray_tracing)
+            .add_feature<vk::PhysicalDeviceRayQueryFeaturesKHR>(create_info.require_features.ray_tracing)
             .select();
 
         if (!device_selector) {
@@ -304,15 +303,15 @@ namespace edge::gfx {
         device_ = std::move(device_selector.value());
 
         // Create debug interface
-        if (auto result = vkw::DebugUtils::create_unique(instance_, device_); result.has_value()) {
-            debug_interface_ = std::move(result.value());
-        }
-        else if (auto result = vkw::DebugReport::create_unique(instance_, device_); result.has_value()) {
-            debug_interface_ = std::move(result.value());
-        }
-        else {
-            debug_interface_ = std::move(vkw::DebugNone::create_unique().value());
-        }
+        //if (auto result = vkw::DebugUtils::create_unique(instance_, device_); result.has_value()) {
+        //    debug_interface_ = std::move(result.value());
+        //}
+        //else if (auto result = vkw::DebugReport::create_unique(instance_, device_); result.has_value()) {
+        //    debug_interface_ = std::move(result.value());
+        //}
+        //else {
+        //    debug_interface_ = std::move(vkw::DebugNone::create_unique().value());
+        //}
 
 //
 //#if USE_NSIGHT_AFTERMATH
