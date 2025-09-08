@@ -219,7 +219,7 @@ namespace edge::gfx {
             return false;
         }
         
-        instance_ = std::move(instance_result.value());
+        vk_instance_ = std::move(instance_result.value());
 
         // Create surface
         {
@@ -234,7 +234,7 @@ namespace edge::gfx {
             vk::Win32SurfaceCreateInfoKHR surface_create_info{};
             surface_create_info.hwnd = hWnd;
             surface_create_info.hinstance = hInstance;
-            auto result = instance_.createWin32SurfaceKHR(&surface_create_info, &vk_alloc_callbacks_, &vk_surface_);
+            auto result = vk_instance_.createWin32SurfaceKHR(&surface_create_info, &vk_alloc_callbacks_, &vk_surface_);
 #endif
             if (result != vk::Result::eSuccess) {
                 GFX_LOGE("Failed to create surface.");
@@ -243,7 +243,7 @@ namespace edge::gfx {
         }
 
         // Select device
-        auto device_selector = vkw::DeviceSelector{ instance_, &vk_alloc_callbacks_ }
+        auto device_selector = vkw::DeviceSelector{ vk_instance_, &vk_alloc_callbacks_ }
             .set_surface(vk_surface_)
             .set_api_version(1, 2, 0)
             .set_preferred_device_type(vk::PhysicalDeviceType::eDiscreteGpu)
@@ -258,7 +258,6 @@ namespace edge::gfx {
             .add_extension(VK_KHR_8BIT_STORAGE_EXTENSION_NAME)
             .add_extension(VK_KHR_16BIT_STORAGE_EXTENSION_NAME)
             .add_extension(VK_KHR_DRAW_INDIRECT_COUNT_EXTENSION_NAME)
-            .add_extension(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME)
             .add_extension(VK_KHR_SHADER_FLOAT_CONTROLS_EXTENSION_NAME)
             .add_extension(VK_KHR_SPIRV_1_4_EXTENSION_NAME)
             .add_extension(VK_KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS_EXTENSION_NAME)
@@ -266,12 +265,16 @@ namespace edge::gfx {
             .add_extension(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)
             .add_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
             .add_extension(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME)
-            .add_extension(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)
+            .add_extension(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, false)
+            .add_extension(VK_EXT_DEBUG_MARKER_EXTENSION_NAME, false)
             .add_extension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, false)
             .add_extension(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, false)
             .add_extension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)
             .add_extension(VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME, false)
             .add_extension(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME, false)
+            .add_extension(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME, false)
+            .add_extension(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, false)
+            .add_extension(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME, false)
 #if !defined(VK_USE_PLATFORM_ANDROID_KHR)
             .add_extension(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME)
 #endif
@@ -300,7 +303,7 @@ namespace edge::gfx {
             return false;
         }
 
-        device_ = std::move(device_selector.value());
+        vkw_device_ = std::move(device_selector.value());
 
         // Create debug interface
         //if (auto result = vkw::DebugUtils::create_unique(instance_, device_); result.has_value()) {
@@ -312,85 +315,91 @@ namespace edge::gfx {
         //else {
         //    debug_interface_ = std::move(vkw::DebugNone::create_unique().value());
         //}
+        
+#if USE_NSIGHT_AFTERMATH
+        // Initialize Nsight Aftermath for this device.
+		//
+		// * ENABLE_RESOURCE_TRACKING - this will include additional information about the
+		//   resource related to a GPU virtual address seen in case of a crash due to a GPU
+		//   page fault. This includes, for example, information about the size of the
+		//   resource, its format, and an indication if the resource has been deleted.
+		//
+		// * ENABLE_AUTOMATIC_CHECKPOINTS - this will enable automatic checkpoints for
+		//   all draw calls, compute dispatchs, and resource copy operations that capture
+		//   CPU call stacks for those event.
+		//
+		//   Using this option should be considered carefully. It can cause very high CPU overhead.
+		//
+		// * ENABLE_SHADER_DEBUG_INFO - this instructs the shader compiler to
+		//   generate debug information (line tables) for all shaders. Using this option
+		//   should be considered carefully. It may cause considerable shader compilation
+		//   overhead and additional overhead for handling the corresponding shader debug
+		//   information callbacks.
+		//
 
-//
-//#if USE_NSIGHT_AFTERMATH
-//        // Initialize Nsight Aftermath for this device.
-//		//
-//		// * ENABLE_RESOURCE_TRACKING - this will include additional information about the
-//		//   resource related to a GPU virtual address seen in case of a crash due to a GPU
-//		//   page fault. This includes, for example, information about the size of the
-//		//   resource, its format, and an indication if the resource has been deleted.
-//		//
-//		// * ENABLE_AUTOMATIC_CHECKPOINTS - this will enable automatic checkpoints for
-//		//   all draw calls, compute dispatchs, and resource copy operations that capture
-//		//   CPU call stacks for those event.
-//		//
-//		//   Using this option should be considered carefully. It can cause very high CPU overhead.
-//		//
-//		// * ENABLE_SHADER_DEBUG_INFO - this instructs the shader compiler to
-//		//   generate debug information (line tables) for all shaders. Using this option
-//		//   should be considered carefully. It may cause considerable shader compilation
-//		//   overhead and additional overhead for handling the corresponding shader debug
-//		//   information callbacks.
-//		//
-//
-//		VkDeviceDiagnosticsConfigCreateInfoNV aftermath_info{ VK_STRUCTURE_TYPE_DEVICE_DIAGNOSTICS_CONFIG_CREATE_INFO_NV };
-//		aftermath_info.flags =
-//			VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_RESOURCE_TRACKING_BIT_NV |
-//			VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_AUTOMATIC_CHECKPOINTS_BIT_NV |
-//			VK_DEVICE_DIAGNOSTICS_CONFIG_ENABLE_SHADER_DEBUG_INFO_BIT_NV;
-//
-//		if (is_device_extension_enabled(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME))
-//		{
-//            aftermath_info.pNext = (void*)device_create_info.pNext;
-//            device_create_info.pNext = &aftermath_info;
-//		}
-//#endif
-//
-//
-//        // Create vulkan memory allocator
-//        VmaVulkanFunctions vma_vulkan_func{};
-//        vma_vulkan_func.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
-//        vma_vulkan_func.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
-//
-//        VmaAllocatorCreateInfo vma_allocator_create_info{};
-//        vma_allocator_create_info.pVulkanFunctions = &vma_vulkan_func;
-//        vma_allocator_create_info.physicalDevice = device.physical;
-//        vma_allocator_create_info.device = device.logical;
-//        vma_allocator_create_info.instance = vk_instance_;
-//        vma_allocator_create_info.pAllocationCallbacks = &vk_alloc_callbacks_;
-//
-//        // NOTE: Nsight graphics using VkImportMemoryHostPointerEXT that cannot be used with dedicated memory allocation
-//        bool can_get_memory_requirements = is_device_extension_supported(device, VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-//        //bool has_dedicated_allocation = is_device_extension_supported(device, VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
-//        bool has_dedicated_allocation = false;
-//        if (can_get_memory_requirements && has_dedicated_allocation && is_device_extension_enabled(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME)) {
-//            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
-//        }
-//        
-//        if (is_device_extension_supported(device, VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME) && is_device_extension_enabled(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
-//            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
-//        }
-//        
-//        if (is_device_extension_supported(device, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) && is_device_extension_enabled(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
-//            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
-//        }
-//
-//        if (is_device_extension_supported(device, VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME) && is_device_extension_enabled(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME)) {
-//            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT;
-//        }
-//
-//        if (is_device_extension_supported(device, VK_KHR_BIND_MEMORY_2_EXTENSION_NAME) && is_device_extension_enabled(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME)) {
-//            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT;
-//        }
-//
-//        if (is_device_extension_supported(device, VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME) && is_device_extension_enabled(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME)) {
-//            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_AMD_DEVICE_COHERENT_MEMORY_BIT;
-//        }
-//
-//        VK_CHECK_RESULT(vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator_),
-//                        "Failed to create memory allocator.");
+        vk::DeviceDiagnosticsConfigCreateInfoNV aftermath_info{};
+		aftermath_info.flags =
+            vk::DeviceDiagnosticsConfigFlagBitsNV::eEnableResourceTracking |
+            vk::DeviceDiagnosticsConfigFlagBitsNV::eEnableAutomaticCheckpoints |
+            vk::DeviceDiagnosticsConfigFlagBitsNV::eEnableShaderDebugInfo;
+
+		if (is_device_extension_enabled(VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME))
+		{
+            aftermath_info.pNext = (void*)device_create_info.pNext;
+            device_create_info.pNext = &aftermath_info;
+		}
+#endif
+
+        // Create vulkan memory allocator
+        VmaVulkanFunctions vma_vulkan_func{};
+        vma_vulkan_func.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+        vma_vulkan_func.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+        VmaAllocatorCreateInfo vma_allocator_create_info{};
+        vma_allocator_create_info.pVulkanFunctions = &vma_vulkan_func;
+        vma_allocator_create_info.physicalDevice = vkw_device_;
+        vma_allocator_create_info.device = vkw_device_;
+        vma_allocator_create_info.instance = vk_instance_;
+        vma_allocator_create_info.pAllocationCallbacks = (VkAllocationCallbacks*)(&vk_alloc_callbacks_);
+
+        // NOTE: Nsight graphics using VkImportMemoryHostPointerEXT that cannot be used with dedicated memory allocation
+        bool is_nsignt_graphics_attached{ false };
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+        {
+            HMODULE nsight_graphics_module = GetModuleHandle("Nvda.Graphics.Interception.dll");
+            is_nsignt_graphics_attached = (nsight_graphics_module != nullptr);
+        }
+#endif
+        bool can_get_memory_requirements = vkw_device_.is_enabled(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+        bool has_dedicated_allocation = vkw_device_.is_enabled(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
+
+        if (can_get_memory_requirements && has_dedicated_allocation && !is_nsignt_graphics_attached) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
+        }
+
+        if (vkw_device_.is_enabled(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+        }
+
+        if (vkw_device_.is_enabled(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+        }
+
+        if (vkw_device_.is_enabled(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT;
+        }
+        
+        if (vkw_device_.is_enabled(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT;
+        }
+        
+        if (vkw_device_.is_enabled(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME)) {
+            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_AMD_DEVICE_COHERENT_MEMORY_BIT;
+        }
+
+        if (auto result = vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator_); result != VK_SUCCESS) {
+            return false;
+        }
 
 		return true;
 	}

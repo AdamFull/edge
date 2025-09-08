@@ -4,6 +4,7 @@
 #include <expected>
 #include <string_view>
 #include <vector>
+#include <tuple>
 #include <memory>
 #include <cstdlib>
 #include <span>
@@ -173,6 +174,42 @@ namespace vkw {
 
 	template<typename T>
 	using Vector = std::vector<T, Allocator<T>>;
+
+	//template<typename T>
+	//class BaseHandle {
+	//public:
+	//	auto set_name(std::string_view name) const -> void {
+	//		// Try debug utils
+	//		{
+	//			vk::DebugUtilsObjectNameInfoEXT name_info{
+	//				.objectType = T::objectType,
+	//				.objectHandle = reinterpret_cast<uint64_t>(static_cast<T::CType>(handle_)),
+	//				.pObjectName = name.data()
+	//			};
+	//			if (auto result = device_.setDebugUtilsObjectNameEXT(&name_info); result == vk::Result::eSuccess) {
+	//				return;
+	//			}
+	//		}
+	//
+	//		// Try debug marker
+	//		{
+	//			vk::DebugMarkerObjectNameInfoEXT name_info{
+	//				.objectType = T::objectType,
+	//				.object = reinterpret_cast<uint64_t>(static_cast<T::CType>(handle_)),
+	//				.pObjectName = name.data()
+	//			};
+	//			if (auto result = device_.debugMarkerSetObjectNameEXT(&name_into); result == vk::Result::eSuccess) {
+	//				return;
+	//			}
+	//		}
+	//	}
+	//
+	//	auto get_handle() const -> T { return handle_; }
+	//	auto get_device() const -> vk::Device { return device_; }
+	//protected:
+	//	T handle_{ VK_NULL_HANDLE };
+	//	vk::Device device_{ VK_NULL_HANDLE };
+	//};
 
 	class InstanceBuilder {
 	public:
@@ -395,7 +432,7 @@ namespace vkw {
 			return *this;
 		}
 
-		auto select() -> Result<vk::Device>;
+		auto select() -> Result<Device>;
 
 	private:
 		vk::Instance instance_{ VK_NULL_HANDLE };
@@ -409,5 +446,52 @@ namespace vkw {
 
 		Vector<std::shared_ptr<void>> requested_features_;
 		void* last_feature_ptr_{ nullptr };
+	};
+
+	class Device {
+	public:
+		Device(vk::PhysicalDevice physical = VK_NULL_HANDLE, vk::Device logical = VK_NULL_HANDLE, vk::AllocationCallbacks const* allocator = nullptr, Vector<const char*>&& enabled_extensions = {});
+		~Device();
+
+		Device(const Device&) = delete;
+		auto operator=(const Device&) -> Device& = delete;
+
+		Device(Device&& other) :
+			logical_{ std::exchange(other.logical_, VK_NULL_HANDLE) },
+			physical_{ std::exchange(other.physical_, VK_NULL_HANDLE) },
+			allocator_{ std::exchange(other.allocator_, nullptr) },
+			enabled_extensions_{ std::exchange(other.enabled_extensions_, {}) },
+			supported_extensions_{ std::exchange(other.supported_extensions_, {}) } {
+
+		}
+
+		auto operator=(Device&& other) -> Device& {
+			logical_ = std::exchange(other.logical_, VK_NULL_HANDLE);
+			physical_ = std::exchange(other.physical_, VK_NULL_HANDLE);
+			allocator_ = std::exchange(other.allocator_, nullptr);
+			enabled_extensions_ = std::exchange(other.enabled_extensions_, {});
+			supported_extensions_ = std::exchange(other.supported_extensions_, {});
+			return *this;
+		}
+
+		auto is_enabled(const char* extension_name) const -> bool;
+		auto is_supported(const char* extension_name) const -> bool;
+
+		operator vk::Device() const { return logical_; }
+		operator VkDevice() const { return logical_; }
+		auto get_logical() const -> vk::Device { return logical_; }
+
+		operator vk::PhysicalDevice() const { return physical_; }
+		operator VkPhysicalDevice() const { return physical_; }
+		auto get_physical() const -> vk::PhysicalDevice { return physical_; }
+
+		auto get_allocator() const -> vk::AllocationCallbacks const* { return allocator_; }
+	private:
+		vk::Device logical_{ VK_NULL_HANDLE };
+		vk::PhysicalDevice physical_{ VK_NULL_HANDLE };
+		vk::AllocationCallbacks const* allocator_{ nullptr };
+
+		Vector<const char*> enabled_extensions_;
+		Vector<vk::ExtensionProperties> supported_extensions_;
 	};
 }

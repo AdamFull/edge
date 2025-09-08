@@ -287,7 +287,7 @@ namespace vkw {
 		requested_features_{ allocator_ } {
 	}
 
-	auto DeviceSelector::select() -> Result<vk::Device> {
+	auto DeviceSelector::select() -> Result<Device> {
 		int32_t best_candidate_index{ -1 };
 		int32_t fallback_index{ -1 };
 
@@ -458,8 +458,38 @@ namespace vkw {
 			return std::unexpected(result);
 		}
 
-		return device;
+		return Device{ selected_device, device, allocator_, std::move(enabled_extensions) };
 	}
 
 #undef VKW_SCOPE // DeviceSelector
+
+	Device::Device(vk::PhysicalDevice physical, vk::Device logical, vk::AllocationCallbacks const* allocator, Vector<const char*>&& enabled_extensions) 
+		: physical_{ physical }, logical_{ logical }, allocator_{ allocator }, enabled_extensions_{ std::move(enabled_extensions) },
+		supported_extensions_{ allocator } {
+		if (physical) {
+			if (auto result = enumerate_device_extension_properties(physical, nullptr, allocator); result.has_value()) {
+				supported_extensions_ = std::move(result.value());
+			}
+		}
+	}
+
+	Device::~Device() {
+		if (logical_) {
+			logical_.destroy();
+		}
+	}
+
+	auto Device::is_enabled(const char* extension_name) const -> bool {
+		return std::find_if(enabled_extensions_.begin(), enabled_extensions_.end(),
+			[&extension_name](const char* name) -> bool {
+				return strcmp(extension_name, name) == 0;
+			}) != enabled_extensions_.end();
+	}
+
+	auto Device::is_supported(const char* extension_name) const -> bool {
+		return std::find_if(supported_extensions_.begin(), supported_extensions_.end(),
+			[&extension_name](const vk::ExtensionProperties& props) -> bool {
+				return strcmp(extension_name, props.extensionName) == 0;
+			}) != supported_extensions_.end();
+	}
 }
