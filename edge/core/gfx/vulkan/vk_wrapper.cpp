@@ -26,48 +26,6 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 namespace vkw {
 #ifdef USE_VALIDATION_LAYERS
-	namespace
-	{
-#define VKW_SCOPE "Vulkan Validation"
-		VKAPI_ATTR VkBool32 VKAPI_CALL debug_utils_messenger_callback(VkDebugUtilsMessageSeverityFlagBitsEXT message_severity, VkDebugUtilsMessageTypeFlagsEXT message_type, const VkDebugUtilsMessengerCallbackDataEXT* callback_data, void* user_data) {
-			// Log debug message
-			if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT) {
-				VKW_LOGT("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
-			}
-			else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT) {
-				VKW_LOGI("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage); 
-			}
-			else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-				VKW_LOGW("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
-			}
-			else if (message_severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-				VKW_LOGE("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
-			}
-			return VK_FALSE;
-		}
-
-		static VKAPI_ATTR VkBool32 VKAPI_CALL debug_report_callback(VkDebugReportFlagsEXT flags, VkDebugReportObjectTypeEXT /*type*/,
-			uint64_t /*object*/, size_t /*location*/, int32_t /*message_code*/,
-			const char* layer_prefix, const char* message, void* /*user_data*/) {
-			if (flags & VK_DEBUG_REPORT_ERROR_BIT_EXT) {
-				VKW_LOGE("{}: {}", layer_prefix, message);
-			}
-			else if (flags & VK_DEBUG_REPORT_WARNING_BIT_EXT) {
-				VKW_LOGW("{}: {}", layer_prefix, message);
-			}
-			else if (flags & VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT) {
-				VKW_LOGW("{}: {}", layer_prefix, message);
-			}
-			else if (flags & VK_DEBUG_REPORT_DEBUG_BIT_EXT) {
-				VKW_LOGD("{}: {}", layer_prefix, message);
-			}
-			else {
-				VKW_LOGI("{}: {}", layer_prefix, message);
-			}
-			return VK_FALSE;
-		}
-#undef VKW_SCOPE // Vulkan validation
-	}
 #endif
 
 #define VKW_SCOPE "InstanceBuilder"
@@ -476,6 +434,22 @@ namespace vkw {
 	Device::~Device() {
 		if (logical_) {
 			logical_.destroy();
+		}
+	}
+
+	auto Device::set_object_name(vk::ObjectType object_type, uint64_t object_handle, std::string_view name) const -> void {
+		{
+			vk::DebugUtilsObjectNameInfoEXT name_info{ object_type, object_handle, name.data() };
+			if (auto result = logical_.setDebugUtilsObjectNameEXT(&name_info); result == vk::Result::eSuccess) {
+				return;
+			}
+		}
+
+		{
+			vk::DebugMarkerObjectNameInfoEXT name_info{ (vk::DebugReportObjectTypeEXT)object_type, object_handle, name.data() };
+			if (auto result = logical_.debugMarkerSetObjectNameEXT(&name_info); result == vk::Result::eSuccess) {
+				return;
+			}
 		}
 	}
 

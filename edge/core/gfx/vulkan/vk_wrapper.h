@@ -474,6 +474,13 @@ namespace vkw {
 			return *this;
 		}
 
+		template<typename T>
+		auto set_object_name(T object, std::string_view name) const -> void {
+			set_object_name(T::objectType, reinterpret_cast<uint64_t>(static_cast<T::CType>(object)), name);
+		}
+
+		auto set_object_name(vk::ObjectType object_type, uint64_t object_handle, std::string_view name) const -> void;
+
 		auto is_enabled(const char* extension_name) const -> bool;
 		auto is_supported(const char* extension_name) const -> bool;
 

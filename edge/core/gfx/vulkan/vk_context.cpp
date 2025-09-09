@@ -5,6 +5,51 @@
 #include <cstdlib>
 
 namespace edge::gfx {
+
+#define GFX_SCOPE "Validation"
+    VKAPI_ATTR vk::Bool32 VKAPI_CALL debug_utils_messenger_callback(vk::DebugUtilsMessageSeverityFlagBitsEXT message_severity, 
+        vk::DebugUtilsMessageTypeFlagsEXT message_type, 
+        const vk::DebugUtilsMessengerCallbackDataEXT* callback_data, 
+        void* user_data) {
+        // Log debug message
+        if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose) {
+            GFX_LOGT("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+        }
+        else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo) {
+            GFX_LOGI("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+        }
+        else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
+            GFX_LOGW("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+        }
+        else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
+            GFX_LOGE("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+        }
+        return VK_FALSE;
+    }
+
+
+    static VKAPI_ATTR vk::Bool32 VKAPI_CALL debug_report_callback(vk::DebugReportFlagsEXT flags, vk::DebugReportObjectTypeEXT /*type*/,
+        uint64_t /*object*/, size_t /*location*/, int32_t /*message_code*/,
+        const char* layer_prefix, const char* message, void* /*user_data*/) {
+        if (flags & vk::DebugReportFlagBitsEXT::eError) {
+            GFX_LOGE("{}: {}", layer_prefix, message);
+        }
+        else if (flags & vk::DebugReportFlagBitsEXT::eWarning) {
+            GFX_LOGW("{}: {}", layer_prefix, message); 
+        }
+        else if (flags & vk::DebugReportFlagBitsEXT::ePerformanceWarning) {
+            GFX_LOGW("{}: {}", layer_prefix, message);
+        }
+        else if (flags & vk::DebugReportFlagBitsEXT::eDebug) {
+            GFX_LOGD("{}: {}", layer_prefix, message);
+        }
+        else {
+            GFX_LOGI("{}: {}", layer_prefix, message);
+        }
+        return VK_FALSE;
+    }
+#undef GFX_SCOPE
+
     extern "C" void* VKAPI_CALL vkmemalloc(void* user_data, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
 		auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
 
@@ -132,6 +177,14 @@ namespace edge::gfx {
         if(vma_allocator_) {
             spdlog::debug("[Vulkan Graphics Context]: Destroying VMA allocator");
             vmaDestroyAllocator(vma_allocator_);
+        }
+
+        // Destroy debug handles
+        if (vk_debug_utils_) {
+            vk_instance_.destroyDebugUtilsMessengerEXT(vk_debug_utils_, &vk_alloc_callbacks_);
+        }
+        else if (vk_debug_report_) {
+            vk_instance_.destroyDebugReportCallbackEXT(vk_debug_report_, &vk_alloc_callbacks_);
         }
 
         // Check that all allocated vulkan objects was deallocated
@@ -306,15 +359,26 @@ namespace edge::gfx {
         vkw_device_ = std::move(device_selector.value());
 
         // Create debug interface
-        //if (auto result = vkw::DebugUtils::create_unique(instance_, device_); result.has_value()) {
-        //    debug_interface_ = std::move(result.value());
-        //}
-        //else if (auto result = vkw::DebugReport::create_unique(instance_, device_); result.has_value()) {
-        //    debug_interface_ = std::move(result.value());
-        //}
-        //else {
-        //    debug_interface_ = std::move(vkw::DebugNone::create_unique().value());
-        //}
+        vk::DebugUtilsMessengerCreateInfoEXT debug_utils_create_info{};
+        debug_utils_create_info.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+            vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo;
+        debug_utils_create_info.messageType = vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation | 
+            vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance;
+        debug_utils_create_info.pfnUserCallback = debug_utils_messenger_callback;
+
+        if (auto result = vk_instance_.createDebugUtilsMessengerEXT(&debug_utils_create_info, &vk_alloc_callbacks_, &vk_debug_utils_); result != vk::Result::eSuccess) {
+            GFX_LOGW("Failed to create debug messenger. Reason: {}", vk::to_string(result));
+        }
+
+        if (!vk_debug_utils_) {
+            vk::DebugReportCallbackCreateInfoEXT debug_report_create_info{};
+            debug_report_create_info.pfnCallback = debug_report_callback;
+
+            debug_report_create_info.flags = vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning | vk::DebugReportFlagBitsEXT::ePerformanceWarning;
+            if (auto result = vk_instance_.createDebugReportCallbackEXT(&debug_report_create_info, &vk_alloc_callbacks_, &vk_debug_report_); result != vk::Result::eSuccess) {
+                GFX_LOGW("Failed to create debug messenger. Reason: {}", vk::to_string(result));
+            }
+        }
         
 #if USE_NSIGHT_AFTERMATH
         // Initialize Nsight Aftermath for this device.

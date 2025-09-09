@@ -260,6 +260,9 @@ namespace edge::gfx {
 		vk::Instance vk_instance_{ VK_NULL_HANDLE };
 		vk::SurfaceKHR vk_surface_{ VK_NULL_HANDLE };
 
+		vk::DebugUtilsMessengerEXT vk_debug_utils_{ VK_NULL_HANDLE };
+		vk::DebugReportCallbackEXT vk_debug_report_{ VK_NULL_HANDLE };
+
 		vkw::Device vkw_device_;
 
 		//std::unique_ptr<vkw::DebugInterface> debug_interface_;
