@@ -72,8 +72,6 @@ namespace edge::gfx {
 	public:
 		virtual ~IGFXCommandList() = default;
 
-		virtual auto reset() -> void = 0;
-
 		virtual auto begin() -> bool = 0;
 		virtual auto end() -> bool = 0;
 

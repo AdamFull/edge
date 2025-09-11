@@ -3,6 +3,12 @@
 namespace edge::gfx::vulkan {
 #define EDGE_LOGGER_SCOPE "Semaphore"
 
+	Semaphore::~Semaphore() {
+		if (handle_) {
+			device_->destroy_handle(handle_);
+		}
+	}
+
 	auto Semaphore::construct(const GraphicsContext& ctx, uint64_t initial_value) -> Owned<Semaphore> {
 		auto self = std::make_unique<Semaphore>();
 		self->_construct(ctx, initial_value);
@@ -14,7 +20,7 @@ namespace edge::gfx::vulkan {
 		signal_info.semaphore = handle_;
 		signal_info.value = value;
 
-		auto result = device_.signalSemaphore(&signal_info);
+		auto result = device_->signal_semaphore(signal_info);
 		if (result == vk::Result::eSuccess) {
 			return SyncResult::eSuccess;
 		}
@@ -31,7 +37,7 @@ namespace edge::gfx::vulkan {
 
 		uint64_t timeout_ns = (timeout == std::chrono::nanoseconds::max()) ? UINT64_MAX : timeout.count();
 
-		vk::Result result = device_.waitSemaphores(&wait_info, timeout_ns);
+		vk::Result result = device_->wait_semaphore(wait_info, timeout_ns);
 		switch (result) {
 		case vk::Result::eSuccess: return SyncResult::eSuccess;
 		case vk::Result::eTimeout: return SyncResult::eTimeout;
@@ -48,24 +54,30 @@ namespace edge::gfx::vulkan {
 	}
 
 	auto Semaphore::get_value() const -> uint64_t {
-		uint64_t value;
-		vk::Result result = device_.getSemaphoreCounterValue(handle_, &value);
-		return (result == vk::Result::eSuccess) ? value : 0;
+		auto result = device_->get_semaphore_counter_value(handle_);
+		if (result) {
+			return result.value();
+		}
+
+		EDGE_SLOGE("Failed to get semaphore value. Reason: {}.", vk::to_string(result.error()));
+
+		return ~0ull;
 	}
 
 	auto Semaphore::_construct(const GraphicsContext& ctx, uint64_t initial_value) -> bool {
-		//device_ = ctx.get_logical_device();
-		allocator_ = ctx.get_allocation_callbacks();
+		device_ = &ctx.get_device();
 
-		VkSemaphoreTypeCreateInfo timeline_create_info{ VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
-		timeline_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
+		vk::SemaphoreTypeCreateInfo timeline_create_info{};
+		timeline_create_info.semaphoreType = vk::SemaphoreType::eTimeline;
 		timeline_create_info.initialValue = initial_value;
 
-		VkSemaphoreCreateInfo create_info{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
+		vk::SemaphoreCreateInfo create_info{};
 		create_info.pNext = &timeline_create_info;
 
-		//VK_CHECK_RESULT(vkCreateSemaphore(device_, &create_info, allocator_, &handle_),
-		//	"Failed to create semaphore.");
+		if (auto result = device_->create_handle(create_info, handle_); result != vk::Result::eSuccess) {
+			EDGE_SLOGE("Failed to create semaphore. Reason: {}.", vk::to_string(result));
+			return false;
+		}
 
 		return true;
 	}
@@ -74,9 +86,6 @@ namespace edge::gfx::vulkan {
 
 #define EDGE_LOGGER_SCOPE "Queue"
 
-	Queue::~Queue() {	
-	}
-
 	auto Queue::construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> Owned<Queue> {
 		auto self = std::make_unique<Queue>();
 		self->_construct(ctx, family_index, queue_index);
@@ -84,7 +93,7 @@ namespace edge::gfx::vulkan {
 	}
 
 	auto Queue::create_command_allocator() const -> Shared<IGFXCommandAllocator> {
-		return CommandAllocator::construct(device_, allocator_, family_index_);
+		return CommandAllocator::construct(*device_, family_index_);
 	}
 
 	auto Queue::submit(const SubmitQueueInfo& submit_info) -> void {
@@ -143,8 +152,8 @@ namespace edge::gfx::vulkan {
 	}
 
 	auto Queue::_construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool {
-		//device_ = ctx.get_logical_device();
-		allocator_ = ctx.get_allocation_callbacks();
+		device_ = &ctx.get_device();
+
 		family_index_ = family_index;
 		queue_index_ = queue_index;
 
@@ -152,7 +161,7 @@ namespace edge::gfx::vulkan {
 		device_queue_info.queueFamilyIndex = family_index;
 		device_queue_info.queueIndex = queue_index;
 
-		device_.getQueue2(&device_queue_info, &handle_);
+		device_->get_queue(device_queue_info, handle_);
 
 		return true;
 	}
@@ -163,35 +172,36 @@ namespace edge::gfx::vulkan {
 
 	CommandAllocator::~CommandAllocator() {
 		if (handle_) {
-			device_.destroyCommandPool(handle_, allocator_);
+			device_->destroy_handle(handle_);
 		}
 	}
 
-	auto CommandAllocator::construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> Owned<CommandAllocator> {
+	auto CommandAllocator::construct(vkw::Device const& device, uint32_t family_index) -> Owned<CommandAllocator> {
 		auto self = std::make_unique<CommandAllocator>();
-		self->_construct(device, allocator, family_index);
+		self->_construct(device, family_index);
 		return self;
 	}
 
 	auto CommandAllocator::allocate_command_list() const -> Shared<IGFXCommandList> {
-		return CommandList::construct(device_, handle_);
+		return CommandList::construct(*device_, handle_);
 	}
 
 	auto CommandAllocator::reset() -> void {
 		// TODO: Not sure do i need individual reset for this one
 	}
 
-	auto CommandAllocator::_construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> bool {
-		device_ = device;
-		allocator_ = allocator;
+	auto CommandAllocator::_construct(vkw::Device const& device, uint32_t family_index) -> bool {
+		device_ = &device;
 		family_index_ = family_index;
 
-		VkCommandPoolCreateInfo create_info{ VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO };
+		vk::CommandPoolCreateInfo create_info{};
 		create_info.queueFamilyIndex = family_index_;
-		create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+		create_info.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
 
-		//VK_CHECK_RESULT(vkCreateCommandPool(device_, &create_info, allocator_, &handle_),
-		//	"Failed to create command pool");
+		if (auto result = device_->create_handle(create_info, handle_); result != vk::Result::eSuccess) {
+			EDGE_SLOGE("Failed to create command allocator. Reason: {}.", vk::to_string(result));
+			return false;
+		}
 
 		return true;
 	}
@@ -201,81 +211,89 @@ namespace edge::gfx::vulkan {
 #define EDGE_LOGGER_SCOPE "CommandList"
 
 	CommandList::~CommandList() {
-
+		if (handle_) {
+			device_->free_command_buffer(command_pool_, handle_);
+		}
 	}
 
-	auto CommandList::construct(vk::Device device, vk::CommandPool command_pool) -> Owned<CommandList> {
+	auto CommandList::construct(vkw::Device const& device, vk::CommandPool command_pool) -> Owned<CommandList> {
 		auto self = std::make_unique<CommandList>();
 		self->_construct(device, command_pool);
 		return self;
 	}
 
-	auto CommandList::reset() -> void {
-		assert(false && "NOT IMPLEMENTED");
-	}
-
 	auto CommandList::begin() -> bool {
+		handle_.reset(vk::CommandBufferResetFlagBits::eReleaseResources);
 		
-		VkCommandBufferBeginInfo begin_info{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
-		begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-		
-		//VK_CHECK_RESULT(vkBeginCommandBuffer(handle_, &begin_info),
-		//	"Failed to begin command buffer.");
+		vk::CommandBufferBeginInfo begin_info{};
+		begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+
+		if (auto result = handle_.begin(&begin_info); result != vk::Result::eSuccess) {
+			EDGE_SLOGE("Failed to begin command list. Reason: {}.", vk::to_string(result));
+			return false;
+		}
 
 		return true;
 	}
 
 	auto CommandList::end() -> bool {
-		//VK_CHECK_RESULT(vkEndCommandBuffer(handle_),
-		//	"Failed to end command buffer.");
-		
+		handle_.end();
 		return true;
 	}
 
 	auto CommandList::set_viewport(float x, float y, float width, float height, float min_depth, float max_depth) const -> void {
-		VkViewport viewport{ x, y, width, height, min_depth, max_depth };
-		vkCmdSetViewport(handle_, 0, 1, &viewport);
+		vk::Viewport viewport{ x, y, width, height, min_depth, max_depth };
+		handle_.setViewport(0, 1, &viewport);
 	}
 
 	auto CommandList::set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const -> void {
-		VkRect2D scissor{ { static_cast<int32_t>(x), static_cast<int32_t>(y) }, { width, height } };
-		vkCmdSetScissor(handle_, 0, 1, &scissor);
+		vk::Rect2D scissor{ { static_cast<int32_t>(x), static_cast<int32_t>(y) }, { width, height } };
+		handle_.setScissor(0, 1, &scissor);
 	}
 
 	auto CommandList::draw(uint32_t vertex_count, uint32_t first_vertex, uint32_t first_instance, uint32_t instance_count) const -> void {
-		vkCmdDraw(handle_, vertex_count, instance_count, first_vertex, first_instance);
+		handle_.draw(vertex_count, instance_count, first_vertex, first_instance);
 	}
 
 	auto CommandList::draw_indexed(uint32_t index_count, uint32_t first_index, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) const -> void {
-		vkCmdDrawIndexed(handle_, index_count, instance_count, first_index, first_vertex, first_instance);
+		handle_.drawIndexed(index_count, instance_count, first_index, first_vertex, first_instance);
 	}
 
 	auto CommandList::dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) const -> void {
-		vkCmdDispatch(handle_, group_x, group_y, group_z);
+		handle_.dispatch(group_x, group_y, group_z);
 	}
 
 	auto CommandList::begin_marker(std::string_view name, uint32_t color) const -> void {
-		assert(false && "NOT IMPLEMENTED");
+		vk::DebugMarkerMarkerInfoEXT marker_info{};
+		marker_info.pMarkerName = name.data();
+		vkw::make_color_array(color, marker_info.color);
+		handle_.debugMarkerBeginEXT(marker_info);
 	}
 
 	auto CommandList::insert_marker(std::string_view name, uint32_t color) const -> void {
-		assert(false && "NOT IMPLEMENTED");
+		vk::DebugMarkerMarkerInfoEXT marker_info{};
+		marker_info.pMarkerName = name.data();
+		vkw::make_color_array(color, marker_info.color);
+		handle_.debugMarkerInsertEXT(marker_info);
 	}
 
 	auto CommandList::end_marker() const -> void {
-		assert(false && "NOT IMPLEMENTED");
+		handle_.debugMarkerEndEXT();
 	}
 
-	auto CommandList::_construct(vk::Device device, vk::CommandPool command_pool) -> bool {
+	auto CommandList::_construct(vkw::Device const& device, vk::CommandPool command_pool) -> bool {
+		device_ = &device;
 		command_pool_ = command_pool;
 
-		VkCommandBufferAllocateInfo allocate_info{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
+		vk::CommandBufferAllocateInfo allocate_info{};
 		allocate_info.commandPool = command_pool;
-		allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+		allocate_info.level = vk::CommandBufferLevel::ePrimary;
 		allocate_info.commandBufferCount = 1;
 
-		//VK_CHECK_RESULT(vkAllocateCommandBuffers(device, &allocate_info, &handle_), 
-		//	"Failed to allocate command buffers.");
+		if (auto result = device_->allocate_command_buffer(allocate_info, handle_); result != vk::Result::eSuccess) {
+			EDGE_SLOGE("Failed to allocate command lists. Reason: {}.", vk::to_string(result));
+			return false;
+		}
 
 		return true;
 	}

@@ -210,6 +210,13 @@ namespace edge::vkw {
 	//	vk::Device device_{ VK_NULL_HANDLE };
 	//};
 
+	inline auto make_color_array(uint32_t in_color, Span<float> out_color) -> void {
+		out_color[3] = static_cast<float>((in_color >> 24) & 0xFF) / 255.0f;
+		out_color[0] = static_cast<float>((in_color >> 16) & 0xFF) / 255.0f;
+		out_color[1] = static_cast<float>((in_color >> 8) & 0xFF) / 255.0f;
+		out_color[2] = static_cast<float>(in_color & 0xFF) / 255.0f;
+	}
+
 	class InstanceBuilder {
 	public:
 		InstanceBuilder(vk::AllocationCallbacks const* allocator);
@@ -472,6 +479,19 @@ namespace edge::vkw {
 			supported_extensions_ = std::exchange(other.supported_extensions_, {});
 			return *this;
 		}
+
+		auto get_queue(const vk::DeviceQueueInfo2& queue_info, vk::Queue& queue) const -> void;
+
+		auto create_handle(const vk::CommandPoolCreateInfo& create_info, vk::CommandPool& handle) const -> vk::Result;
+		auto destroy_handle(vk::CommandPool handle) const -> void;
+		auto allocate_command_buffer(const vk::CommandBufferAllocateInfo& allocate_info, vk::CommandBuffer& handle) const -> vk::Result;
+		auto free_command_buffer(vk::CommandPool command_pool, vk::CommandBuffer handle) const -> void;
+
+		auto create_handle(const vk::SemaphoreCreateInfo& create_info, vk::Semaphore& handle) const -> vk::Result;
+		auto destroy_handle(vk::Semaphore handle) const -> void;
+		auto signal_semaphore(const vk::SemaphoreSignalInfo& signal_info) const -> vk::Result;
+		auto wait_semaphore(const vk::SemaphoreWaitInfo& wait_info, uint64_t timeout = std::numeric_limits<uint64_t>::max()) const -> vk::Result;
+		auto get_semaphore_counter_value(vk::Semaphore handle) const -> Result<uint64_t>;
 
 		auto create_handle(const vk::SwapchainCreateInfoKHR& create_info, vk::SwapchainKHR& handle) const -> vk::Result;
 		auto destroy_handle(vk::SwapchainKHR handle) const -> void;

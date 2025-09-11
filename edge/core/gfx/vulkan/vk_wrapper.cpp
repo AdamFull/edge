@@ -545,6 +545,50 @@ namespace edge::vkw {
 		}
 	}
 
+	auto Device::get_queue(const vk::DeviceQueueInfo2& queue_info, vk::Queue& queue) const -> void {
+		logical_.getQueue2(&queue_info, &queue);
+	}
+
+	auto Device::create_handle(const vk::CommandPoolCreateInfo& create_info, vk::CommandPool& handle) const -> vk::Result {
+		return logical_.createCommandPool(&create_info, allocator_, &handle);
+	}
+
+	auto Device::destroy_handle(vk::CommandPool handle) const -> void {
+		logical_.destroyCommandPool(handle, allocator_);
+	}
+
+	auto Device::allocate_command_buffer(const vk::CommandBufferAllocateInfo& allocate_info, vk::CommandBuffer& handle) const -> vk::Result {
+		return logical_.allocateCommandBuffers(&allocate_info, &handle);
+	}
+
+	auto Device::free_command_buffer(vk::CommandPool command_pool, vk::CommandBuffer handle) const -> void {
+		logical_.freeCommandBuffers(command_pool, 1, &handle);
+	}
+
+	auto Device::create_handle(const vk::SemaphoreCreateInfo& create_info, vk::Semaphore& handle) const -> vk::Result {
+		return logical_.createSemaphore(&create_info, allocator_, &handle);
+	}
+
+	auto Device::destroy_handle(vk::Semaphore handle) const -> void {
+		logical_.destroySemaphore(handle, allocator_);
+	}
+
+	auto Device::signal_semaphore(const vk::SemaphoreSignalInfo& signal_info) const -> vk::Result {
+		return logical_.signalSemaphore(&signal_info);
+	}
+
+	auto Device::wait_semaphore(const vk::SemaphoreWaitInfo& wait_info, uint64_t timeout) const -> vk::Result {
+		return logical_.waitSemaphores(&wait_info, timeout);
+	}
+
+	auto Device::get_semaphore_counter_value(vk::Semaphore handle) const -> Result<uint64_t> {
+		uint64_t value;
+		if (auto result = logical_.getSemaphoreCounterValue(handle, &value); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return value;
+	}
+
 	auto Device::create_handle(const vk::SwapchainCreateInfoKHR& create_info, vk::SwapchainKHR& handle) const -> vk::Result {
 		return logical_.createSwapchainKHR(&create_info, allocator_, &handle);
 	}

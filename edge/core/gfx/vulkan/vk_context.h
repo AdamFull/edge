@@ -34,7 +34,21 @@ namespace edge::gfx::vulkan {
 
 	class Semaphore final : public IGFXSemaphore {
 	public:
-		~Semaphore() override = default;
+		Semaphore() = default;
+		~Semaphore() override;
+
+		Semaphore(const Semaphore&) = delete;
+		auto operator=(const Semaphore&) -> Semaphore & = delete;
+
+		Semaphore(Semaphore&& other) 
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
+			, device_{ std::exchange(other.device_, nullptr) } {}
+
+		auto operator=(Semaphore&& other) -> Semaphore& {
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			device_ = std::exchange(other.device_, nullptr);
+			return *this;
+		}
 
 		static auto construct(const GraphicsContext& ctx, uint64_t initial_value) -> Owned<Semaphore>;
 
@@ -50,14 +64,31 @@ namespace edge::gfx::vulkan {
 	private:
 		auto _construct(const GraphicsContext& ctx, uint64_t initial_value) -> bool;
 
-		vk::Device device_{ VK_NULL_HANDLE };
-		vk::AllocationCallbacks const* allocator_{ nullptr };
+		vkw::Device const* device_{ nullptr };
 		vk::Semaphore handle_{ VK_NULL_HANDLE };
 	};
 
 	class Queue final : public IGFXQueue {
 	public:
-		~Queue() override;
+		Queue() = default;
+		~Queue() override = default;
+
+		Queue(const Queue&) = delete;
+		auto operator=(const Queue&) -> Queue & = delete;
+
+		Queue(Queue&& other) 
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
+			, device_{ std::exchange(other.device_, nullptr) }
+			, family_index_{ std::exchange(other.family_index_, ~0u) }
+			, queue_index_{ std::exchange(other.queue_index_, ~0u) } {}
+
+		auto operator=(Queue&& other) -> Queue& {
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			device_ = std::exchange(other.device_, nullptr);
+			family_index_ = std::exchange(other.family_index_, ~0u);
+			queue_index_ = std::exchange(other.queue_index_, ~0u);
+			return *this;
+		}
 
 		static auto construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> Owned<Queue>;
 
@@ -72,8 +103,8 @@ namespace edge::gfx::vulkan {
 	private:
 		auto _construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool;
 
-		vk::Device device_{ VK_NULL_HANDLE };
-		vk::AllocationCallbacks const* allocator_{ nullptr };
+		vkw::Device const* device_{ nullptr };
+
 		vk::Queue handle_{ VK_NULL_HANDLE };
 		uint32_t family_index_{ 0u };
 		uint32_t queue_index_{ 0u };
@@ -81,9 +112,25 @@ namespace edge::gfx::vulkan {
 
 	class CommandAllocator final : public IGFXCommandAllocator {
 	public:
+		CommandAllocator() = default;
 		~CommandAllocator() override;
 
-		static auto construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> Owned<CommandAllocator>;
+		CommandAllocator(const CommandAllocator&) = delete;
+		auto operator=(const CommandAllocator&) -> CommandAllocator & = delete;
+
+		CommandAllocator(CommandAllocator&& other)
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
+			, device_{ std::exchange(other.device_, nullptr) }
+			, family_index_{ std::exchange(other.family_index_, ~0u) } {}
+
+		auto operator=(CommandAllocator&& other) -> CommandAllocator& {
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			device_ = std::exchange(other.device_, nullptr);
+			family_index_ = std::exchange(other.family_index_, ~0u);
+			return *this;
+		}
+
+		static auto construct(vkw::Device const& device, uint32_t family_index) -> Owned<CommandAllocator>;
 
 		auto allocate_command_list() const -> Shared<IGFXCommandList> override;
 		auto reset() -> void override;
@@ -92,21 +139,34 @@ namespace edge::gfx::vulkan {
 			return handle_;
 		}
 	private:
-		auto _construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> bool;
+		auto _construct(vkw::Device const& device, uint32_t family_index) -> bool;
 
-		vk::Device device_{ VK_NULL_HANDLE };
-		vk::AllocationCallbacks const* allocator_{ nullptr };
+		vkw::Device const* device_{ nullptr };
 		uint32_t family_index_{ 0u };
 		vk::CommandPool handle_{ VK_NULL_HANDLE };
 	};
 
 	class CommandList final : public IGFXCommandList {
 	public:
+		CommandList() = default;
 		~CommandList() override;
 
-		static auto construct(vk::Device device, vk::CommandPool command_pool) -> Owned<CommandList>;
+		CommandList(const CommandList&) = delete;
+		auto operator=(const CommandList&) -> CommandList & = delete;
 
-		auto reset() -> void override;
+		CommandList(CommandList&& other)
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
+			, command_pool_{ std::exchange(other.command_pool_, VK_NULL_HANDLE) }
+			, device_{ std::exchange(other.device_, nullptr) }{}
+
+		auto operator=(CommandList&& other) -> CommandList& {
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			command_pool_ = std::exchange(other.command_pool_, VK_NULL_HANDLE);
+			device_ = std::exchange(other.device_, nullptr);
+			return *this;
+		}
+
+		static auto construct(vkw::Device const& device, vk::CommandPool command_pool) -> Owned<CommandList>;
 
 		auto begin() -> bool override;
 		auto end() -> bool override;
@@ -123,14 +183,25 @@ namespace edge::gfx::vulkan {
 		auto insert_marker(std::string_view name, uint32_t color) const -> void override;
 		auto end_marker() const -> void override;
 
-		auto get_handle() const -> vk::CommandBuffer {
-			return handle_;
-		}
+		auto get_handle() const -> vk::CommandBuffer { return handle_; }
 	private:
-		auto _construct(vk::Device device, vk::CommandPool command_pool) -> bool;
+		auto _construct(vkw::Device const& device, vk::CommandPool command_pool) -> bool;
 
-		vk::CommandBuffer handle_;
-		vk::CommandPool command_pool_;
+		vkw::Device const* device_{ nullptr };
+
+		vk::CommandBuffer handle_{ VK_NULL_HANDLE };
+		vk::CommandPool command_pool_{ VK_NULL_HANDLE };
+	};
+
+	class PresentationFrame final : public IGFXPresentationFrame {
+	public:
+		~PresentationFrame() override;
+	private:
+		vkw::Device const* device_{ nullptr };
+
+		vk::Semaphore image_available_{ VK_NULL_HANDLE };
+		vk::Semaphore rendering_finished_{ VK_NULL_HANDLE };
+		vk::Fence fence_{ VK_NULL_HANDLE };
 	};
 
 	class PresentationEngine final : public IGFXPresentationEngine {
@@ -217,13 +288,10 @@ namespace edge::gfx::vulkan {
 
 		auto create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> Shared<IGFXPresentationEngine> override;
 
-		auto get_allocation_callbacks() const -> vk::AllocationCallbacks const* {
-			return &vk_alloc_callbacks_;
-		}
+		auto get_device() const -> vkw::Device const& { return vkw_device_; }
+		auto get_allocation_callbacks() const -> vk::AllocationCallbacks const* { return &vk_alloc_callbacks_; }
 
-		auto get_surface() const -> vk::SurfaceKHR {
-			return vk_surface_;
-		}
+		auto get_surface() const -> vk::SurfaceKHR { return vk_surface_; }
 	private:
 		vk::detail::DynamicLoader vk_dynamic_loader_;
 		vk::AllocationCallbacks vk_alloc_callbacks_{};
