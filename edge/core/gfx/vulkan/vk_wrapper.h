@@ -1,11 +1,12 @@
 #pragma once
 
+#include "../../foundation/foundation.h"
+
 #include <array>
 #include <expected>
 #include <string_view>
 #include <vector>
 #include <tuple>
-#include <memory>
 #include <cstdlib>
 #include <span>
 #include <functional>
@@ -26,11 +27,9 @@
 #endif
 #endif
 
-namespace vkw {
-	class Instance;
-	class PhysicalDevice;
+namespace edge::vkw {
 	class Device;
-	class DebugUtilsMessengerEXT;
+	class Swapchain;
 
 	template<typename T>
 	using Result = std::expected<T, vk::Result>;
@@ -444,7 +443,7 @@ namespace vkw {
 
 		Vector<std::pair<const char*, bool>> requested_extensions_;
 
-		Vector<std::shared_ptr<void>> requested_features_;
+		Vector<Shared<void>> requested_features_;
 		void* last_feature_ptr_{ nullptr };
 	};
 
@@ -474,6 +473,9 @@ namespace vkw {
 			return *this;
 		}
 
+		auto create_handle(const vk::SwapchainCreateInfoKHR& create_info, vk::SwapchainKHR& handle) const -> vk::Result;
+		auto destroy_handle(vk::SwapchainKHR handle) const -> void;
+
 		template<typename T>
 		auto set_object_name(T object, std::string_view name) const -> void {
 			set_object_name(T::objectType, reinterpret_cast<uint64_t>(static_cast<T::CType>(object)), name);
@@ -500,5 +502,113 @@ namespace vkw {
 
 		Vector<const char*> enabled_extensions_;
 		Vector<vk::ExtensionProperties> supported_extensions_;
+	};
+
+	class Swapchain {
+	public:
+		struct State {
+			uint32_t image_count;
+			vk::SurfaceFormatKHR format;
+			vk::Extent2D extent;
+			vk::SurfaceTransformFlagBitsKHR transform;
+			bool vsync;
+			bool hdr;
+		};
+
+		Swapchain(Device const& device, vk::SwapchainKHR swapchain, const State& new_state);
+		~Swapchain();
+
+		Swapchain(const Swapchain&) = delete;
+		auto operator=(const Swapchain&) -> Swapchain & = delete;
+
+		Swapchain(Swapchain&& other) :
+			handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) },
+			device_{ std::exchange(other.device_, nullptr) } {
+		}
+
+		auto operator=(Swapchain&& other) -> Swapchain& {
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			device_ = std::exchange(other.device_, nullptr);
+			return *this;
+		}
+
+		auto reset() -> void;
+
+		auto get_image_count() const noexcept -> uint32_t { return state_.image_count; }
+		auto get_format() const noexcept -> vk::Format { return state_.format.format; }
+		auto get_color_space() const noexcept -> vk::ColorSpaceKHR { return state_.format.colorSpace; }
+		auto get_extent() const noexcept -> vk::Extent2D { return state_.extent; }
+		auto get_width() const noexcept -> uint32_t { return state_.extent.width; }
+		auto get_height() const noexcept -> uint32_t { return state_.extent.height; }
+		auto get_transform() const noexcept -> vk::SurfaceTransformFlagBitsKHR { return state_.transform; }
+		auto is_vsync_enabled() const noexcept -> bool { return state_.vsync; }
+		auto is_hdr_enabled() const noexcept -> bool { return state_.hdr; }
+
+		operator vk::SwapchainKHR() const noexcept { return handle_; }
+		operator VkSwapchainKHR() const noexcept { return handle_; }
+		auto get_handle() const noexcept -> vk::SwapchainKHR { return handle_; }
+	private:
+		vk::SwapchainKHR handle_{ VK_NULL_HANDLE };
+		Device const* device_{ nullptr };
+
+		State state_;
+	};
+
+	class SwapchainBuilder {
+	public:
+		SwapchainBuilder(Device const& device, vk::SurfaceKHR surface);
+
+		auto set_image_count(uint32_t count) -> SwapchainBuilder& {
+			requested_state_.image_count = count;
+			return *this;
+		}
+
+		auto set_image_format(vk::Format format) -> SwapchainBuilder& {
+			requested_state_.format.format = format;
+			return *this;
+		}
+
+		auto set_color_space(vk::ColorSpaceKHR color_space) -> SwapchainBuilder& {
+			requested_state_.format.colorSpace = color_space;
+			return *this;
+		}
+
+		auto set_image_extent(vk::Extent2D extent) -> SwapchainBuilder& {
+			requested_state_.extent = extent;
+			return *this;
+		}
+
+		auto set_image_extent(uint32_t width, uint32_t height) -> SwapchainBuilder& {
+			requested_state_.extent = vk::Extent2D{ width, height };
+			return *this;
+		}
+
+		auto enable_vsync(bool enable) -> SwapchainBuilder& {
+			requested_state_.vsync = enable;
+			return *this;
+		}
+
+		auto enable_hdr(bool enable) -> SwapchainBuilder& {
+			requested_state_.hdr = enable;
+			return *this;
+		}
+
+		auto set_old_swapchain(vk::SwapchainKHR old_swapchain) -> SwapchainBuilder& {
+			old_swapchain_ = old_swapchain;
+			return *this;
+		}
+
+		auto build() -> Result<Swapchain>;
+	private:
+		static auto choose_suitable_extent(vk::Extent2D request_extent, const vk::SurfaceCapabilitiesKHR& surface_caps) -> vk::Extent2D;
+		static auto choose_surface_format(const vk::SurfaceFormatKHR requested_surface_format, const Vector<vk::SurfaceFormatKHR>& available_surface_formats, bool prefer_hdr = false) -> vk::SurfaceFormatKHR;
+		static auto choose_suitable_composite_alpha(vk::CompositeAlphaFlagBitsKHR request_composite_alpha, vk::CompositeAlphaFlagsKHR supported_composite_alpha) -> vk::CompositeAlphaFlagBitsKHR;
+		static auto choose_suitable_present_mode(vk::PresentModeKHR request_present_mode, std::span<const vk::PresentModeKHR> available_present_modes, std::span<const vk::PresentModeKHR> present_mode_priority_list) -> vk::PresentModeKHR;
+
+		Swapchain::State requested_state_;
+		vk::SwapchainKHR old_swapchain_{ VK_NULL_HANDLE };
+
+		Device const* device_{ nullptr };
+		vk::SurfaceKHR surface_{ VK_NULL_HANDLE };
 	};
 }

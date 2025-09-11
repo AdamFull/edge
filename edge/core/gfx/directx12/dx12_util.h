@@ -7,7 +7,7 @@
 
 #define D3D12_CHECK_RESULT(result, error_text) \
     if(FAILED(result)) { \
-        spdlog::error("[D3D12 Graphics Context]: {} Reason: {:#010x}", error_text, static_cast<uint32_t>(result)); \
+        EDGE_LOGE("[D3D12 Graphics Context]: {} Reason: {:#010x}", error_text, static_cast<uint32_t>(result)); \
         return false; \
     }
 

@@ -13,14 +13,6 @@
 
 #include "vk_wrapper.h"
 
-#include <spdlog/spdlog.h>
-
-#define GFX_LOGI(...) spdlog::info("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
-#define GFX_LOGD(...) spdlog::debug("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
-#define GFX_LOGT(...) spdlog::trace("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
-#define GFX_LOGW(...) spdlog::warn("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
-#define GFX_LOGE(...) spdlog::error("[{}]: {}", GFX_SCOPE, std::format(__VA_ARGS__))
-
 namespace edge::gfx {
 	class VulkanGraphicsContext;
 	class VulkanQueue;
@@ -74,7 +66,7 @@ namespace edge::gfx {
 
 		static auto construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> std::unique_ptr<VulkanQueue>;
 
-		auto create_command_allocator() const -> std::shared_ptr<IGFXCommandAllocator> override;
+		auto create_command_allocator() const -> Shared<IGFXCommandAllocator> override;
 
 		auto submit(const SubmitQueueInfo& submit_info) -> void override;
 		auto wait_idle() -> SyncResult override;
@@ -102,7 +94,7 @@ namespace edge::gfx {
 
 		static auto construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> std::unique_ptr<VulkanCommandAllocator>;
 
-		auto allocate_command_list() const -> std::shared_ptr<IGFXCommandList> override;
+		auto allocate_command_list() const -> Shared<IGFXCommandList> override;
 		auto reset() -> void override;
 
 		auto get_handle() const -> vk::CommandPool {
@@ -150,33 +142,30 @@ namespace edge::gfx {
 		vk::CommandPool command_pool_;
 	};
 
-	class VulkanSwapchain final : public IGFXSwapchain {
+	class VulkanPresentationEngine final : public IGFXPresentationEngine {
 	public:
-		~VulkanSwapchain() override;
+		~VulkanPresentationEngine() override;
 
-		static auto construct(const VulkanGraphicsContext& ctx, const SwapchainCreateInfo& create_info) -> std::unique_ptr<VulkanSwapchain>;
+		static auto construct(const VulkanGraphicsContext& ctx, const PresentationEngineCreateInfo& create_info) -> std::unique_ptr<VulkanPresentationEngine>;
 
 		auto get_current_image_index() const -> uint32_t override;
-		auto get_current_image() const -> std::shared_ptr<IGFXImage> override;
+		auto get_current_image() const -> Shared<IGFXImage> override;
 
 		auto acquire_next_image(uint32_t* next_image_index) -> bool override;
 
 		auto reset() -> bool override;
 	private:
-		auto _construct(const VulkanGraphicsContext& ctx, const SwapchainCreateInfo& create_info) -> bool;
+		auto _construct(const VulkanGraphicsContext& ctx, const PresentationEngineCreateInfo& create_info) -> bool;
 		auto get_prev_frame_index() const -> uint32_t;
 
-		vk::Device device_{ VK_NULL_HANDLE };
-		vk::PhysicalDevice physical_{ VK_NULL_HANDLE };
-		vk::SurfaceKHR surface_{ VK_NULL_HANDLE };
-		vk::AllocationCallbacks const* allocator_{ nullptr };
+		vkw::Device const* device_{ nullptr };
 
 		vk::SwapchainKHR handle_{ VK_NULL_HANDLE };
-		vk::SwapchainCreateInfoKHR create_info_;
 
 		struct Frame {
 			vk::Semaphore image_available_{ VK_NULL_HANDLE };
-			vk::Fence fence_;
+			vk::Semaphore queue_finished_{ VK_NULL_HANDLE };
+			vk::Fence fence_{ VK_NULL_HANDLE };
 		};
 
 		std::vector<Frame> frames_in_flight_;
@@ -190,8 +179,8 @@ namespace edge::gfx {
 	//	public:
 	//		~Frame();
 	//
-	//		//std::shared_ptr<VulkanImage> image_;
-	//		//std::shared_ptr<VulkanImageView> image_view_;
+	//		//Shared<VulkanImage> image_;
+	//		//Shared<VulkanImageView> image_view_;
 	//
 	//		vk::Semaphore image_available_{ VK_NULL_HANDLE };
 	//		vk::Semaphore execution_finished_{ VK_NULL_HANDLE };
@@ -202,7 +191,7 @@ namespace edge::gfx {
 	//
 	//	static auto construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> std::unique_ptr<VulkanPresentationEngine>;
 	//
-	//	auto get_queue() const -> std::shared_ptr<IGFXQueue> override {
+	//	auto get_queue() const -> Shared<IGFXQueue> override {
 	//		return queue_;
 	//	}
 	//
@@ -221,9 +210,9 @@ namespace edge::gfx {
 	//	vk::SwapchainKHR handle_{ VK_NULL_HANDLE };
 	//	vk::SwapchainCreateInfoKHR swapchain_create_info;
 	//
-	//	std::shared_ptr<VulkanQueue> queue_;
-	//	std::shared_ptr<VulkanCommandAllocator> command_allocator_;
-	//	std::vector<std::shared_ptr<IGFXCommandList>> command_lists_;
+	//	Shared<VulkanQueue> queue_;
+	//	Shared<VulkanCommandAllocator> command_allocator_;
+	//	std::vector<Shared<IGFXCommandList>> command_lists_;
 	//
 	//	// Swapchain settings
 	//	bool vsync_{ false };
@@ -240,10 +229,10 @@ namespace edge::gfx {
 
 		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
 
-		auto create_queue(QueueType queue_type) const -> std::shared_ptr<IGFXQueue> override;
-		auto create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> override;
+		auto create_queue(QueueType queue_type) const -> Shared<IGFXQueue> override;
+		auto create_semaphore(uint64_t value) const -> Shared<IGFXSemaphore> override;
 
-		auto create_swapchain(const SwapchainCreateInfo& create_info) -> std::shared_ptr<IGFXSemaphore> override;
+		auto create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> Shared<IGFXPresentationEngine> override;
 
 		auto get_allocation_callbacks() const -> vk::AllocationCallbacks const* {
 			return &vk_alloc_callbacks_;

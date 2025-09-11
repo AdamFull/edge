@@ -52,19 +52,19 @@ namespace edge::gfx {
 
 		switch (severity) {
 		case D3D12_MESSAGE_SEVERITY_CORRUPTION:
-			spdlog::critical("[D3D12] {}: {}", category_str, description);
+			EDGE_LOGE("[D3D12] {}: {}", category_str, description);
 			break;
 		case D3D12_MESSAGE_SEVERITY_ERROR:
-			spdlog::error("[D3D12] {}: {}", category_str, description);
+			EDGE_LOGE("[D3D12] {}: {}", category_str, description);
 			break;
 		case D3D12_MESSAGE_SEVERITY_WARNING:
-			spdlog::warn("[D3D12] {}: {}", category_str, description);
+			EDGE_LOGW("[D3D12] {}: {}", category_str, description);
 			break;
 		case D3D12_MESSAGE_SEVERITY_INFO:
-			spdlog::info("[D3D12] {}: {}", category_str, description);
+			EDGE_LOGI("[D3D12] {}: {}", category_str, description);
 			break;
 		case D3D12_MESSAGE_SEVERITY_MESSAGE:
-			spdlog::debug("[D3D12] {}: {}", category_str, description);
+			EDGE_LOGD("[D3D12] {}: {}", category_str, description);
 			break;
 		}
 	}
@@ -84,7 +84,7 @@ namespace edge::gfx {
 	auto DirectX12GraphicsContext::create(const GraphicsContextCreateInfo& create_info) -> bool {
 		window_handle_ = static_cast<HWND>(create_info.window->get_native_handle());
 		if (!window_handle_) {
-			spdlog::error("[D3D12 Graphics Context]: Invalid window handle");
+			EDGE_LOGE("[D3D12 Graphics Context]: Invalid window handle");
 			return false;
 		}
 
@@ -183,7 +183,7 @@ namespace edge::gfx {
 				WideCharToMultiByte(CP_UTF8, 0, new_device.desc.Description, -1, adapter_name.data(), size, nullptr, nullptr);
 			}
 
-			spdlog::info("  [{}] {} (Feature Level: {}, Type: {}, VRAM: {} MB, RT: {}, MS: {}, VRS: {})",
+			EDGE_LOGI("  [{}] {} (Feature Level: {}, Type: {}, VRAM: {} MB, RT: {}, MS: {}, VRS: {})",
 				adapter_index, adapter_name,
 				get_feature_level_string(D3D_FEATURE_LEVEL_12_0),
 				(new_device.device_type == GraphicsDeviceType::eSoftware) ? "Software" : (new_device.device_type == GraphicsDeviceType::eDiscrete ? "Discrete" : "Integrated"),
@@ -196,7 +196,7 @@ namespace edge::gfx {
 		}
 
 		if (devices_.empty()) {
-			spdlog::error("[D3D12 Graphics Context]: No suitable D3D12 adapters found");
+			EDGE_LOGE("[D3D12 Graphics Context]: No suitable D3D12 adapters found");
 			return false;
 		}
 
@@ -208,12 +208,12 @@ namespace edge::gfx {
 			bool requested_features_supported{ true };
 			// Check for requested features support
 			if (create_info.require_features.ray_tracing && !device.supports_ray_tracing) {
-				spdlog::warn("[D3D12 Graphics Context]: Adapter {} doesn't support ray tracing", device_index);
+				EDGE_LOGW("[D3D12 Graphics Context]: Adapter {} doesn't support ray tracing", device_index);
 				requested_features_supported = false;
 			}
 
 			if (create_info.require_features.mesh_shading && !device.supports_mesh_shaders) {
-				spdlog::warn("[D3D12 Graphics Context]: Adapter {} doesn't support mesh shaders", device_index);
+				EDGE_LOGW("[D3D12 Graphics Context]: Adapter {} doesn't support mesh shaders", device_index);
 				requested_features_supported = false;
 			}
 
@@ -237,7 +237,7 @@ namespace edge::gfx {
 
 		if (selected_adapter_index_ == -1) {
 			if (fallback_adapter_index == -1) {
-				spdlog::error("[D3D12 Graphics Context]: No suitable adapter found");
+				EDGE_LOGE("[D3D12 Graphics Context]: No suitable adapter found");
 				return false;
 			}
 			selected_adapter_index_ = fallback_adapter_index;
@@ -252,7 +252,7 @@ namespace edge::gfx {
 			WideCharToMultiByte(CP_UTF8, 0, device.desc.Description, -1, adapter_name.data(), size, nullptr, nullptr);
 		}
 
-		spdlog::info("[D3D12 Graphics Context]: Selected adapter [{}]: {}", selected_adapter_index_, adapter_name);
+		EDGE_LOGI("[D3D12 Graphics Context]: Selected adapter [{}]: {}", selected_adapter_index_, adapter_name);
 
 		if (device.supports_ray_tracing) {
 			device.logical->QueryInterface(IID_PPV_ARGS(&device.logical_rtx));
@@ -289,7 +289,7 @@ namespace edge::gfx {
 			debug_validation_->AddStorageFilterEntries(&filter);
 
 			if (FAILED(debug_validation_->RegisterMessageCallback(debug_message_callback, D3D12_MESSAGE_CALLBACK_FLAG_NONE, this, &debug_callback_cookie_))) {
-				spdlog::warn("[D3D12 Graphics Context]: Failed to create debug messager.");
+				EDGE_LOGW("[D3D12 Graphics Context]: Failed to create debug messager.");
 			}
 		}
 #endif
@@ -305,12 +305,12 @@ namespace edge::gfx {
 		return true;
 	}
 
-	auto DirectX12GraphicsContext::create_queue(QueueType queue_type) -> std::shared_ptr<IGFXQueue> {
+	auto DirectX12GraphicsContext::create_queue(QueueType queue_type) -> Shared<IGFXQueue> {
 		return D3D12Queue::construct(*this, (queue_type == QueueType::eDirect) ? D3D12_COMMAND_LIST_TYPE_DIRECT : 
 			(queue_type == QueueType::eCompute) ? D3D12_COMMAND_LIST_TYPE_COMPUTE : D3D12_COMMAND_LIST_TYPE_COPY);
 	}
 
-	auto DirectX12GraphicsContext::create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> {
+	auto DirectX12GraphicsContext::create_semaphore(uint64_t value) const -> Shared<IGFXSemaphore> {
 		return D3D12Semaphore::construct(*this, value);
 	}
 

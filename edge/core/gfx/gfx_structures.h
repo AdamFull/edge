@@ -1,8 +1,9 @@
 #pragma once
 
-#include "gfx_enum.h"
+#include <tiny_imageformat/tinyimageformat.h>
 
-#include <memory>
+#include "gfx_enum.h"
+#include "../foundation/foundation.h"
 
 namespace edge::platform {
 	class IPlatformWindow;
@@ -18,6 +19,14 @@ namespace edge::gfx {
 
 	class IGFXImage;
 
+	struct Extent2D {
+		uint32_t width, height;
+	};
+
+	struct Extent3D {
+		uint32_t width, height, depth;
+	};
+
 	struct GraphicsContextCreateInfo {
 		GraphicsDeviceType physical_device_type;
 		platform::IPlatformWindow* window;
@@ -29,14 +38,14 @@ namespace edge::gfx {
 	};
 
 	struct SemaphoreSubmitInfo {
-		std::shared_ptr<IGFXSemaphore> semaphore;
+		Shared<IGFXSemaphore> semaphore;
 		uint64_t value;
 	};
 
 	struct SubmitQueueInfo {
 		std::vector<SemaphoreSubmitInfo> wait_semaphores;
 		std::vector<SemaphoreSubmitInfo> signal_semaphores;
-		std::vector<std::shared_ptr<IGFXCommandList>> command_lists;
+		std::vector<Shared<IGFXCommandList>> command_lists;
 	};
 
 	struct PresentInfo {
@@ -44,9 +53,14 @@ namespace edge::gfx {
 		std::vector<SemaphoreSubmitInfo> signal_semaphores;
 	};
 
-	struct SwapchainCreateInfo {
+	struct PresentationEngineCreateInfo {
+		QueueType queue_type;
+
 		uint32_t width, height;
 		uint32_t image_count;
+		TinyImageFormat format;
+
 		bool vsync;
+		bool hdr;
 	};
 }

@@ -2,11 +2,10 @@
 
 #include <atomic>
 #include <ranges>
+#include <numeric>
 
 #define VMA_IMPLEMENTATION
 #include <vk_mem_alloc.h>
-
-#include <spdlog/spdlog.h>
 
 static bool g_volk_initialized{ false };
 static std::atomic<uint64_t> g_volk_ref_counter{ 0ull };
@@ -18,17 +17,11 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #define VKW_CHECK_RESULT(expr) { auto result = expr; if(result != VK_SUCCESS) return std::unexpected(result); }
 
-#define VKW_LOGI(...) spdlog::info("[{}]: {}", VKW_SCOPE, std::format(__VA_ARGS__))
-#define VKW_LOGD(...) spdlog::debug("[{}]: {}", VKW_SCOPE, std::format(__VA_ARGS__))
-#define VKW_LOGT(...) spdlog::trace("[{}]: {}", VKW_SCOPE, std::format(__VA_ARGS__))
-#define VKW_LOGW(...) spdlog::warn("[{}]: {}", VKW_SCOPE, std::format(__VA_ARGS__))
-#define VKW_LOGE(...) spdlog::error("[{}]: {}", VKW_SCOPE, std::format(__VA_ARGS__))
-
-namespace vkw {
+namespace edge::vkw {
 #ifdef USE_VALIDATION_LAYERS
 #endif
 
-#define VKW_SCOPE "InstanceBuilder"
+#define EDGE_LOGGER_SCOPE "InstanceBuilder"
 
 	inline auto enumerate_instance_layer_properties(vk::AllocationCallbacks const* allocator) -> Result<Vector<vk::LayerProperties>> {
 		uint32_t count;
@@ -89,11 +82,124 @@ namespace vkw {
 	inline auto get_queue_family_properties(vk::PhysicalDevice device, vk::AllocationCallbacks const* allocator = nullptr) -> Vector<vk::QueueFamilyProperties> {
 		uint32_t count;
 		device.getQueueFamilyProperties(&count, nullptr);
-		
+
 		Vector<vk::QueueFamilyProperties> output(count, allocator);
 		device.getQueueFamilyProperties(&count, output.data());
 
 		return output;
+	}
+
+	inline auto get_surface_formats(vk::PhysicalDevice device, vk::SurfaceKHR surface, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::SurfaceFormatKHR>> {
+		uint32_t count;
+		if (auto result = device.getSurfaceFormatsKHR(surface, &count, nullptr); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		Vector<vk::SurfaceFormatKHR> output(count, allocator);
+		if (auto result = device.getSurfaceFormatsKHR(surface, &count, output.data()); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return output;
+	}
+
+	inline auto get_surface_present_modes(vk::PhysicalDevice device, vk::SurfaceKHR surface, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::PresentModeKHR>> {
+		uint32_t count;
+		if (auto result = device.getSurfacePresentModesKHR(surface, &count, nullptr); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		Vector<vk::PresentModeKHR> output(count, allocator);
+		if (auto result = device.getSurfacePresentModesKHR(surface, &count, output.data()); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return output;
+	}
+
+	inline auto is_hdr_format(vk::Format format) -> bool {
+		switch (format) {
+			// 10-bit formats
+		case vk::Format::eA2B10G10R10UnormPack32:
+		case vk::Format::eA2R10G10B10UnormPack32:
+		case vk::Format::eA2B10G10R10UintPack32:
+		case vk::Format::eA2R10G10B10UintPack32:
+		case vk::Format::eA2B10G10R10SintPack32:
+		case vk::Format::eA2R10G10B10SintPack32:
+
+			// 16-bit float formats
+		case vk::Format::eR16G16B16A16Sfloat:
+		case vk::Format::eR16G16B16Sfloat:
+
+			// 32-bit float formats
+		case vk::Format::eR32G32B32A32Sfloat:
+		case vk::Format::eR32G32B32Sfloat:
+
+			// BC6H (HDR texture compression)
+		case vk::Format::eBc6HUfloatBlock:
+		case vk::Format::eBc6HSfloatBlock:
+
+			// ASTC HDR
+		case vk::Format::eAstc4x4SfloatBlock:
+		case vk::Format::eAstc5x4SfloatBlock:
+		case vk::Format::eAstc5x5SfloatBlock:
+		case vk::Format::eAstc6x5SfloatBlock:
+		case vk::Format::eAstc6x6SfloatBlock:
+		case vk::Format::eAstc8x5SfloatBlock:
+		case vk::Format::eAstc8x6SfloatBlock:
+		case vk::Format::eAstc8x8SfloatBlock:
+		case vk::Format::eAstc10x5SfloatBlock:
+		case vk::Format::eAstc10x6SfloatBlock:
+		case vk::Format::eAstc10x8SfloatBlock:
+		case vk::Format::eAstc10x10SfloatBlock:
+		case vk::Format::eAstc12x10SfloatBlock:
+		case vk::Format::eAstc12x12SfloatBlock:
+			return true;
+
+		default:
+			return false;
+		}
+	}
+
+	inline auto is_hdr_color_space(vk::ColorSpaceKHR color_space) -> bool {
+		switch (color_space) {
+			// HDR10 color spaces
+		case vk::ColorSpaceKHR::eHdr10St2084EXT:
+		case vk::ColorSpaceKHR::eHdr10HlgEXT:
+
+			// Dolby Vision
+		case vk::ColorSpaceKHR::eDolbyvisionEXT:
+
+			// Extended sRGB (scRGB)
+		case vk::ColorSpaceKHR::eExtendedSrgbLinearEXT:
+		case vk::ColorSpaceKHR::eExtendedSrgbNonlinearEXT:
+
+			// Display P3
+		case vk::ColorSpaceKHR::eDisplayP3NonlinearEXT:
+		case vk::ColorSpaceKHR::eDisplayP3LinearEXT:
+
+			// Wide color gamut
+		case vk::ColorSpaceKHR::eBt2020LinearEXT:
+		case vk::ColorSpaceKHR::eBt709LinearEXT:
+		case vk::ColorSpaceKHR::eDciP3NonlinearEXT:
+		case vk::ColorSpaceKHR::eAdobergbLinearEXT:
+		case vk::ColorSpaceKHR::eAdobergbNonlinearEXT:
+			return true;
+
+		default:
+			return false;
+		}
+	}
+
+	inline auto check_format_hdr_support(vk::PhysicalDevice device, vk::Format format) -> bool {
+		vk::FormatProperties props;
+		device.getFormatProperties(format, &props);
+
+		bool supports_color_attachment = static_cast<bool>(props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eColorAttachment);
+		bool supports_storage_image = static_cast<bool>(props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eStorageImage);
+		bool supports_sampled_image = static_cast<bool>(props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImage);
+
+		return is_hdr_format(format) && supports_color_attachment && supports_storage_image && supports_sampled_image;
 	}
 
 	InstanceBuilder::InstanceBuilder(vk::AllocationCallbacks const* allocator) :
@@ -108,7 +214,7 @@ namespace vkw {
 	auto InstanceBuilder::build() -> Result<vk::Instance> {
 		// Request all validation layers supported
 		Vector<vk::LayerProperties> all_layer_properties{ allocator_ };
-		
+
 		if (auto request = enumerate_instance_layer_properties(allocator_); request.has_value()) {
 			all_layer_properties = std::move(request.value());
 		}
@@ -123,7 +229,7 @@ namespace vkw {
 		// Check enabled layers
 		for (auto it = enabled_layers_.begin(); it != enabled_layers_.end();) {
 			if (!check_layer_support(*it)) {
-				VKW_LOGW("Unsupported layer \"{}\" removed.", *it);
+				EDGE_SLOGW("Unsupported layer \"{}\" removed.", *it);
 				it = enabled_extensions_.erase(it);
 				continue;
 			}
@@ -152,7 +258,7 @@ namespace vkw {
 		// Check enabled extensions
 		for (auto it = enabled_extensions_.begin(); it != enabled_extensions_.end();) {
 			if (!check_ext_support(*it)) {
-				VKW_LOGW("Unsupported extension \"{}\" removed.", *it);
+				EDGE_SLOGW("Unsupported extension \"{}\" removed.", *it);
 				it = enabled_extensions_.erase(it);
 				continue;
 			}
@@ -160,7 +266,7 @@ namespace vkw {
 			++it;
 		}
 
-#define TRY_ENABLE_EXTENSION(ext) if(!check_ext_support(ext)) { VKW_LOGE("Extension \"{}\" not supported.", ext); return std::unexpected(vk::Result::eErrorExtensionNotPresent); } add_extension(ext);
+#define TRY_ENABLE_EXTENSION(ext) if(!check_ext_support(ext)) { EDGE_SLOGE("Extension \"{}\" not supported.", ext); return std::unexpected(vk::Result::eErrorExtensionNotPresent); } add_extension(ext);
 
 		// Surface
 		if (enable_surface_) {
@@ -234,9 +340,9 @@ namespace vkw {
 		return instance_handle;
 	}
 
-#undef VKW_SCOPE // InstanceBuilder
+#undef EDGE_LOGGER_SCOPE // InstanceBuilder
 
-#define VKW_SCOPE "DeviceSelector"
+#define EDGE_LOGGER_SCOPE "DeviceSelector"
 
 	DeviceSelector::DeviceSelector(vk::Instance instance, vk::AllocationCallbacks const* allocator) :
 		instance_{ instance },
@@ -267,7 +373,7 @@ namespace vkw {
 
 			// No extensions found. Bug?
 			if (available_extensions.empty()) {
-				VKW_LOGE("Device \"{}\" have no supported extensions. Check driver.", std::string_view(properties.deviceName));
+				EDGE_SLOGE("Device \"{}\" have no supported extensions. Check driver.", std::string_view(properties.deviceName));
 				continue;
 			}
 
@@ -284,11 +390,11 @@ namespace vkw {
 			for (auto& ext : requested_extensions_) {
 				if (!check_ext_support(ext.first)) {
 					if (ext.second) {
-						VKW_LOGE("Device \"{}\" is not support required extension \"{}\"", std::string_view(properties.deviceName), ext.first);
+						EDGE_SLOGE("Device \"{}\" is not support required extension \"{}\"", std::string_view(properties.deviceName), ext.first);
 						all_extension_supported = false;
 					}
 
-					VKW_LOGW("Device \"{}\" is not support optional extension \"{}\"", std::string_view(properties.deviceName), ext.first);
+					EDGE_SLOGW("Device \"{}\" is not support optional extension \"{}\"", std::string_view(properties.deviceName), ext.first);
 					continue;
 				}
 
@@ -303,7 +409,7 @@ namespace vkw {
 			// Check that device have queue with present support
 			if (surface_) {
 				auto queue_family_props = get_queue_family_properties(physical_device, allocator_);
-				
+
 				bool surface_supported{ false };
 				for (uint32_t queue_family_index = 0; queue_family_index < static_cast<uint32_t>(queue_family_props.size()); ++queue_family_index) {
 					if (physical_device.getSurfaceSupportKHR(queue_family_index, surface_) == VK_TRUE) {
@@ -342,7 +448,7 @@ namespace vkw {
 		auto properties = selected_device.getProperties();
 		auto queue_family_properties = get_queue_family_properties(selected_device, allocator_);
 
-		VKW_LOGD("{} device \"{}\" selected.", to_string(properties.deviceType), std::string_view(properties.deviceName));
+		EDGE_SLOGD("{} device \"{}\" selected.", to_string(properties.deviceType), std::string_view(properties.deviceName));
 
 		Vector<vk::DeviceQueueCreateInfo> queue_create_infos(queue_family_properties.size(), allocator_);
 		Vector<Vector<float>> family_queue_priorities(queue_family_properties.size(), Vector<float>(allocator_), allocator_);
@@ -419,9 +525,11 @@ namespace vkw {
 		return Device{ selected_device, device, allocator_, std::move(enabled_extensions) };
 	}
 
-#undef VKW_SCOPE // DeviceSelector
+#undef EDGE_LOGGER_SCOPE // DeviceSelector
 
-	Device::Device(vk::PhysicalDevice physical, vk::Device logical, vk::AllocationCallbacks const* allocator, Vector<const char*>&& enabled_extensions) 
+#define EDGE_LOGGER_SCOPE Device
+
+	Device::Device(vk::PhysicalDevice physical, vk::Device logical, vk::AllocationCallbacks const* allocator, Vector<const char*>&& enabled_extensions)
 		: physical_{ physical }, logical_{ logical }, allocator_{ allocator }, enabled_extensions_{ std::move(enabled_extensions) },
 		supported_extensions_{ allocator } {
 		if (physical) {
@@ -435,6 +543,14 @@ namespace vkw {
 		if (logical_) {
 			logical_.destroy();
 		}
+	}
+
+	auto Device::create_handle(const vk::SwapchainCreateInfoKHR& create_info, vk::SwapchainKHR& handle) const -> vk::Result {
+		return logical_.createSwapchainKHR(&create_info, allocator_, &handle);
+	}
+
+	auto Device::destroy_handle(vk::SwapchainKHR handle) const -> void {
+		logical_.destroySwapchainKHR(handle, allocator_);
 	}
 
 	auto Device::set_object_name(vk::ObjectType object_type, uint64_t object_handle, std::string_view name) const -> void {
@@ -466,4 +582,292 @@ namespace vkw {
 				return strcmp(extension_name, props.extensionName) == 0;
 			}) != supported_extensions_.end();
 	}
+
+#undef EDGE_LOGGER_SCOPE // Device
+
+#define EDGE_LOGGER_SCOPE "Swapchain"
+
+	Swapchain::Swapchain(Device const& device, vk::SwapchainKHR swapchain, const State& new_state)
+		: device_{ &device }
+		, handle_{ swapchain }
+		, state_{ new_state } {
+	}
+
+	Swapchain::~Swapchain() {
+		if (handle_) {
+			device_->destroy_handle(handle_);
+		}
+	}
+
+	auto Swapchain::reset() -> void {
+		handle_ = VK_NULL_HANDLE;
+		device_ = nullptr;
+	}
+
+#undef EDGE_LOGGER_SCOPE // Swapchain
+
+#define EDGE_LOGGER_SCOPE "SwapchainBuilder"
+
+	SwapchainBuilder::SwapchainBuilder(Device const& device, vk::SurfaceKHR surface) 
+		: device_{ &device }
+		, surface_{ surface } {
+	}
+
+	auto SwapchainBuilder::build() -> Result<Swapchain> {
+		vk::PresentModeKHR present_mode = (requested_state_.vsync) ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eMailbox;
+		std::array<vk::PresentModeKHR, 3ull> present_mode_priority_list{ 
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+			vk::PresentModeKHR::eFifo, vk::PresentModeKHR::eMailbox, 
+#else
+			vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eFifo,
+#endif
+			vk::PresentModeKHR::eImmediate };
+
+		auto physical_device = device_->get_physical();
+
+		Vector<vk::SurfaceFormatKHR> surface_formats;
+		if (auto result = get_surface_formats(physical_device, surface_, device_->get_allocator()); result.has_value()) {
+			surface_formats = std::move(result.value());
+		}
+
+		Vector<vk::PresentModeKHR> present_modes;
+		if (auto result = get_surface_present_modes(physical_device, surface_, device_->get_allocator()); result.has_value()) {
+			present_modes = std::move(result.value());
+		}
+
+		// Choose best properties based on surface capabilities
+		vk::SurfaceCapabilitiesKHR const surface_capabilities = physical_device.getSurfaceCapabilitiesKHR(surface_);
+
+		auto potential_extent = requested_state_.extent;
+		if (potential_extent.width == 1 || potential_extent.height == 1) {
+			potential_extent = surface_capabilities.currentExtent;
+		}
+
+		vk::SwapchainCreateInfoKHR create_info{};
+		create_info.oldSwapchain = old_swapchain_;
+		create_info.minImageCount = std::clamp(requested_state_.image_count, surface_capabilities.minImageCount, surface_capabilities.maxImageCount ? surface_capabilities.maxImageCount : std::numeric_limits<uint32_t>::max());
+		create_info.imageExtent = choose_suitable_extent(potential_extent, surface_capabilities);
+
+		const auto surface_format = choose_surface_format(requested_state_.format, surface_formats, requested_state_.hdr);
+		if (requested_state_.format != vk::Format::eUndefined && surface_format != requested_state_.format) {
+			EDGE_SLOGW("Requested format \"{}|{}\" is not supported. Selecting available \"{}|{}\".",
+				vk::to_string(requested_state_.format.format), vk::to_string(requested_state_.format.colorSpace),
+				vk::to_string(surface_format.format), vk::to_string(surface_format.colorSpace));
+		}
+		else {
+			EDGE_SLOGI("Selected format \"{}|{}\".", vk::to_string(surface_format.format), vk::to_string(surface_format.colorSpace));
+		}
+
+		create_info.imageFormat = surface_format.format;
+		create_info.imageColorSpace = surface_format.colorSpace;
+		create_info.imageArrayLayers = 1;
+
+		// TODO: Add usage valudation
+		const auto format_properties = physical_device.getFormatProperties(create_info.imageFormat);
+		create_info.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+
+		create_info.preTransform = ((requested_state_.transform & surface_capabilities.supportedTransforms) == requested_state_.transform) ? requested_state_.transform : surface_capabilities.currentTransform;
+		create_info.compositeAlpha = choose_suitable_composite_alpha(vk::CompositeAlphaFlagBitsKHR::eInherit, surface_capabilities.supportedCompositeAlpha);
+		create_info.presentMode = choose_suitable_present_mode(present_mode, present_modes, present_mode_priority_list);
+
+		create_info.surface = surface_;
+		create_info.clipped = VK_TRUE;
+		create_info.imageSharingMode = vk::SharingMode::eExclusive;
+
+		auto queue_family_properties = get_queue_family_properties(physical_device, device_->get_allocator());
+		Vector<uint32_t> queue_family_indices(queue_family_properties.size(), device_->get_allocator());
+		std::iota(queue_family_indices.begin(), queue_family_indices.end(), 0);
+
+		if (queue_family_indices.size() > 1) {
+			create_info.queueFamilyIndexCount = static_cast<uint32_t>(queue_family_indices.size());
+			create_info.pQueueFamilyIndices = queue_family_indices.data();
+			create_info.imageSharingMode = vk::SharingMode::eConcurrent;
+		}
+
+		vk::SwapchainKHR swapchain{ VK_NULL_HANDLE };
+		if (auto result = device_->create_handle(create_info, swapchain); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		Swapchain::State new_state{
+			.image_count = create_info.minImageCount,
+			.format = surface_format,
+			.extent = create_info.imageExtent,
+			.transform = create_info.preTransform,
+			.vsync = requested_state_.vsync,
+			.hdr = requested_state_.hdr && is_hdr_format(create_info.imageFormat) && is_hdr_color_space(create_info.imageColorSpace)
+		};
+		return Swapchain(*device_, swapchain, new_state);
+	}
+
+	auto SwapchainBuilder::choose_suitable_extent(vk::Extent2D request_extent, const vk::SurfaceCapabilitiesKHR& surface_caps) -> vk::Extent2D {
+		if (surface_caps.currentExtent.width == 0xFFFFFFFF) {
+			return request_extent;
+		}
+
+		if (request_extent.width < 1 || request_extent.height < 1) {
+			EDGE_SLOGW(" Image extent ({}, {}) not supported. Selecting ({}, {}).",
+				request_extent.width, request_extent.height,
+				surface_caps.currentExtent.width, surface_caps.currentExtent.height);
+			return surface_caps.currentExtent;
+		}
+
+		request_extent.width = std::clamp(request_extent.width, surface_caps.minImageExtent.width, surface_caps.maxImageExtent.width);
+		request_extent.height = std::clamp(request_extent.height, surface_caps.minImageExtent.height, surface_caps.maxImageExtent.height);
+
+		return request_extent;
+	}
+
+	auto SwapchainBuilder::choose_surface_format(const vk::SurfaceFormatKHR requested_surface_format, const Vector<vk::SurfaceFormatKHR>& available_surface_formats, bool prefer_hdr) -> vk::SurfaceFormatKHR {
+		// Separate formats by hdr support
+		Vector<vk::SurfaceFormatKHR> sdr_fromats{ available_surface_formats.get_allocator() };
+		Vector<vk::SurfaceFormatKHR> hdr_fromats{ available_surface_formats.get_allocator() };
+		for (const auto& surface_format : available_surface_formats) {
+			if (is_hdr_format(surface_format.format) && is_hdr_color_space(surface_format.colorSpace)) {
+				hdr_fromats.push_back(surface_format);
+			}
+			else {
+				sdr_fromats.push_back(surface_format);
+			}
+		}
+
+		// HDR priority list (in order of preference)
+		static const std::array<vk::SurfaceFormatKHR, 8> hdr_priority_list = {
+			// HDR10 formats - most compatible
+			vk::SurfaceFormatKHR{vk::Format::eA2B10G10R10UnormPack32, vk::ColorSpaceKHR::eHdr10St2084EXT},
+			vk::SurfaceFormatKHR{vk::Format::eA2R10G10B10UnormPack32, vk::ColorSpaceKHR::eHdr10St2084EXT},
+
+			// Display P3 formats - Apple ecosystem
+			vk::SurfaceFormatKHR{vk::Format::eA2B10G10R10UnormPack32, vk::ColorSpaceKHR::eDisplayP3NonlinearEXT},
+			vk::SurfaceFormatKHR{vk::Format::eA2R10G10B10UnormPack32, vk::ColorSpaceKHR::eDisplayP3NonlinearEXT},
+
+			// Extended sRGB (scRGB) - Windows
+			vk::SurfaceFormatKHR{vk::Format::eR16G16B16A16Sfloat, vk::ColorSpaceKHR::eExtendedSrgbLinearEXT},
+			vk::SurfaceFormatKHR{vk::Format::eA2B10G10R10UnormPack32, vk::ColorSpaceKHR::eExtendedSrgbNonlinearEXT},
+
+			// Rec. 2020 - broadcast standard
+			vk::SurfaceFormatKHR{vk::Format::eA2B10G10R10UnormPack32, vk::ColorSpaceKHR::eBt2020LinearEXT},
+			vk::SurfaceFormatKHR{vk::Format::eR16G16B16A16Sfloat, vk::ColorSpaceKHR::eBt2020LinearEXT}
+		};
+
+		// SDR priority list (in order of preference)
+		static const std::array<vk::SurfaceFormatKHR, 7> sdr_priority_list = {
+			// 10-bit formats
+			vk::SurfaceFormatKHR{vk::Format::eA2B10G10R10UnormPack32, vk::ColorSpaceKHR::eSrgbNonlinear},
+
+			// Standard sRGB formats
+			vk::SurfaceFormatKHR{vk::Format::eB8G8R8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear},
+			vk::SurfaceFormatKHR{vk::Format::eR8G8B8A8Srgb, vk::ColorSpaceKHR::eSrgbNonlinear},
+
+			// Unorm variants (gamma corrected manually)
+			vk::SurfaceFormatKHR{vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear},
+			vk::SurfaceFormatKHR{vk::Format::eR8G8B8A8Unorm, vk::ColorSpaceKHR::eSrgbNonlinear},
+
+			// Alternative formats
+			vk::SurfaceFormatKHR{vk::Format::eA8B8G8R8SrgbPack32, vk::ColorSpaceKHR::eSrgbNonlinear},
+			vk::SurfaceFormatKHR{vk::Format::eA8B8G8R8UnormPack32, vk::ColorSpaceKHR::eSrgbNonlinear}
+		};
+
+		auto lookup_format = [](std::span<const vk::SurfaceFormatKHR> formats, const vk::SurfaceFormatKHR& requested, vk::SurfaceFormatKHR& out_format, bool full_match = true) -> bool {
+			auto found = std::find_if(formats.begin(), formats.end(), [&requested, full_match](const vk::SurfaceFormatKHR& format) {
+				return full_match ? (format.format == requested.format && format.colorSpace == requested.colorSpace) : format.format == requested.format;
+				});
+
+			if (found != formats.end()) {
+				out_format = *found;
+				return true;
+			}
+			return false;
+			};
+
+		auto pick_format = [&lookup_format](std::span<const vk::SurfaceFormatKHR> available_formats, const vk::SurfaceFormatKHR& requested, vk::SurfaceFormatKHR& out_format) -> bool {
+			if (lookup_format(available_formats, requested, out_format) ||
+				lookup_format(available_formats, requested, out_format, false)) {
+				return true;
+			}
+
+			return false;
+			};
+
+		auto pick_by_list_format = [&pick_format](std::span<const vk::SurfaceFormatKHR> available_formats, std::span<const vk::SurfaceFormatKHR> priority_list) -> vk::SurfaceFormatKHR {
+			for (const auto& preferred : priority_list) {
+				vk::SurfaceFormatKHR selected;
+				if (pick_format(available_formats, preferred, selected)) {
+					return selected;
+				}
+			}
+			return available_formats[0];
+			};
+
+		if (requested_surface_format.format != vk::Format::eUndefined) {
+			vk::SurfaceFormatKHR selected;
+			if (pick_format(available_surface_formats, requested_surface_format, selected)) {
+				return selected;
+			}
+		}
+
+		// Pick hdr format
+		if (prefer_hdr && !hdr_fromats.empty()) {
+			return pick_by_list_format(hdr_fromats, hdr_priority_list);
+		}
+
+		// Pick sdr format
+		if (!sdr_fromats.empty()) {
+			return pick_by_list_format(sdr_fromats, sdr_priority_list);
+		}
+
+		if (!available_surface_formats.empty()) {
+			return available_surface_formats[0];
+		}
+
+		return {};
+	}
+
+	auto SwapchainBuilder::choose_suitable_composite_alpha(vk::CompositeAlphaFlagBitsKHR request_composite_alpha, vk::CompositeAlphaFlagsKHR supported_composite_alpha) -> vk::CompositeAlphaFlagBitsKHR {
+		if (request_composite_alpha & supported_composite_alpha) {
+			return request_composite_alpha;
+		}
+
+		static const std::vector<vk::CompositeAlphaFlagBitsKHR> composite_alpha_priority_list = {
+			vk::CompositeAlphaFlagBitsKHR::eOpaque, vk::CompositeAlphaFlagBitsKHR::ePreMultiplied,
+			vk::CompositeAlphaFlagBitsKHR::ePostMultiplied, vk::CompositeAlphaFlagBitsKHR::eInherit
+		};
+
+		auto const chosen_composite_alpha_it = std::find_if(composite_alpha_priority_list.begin(), composite_alpha_priority_list.end(),
+			[&supported_composite_alpha](vk::CompositeAlphaFlagBitsKHR composite_alpha) { return composite_alpha & supported_composite_alpha; });
+
+		if (chosen_composite_alpha_it == composite_alpha_priority_list.end()) {
+			EDGE_SLOGE("No compatible composite alpha found.");
+		}
+		else {
+			EDGE_SLOGW("Composite alpha '{}' not supported. Selecting '{}.", vk::to_string(request_composite_alpha), vk::to_string(*chosen_composite_alpha_it));
+			return *chosen_composite_alpha_it;
+		}
+
+		return {};
+	}
+
+	auto SwapchainBuilder::choose_suitable_present_mode(vk::PresentModeKHR request_present_mode, std::span<const vk::PresentModeKHR> available_present_modes, std::span<const vk::PresentModeKHR> present_mode_priority_list) -> vk::PresentModeKHR {
+	// Try to find the requested present mode in the available present modes
+	auto const present_mode_it = std::find(available_present_modes.begin(), available_present_modes.end(), request_present_mode);
+	if (present_mode_it == available_present_modes.end()) {
+		// If the requested present mode isn't found, then try to find a mode from the priority list
+		auto const chosen_present_mode_it =
+			std::find_if(present_mode_priority_list.begin(), present_mode_priority_list.end(),
+				[&available_present_modes](vk::PresentModeKHR present_mode) { return std::find(available_present_modes.begin(), available_present_modes.end(), present_mode) != available_present_modes.end(); });
+
+		// If nothing found, always default to FIFO
+		vk::PresentModeKHR const chosen_present_mode = (chosen_present_mode_it != present_mode_priority_list.end()) ? *chosen_present_mode_it : vk::PresentModeKHR::eFifo;
+
+		EDGE_SLOGW("Present mode '{}' not supported. Selecting '{}'.", vk::to_string(request_present_mode), vk::to_string(chosen_present_mode));
+		return chosen_present_mode;
+	}
+	else {
+		EDGE_SLOGD("Present mode selected: {}", to_string(request_present_mode));
+		return request_present_mode;
+	}
+		}
+
+#undef EDGE_LOGGER_SCOPE // SwapchainBuilder
+
 }

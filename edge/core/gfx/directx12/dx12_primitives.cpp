@@ -60,7 +60,7 @@ namespace edge::gfx {
 
 		HRESULT hr = device->CreateFence(initial_value, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&handle_));
 		if (FAILED(hr)) {
-			spdlog::error("[D3D12 Semaphore]: Failed to create semaphore. Reason: {}", get_error_string(hr));
+			EDGE_LOGE("[D3D12 Semaphore]: Failed to create semaphore. Reason: {}", get_error_string(hr));
 			return false;
 		}
 
@@ -86,7 +86,7 @@ namespace edge::gfx {
 		return self;
 	}
 
-	auto D3D12Queue::create_command_allocator() const -> std::shared_ptr<IGFXCommandAllocator> {
+	auto D3D12Queue::create_command_allocator() const -> Shared<IGFXCommandAllocator> {
 		return D3D12CommandAllocator::construct(*this);
 	}
 
@@ -98,7 +98,7 @@ namespace edge::gfx {
 		for (auto& semaphore : submit_info.wait_semaphores) {
 			auto d3d_semaphore = std::static_pointer_cast<D3D12Semaphore>(semaphore.semaphore);
 			if (HRESULT hr = handle_->Wait(d3d_semaphore->get_handle().Get(), semaphore.value); FAILED(hr)) {
-				spdlog::error("[D3D12 Queue]: Failed to wait semaphore. Reason: {}.", get_error_string(hr));
+				EDGE_LOGE("[D3D12 Queue]: Failed to wait semaphore. Reason: {}.", get_error_string(hr));
 			}
 		}
 
@@ -114,7 +114,7 @@ namespace edge::gfx {
 		for (auto& semaphore : submit_info.signal_semaphores) {
 			auto d3d_semaphore = std::static_pointer_cast<D3D12Semaphore>(semaphore.semaphore);
 			if (HRESULT hr = handle_->Signal(d3d_semaphore->get_handle().Get(), semaphore.value); FAILED(hr)) {
-				spdlog::error("[D3D12 Queue]: Failed to signal semaphore. Reason: {}.", get_error_string(hr));
+				EDGE_LOGE("[D3D12 Queue]: Failed to signal semaphore. Reason: {}.", get_error_string(hr));
 				continue;
 			}
 			d3d_semaphore->set_value(semaphore.value);
@@ -125,7 +125,7 @@ namespace edge::gfx {
 		constexpr uint64_t fence_value{ 1ull };
 		HRESULT hr = handle_->Signal(fence_.Get(), fence_value);
 		if (FAILED(hr)) {
-			spdlog::error("[D3D12 Queue]: Failed to signal wait idle semaphore.");
+			EDGE_LOGE("[D3D12 Queue]: Failed to signal wait idle semaphore.");
 			return (hr == DXGI_ERROR_DEVICE_REMOVED || hr == DXGI_ERROR_DEVICE_RESET)
 				? SyncResult::eDeviceLost : SyncResult::eError;
 		}
@@ -176,7 +176,7 @@ namespace edge::gfx {
 		return self;
 	}
 
-	auto D3D12CommandAllocator::allocate_command_list() const -> std::shared_ptr<IGFXCommandList> {
+	auto D3D12CommandAllocator::allocate_command_list() const -> Shared<IGFXCommandList> {
 		return D3D12CommandList::construct(*this);
 	}
 

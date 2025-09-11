@@ -1,168 +1,6 @@
 #include "vk_context.h"
 
 namespace edge::gfx {
-	// Helper functions
-	auto choose_extent(vk::Extent2D request_extent, const vk::Extent2D& min_image_extent,
-		const vk::Extent2D& max_image_extent, const vk::Extent2D& current_extent) -> vk::Extent2D {
-		if (current_extent.width == 0xFFFFFFFF) {
-			return request_extent;
-		}
-
-		if (request_extent.width < 1 || request_extent.height < 1) {
-			spdlog::warn("[Vulkan Presentation Engine] Image extent ({}, {}) not supported. Selecting ({}, {}).",
-				request_extent.width, request_extent.height,
-				current_extent.width, current_extent.height);
-			return current_extent;
-		}
-
-		request_extent.width = std::clamp(request_extent.width, min_image_extent.width, max_image_extent.width);
-		request_extent.height = std::clamp(request_extent.height, min_image_extent.height, max_image_extent.height);
-
-		return request_extent;
-	}
-
-	auto choose_present_mode(vk::PresentModeKHR request_present_mode, std::span<const vk::PresentModeKHR> available_present_modes,
-		std::span<const vk::PresentModeKHR> present_mode_priority_list) -> vk::PresentModeKHR {
-		// Try to find the requested present mode in the available present modes
-		auto const present_mode_it = std::find(available_present_modes.begin(), available_present_modes.end(), request_present_mode);
-		if (present_mode_it == available_present_modes.end()) {
-			// If the requested present mode isn't found, then try to find a mode from the priority list
-			auto const chosen_present_mode_it =
-				std::find_if(present_mode_priority_list.begin(), present_mode_priority_list.end(),
-					[&available_present_modes](vk::PresentModeKHR present_mode) {
-						return std::find(available_present_modes.begin(), available_present_modes.end(), present_mode) != available_present_modes.end();
-					});
-
-			// If nothing found, always default to FIFO
-			vk::PresentModeKHR const chosen_present_mode = (chosen_present_mode_it != present_mode_priority_list.end()) ? *chosen_present_mode_it : vk::PresentModeKHR::eFifo;
-
-			spdlog::warn("[VkSwapchain] Present mode '{}' not supported. Selecting '{}'.", vk::to_string(request_present_mode), vk::to_string(chosen_present_mode));
-			return chosen_present_mode;
-		}
-		else {
-			spdlog::debug("[VkSwapchain] Present mode selected: {}", vk::to_string(request_present_mode));
-			return request_present_mode;
-		}
-	}
-
-	auto choose_surface_format(const vk::SurfaceFormatKHR requested_surface_format, std::span<const vk::SurfaceFormatKHR> available_surface_formats,
-		std::span<const vk::SurfaceFormatKHR> surface_format_priority_list) -> vk::SurfaceFormatKHR {
-		// Try to find the requested surface format in the available surface formats
-		auto const surface_format_it = std::find(available_surface_formats.begin(), available_surface_formats.end(), requested_surface_format);
-		
-		// If the requested surface format isn't found, then try to request a format from the priority list
-		if (surface_format_it == available_surface_formats.end()) {
-			auto const chosen_surface_format_it =
-				std::find_if(surface_format_priority_list.begin(), surface_format_priority_list.end(),
-					[&available_surface_formats](vk::SurfaceFormatKHR surface_format) {
-						return std::find(available_surface_formats.begin(), available_surface_formats.end(), surface_format) != available_surface_formats.end();
-					});
-		
-			// If nothing found, default to the first available format
-			vk::SurfaceFormatKHR const& chosen_surface_format = (chosen_surface_format_it != surface_format_priority_list.end()) ? *chosen_surface_format_it : available_surface_formats[0];
-		
-			spdlog::warn("[VkSwapchain] Surface format ({}) not supported. Selecting ({}).",
-				vk::to_string(requested_surface_format.format) + ", " + vk::to_string(requested_surface_format.colorSpace),
-				vk::to_string(chosen_surface_format.format) + ", " + vk::to_string(chosen_surface_format.colorSpace));
-			return chosen_surface_format;
-		}
-		else {
-			spdlog::debug("[VkSwapchain] Surface format selected: {}", vk::to_string(requested_surface_format.format) + ", " + vk::to_string(requested_surface_format.colorSpace));
-			return requested_surface_format;
-		}
-		return {};
-	}
-
-	auto choose_transform(vk::SurfaceTransformFlagBitsKHR request_transform, vk::SurfaceTransformFlagsKHR supported_transform,
-		vk::SurfaceTransformFlagBitsKHR current_transform) -> vk::SurfaceTransformFlagBitsKHR {
-		if (request_transform & supported_transform) {
-			return request_transform;
-		}
-
-		spdlog::warn("[VkSwapchain] Surface transform '{}' not supported. Selecting '{}'.", vk::to_string(request_transform), vk::to_string(current_transform));
-		return current_transform;
-	}
-
-	auto choose_composite_alpha(vk::CompositeAlphaFlagBitsKHR request_composite_alpha,
-		vk::CompositeAlphaFlagsKHR supported_composite_alpha) -> vk::CompositeAlphaFlagBitsKHR {
-		if (request_composite_alpha & supported_composite_alpha) {
-			return request_composite_alpha;
-		}
-
-		static const std::array<vk::CompositeAlphaFlagBitsKHR, 4ull> composite_alpha_priority_list = {
-			vk::CompositeAlphaFlagBitsKHR::eOpaque, vk::CompositeAlphaFlagBitsKHR::ePreMultiplied,
-			vk::CompositeAlphaFlagBitsKHR::ePostMultiplied, vk::CompositeAlphaFlagBitsKHR::eInherit
-		};
-
-		auto const chosen_composite_alpha_it = std::find_if(composite_alpha_priority_list.begin(), composite_alpha_priority_list.end(),
-			[&supported_composite_alpha](vk::CompositeAlphaFlagBitsKHR composite_alpha) { return composite_alpha & supported_composite_alpha; });
-
-		if (chosen_composite_alpha_it == composite_alpha_priority_list.end()) {
-			spdlog::error("[VkSwapchain] No compatible composite alpha found.");
-		}
-		else {
-			spdlog::warn("[VkSwapchain] Composite alpha '{}' not supported. Selecting '{}.", vk::to_string(request_composite_alpha), vk::to_string(*chosen_composite_alpha_it));
-			return *chosen_composite_alpha_it;
-		}
-
-		return {};
-	}
-
-	auto validate_format_feature(vk::ImageUsageFlagBits image_usage, vk::FormatFeatureFlags supported_features) -> bool {
-		return (image_usage != vk::ImageUsageFlagBits::eStorage) || ((supported_features & vk::FormatFeatureFlagBits::eStorageImage) == vk::FormatFeatureFlagBits::eStorageImage);
-	}
-
-	auto choose_image_usage(const std::set<vk::ImageUsageFlagBits>& requested_image_usage_flags,
-		vk::ImageUsageFlags supported_image_usage, vk::FormatFeatureFlags supported_features) -> std::set<vk::ImageUsageFlagBits> {
-		std::set<vk::ImageUsageFlagBits> validated_image_usage_flags;
-		for (auto flag : requested_image_usage_flags) {
-			if ((flag & supported_image_usage) && validate_format_feature(flag, supported_features)) {
-				validated_image_usage_flags.insert(flag);
-			}
-			else {
-				spdlog::warn("[VkSwapchain] Image usage ({}) requested but not supported.", vk::to_string(flag));
-			}
-		}
-
-		if (validated_image_usage_flags.empty()) {
-			// Pick the first format from list of defaults, if supported
-			static const std::array<vk::ImageUsageFlagBits, 4ull> image_usage_priority_list = {
-				vk::ImageUsageFlagBits::eColorAttachment, vk::ImageUsageFlagBits::eStorage, vk::ImageUsageFlagBits::eSampled, vk::ImageUsageFlagBits::eTransferDst
-			};
-
-			auto const priority_list_it = std::find_if(image_usage_priority_list.begin(), image_usage_priority_list.end(),
-				[&supported_image_usage, &supported_features](auto const image_usage) {
-					return ((image_usage & supported_image_usage) && validate_format_feature(image_usage, supported_features));
-				});
-
-			if (priority_list_it != image_usage_priority_list.end()) {
-				validated_image_usage_flags.insert(*priority_list_it);
-			}
-		}
-
-		if (validated_image_usage_flags.empty()) {
-			spdlog::error("[VkSwapchain] No compatible image usage found.");
-		}
-		else {
-			// Log image usage flags used
-			std::string usage_list;
-			for (vk::ImageUsageFlagBits image_usage : validated_image_usage_flags) {
-				usage_list += to_string(image_usage) + " ";
-			}
-			spdlog::debug("[VkSwapchain] Image usage flags: {}", usage_list);
-		}
-
-		return validated_image_usage_flags;
-	}
-
-	auto composite_image_flags(std::set<vk::ImageUsageFlagBits>& image_usage_flags) -> vk::ImageUsageFlags {
-		vk::ImageUsageFlags image_usage;
-		for (auto flag : image_usage_flags) {
-			image_usage |= flag;
-		}
-		return image_usage;
-	}
-
 	// Semaphore 
 	auto VulkanSemaphore::construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> std::unique_ptr<VulkanSemaphore> {
 		auto self = std::make_unique<VulkanSemaphore>();
@@ -181,7 +19,7 @@ namespace edge::gfx {
 			return SyncResult::eSuccess;
 		}
 
-		spdlog::error("[VulkanSemaphore]: Failed while signaling semaphore from cpu. Reason: {}.", vk::to_string(result));
+		EDGE_LOGE("[VulkanSemaphore]: Failed while signaling semaphore from cpu. Reason: {}.", vk::to_string(result));
 		return (result == vk::Result::eErrorDeviceLost) ? SyncResult::eDeviceLost : SyncResult::eError;
 	}
 
@@ -199,7 +37,7 @@ namespace edge::gfx {
 		case vk::Result::eTimeout: return SyncResult::eTimeout;
 		case vk::Result::eErrorDeviceLost: return SyncResult::eDeviceLost;
 		default: {
-			spdlog::error("[VulkanSync]: Failed while waiting semaphore on cpu. Reason: {}.", vk::to_string(result));
+			EDGE_LOGE("[VulkanSync]: Failed while waiting semaphore on cpu. Reason: {}.", vk::to_string(result));
 			return SyncResult::eError;
 		}
 		}
@@ -243,7 +81,7 @@ namespace edge::gfx {
 		return self;
 	}
 
-	auto VulkanQueue::create_command_allocator() const -> std::shared_ptr<IGFXCommandAllocator> {
+	auto VulkanQueue::create_command_allocator() const -> Shared<IGFXCommandAllocator> {
 		return VulkanCommandAllocator::construct(device_, allocator_, family_index_);
 	}
 
@@ -291,7 +129,7 @@ namespace edge::gfx {
 			return;
 		}
 
-		spdlog::error("[VulkanQueue]: Failed while signaling semaphore from gpu. Reason: {}.", vk::to_string(result));
+		EDGE_LOGE("[VulkanQueue]: Failed while signaling semaphore from gpu. Reason: {}.", vk::to_string(result));
 	}
 
 	// TODO: Implement present
@@ -330,7 +168,7 @@ namespace edge::gfx {
 		return self;
 	}
 
-	auto VulkanCommandAllocator::allocate_command_list() const -> std::shared_ptr<IGFXCommandList> {
+	auto VulkanCommandAllocator::allocate_command_list() const -> Shared<IGFXCommandList> {
 		return VulkanCommandList::construct(device_, handle_);
 	}
 
@@ -433,61 +271,6 @@ namespace edge::gfx {
 
 		return true;
 	}
-
-	// Swapchain
-	VulkanSwapchain::~VulkanSwapchain() {
-		if (handle_) {
-			device_.destroySwapchainKHR(handle_, allocator_);
-		}
-	}
-
-	auto VulkanSwapchain::construct(const VulkanGraphicsContext& ctx, const SwapchainCreateInfo& create_info) -> std::unique_ptr<VulkanSwapchain> {
-		auto self = std::make_unique<VulkanSwapchain>();
-		self->_construct(ctx, create_info);
-		return self;
-	}
-
-	auto VulkanSwapchain::get_current_image_index() const -> uint32_t {
-		return current_image_;
-	}
-
-	auto VulkanSwapchain::get_current_image() const -> std::shared_ptr<IGFXImage> {
-		return nullptr;
-	}
-
-	auto VulkanSwapchain::acquire_next_image(uint32_t* next_image_index) -> bool {
-		auto prev_frame_index = get_prev_frame_index();
-		auto& prev_frame = frames_in_flight_[prev_frame_index];
-		
-		// Wait end of 
-		//VK_CHECK_RESULT(vkWaitForFences(device_, 1u, &prev_frame.fence_, VK_TRUE, UINT64_MAX),
-		//	"Failed waiting on previous frame fence.");
-
-		VkAcquireNextImageInfoKHR acquire_info{ VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR };
-		//acquire_info.semaphore = current_frame.image_available_;
-
-
-		vkAcquireNextImage2KHR(device_, &acquire_info, &current_image_);
-
-		if (next_image_index) {
-			*next_image_index = current_image_;
-		}
-
-		return false;
-	}
-
-	auto VulkanSwapchain::reset() -> bool {
-		return false;
-	}
-	
-	auto VulkanSwapchain::_construct(const VulkanGraphicsContext& ctx, const SwapchainCreateInfo& create_info) -> bool {
-		return false;
-	}
-
-	auto VulkanSwapchain::get_prev_frame_index() const -> uint32_t {
-		return current_image_ == 0u ? create_info_.minImageCount - 1u : current_image_ - 1u;
-	}
-
 
 	// Presentation engine
 //	auto VulkanPresentationEngine::construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> std::unique_ptr<VulkanPresentationEngine> {

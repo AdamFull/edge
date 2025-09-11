@@ -65,7 +65,7 @@ namespace edge::gfx {
 
 		static auto construct(const DirectX12GraphicsContext& ctx, D3D12_COMMAND_LIST_TYPE list_type) -> std::unique_ptr<D3D12Queue>;
 
-		auto create_command_allocator() const -> std::shared_ptr<IGFXCommandAllocator> override;
+		auto create_command_allocator() const -> Shared<IGFXCommandAllocator> override;
 
 		auto submit(const SubmitQueueInfo& submit_info) -> void override;
 		auto wait_idle() -> SyncResult override;
@@ -87,7 +87,7 @@ namespace edge::gfx {
 
 		static auto construct(const D3D12Queue& queue) -> std::unique_ptr<D3D12CommandAllocator>;
 
-		auto allocate_command_list() const -> std::shared_ptr<IGFXCommandList> override;
+		auto allocate_command_list() const -> Shared<IGFXCommandList> override;
 		auto reset() -> void override;
 
 		auto get_handle() const -> Microsoft::WRL::ComPtr<ID3D12CommandAllocator> {
@@ -145,8 +145,8 @@ namespace edge::gfx {
 
 		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
 
-		auto create_queue(QueueType queue_type) -> std::shared_ptr<IGFXQueue> override;
-		auto create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> override;
+		auto create_queue(QueueType queue_type) -> Shared<IGFXQueue> override;
+		auto create_semaphore(uint64_t value) const -> Shared<IGFXSemaphore> override;
 
 		auto get_device() const -> Microsoft::WRL::ComPtr<ID3D12Device>;
 

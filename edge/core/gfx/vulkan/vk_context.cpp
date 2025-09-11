@@ -6,23 +6,23 @@
 
 namespace edge::gfx {
 
-#define GFX_SCOPE "Validation"
+#define EDGE_LOGGER_SCOPE "Validation"
     VKAPI_ATTR vk::Bool32 VKAPI_CALL debug_utils_messenger_callback(vk::DebugUtilsMessageSeverityFlagBitsEXT message_severity, 
         vk::DebugUtilsMessageTypeFlagsEXT message_type, 
         const vk::DebugUtilsMessengerCallbackDataEXT* callback_data, 
         void* user_data) {
         // Log debug message
         if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose) {
-            GFX_LOGT("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+            EDGE_SLOGT("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
         }
         else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo) {
-            GFX_LOGI("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+            EDGE_SLOGI("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
         }
         else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
-            GFX_LOGW("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+            EDGE_SLOGW("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
         }
         else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
-            GFX_LOGE("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+            EDGE_SLOGE("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
         }
         return VK_FALSE;
     }
@@ -32,23 +32,25 @@ namespace edge::gfx {
         uint64_t /*object*/, size_t /*location*/, int32_t /*message_code*/,
         const char* layer_prefix, const char* message, void* /*user_data*/) {
         if (flags & vk::DebugReportFlagBitsEXT::eError) {
-            GFX_LOGE("{}: {}", layer_prefix, message);
+            EDGE_SLOGE("{}: {}", layer_prefix, message);
         }
         else if (flags & vk::DebugReportFlagBitsEXT::eWarning) {
-            GFX_LOGW("{}: {}", layer_prefix, message); 
+            EDGE_SLOGW("{}: {}", layer_prefix, message); 
         }
         else if (flags & vk::DebugReportFlagBitsEXT::ePerformanceWarning) {
-            GFX_LOGW("{}: {}", layer_prefix, message);
+            EDGE_SLOGW("{}: {}", layer_prefix, message);
         }
         else if (flags & vk::DebugReportFlagBitsEXT::eDebug) {
-            GFX_LOGD("{}: {}", layer_prefix, message);
+            EDGE_SLOGD("{}: {}", layer_prefix, message);
         }
         else {
-            GFX_LOGI("{}: {}", layer_prefix, message);
+            EDGE_SLOGI("{}: {}", layer_prefix, message);
         }
         return VK_FALSE;
     }
-#undef GFX_SCOPE
+#undef EDGE_LOGGER_SCOPE
+
+#define EDGE_LOGGER_SCOPE "Allocator"
 
     extern "C" void* VKAPI_CALL vkmemalloc(void* user_data, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
 		auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
@@ -71,7 +73,7 @@ namespace edge::gfx {
 
 		// POSIX aligned allocation
 		if (posix_memalign(&ptr, alignment, size) != 0) {
-            spdlog::error("[Vulkan Graphics Context]: Failed to allocate {} bytes with {} bytes alignment in {} scope.",
+            EDGE_SLOGE("Failed to allocate {} bytes with {} bytes alignment in {} scope.",
                           size, alignment, get_allocation_scope_str(allocation_scope));
 			ptr = nullptr;
 		}
@@ -84,7 +86,7 @@ namespace edge::gfx {
 			stats->allocation_map[ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
 
 #if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
-			spdlog::trace("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
+            EDGE_SLOGT("Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
 				reinterpret_cast<uintptr_t>(ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
 #endif
 		}
@@ -105,13 +107,13 @@ namespace edge::gfx {
 				stats->deallocation_count.fetch_add(1ull);
 
 #if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
-				spdlog::trace("[Vulkan Graphics Context]: Deallocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
+                EDGE_SLOGT("[Vulkan Graphics Context]: Deallocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
 					reinterpret_cast<uintptr_t>(mem), found->second.size, found->second.align, get_allocation_scope_str(found->second.scope), std::this_thread::get_id());
 #endif
 				stats->allocation_map.erase(found);
 			}
 			else {
-				spdlog::error("[Vulkan Graphics Context]: Found invalid memory allocation: {:#010x}.", reinterpret_cast<uintptr_t>(mem));
+                EDGE_SLOGE("[Vulkan Graphics Context]: Found invalid memory allocation: {:#010x}.", reinterpret_cast<uintptr_t>(mem));
 			}
 		}
 
@@ -149,7 +151,7 @@ namespace edge::gfx {
             stats->allocation_map[new_ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
 
 #if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
-            spdlog::trace("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
+            EDGE_SLOGT("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
                 reinterpret_cast<uintptr_t>(new_ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
 #endif
         }
@@ -171,11 +173,13 @@ namespace edge::gfx {
 
     }
 
-#define GFX_SCOPE "Vulkan GFX Context"
+#undef EDGE_LOGGER_SCOPE // Allocator
+
+#define EDGE_LOGGER_SCOPE "Vulkan GFX Context"
 
     VulkanGraphicsContext::~VulkanGraphicsContext() {
         if(vma_allocator_) {
-            spdlog::debug("[Vulkan Graphics Context]: Destroying VMA allocator");
+            EDGE_SLOGD("Destroying VMA allocator");
             vmaDestroyAllocator(vma_allocator_);
         }
 
@@ -189,16 +193,16 @@ namespace edge::gfx {
 
         // Check that all allocated vulkan objects was deallocated
         if (memalloc_stats_.allocation_count != memalloc_stats_.deallocation_count) {
-            spdlog::error("[Vulkan Graphics Context]: Memory leaks detected!\n Allocated: {}, Deallocated: {} objects. Leaked {} bytes.",
+            EDGE_SLOGE("Memory leaks detected!\n Allocated: {}, Deallocated: {} objects. Leaked {} bytes.",
                 memalloc_stats_.allocation_count.load(), memalloc_stats_.deallocation_count.load(), memalloc_stats_.total_bytes_allocated.load());
 
             for (const auto& allocation : memalloc_stats_.allocation_map) {
-                spdlog::warn("{:#010x} : {} bytes, {} byte alignment, {} scope",
+                EDGE_SLOGW("{:#010x} : {} bytes, {} byte alignment, {} scope",
                     reinterpret_cast<uintptr_t>(allocation.first), allocation.second.size, allocation.second.align, vk::to_string(allocation.second.scope));
             }
         }
         else {
-            spdlog::info("[Vulkan Graphics Context]: All memory correctly deallocated");
+            EDGE_SLOGI("All memory correctly deallocated");
         }
 
         volkFinalize();
@@ -268,7 +272,7 @@ namespace edge::gfx {
             .build();
 
         if (!instance_result) {
-            GFX_LOGE("Failed to create instance. Reason: {}.", vk::to_string(instance_result.error()));
+            EDGE_SLOGE("Failed to create instance. Reason: {}.", vk::to_string(instance_result.error()));
             return false;
         }
         
@@ -290,7 +294,7 @@ namespace edge::gfx {
             auto result = vk_instance_.createWin32SurfaceKHR(&surface_create_info, &vk_alloc_callbacks_, &vk_surface_);
 #endif
             if (result != vk::Result::eSuccess) {
-                GFX_LOGE("Failed to create surface.");
+                EDGE_SLOGE("Failed to create surface.");
                 return false;
             }
         }
@@ -352,7 +356,7 @@ namespace edge::gfx {
             .select();
 
         if (!device_selector) {
-            GFX_LOGE("Failed to find suitable device.");
+            EDGE_SLOGE("Failed to find suitable device.");
             return false;
         }
 
@@ -367,7 +371,7 @@ namespace edge::gfx {
         debug_utils_create_info.pfnUserCallback = debug_utils_messenger_callback;
 
         if (auto result = vk_instance_.createDebugUtilsMessengerEXT(&debug_utils_create_info, &vk_alloc_callbacks_, &vk_debug_utils_); result != vk::Result::eSuccess) {
-            GFX_LOGW("Failed to create debug messenger. Reason: {}", vk::to_string(result));
+            EDGE_SLOGW("Failed to create debug messenger. Reason: {}", vk::to_string(result));
         }
 
         if (!vk_debug_utils_) {
@@ -376,7 +380,7 @@ namespace edge::gfx {
 
             debug_report_create_info.flags = vk::DebugReportFlagBitsEXT::eError | vk::DebugReportFlagBitsEXT::eWarning | vk::DebugReportFlagBitsEXT::ePerformanceWarning;
             if (auto result = vk_instance_.createDebugReportCallbackEXT(&debug_report_create_info, &vk_alloc_callbacks_, &vk_debug_report_); result != vk::Result::eSuccess) {
-                GFX_LOGW("Failed to create debug messenger. Reason: {}", vk::to_string(result));
+                EDGE_SLOGW("Failed to create debug messenger. Reason: {}", vk::to_string(result));
             }
         }
         
@@ -465,10 +469,18 @@ namespace edge::gfx {
             return false;
         }
 
+        auto swapchain_result = vkw::SwapchainBuilder{ vkw_device_, vk_surface_ }
+            .enable_hdr(true)
+            .enable_vsync(true)
+            //.set_image_format(vk::Format::eB8G8R8A8Srgb)
+            //.set_color_space(vk::ColorSpaceKHR::eSrgbNonlinear)
+            .set_image_count(2)
+            .build();
+
 		return true;
 	}
 
-    auto VulkanGraphicsContext::create_queue(QueueType queue_type) const -> std::shared_ptr<IGFXQueue> {
+    auto VulkanGraphicsContext::create_queue(QueueType queue_type) const -> Shared<IGFXQueue> {
         //auto& device = devices_[selected_device_index_];
         //auto& family_groups = device.queue_type_to_family_map[static_cast<uint32_t>(queue_type)];
         //
@@ -488,11 +500,11 @@ namespace edge::gfx {
         return nullptr;
     }
 
-    auto VulkanGraphicsContext::create_semaphore(uint64_t value) const -> std::shared_ptr<IGFXSemaphore> {
+    auto VulkanGraphicsContext::create_semaphore(uint64_t value) const -> Shared<IGFXSemaphore> {
         return VulkanSemaphore::construct(*this, value);
     }
 
-    auto VulkanGraphicsContext::create_swapchain(const SwapchainCreateInfo& create_info) -> std::shared_ptr<IGFXSemaphore> {
+    auto VulkanGraphicsContext::create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> Shared<IGFXPresentationEngine> {
         return nullptr;
     }
 }
