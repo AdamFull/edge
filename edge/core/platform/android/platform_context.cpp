@@ -57,7 +57,7 @@ namespace edge::platform {
 #else
         logger->set_level(spdlog::level::trace);
 #endif
-        logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+        logger->set_pattern(EDGE_LOGGER_PATTERN);
         spdlog::set_default_logger(logger);
 
         window_ = AndroidPlatformWindow::construct(this);

@@ -57,7 +57,7 @@ namespace edge::platform {
 
 		auto logger = std::make_shared<spdlog::logger>("Logger", sink_list.begin(), sink_list.end());
 		logger->set_level(log_level);
-		logger->set_pattern("[%Y-%m-%d %H:%M:%S] [%^%l%$] %v");
+		logger->set_pattern(EDGE_LOGGER_PATTERN);
 		spdlog::set_default_logger(logger);
 
 		window_ = DesktopPlatformWindow::construct(this);
