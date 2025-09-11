@@ -13,30 +13,30 @@
 
 #include "vk_wrapper.h"
 
-namespace edge::gfx {
-	class VulkanGraphicsContext;
-	class VulkanQueue;
+namespace edge::gfx::vulkan {
+	class GraphicsContext;
+	class Queue;
 
-	struct VkMemoryAllocationDesc {
+	struct MemoryAllocationDesc {
 		size_t size;
 		size_t align;
 		vk::SystemAllocationScope scope;
         std::thread::id thread_id;
 	};
 
-	struct VkMemoryAllocationStats {
+	struct MemoryAllocationStats {
         std::atomic<size_t> total_bytes_allocated;
         std::atomic<size_t> allocation_count;
         std::atomic<size_t> deallocation_count;
         std::mutex mutex;
-		std::unordered_map<void*, VkMemoryAllocationDesc> allocation_map;
+		std::unordered_map<void*, MemoryAllocationDesc> allocation_map;
 	};
 
-	class VulkanSemaphore final : public IGFXSemaphore {
+	class Semaphore final : public IGFXSemaphore {
 	public:
-		~VulkanSemaphore() override = default;
+		~Semaphore() override = default;
 
-		static auto construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> std::unique_ptr<VulkanSemaphore>;
+		static auto construct(const GraphicsContext& ctx, uint64_t initial_value) -> Owned<Semaphore>;
 
 		auto signal(uint64_t value) -> SyncResult override;
 		auto wait(uint64_t value, std::chrono::nanoseconds timeout = std::chrono::nanoseconds::max()) -> SyncResult override;
@@ -44,42 +44,33 @@ namespace edge::gfx {
 		auto is_completed(uint64_t value) const -> bool override;
 		auto get_value() const -> uint64_t override;
 
-		auto set_value(uint64_t value) -> void {
-			value_ = std::max(value_, value);
-		}
-
 		auto get_handle() const -> vk::Semaphore {
 			return handle_;
 		}
 	private:
-		auto _construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> bool;
+		auto _construct(const GraphicsContext& ctx, uint64_t initial_value) -> bool;
 
 		vk::Device device_{ VK_NULL_HANDLE };
 		vk::AllocationCallbacks const* allocator_{ nullptr };
 		vk::Semaphore handle_{ VK_NULL_HANDLE };
-		uint64_t value_{ 0ull };
 	};
 
-	class VulkanQueue final : public IGFXQueue {
+	class Queue final : public IGFXQueue {
 	public:
-		~VulkanQueue() override;
+		~Queue() override;
 
-		static auto construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> std::unique_ptr<VulkanQueue>;
+		static auto construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> Owned<Queue>;
 
 		auto create_command_allocator() const -> Shared<IGFXCommandAllocator> override;
 
 		auto submit(const SubmitQueueInfo& submit_info) -> void override;
+		auto submit(Span<const vk::SemaphoreSubmitInfo> wait_semaphores, Span<const vk::SemaphoreSubmitInfo> signal_semaphores, Span<const vk::CommandBufferSubmitInfo> command_buffers) -> void;
 		auto wait_idle() -> SyncResult override;
 
-		auto get_handle() const -> vk::Queue {
-			return handle_;
-		}
-
-		auto get_family_index() const -> uint32_t {
-			return family_index_;
-		}
+		auto get_handle() const -> vk::Queue { return handle_; }
+		auto get_family_index() const -> uint32_t { return family_index_; }
 	private:
-		auto _construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool;
+		auto _construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool;
 
 		vk::Device device_{ VK_NULL_HANDLE };
 		vk::AllocationCallbacks const* allocator_{ nullptr };
@@ -88,11 +79,11 @@ namespace edge::gfx {
 		uint32_t queue_index_{ 0u };
 	};
 
-	class VulkanCommandAllocator final : public IGFXCommandAllocator {
+	class CommandAllocator final : public IGFXCommandAllocator {
 	public:
-		~VulkanCommandAllocator() override;
+		~CommandAllocator() override;
 
-		static auto construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> std::unique_ptr<VulkanCommandAllocator>;
+		static auto construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> Owned<CommandAllocator>;
 
 		auto allocate_command_list() const -> Shared<IGFXCommandList> override;
 		auto reset() -> void override;
@@ -109,11 +100,11 @@ namespace edge::gfx {
 		vk::CommandPool handle_{ VK_NULL_HANDLE };
 	};
 
-	class VulkanCommandList final : public IGFXCommandList {
+	class CommandList final : public IGFXCommandList {
 	public:
-		~VulkanCommandList() override;
+		~CommandList() override;
 
-		static auto construct(vk::Device device, vk::CommandPool command_pool) -> std::unique_ptr<VulkanCommandList>;
+		static auto construct(vk::Device device, vk::CommandPool command_pool) -> Owned<CommandList>;
 
 		auto reset() -> void override;
 
@@ -142,11 +133,11 @@ namespace edge::gfx {
 		vk::CommandPool command_pool_;
 	};
 
-	class VulkanPresentationEngine final : public IGFXPresentationEngine {
+	class PresentationEngine final : public IGFXPresentationEngine {
 	public:
-		~VulkanPresentationEngine() override;
+		~PresentationEngine() override;
 
-		static auto construct(const VulkanGraphicsContext& ctx, const PresentationEngineCreateInfo& create_info) -> std::unique_ptr<VulkanPresentationEngine>;
+		static auto construct(const GraphicsContext& ctx, const PresentationEngineCreateInfo& create_info) -> Owned<PresentationEngine>;
 
 		auto get_current_image_index() const -> uint32_t override;
 		auto get_current_image() const -> Shared<IGFXImage> override;
@@ -155,20 +146,12 @@ namespace edge::gfx {
 
 		auto reset() -> bool override;
 	private:
-		auto _construct(const VulkanGraphicsContext& ctx, const PresentationEngineCreateInfo& create_info) -> bool;
+		auto _construct(const GraphicsContext& ctx, const PresentationEngineCreateInfo& create_info) -> bool;
 		auto get_prev_frame_index() const -> uint32_t;
 
 		vkw::Device const* device_{ nullptr };
+		vkw::Swapchain swapchain_;
 
-		vk::SwapchainKHR handle_{ VK_NULL_HANDLE };
-
-		struct Frame {
-			vk::Semaphore image_available_{ VK_NULL_HANDLE };
-			vk::Semaphore queue_finished_{ VK_NULL_HANDLE };
-			vk::Fence fence_{ VK_NULL_HANDLE };
-		};
-
-		std::vector<Frame> frames_in_flight_;
 		uint32_t current_image_{ 0u };
 
 	};
@@ -189,7 +172,7 @@ namespace edge::gfx {
 	//
 	//	~VulkanPresentationEngine() override;
 	//
-	//	static auto construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> std::unique_ptr<VulkanPresentationEngine>;
+	//	static auto construct(const GraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> Owned<VulkanPresentationEngine>;
 	//
 	//	auto get_queue() const -> Shared<IGFXQueue> override {
 	//		return queue_;
@@ -200,7 +183,7 @@ namespace edge::gfx {
 	//
 	//	auto get_frame_index() const -> uint32_t override;
 	//private:
-	//	auto _construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> bool;
+	//	auto _construct(const GraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> bool;
 	//	auto update_swapchain() -> bool;
 	//
 	//	vk::Device device_{ VK_NULL_HANDLE };
@@ -221,11 +204,11 @@ namespace edge::gfx {
 	//	VkSurfaceTransformFlagBitsKHR requested_transform_{ VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR };
 	//};
 
-	class VulkanGraphicsContext final : public IGFXContext {
+	class GraphicsContext final : public IGFXContext {
 	public:
-		~VulkanGraphicsContext() override;
+		~GraphicsContext() override;
 
-		static auto construct() -> std::unique_ptr<VulkanGraphicsContext>;
+		static auto construct() -> Owned<GraphicsContext>;
 
 		auto create(const GraphicsContextCreateInfo& create_info) -> bool override;
 
@@ -244,7 +227,7 @@ namespace edge::gfx {
 	private:
 		vk::detail::DynamicLoader vk_dynamic_loader_;
 		vk::AllocationCallbacks vk_alloc_callbacks_{};
-		VkMemoryAllocationStats memalloc_stats_{};
+		MemoryAllocationStats memalloc_stats_{};
 
 		vk::Instance vk_instance_{ VK_NULL_HANDLE };
 		vk::SurfaceKHR vk_surface_{ VK_NULL_HANDLE };
@@ -253,8 +236,6 @@ namespace edge::gfx {
 		vk::DebugReportCallbackEXT vk_debug_report_{ VK_NULL_HANDLE };
 
 		vkw::Device vkw_device_;
-
-		//std::unique_ptr<vkw::DebugInterface> debug_interface_;
 
         VmaAllocator vma_allocator_{ VK_NULL_HANDLE };
 	};

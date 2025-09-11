@@ -4,7 +4,7 @@
 
 #include <cstdlib>
 
-namespace edge::gfx {
+namespace edge::gfx::vulkan {
 
 #define EDGE_LOGGER_SCOPE "Validation"
     VKAPI_ATTR vk::Bool32 VKAPI_CALL debug_utils_messenger_callback(vk::DebugUtilsMessageSeverityFlagBitsEXT message_severity, 
@@ -53,7 +53,7 @@ namespace edge::gfx {
 #define EDGE_LOGGER_SCOPE "Allocator"
 
     extern "C" void* VKAPI_CALL vkmemalloc(void* user_data, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
-		auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
+		auto* stats = static_cast<MemoryAllocationStats*>(user_data);
 
 		void* ptr = nullptr;
 
@@ -99,7 +99,7 @@ namespace edge::gfx {
 			return;
 		}
 
-		auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
+		auto* stats = static_cast<MemoryAllocationStats*>(user_data);
 		if (stats) {
             std::lock_guard<std::mutex> lock(stats->mutex);
 			if (auto found = stats->allocation_map.find(mem); found != stats->allocation_map.end()) {
@@ -136,7 +136,7 @@ namespace edge::gfx {
 		}
 
 #if EDGE_PLATFORM_WINDOWS
-        auto* stats = static_cast<VkMemoryAllocationStats*>(user_data);
+        auto* stats = static_cast<MemoryAllocationStats*>(user_data);
         auto* new_ptr = _aligned_realloc(old, size, alignment);
         if (stats && new_ptr) {
             std::lock_guard<std::mutex> lock(stats->mutex);
@@ -177,7 +177,7 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "Vulkan GFX Context"
 
-    VulkanGraphicsContext::~VulkanGraphicsContext() {
+    GraphicsContext::~GraphicsContext() {
         if(vma_allocator_) {
             EDGE_SLOGD("Destroying VMA allocator");
             vmaDestroyAllocator(vma_allocator_);
@@ -208,15 +208,15 @@ namespace edge::gfx {
         volkFinalize();
 	}
 
-    auto VulkanGraphicsContext::construct() -> std::unique_ptr<VulkanGraphicsContext> {
+    auto GraphicsContext::construct() -> std::unique_ptr<GraphicsContext> {
         volkInitialize();
 
-        auto self = std::make_unique<VulkanGraphicsContext>();
+        auto self = std::make_unique<GraphicsContext>();
         VULKAN_HPP_DEFAULT_DISPATCHER.init(self->vk_dynamic_loader_.getProcAddress<PFN_vkGetInstanceProcAddr>("vkGetInstanceProcAddr"));
         return self;
     }
 
-	auto VulkanGraphicsContext::create(const GraphicsContextCreateInfo& create_info) -> bool {
+	auto GraphicsContext::create(const GraphicsContextCreateInfo& create_info) -> bool {
 		memalloc_stats_.total_bytes_allocated = 0ull;
 		memalloc_stats_.allocation_count = 0ull;
 		memalloc_stats_.deallocation_count = 0ull;
@@ -480,7 +480,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-    auto VulkanGraphicsContext::create_queue(QueueType queue_type) const -> Shared<IGFXQueue> {
+    auto GraphicsContext::create_queue(QueueType queue_type) const -> Shared<IGFXQueue> {
         //auto& device = devices_[selected_device_index_];
         //auto& family_groups = device.queue_type_to_family_map[static_cast<uint32_t>(queue_type)];
         //
@@ -500,11 +500,11 @@ namespace edge::gfx {
         return nullptr;
     }
 
-    auto VulkanGraphicsContext::create_semaphore(uint64_t value) const -> Shared<IGFXSemaphore> {
-        return VulkanSemaphore::construct(*this, value);
+    auto GraphicsContext::create_semaphore(uint64_t value) const -> Shared<IGFXSemaphore> {
+        return Semaphore::construct(*this, value);
     }
 
-    auto VulkanGraphicsContext::create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> Shared<IGFXPresentationEngine> {
+    auto GraphicsContext::create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> Shared<IGFXPresentationEngine> {
         return nullptr;
     }
 }

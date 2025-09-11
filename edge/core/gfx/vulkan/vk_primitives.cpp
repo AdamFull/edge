@@ -1,29 +1,29 @@
 #include "vk_context.h"
 
-namespace edge::gfx {
-	// Semaphore 
-	auto VulkanSemaphore::construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> std::unique_ptr<VulkanSemaphore> {
-		auto self = std::make_unique<VulkanSemaphore>();
+namespace edge::gfx::vulkan {
+#define EDGE_LOGGER_SCOPE "Semaphore"
+
+	auto Semaphore::construct(const GraphicsContext& ctx, uint64_t initial_value) -> Owned<Semaphore> {
+		auto self = std::make_unique<Semaphore>();
 		self->_construct(ctx, initial_value);
 		return self;
 	}
 
-	auto VulkanSemaphore::signal(uint64_t value) -> SyncResult {
+	auto Semaphore::signal(uint64_t value) -> SyncResult {
 		vk::SemaphoreSignalInfo signal_info{};
 		signal_info.semaphore = handle_;
 		signal_info.value = value;
 
-		vk::Result result = device_.signalSemaphore(&signal_info);
+		auto result = device_.signalSemaphore(&signal_info);
 		if (result == vk::Result::eSuccess) {
-			value_ = std::max(value_, value);
 			return SyncResult::eSuccess;
 		}
 
-		EDGE_LOGE("[VulkanSemaphore]: Failed while signaling semaphore from cpu. Reason: {}.", vk::to_string(result));
+		EDGE_SLOGE("Failed while signaling semaphore from cpu. Reason: {}.", vk::to_string(result));
 		return (result == vk::Result::eErrorDeviceLost) ? SyncResult::eDeviceLost : SyncResult::eError;
 	}
 
-	auto VulkanSemaphore::wait(uint64_t value, std::chrono::nanoseconds timeout) -> SyncResult {
+	auto Semaphore::wait(uint64_t value, std::chrono::nanoseconds timeout) -> SyncResult {
 		vk::SemaphoreWaitInfo wait_info{};
 		wait_info.semaphoreCount = 1;
 		wait_info.pSemaphores = &handle_;
@@ -37,29 +37,29 @@ namespace edge::gfx {
 		case vk::Result::eTimeout: return SyncResult::eTimeout;
 		case vk::Result::eErrorDeviceLost: return SyncResult::eDeviceLost;
 		default: {
-			EDGE_LOGE("[VulkanSync]: Failed while waiting semaphore on cpu. Reason: {}.", vk::to_string(result));
+			EDGE_SLOGE("Failed while waiting semaphore on cpu. Reason: {}.", vk::to_string(result));
 			return SyncResult::eError;
 		}
 		}
 	}
 
-	auto VulkanSemaphore::is_completed(uint64_t value) const -> bool {
+	auto Semaphore::is_completed(uint64_t value) const -> bool {
 		return get_value() >= value;
 	}
 
-	auto VulkanSemaphore::get_value() const -> uint64_t {
+	auto Semaphore::get_value() const -> uint64_t {
 		uint64_t value;
 		vk::Result result = device_.getSemaphoreCounterValue(handle_, &value);
 		return (result == vk::Result::eSuccess) ? value : 0;
 	}
 
-	auto VulkanSemaphore::_construct(const VulkanGraphicsContext& ctx, uint64_t initial_value) -> bool {
+	auto Semaphore::_construct(const GraphicsContext& ctx, uint64_t initial_value) -> bool {
 		//device_ = ctx.get_logical_device();
 		allocator_ = ctx.get_allocation_callbacks();
 
 		VkSemaphoreTypeCreateInfo timeline_create_info{ VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO };
 		timeline_create_info.semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE;
-		timeline_create_info.initialValue = value_ = initial_value;
+		timeline_create_info.initialValue = initial_value;
 
 		VkSemaphoreCreateInfo create_info{ VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
 		create_info.pNext = &timeline_create_info;
@@ -70,36 +70,33 @@ namespace edge::gfx {
 		return true;
 	}
 
-	// Queue
-	VulkanQueue::~VulkanQueue() {
-		
+#undef EDGE_LOGGER_SCOPE // Semaphore
+
+#define EDGE_LOGGER_SCOPE "Queue"
+
+	Queue::~Queue() {	
 	}
 
-	auto VulkanQueue::construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> std::unique_ptr<VulkanQueue> {
-		auto self = std::make_unique<VulkanQueue>();
+	auto Queue::construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> Owned<Queue> {
+		auto self = std::make_unique<Queue>();
 		self->_construct(ctx, family_index, queue_index);
 		return self;
 	}
 
-	auto VulkanQueue::create_command_allocator() const -> Shared<IGFXCommandAllocator> {
-		return VulkanCommandAllocator::construct(device_, allocator_, family_index_);
+	auto Queue::create_command_allocator() const -> Shared<IGFXCommandAllocator> {
+		return CommandAllocator::construct(device_, allocator_, family_index_);
 	}
 
-	auto VulkanQueue::submit(const SubmitQueueInfo& submit_info) -> void {
-		std::array<vk::SemaphoreSubmitInfo, 16ull> wait_semaphores{};
-		std::array<vk::SemaphoreSubmitInfo, 16ull> signal_semaphores{};
-		std::array<vk::CommandBufferSubmitInfo, 16ull> command_buffers{};
-
-		vk::SubmitInfo2KHR vk_submit_info{};
-		vk_submit_info.pWaitSemaphoreInfos = wait_semaphores.data();
-		vk_submit_info.pSignalSemaphoreInfos = signal_semaphores.data();
-		vk_submit_info.pCommandBufferInfos = command_buffers.data();
+	auto Queue::submit(const SubmitQueueInfo& submit_info) -> void {
+		FixedVector<vk::SemaphoreSubmitInfo> wait_semaphores{};
+		FixedVector<vk::SemaphoreSubmitInfo> signal_semaphores{};
+		FixedVector<vk::CommandBufferSubmitInfo> command_buffers{};
 
 		for (int32_t i = 0; i < static_cast<int32_t>(submit_info.wait_semaphores.size()); ++i) {
 			auto& semaphore_info = submit_info.wait_semaphores[i];
 			if (semaphore_info.semaphore) {
-				auto& semaphore_submit_info = wait_semaphores[vk_submit_info.waitSemaphoreInfoCount++];
-				semaphore_submit_info.semaphore = std::static_pointer_cast<VulkanSemaphore>(semaphore_info.semaphore)->get_handle();
+				auto& semaphore_submit_info = wait_semaphores.emplace_back();
+				semaphore_submit_info.semaphore = std::static_pointer_cast<Semaphore>(semaphore_info.semaphore)->get_handle();
 				semaphore_submit_info.value = semaphore_info.value;
 				semaphore_submit_info.stageMask = vk::PipelineStageFlagBits2::eAllCommands;
 			}
@@ -108,38 +105,44 @@ namespace edge::gfx {
 		for (int32_t i = 0; i < static_cast<int32_t>(submit_info.signal_semaphores.size()); ++i) {
 			auto& semaphore_info = submit_info.signal_semaphores[i];
 			if (semaphore_info.semaphore) {
-				auto& semaphore_submit_info = wait_semaphores[vk_submit_info.signalSemaphoreInfoCount++];
-				semaphore_submit_info.semaphore = std::static_pointer_cast<VulkanSemaphore>(semaphore_info.semaphore)->get_handle();
+				auto& semaphore_submit_info = signal_semaphores.emplace_back();
+				semaphore_submit_info.semaphore = std::static_pointer_cast<Semaphore>(semaphore_info.semaphore)->get_handle();
 				semaphore_submit_info.value = semaphore_info.value;
 				semaphore_submit_info.stageMask = vk::PipelineStageFlagBits2::eAllCommands;
 			}
 		}
 
 		for (int32_t i = 0; i < submit_info.command_lists.size(); ++i) {
-			auto& cmd_list_submit_info = command_buffers[vk_submit_info.commandBufferInfoCount++];
-			cmd_list_submit_info.commandBuffer = std::static_pointer_cast<VulkanCommandList>(submit_info.command_lists[i])->get_handle();
+			auto& cmd_list_submit_info = command_buffers.emplace_back();
+			cmd_list_submit_info.commandBuffer = std::static_pointer_cast<CommandList>(submit_info.command_lists[i])->get_handle();
 		}
 
-		vk::Result result = handle_.submit2(1, &vk_submit_info, VK_NULL_HANDLE);
-		if (result == vk::Result::eSuccess) {
-			for (auto& semaphore_submit_info : submit_info.signal_semaphores) {
-				auto semaphore = std::static_pointer_cast<VulkanSemaphore>(semaphore_submit_info.semaphore);
-				semaphore->set_value(semaphore_submit_info.value);
-			}
-			return;
-		}
+		submit(wait_semaphores, signal_semaphores, command_buffers);
+	}
 
-		EDGE_LOGE("[VulkanQueue]: Failed while signaling semaphore from gpu. Reason: {}.", vk::to_string(result));
+	auto Queue::submit(Span<const vk::SemaphoreSubmitInfo> wait_semaphores, Span<const vk::SemaphoreSubmitInfo> signal_semaphores, Span<const vk::CommandBufferSubmitInfo> command_buffers) -> void {
+		vk::SubmitInfo2KHR submit_info{};
+		submit_info.pWaitSemaphoreInfos = wait_semaphores.data();
+		submit_info.waitSemaphoreInfoCount = static_cast<uint32_t>(wait_semaphores.size());
+		submit_info.pSignalSemaphoreInfos = signal_semaphores.data();
+		submit_info.signalSemaphoreInfoCount = static_cast<uint32_t>(signal_semaphores.size());
+		submit_info.pCommandBufferInfos = command_buffers.data();
+		submit_info.commandBufferInfoCount = static_cast<uint32_t>(command_buffers.size());
+
+		vk::Result result = handle_.submit2(1, &submit_info, VK_NULL_HANDLE);
+		if (result != vk::Result::eSuccess) {
+			EDGE_SLOGE("Failed while signaling semaphore from gpu. Reason: {}.", vk::to_string(result));
+		}
 	}
 
 	// TODO: Implement present
 
-	auto VulkanQueue::wait_idle() -> SyncResult {
-		vkQueueWaitIdle(handle_);
+	auto Queue::wait_idle() -> SyncResult {
+		handle_.waitIdle();
 		return SyncResult::eSuccess;
 	}
 
-	auto VulkanQueue::_construct(const VulkanGraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool {
+	auto Queue::_construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool {
 		//device_ = ctx.get_logical_device();
 		allocator_ = ctx.get_allocation_callbacks();
 		family_index_ = family_index;
@@ -154,29 +157,31 @@ namespace edge::gfx {
 		return true;
 	}
 
-	// Command allocator
-	
-	VulkanCommandAllocator::~VulkanCommandAllocator() {
+#undef EDGE_LOGGER_SCOPE // Queue
+
+#define EDGE_LOGGER_SCOPE "CommandAllocator"
+
+	CommandAllocator::~CommandAllocator() {
 		if (handle_) {
 			device_.destroyCommandPool(handle_, allocator_);
 		}
 	}
 
-	auto VulkanCommandAllocator::construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> std::unique_ptr<VulkanCommandAllocator> {
-		auto self = std::make_unique<VulkanCommandAllocator>();
+	auto CommandAllocator::construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> Owned<CommandAllocator> {
+		auto self = std::make_unique<CommandAllocator>();
 		self->_construct(device, allocator, family_index);
 		return self;
 	}
 
-	auto VulkanCommandAllocator::allocate_command_list() const -> Shared<IGFXCommandList> {
-		return VulkanCommandList::construct(device_, handle_);
+	auto CommandAllocator::allocate_command_list() const -> Shared<IGFXCommandList> {
+		return CommandList::construct(device_, handle_);
 	}
 
-	auto VulkanCommandAllocator::reset() -> void {
+	auto CommandAllocator::reset() -> void {
 		// TODO: Not sure do i need individual reset for this one
 	}
 
-	auto VulkanCommandAllocator::_construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> bool {
+	auto CommandAllocator::_construct(vk::Device device, vk::AllocationCallbacks const* allocator, uint32_t family_index) -> bool {
 		device_ = device;
 		allocator_ = allocator;
 		family_index_ = family_index;
@@ -191,22 +196,25 @@ namespace edge::gfx {
 		return true;
 	}
 
-	// Command list
-	VulkanCommandList::~VulkanCommandList() {
+#undef EDGE_LOGGER_SCOPE // CommandAllocator
+
+#define EDGE_LOGGER_SCOPE "CommandList"
+
+	CommandList::~CommandList() {
 
 	}
 
-	auto VulkanCommandList::construct(vk::Device device, vk::CommandPool command_pool) -> std::unique_ptr<VulkanCommandList> {
-		auto self = std::make_unique<VulkanCommandList>();
+	auto CommandList::construct(vk::Device device, vk::CommandPool command_pool) -> Owned<CommandList> {
+		auto self = std::make_unique<CommandList>();
 		self->_construct(device, command_pool);
 		return self;
 	}
 
-	auto VulkanCommandList::reset() -> void {
+	auto CommandList::reset() -> void {
 		assert(false && "NOT IMPLEMENTED");
 	}
 
-	auto VulkanCommandList::begin() -> bool {
+	auto CommandList::begin() -> bool {
 		
 		VkCommandBufferBeginInfo begin_info{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
 		begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
@@ -217,48 +225,48 @@ namespace edge::gfx {
 		return true;
 	}
 
-	auto VulkanCommandList::end() -> bool {
+	auto CommandList::end() -> bool {
 		//VK_CHECK_RESULT(vkEndCommandBuffer(handle_),
 		//	"Failed to end command buffer.");
 		
 		return true;
 	}
 
-	auto VulkanCommandList::set_viewport(float x, float y, float width, float height, float min_depth, float max_depth) const -> void {
+	auto CommandList::set_viewport(float x, float y, float width, float height, float min_depth, float max_depth) const -> void {
 		VkViewport viewport{ x, y, width, height, min_depth, max_depth };
 		vkCmdSetViewport(handle_, 0, 1, &viewport);
 	}
 
-	auto VulkanCommandList::set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const -> void {
+	auto CommandList::set_scissor(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const -> void {
 		VkRect2D scissor{ { static_cast<int32_t>(x), static_cast<int32_t>(y) }, { width, height } };
 		vkCmdSetScissor(handle_, 0, 1, &scissor);
 	}
 
-	auto VulkanCommandList::draw(uint32_t vertex_count, uint32_t first_vertex, uint32_t first_instance, uint32_t instance_count) const -> void {
+	auto CommandList::draw(uint32_t vertex_count, uint32_t first_vertex, uint32_t first_instance, uint32_t instance_count) const -> void {
 		vkCmdDraw(handle_, vertex_count, instance_count, first_vertex, first_instance);
 	}
 
-	auto VulkanCommandList::draw_indexed(uint32_t index_count, uint32_t first_index, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) const -> void {
+	auto CommandList::draw_indexed(uint32_t index_count, uint32_t first_index, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) const -> void {
 		vkCmdDrawIndexed(handle_, index_count, instance_count, first_index, first_vertex, first_instance);
 	}
 
-	auto VulkanCommandList::dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) const -> void {
+	auto CommandList::dispatch(uint32_t group_x, uint32_t group_y, uint32_t group_z) const -> void {
 		vkCmdDispatch(handle_, group_x, group_y, group_z);
 	}
 
-	auto VulkanCommandList::begin_marker(std::string_view name, uint32_t color) const -> void {
+	auto CommandList::begin_marker(std::string_view name, uint32_t color) const -> void {
 		assert(false && "NOT IMPLEMENTED");
 	}
 
-	auto VulkanCommandList::insert_marker(std::string_view name, uint32_t color) const -> void {
+	auto CommandList::insert_marker(std::string_view name, uint32_t color) const -> void {
 		assert(false && "NOT IMPLEMENTED");
 	}
 
-	auto VulkanCommandList::end_marker() const -> void {
+	auto CommandList::end_marker() const -> void {
 		assert(false && "NOT IMPLEMENTED");
 	}
 
-	auto VulkanCommandList::_construct(vk::Device device, vk::CommandPool command_pool) -> bool {
+	auto CommandList::_construct(vk::Device device, vk::CommandPool command_pool) -> bool {
 		command_pool_ = command_pool;
 
 		VkCommandBufferAllocateInfo allocate_info{ VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO };
@@ -272,8 +280,10 @@ namespace edge::gfx {
 		return true;
 	}
 
+#undef EDGE_LOGGER_SCOPE // CommandList
+
 	// Presentation engine
-//	auto VulkanPresentationEngine::construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> std::unique_ptr<VulkanPresentationEngine> {
+//	auto VulkanPresentationEngine::construct(const GraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> Owned<VulkanPresentationEngine> {
 //		auto self = std::make_unique<VulkanPresentationEngine>();
 //		self->_construct(ctx, queue_type, frames_in_flight);
 //		return self;
@@ -302,14 +312,14 @@ namespace edge::gfx {
 //		return 0;
 //	}
 //
-//	auto VulkanPresentationEngine::_construct(const VulkanGraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> bool {
+//	auto VulkanPresentationEngine::_construct(const GraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> bool {
 //		device_ = ctx.get_logical_device();
 //		physical_ = ctx.get_physical_device();
 //		surface_ = ctx.get_surface();
 //		allocator_ = ctx.get_allocation_callbacks();
 //
-//		queue_ = std::static_pointer_cast<VulkanQueue>(ctx.create_queue(queue_type));
-//		command_allocator_ = std::static_pointer_cast<VulkanCommandAllocator>(queue_->create_command_allocator());
+//		queue_ = std::static_pointer_cast<Queue>(ctx.create_queue(queue_type));
+//		command_allocator_ = std::static_pointer_cast<CommandAllocator>(queue_->create_command_allocator());
 //		
 //		if (!update_swapchain()) {
 //			return false;
