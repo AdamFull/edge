@@ -174,6 +174,9 @@ namespace edge::vkw {
 	template<typename T>
 	using Vector = std::vector<T, Allocator<T>>;
 
+	template<typename K, typename T, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = Allocator<std::pair<K, T>>>
+	using HashMap = std::unordered_map<K, T, Hasher, KeyEq, Alloc>;
+
 	//template<typename T>
 	//class BaseHandle {
 	//public:
@@ -480,6 +483,8 @@ namespace edge::vkw {
 			return *this;
 		}
 
+		auto get_queue_family_properties() const -> Vector<vk::QueueFamilyProperties>;
+
 		auto get_queue(const vk::DeviceQueueInfo2& queue_info, vk::Queue& queue) const -> void;
 
 		auto create_handle(const vk::CommandPoolCreateInfo& create_info, vk::CommandPool& handle) const -> vk::Result;
@@ -492,6 +497,9 @@ namespace edge::vkw {
 		auto signal_semaphore(const vk::SemaphoreSignalInfo& signal_info) const -> vk::Result;
 		auto wait_semaphore(const vk::SemaphoreWaitInfo& wait_info, uint64_t timeout = std::numeric_limits<uint64_t>::max()) const -> vk::Result;
 		auto get_semaphore_counter_value(vk::Semaphore handle) const -> Result<uint64_t>;
+
+		auto create_handle(const vk::FenceCreateInfo& create_info, vk::Fence& handle) const -> vk::Result;
+		auto destroy_handle(vk::Fence handle) const -> void;
 
 		auto create_handle(const vk::SwapchainCreateInfoKHR& create_info, vk::SwapchainKHR& handle) const -> vk::Result;
 		auto destroy_handle(vk::SwapchainKHR handle) const -> void;
@@ -536,6 +544,7 @@ namespace edge::vkw {
 		};
 
 		Swapchain(Device const& device, vk::SwapchainKHR swapchain, const State& new_state);
+		Swapchain(std::nullptr_t) noexcept {}
 		~Swapchain();
 
 		Swapchain(const Swapchain&) = delete;

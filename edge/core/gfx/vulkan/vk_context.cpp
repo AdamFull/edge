@@ -177,6 +177,21 @@ namespace edge::gfx::vulkan {
 
 #define EDGE_LOGGER_SCOPE "Vulkan GFX Context"
 
+    GraphicsContext::GraphicsContext() {
+
+        memalloc_stats_.total_bytes_allocated = 0ull;
+        memalloc_stats_.allocation_count = 0ull;
+        memalloc_stats_.deallocation_count = 0ull;
+
+        // Create allocation callbacks
+        vk_alloc_callbacks_.pfnAllocation = (vk::PFN_AllocationFunction)vkmemalloc;
+        vk_alloc_callbacks_.pfnFree = (vk::PFN_FreeFunction)vkmemfree;
+        vk_alloc_callbacks_.pfnReallocation = (vk::PFN_ReallocationFunction)vkmemrealloc;
+        vk_alloc_callbacks_.pfnInternalAllocation = (vk::PFN_InternalAllocationNotification)vkinternalmemalloc;
+        vk_alloc_callbacks_.pfnInternalFree = (vk::PFN_InternalFreeNotification)vkinternalmemfree;
+        vk_alloc_callbacks_.pUserData = &memalloc_stats_;
+    }
+
     GraphicsContext::~GraphicsContext() {
         if(vma_allocator_) {
             EDGE_SLOGD("Destroying VMA allocator");
@@ -217,18 +232,6 @@ namespace edge::gfx::vulkan {
     }
 
 	auto GraphicsContext::create(const GraphicsContextCreateInfo& create_info) -> bool {
-		memalloc_stats_.total_bytes_allocated = 0ull;
-		memalloc_stats_.allocation_count = 0ull;
-		memalloc_stats_.deallocation_count = 0ull;
-
-		// Create allocation callbacks
-		vk_alloc_callbacks_.pfnAllocation = (vk::PFN_AllocationFunction)vkmemalloc;
-		vk_alloc_callbacks_.pfnFree = (vk::PFN_FreeFunction)vkmemfree;
-		vk_alloc_callbacks_.pfnReallocation = (vk::PFN_ReallocationFunction)vkmemrealloc;
-		vk_alloc_callbacks_.pfnInternalAllocation = (vk::PFN_InternalAllocationNotification) vkinternalmemalloc;
-		vk_alloc_callbacks_.pfnInternalFree = (vk::PFN_InternalFreeNotification)vkinternalmemfree;
-		vk_alloc_callbacks_.pUserData = &memalloc_stats_;
-
         auto instance_result = vkw::InstanceBuilder{ &vk_alloc_callbacks_ }
             .set_app_name("MyApp")
             .set_app_version(1, 0, 0)
@@ -362,6 +365,59 @@ namespace edge::gfx::vulkan {
 
         vkw_device_ = std::move(device_selector.value());
 
+        // Make queue family map
+        if (auto family_propersies = vkw_device_.get_queue_family_properties(); !family_propersies.empty()) {
+            for (uint32_t index = 0; index < static_cast<uint32_t>(family_propersies.size()); ++index) {
+                auto const& queue_family_property = family_propersies[index];
+                auto present_supported = vkw_device_.get_physical().getSurfaceSupportKHR(index, vk_surface_) == VK_TRUE;
+
+                bool is_graphics_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eGraphics) == vk::QueueFlagBits::eGraphics;
+                bool is_compute_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eCompute) == vk::QueueFlagBits::eCompute;
+                bool is_copy_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eTransfer) == vk::QueueFlagBits::eTransfer;
+
+                QueueType queue_type{};
+                if (present_supported && is_graphics_commands_supported &&
+                    is_compute_commands_supported && is_copy_commands_supported) {
+                    queue_type = QueueType::eDirect;
+                }
+                else if (present_supported && is_compute_commands_supported && is_copy_commands_supported) {
+                    queue_type = QueueType::eCompute;
+                }
+                else if (is_copy_commands_supported) {
+                    queue_type = QueueType::eCopy;
+                }
+
+                auto& group = queue_family_map_[static_cast<size_t>(queue_type)];
+                auto& family_info = group.emplace_back();
+                family_info.index = index;
+                family_info.queue_indices = vkw::Vector<uint32_t>(queue_family_property.queueCount, &vk_alloc_callbacks_);
+                std::iota(family_info.queue_indices.rbegin(), family_info.queue_indices.rend(), 0u);
+
+#ifndef NDEBUG
+                std::string supported_commands;
+
+                if (present_supported) {
+                    supported_commands += "present|";
+                }
+                if (is_graphics_commands_supported) {
+                    supported_commands += "graphics|";
+                }
+                if (is_compute_commands_supported) {
+                    supported_commands += "compute|";
+                }
+                if (is_copy_commands_supported) {
+                    supported_commands += "transfer";
+                }
+
+                if (!supported_commands.empty()) {
+                    supported_commands.pop_back();
+                }
+
+                EDGE_SLOGD("Found \"{}\" queue that support: {} commands.", foundation::to_string(queue_type), supported_commands);
+#endif
+            }
+        }
+
         // Create debug interface
         vk::DebugUtilsMessengerCreateInfoEXT debug_utils_create_info{};
         debug_utils_create_info.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
@@ -469,42 +525,31 @@ namespace edge::gfx::vulkan {
             return false;
         }
 
-        auto swapchain_result = vkw::SwapchainBuilder{ vkw_device_, vk_surface_ }
-            .enable_hdr(true)
-            .enable_vsync(true)
-            //.set_image_format(vk::Format::eB8G8R8A8Srgb)
-            //.set_color_space(vk::ColorSpaceKHR::eSrgbNonlinear)
-            .set_image_count(2)
-            .build();
+        auto queue_request_result = create_queue(QueueType::eDirect);
 
 		return true;
 	}
 
-    auto GraphicsContext::create_queue(QueueType queue_type) const -> Shared<IGFXQueue> {
-        //auto& device = devices_[selected_device_index_];
-        //auto& family_groups = device.queue_type_to_family_map[static_cast<uint32_t>(queue_type)];
-        //
-        //// Lookup for free queue slots
-        //for (auto family_index : family_groups) {
-        //    auto& family_properties = device.queue_family_props[family_index];
-        //    auto& queues_used = device.queue_family_queue_usages[family_index];
-        //
-        //    if (queues_used >= family_properties.queueCount) {
-        //        // TODO: try to check freed indices
-        //        return nullptr;
-        //    }
-        //
-        //    return VulkanQueue::construct(*this, family_index, queues_used++);
-        //}
+    auto GraphicsContext::create_queue(QueueType queue_type) const -> GFXResult<Shared<IGFXQueue>> {
+        const auto& family_group = queue_family_map_[static_cast<size_t>(queue_type)];
+        for (auto family : family_group) {
+            if (!family.queue_indices.empty()) {
+                auto queue_index = family.queue_indices.back();
+                family.queue_indices.pop_back();
 
-        return nullptr;
+                // TODO: return queue index back in queue deletion
+                return Queue::construct(*this, family.index, queue_index);
+            }
+        }
+
+        return std::unexpected(Result::eUndefined);
     }
 
-    auto GraphicsContext::create_semaphore(uint64_t value) const -> Shared<IGFXSemaphore> {
+    auto GraphicsContext::create_semaphore(uint64_t value) const -> GFXResult<Shared<IGFXSemaphore>> {
         return Semaphore::construct(*this, value);
     }
 
-    auto GraphicsContext::create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> Shared<IGFXPresentationEngine> {
+    auto GraphicsContext::create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> GFXResult<Shared<IGFXPresentationEngine>> {
         return nullptr;
     }
 }

@@ -22,184 +22,174 @@ namespace edge::vkw {
 #endif
 
 #define EDGE_LOGGER_SCOPE "InstanceBuilder"
+	namespace helpers {
+		inline auto enumerate_instance_layer_properties(vk::AllocationCallbacks const* allocator) -> Result<Vector<vk::LayerProperties>> {
+			uint32_t count;
+			if (auto result = vk::enumerateInstanceLayerProperties(&count, nullptr); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
 
-	inline auto enumerate_instance_layer_properties(vk::AllocationCallbacks const* allocator) -> Result<Vector<vk::LayerProperties>> {
-		uint32_t count;
-		if (auto result = vk::enumerateInstanceLayerProperties(&count, nullptr); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
+			Vector<vk::LayerProperties> output(count, allocator);
+			if (auto result = vk::enumerateInstanceLayerProperties(&count, output.data()); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
+
+			return output;
 		}
 
-		Vector<vk::LayerProperties> output(count, allocator);
-		if (auto result = vk::enumerateInstanceLayerProperties(&count, output.data()); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
+		inline auto enumerate_instance_extension_properties(const char* layer_name, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::ExtensionProperties>> {
+			uint32_t count;
+			if (auto result = vk::enumerateInstanceExtensionProperties(layer_name, &count, nullptr); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
+
+			Vector<vk::ExtensionProperties> output(count, allocator);
+			if (auto result = vk::enumerateInstanceExtensionProperties(layer_name, &count, output.data()); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
+
+			return output;
 		}
 
-		return output;
-	}
+		inline auto enumerate_physical_devices(vk::Instance instance, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::PhysicalDevice>> {
+			uint32_t count;
+			if (auto result = instance.enumeratePhysicalDevices(&count, nullptr); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
 
-	inline auto enumerate_instance_extension_properties(const char* layer_name, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::ExtensionProperties>> {
-		uint32_t count;
-		if (auto result = vk::enumerateInstanceExtensionProperties(layer_name, &count, nullptr); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
+			Vector<vk::PhysicalDevice> output(count, allocator);
+			if (auto result = instance.enumeratePhysicalDevices(&count, output.data()); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
+
+			return output;
 		}
 
-		Vector<vk::ExtensionProperties> output(count, allocator);
-		if (auto result = vk::enumerateInstanceExtensionProperties(layer_name, &count, output.data()); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
+		inline auto enumerate_device_extension_properties(vk::PhysicalDevice device, const char* layer_name = nullptr, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::ExtensionProperties>> {
+			uint32_t count;
+			if (auto result = device.enumerateDeviceExtensionProperties(layer_name, &count, nullptr); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
+
+			Vector<vk::ExtensionProperties> output(count, allocator);
+			if (auto result = device.enumerateDeviceExtensionProperties(layer_name, &count, output.data()); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
+
+			return output;
 		}
 
-		return output;
-	}
+		inline auto get_queue_family_properties(vk::PhysicalDevice device, vk::AllocationCallbacks const* allocator = nullptr) -> Vector<vk::QueueFamilyProperties> {
+			uint32_t count;
+			device.getQueueFamilyProperties(&count, nullptr);
 
-	inline auto enumerate_physical_devices(vk::Instance instance, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::PhysicalDevice>> {
-		uint32_t count;
-		if (auto result = instance.enumeratePhysicalDevices(&count, nullptr); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
+			Vector<vk::QueueFamilyProperties> output(count, allocator);
+			device.getQueueFamilyProperties(&count, output.data());
+
+			return output;
 		}
 
-		Vector<vk::PhysicalDevice> output(count, allocator);
-		if (auto result = instance.enumeratePhysicalDevices(&count, output.data()); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
+		inline auto get_surface_formats(vk::PhysicalDevice device, vk::SurfaceKHR surface, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::SurfaceFormatKHR>> {
+			uint32_t count;
+			if (auto result = device.getSurfaceFormatsKHR(surface, &count, nullptr); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
+
+			Vector<vk::SurfaceFormatKHR> output(count, allocator);
+			if (auto result = device.getSurfaceFormatsKHR(surface, &count, output.data()); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
+
+			return output;
 		}
 
-		return output;
-	}
+		inline auto get_surface_present_modes(vk::PhysicalDevice device, vk::SurfaceKHR surface, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::PresentModeKHR>> {
+			uint32_t count;
+			if (auto result = device.getSurfacePresentModesKHR(surface, &count, nullptr); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
 
-	inline auto enumerate_device_extension_properties(vk::PhysicalDevice device, const char* layer_name = nullptr, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::ExtensionProperties>> {
-		uint32_t count;
-		if (auto result = device.enumerateDeviceExtensionProperties(layer_name, &count, nullptr); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
+			Vector<vk::PresentModeKHR> output(count, allocator);
+			if (auto result = device.getSurfacePresentModesKHR(surface, &count, output.data()); result != vk::Result::eSuccess) {
+				return std::unexpected(result);
+			}
+
+			return output;
 		}
 
-		Vector<vk::ExtensionProperties> output(count, allocator);
-		if (auto result = device.enumerateDeviceExtensionProperties(layer_name, &count, output.data()); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
+		inline auto is_hdr_format(vk::Format format) -> bool {
+			switch (format) {
+				// 10-bit formats
+			case vk::Format::eA2B10G10R10UnormPack32:
+			case vk::Format::eA2R10G10B10UnormPack32:
+			case vk::Format::eA2B10G10R10UintPack32:
+			case vk::Format::eA2R10G10B10UintPack32:
+			case vk::Format::eA2B10G10R10SintPack32:
+			case vk::Format::eA2R10G10B10SintPack32:
+
+				// 16-bit float formats
+			case vk::Format::eR16G16B16A16Sfloat:
+			case vk::Format::eR16G16B16Sfloat:
+
+				// 32-bit float formats
+			case vk::Format::eR32G32B32A32Sfloat:
+			case vk::Format::eR32G32B32Sfloat:
+
+				// BC6H (HDR texture compression)
+			case vk::Format::eBc6HUfloatBlock:
+			case vk::Format::eBc6HSfloatBlock:
+
+				// ASTC HDR
+			case vk::Format::eAstc4x4SfloatBlock:
+			case vk::Format::eAstc5x4SfloatBlock:
+			case vk::Format::eAstc5x5SfloatBlock:
+			case vk::Format::eAstc6x5SfloatBlock:
+			case vk::Format::eAstc6x6SfloatBlock:
+			case vk::Format::eAstc8x5SfloatBlock:
+			case vk::Format::eAstc8x6SfloatBlock:
+			case vk::Format::eAstc8x8SfloatBlock:
+			case vk::Format::eAstc10x5SfloatBlock:
+			case vk::Format::eAstc10x6SfloatBlock:
+			case vk::Format::eAstc10x8SfloatBlock:
+			case vk::Format::eAstc10x10SfloatBlock:
+			case vk::Format::eAstc12x10SfloatBlock:
+			case vk::Format::eAstc12x12SfloatBlock:
+				return true;
+
+			default:
+				return false;
+			}
 		}
 
-		return output;
-	}
+		inline auto is_hdr_color_space(vk::ColorSpaceKHR color_space) -> bool {
+			switch (color_space) {
+				// HDR10 color spaces
+			case vk::ColorSpaceKHR::eHdr10St2084EXT:
+			case vk::ColorSpaceKHR::eHdr10HlgEXT:
 
-	inline auto get_queue_family_properties(vk::PhysicalDevice device, vk::AllocationCallbacks const* allocator = nullptr) -> Vector<vk::QueueFamilyProperties> {
-		uint32_t count;
-		device.getQueueFamilyProperties(&count, nullptr);
+				// Dolby Vision
+			case vk::ColorSpaceKHR::eDolbyvisionEXT:
 
-		Vector<vk::QueueFamilyProperties> output(count, allocator);
-		device.getQueueFamilyProperties(&count, output.data());
+				// Extended sRGB (scRGB)
+			case vk::ColorSpaceKHR::eExtendedSrgbLinearEXT:
+			case vk::ColorSpaceKHR::eExtendedSrgbNonlinearEXT:
 
-		return output;
-	}
+				// Display P3
+			case vk::ColorSpaceKHR::eDisplayP3NonlinearEXT:
+			case vk::ColorSpaceKHR::eDisplayP3LinearEXT:
 
-	inline auto get_surface_formats(vk::PhysicalDevice device, vk::SurfaceKHR surface, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::SurfaceFormatKHR>> {
-		uint32_t count;
-		if (auto result = device.getSurfaceFormatsKHR(surface, &count, nullptr); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
+				// Wide color gamut
+			case vk::ColorSpaceKHR::eBt2020LinearEXT:
+			case vk::ColorSpaceKHR::eBt709LinearEXT:
+			case vk::ColorSpaceKHR::eDciP3NonlinearEXT:
+			case vk::ColorSpaceKHR::eAdobergbLinearEXT:
+			case vk::ColorSpaceKHR::eAdobergbNonlinearEXT:
+				return true;
+
+			default:
+				return false;
+			}
 		}
-
-		Vector<vk::SurfaceFormatKHR> output(count, allocator);
-		if (auto result = device.getSurfaceFormatsKHR(surface, &count, output.data()); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		return output;
-	}
-
-	inline auto get_surface_present_modes(vk::PhysicalDevice device, vk::SurfaceKHR surface, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::PresentModeKHR>> {
-		uint32_t count;
-		if (auto result = device.getSurfacePresentModesKHR(surface, &count, nullptr); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		Vector<vk::PresentModeKHR> output(count, allocator);
-		if (auto result = device.getSurfacePresentModesKHR(surface, &count, output.data()); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		return output;
-	}
-
-	inline auto is_hdr_format(vk::Format format) -> bool {
-		switch (format) {
-			// 10-bit formats
-		case vk::Format::eA2B10G10R10UnormPack32:
-		case vk::Format::eA2R10G10B10UnormPack32:
-		case vk::Format::eA2B10G10R10UintPack32:
-		case vk::Format::eA2R10G10B10UintPack32:
-		case vk::Format::eA2B10G10R10SintPack32:
-		case vk::Format::eA2R10G10B10SintPack32:
-
-			// 16-bit float formats
-		case vk::Format::eR16G16B16A16Sfloat:
-		case vk::Format::eR16G16B16Sfloat:
-
-			// 32-bit float formats
-		case vk::Format::eR32G32B32A32Sfloat:
-		case vk::Format::eR32G32B32Sfloat:
-
-			// BC6H (HDR texture compression)
-		case vk::Format::eBc6HUfloatBlock:
-		case vk::Format::eBc6HSfloatBlock:
-
-			// ASTC HDR
-		case vk::Format::eAstc4x4SfloatBlock:
-		case vk::Format::eAstc5x4SfloatBlock:
-		case vk::Format::eAstc5x5SfloatBlock:
-		case vk::Format::eAstc6x5SfloatBlock:
-		case vk::Format::eAstc6x6SfloatBlock:
-		case vk::Format::eAstc8x5SfloatBlock:
-		case vk::Format::eAstc8x6SfloatBlock:
-		case vk::Format::eAstc8x8SfloatBlock:
-		case vk::Format::eAstc10x5SfloatBlock:
-		case vk::Format::eAstc10x6SfloatBlock:
-		case vk::Format::eAstc10x8SfloatBlock:
-		case vk::Format::eAstc10x10SfloatBlock:
-		case vk::Format::eAstc12x10SfloatBlock:
-		case vk::Format::eAstc12x12SfloatBlock:
-			return true;
-
-		default:
-			return false;
-		}
-	}
-
-	inline auto is_hdr_color_space(vk::ColorSpaceKHR color_space) -> bool {
-		switch (color_space) {
-			// HDR10 color spaces
-		case vk::ColorSpaceKHR::eHdr10St2084EXT:
-		case vk::ColorSpaceKHR::eHdr10HlgEXT:
-
-			// Dolby Vision
-		case vk::ColorSpaceKHR::eDolbyvisionEXT:
-
-			// Extended sRGB (scRGB)
-		case vk::ColorSpaceKHR::eExtendedSrgbLinearEXT:
-		case vk::ColorSpaceKHR::eExtendedSrgbNonlinearEXT:
-
-			// Display P3
-		case vk::ColorSpaceKHR::eDisplayP3NonlinearEXT:
-		case vk::ColorSpaceKHR::eDisplayP3LinearEXT:
-
-			// Wide color gamut
-		case vk::ColorSpaceKHR::eBt2020LinearEXT:
-		case vk::ColorSpaceKHR::eBt709LinearEXT:
-		case vk::ColorSpaceKHR::eDciP3NonlinearEXT:
-		case vk::ColorSpaceKHR::eAdobergbLinearEXT:
-		case vk::ColorSpaceKHR::eAdobergbNonlinearEXT:
-			return true;
-
-		default:
-			return false;
-		}
-	}
-
-	inline auto check_format_hdr_support(vk::PhysicalDevice device, vk::Format format) -> bool {
-		vk::FormatProperties props;
-		device.getFormatProperties(format, &props);
-
-		bool supports_color_attachment = static_cast<bool>(props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eColorAttachment);
-		bool supports_storage_image = static_cast<bool>(props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eStorageImage);
-		bool supports_sampled_image = static_cast<bool>(props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImage);
-
-		return is_hdr_format(format) && supports_color_attachment && supports_storage_image && supports_sampled_image;
 	}
 
 	InstanceBuilder::InstanceBuilder(vk::AllocationCallbacks const* allocator) :
@@ -215,7 +205,7 @@ namespace edge::vkw {
 		// Request all validation layers supported
 		Vector<vk::LayerProperties> all_layer_properties{ allocator_ };
 
-		if (auto request = enumerate_instance_layer_properties(allocator_); request.has_value()) {
+		if (auto request = helpers::enumerate_instance_layer_properties(allocator_); request.has_value()) {
 			all_layer_properties = std::move(request.value());
 		}
 
@@ -241,7 +231,7 @@ namespace edge::vkw {
 		Vector<vk::ExtensionProperties> all_extension_properties{ allocator_ };
 		for (int32_t layer_index = 0; layer_index < static_cast<int32_t>(enabled_layers_.size() + 1); ++layer_index) {
 			const char* layer_name = (layer_index == 0 ? nullptr : enabled_layers_[layer_index - 1]);
-			if (auto request = enumerate_instance_extension_properties(layer_name, allocator_); request.has_value()) {
+			if (auto request = helpers::enumerate_instance_extension_properties(layer_name, allocator_); request.has_value()) {
 				auto layer_ext_props = std::move(request.value());
 				all_extension_properties.insert(all_extension_properties.end(), layer_ext_props.begin(), layer_ext_props.end());
 			}
@@ -356,7 +346,7 @@ namespace edge::vkw {
 		int32_t fallback_index{ -1 };
 
 		Vector<vk::PhysicalDevice> physical_devices(allocator_);
-		if (auto result = enumerate_physical_devices(instance_, allocator_); result.has_value()) {
+		if (auto result = helpers::enumerate_physical_devices(instance_, allocator_); result.has_value()) {
 			physical_devices = std::move(result.value());
 		}
 
@@ -367,7 +357,7 @@ namespace edge::vkw {
 			auto properties = physical_device.getProperties();
 
 			Vector<vk::ExtensionProperties> available_extensions{ allocator_ };
-			if (auto result = enumerate_device_extension_properties(physical_device); result.has_value()) {
+			if (auto result = helpers::enumerate_device_extension_properties(physical_device); result.has_value()) {
 				available_extensions = std::move(result.value());
 			}
 
@@ -408,7 +398,7 @@ namespace edge::vkw {
 
 			// Check that device have queue with present support
 			if (surface_) {
-				auto queue_family_props = get_queue_family_properties(physical_device, allocator_);
+				auto queue_family_props = helpers::get_queue_family_properties(physical_device, allocator_);
 
 				bool surface_supported{ false };
 				for (uint32_t queue_family_index = 0; queue_family_index < static_cast<uint32_t>(queue_family_props.size()); ++queue_family_index) {
@@ -446,7 +436,7 @@ namespace edge::vkw {
 		auto& enabled_extensions = per_device_extensions[selected_device_index];
 
 		auto properties = selected_device.getProperties();
-		auto queue_family_properties = get_queue_family_properties(selected_device, allocator_);
+		auto queue_family_properties = helpers::get_queue_family_properties(selected_device, allocator_);
 
 		EDGE_SLOGD("{} device \"{}\" selected.", to_string(properties.deviceType), std::string_view(properties.deviceName));
 
@@ -533,7 +523,7 @@ namespace edge::vkw {
 		: physical_{ physical }, logical_{ logical }, allocator_{ allocator }, enabled_extensions_{ std::move(enabled_extensions) },
 		supported_extensions_{ allocator } {
 		if (physical) {
-			if (auto result = enumerate_device_extension_properties(physical, nullptr, allocator); result.has_value()) {
+			if (auto result = helpers::enumerate_device_extension_properties(physical, nullptr, allocator); result.has_value()) {
 				supported_extensions_ = std::move(result.value());
 			}
 		}
@@ -543,6 +533,10 @@ namespace edge::vkw {
 		if (logical_) {
 			logical_.destroy();
 		}
+	}
+
+	auto Device::get_queue_family_properties() const -> Vector<vk::QueueFamilyProperties> {
+		return helpers::get_queue_family_properties(physical_, allocator_);
 	}
 
 	auto Device::get_queue(const vk::DeviceQueueInfo2& queue_info, vk::Queue& queue) const -> void {
@@ -587,6 +581,14 @@ namespace edge::vkw {
 			return std::unexpected(result);
 		}
 		return value;
+	}
+
+	auto Device::create_handle(const vk::FenceCreateInfo& create_info, vk::Fence& handle) const -> vk::Result {
+		return logical_.createFence(&create_info, allocator_, &handle);
+	}
+
+	auto Device::destroy_handle(vk::Fence handle) const -> void {
+		logical_.destroyFence(handle, allocator_);
 	}
 
 	auto Device::create_handle(const vk::SwapchainCreateInfoKHR& create_info, vk::SwapchainKHR& handle) const -> vk::Result {
@@ -670,12 +672,12 @@ namespace edge::vkw {
 		auto physical_device = device_->get_physical();
 
 		Vector<vk::SurfaceFormatKHR> surface_formats;
-		if (auto result = get_surface_formats(physical_device, surface_, device_->get_allocator()); result.has_value()) {
+		if (auto result = helpers::get_surface_formats(physical_device, surface_, device_->get_allocator()); result.has_value()) {
 			surface_formats = std::move(result.value());
 		}
 
 		Vector<vk::PresentModeKHR> present_modes;
-		if (auto result = get_surface_present_modes(physical_device, surface_, device_->get_allocator()); result.has_value()) {
+		if (auto result = helpers::get_surface_present_modes(physical_device, surface_, device_->get_allocator()); result.has_value()) {
 			present_modes = std::move(result.value());
 		}
 
@@ -718,7 +720,7 @@ namespace edge::vkw {
 		create_info.clipped = VK_TRUE;
 		create_info.imageSharingMode = vk::SharingMode::eExclusive;
 
-		auto queue_family_properties = get_queue_family_properties(physical_device, device_->get_allocator());
+		auto queue_family_properties = device_->get_queue_family_properties();
 		Vector<uint32_t> queue_family_indices(queue_family_properties.size(), device_->get_allocator());
 		std::iota(queue_family_indices.begin(), queue_family_indices.end(), 0);
 
@@ -739,7 +741,7 @@ namespace edge::vkw {
 			.extent = create_info.imageExtent,
 			.transform = create_info.preTransform,
 			.vsync = requested_state_.vsync,
-			.hdr = requested_state_.hdr && is_hdr_format(create_info.imageFormat) && is_hdr_color_space(create_info.imageColorSpace)
+			.hdr = requested_state_.hdr && helpers::is_hdr_format(create_info.imageFormat) && helpers::is_hdr_color_space(create_info.imageColorSpace)
 		};
 		return Swapchain(*device_, swapchain, new_state);
 	}
@@ -767,7 +769,7 @@ namespace edge::vkw {
 		Vector<vk::SurfaceFormatKHR> sdr_fromats{ available_surface_formats.get_allocator() };
 		Vector<vk::SurfaceFormatKHR> hdr_fromats{ available_surface_formats.get_allocator() };
 		for (const auto& surface_format : available_surface_formats) {
-			if (is_hdr_format(surface_format.format) && is_hdr_color_space(surface_format.colorSpace)) {
+			if (helpers::is_hdr_format(surface_format.format) && helpers::is_hdr_color_space(surface_format.colorSpace)) {
 				hdr_fromats.push_back(surface_format);
 			}
 			else {

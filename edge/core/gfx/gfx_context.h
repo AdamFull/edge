@@ -14,15 +14,15 @@ namespace edge::gfx {
 		virtual auto signal(uint64_t value) -> SyncResult = 0;
 		virtual auto wait(uint64_t value, std::chrono::nanoseconds timeout = std::chrono::nanoseconds::max()) -> SyncResult = 0;
 
-		virtual auto is_completed(uint64_t value) const -> bool = 0;
-		virtual auto get_value() const -> uint64_t = 0;
+		virtual auto is_completed(uint64_t value) const -> GFXResult<bool> = 0;
+		virtual auto get_value() const -> GFXResult<uint64_t> = 0;
 	};
 
 	class IGFXQueue {
 	public:
 		virtual ~IGFXQueue() = default;
 
-		virtual auto create_command_allocator() const -> Shared<IGFXCommandAllocator> = 0;
+		virtual auto create_command_allocator() const -> GFXResult<Shared<IGFXCommandAllocator>> = 0;
 
 		virtual auto submit(const SubmitQueueInfo& submit_info) -> void = 0;
 		virtual auto wait_idle() -> SyncResult = 0;
@@ -32,10 +32,10 @@ namespace edge::gfx {
 	public:
 		virtual ~IGFXBuffer() = default;
 
-		[[nodiscard]] virtual auto map() -> std::span<uint8_t> = 0;
+		[[nodiscard]] virtual auto map() -> GFXResult<std::span<uint8_t>> = 0;
 		virtual auto unmap() noexcept -> void = 0;
 
-		[[nodiscard]] virtual auto update(const void* data, uint64_t size, uint64_t offset = 0ull) -> uint64_t = 0;
+		[[nodiscard]] virtual auto update(const void* data, uint64_t size, uint64_t offset = 0ull) -> GFXResult<uint64_t> = 0;
 
 		[[nodiscard]] virtual auto get_size() const noexcept -> uint64_t = 0;
 		[[nodiscard]] virtual auto get_address() const -> uint64_t = 0;
@@ -64,8 +64,7 @@ namespace edge::gfx {
 	public:
 		virtual ~IGFXCommandAllocator() = default;
 
-		virtual auto allocate_command_list() const -> Shared<IGFXCommandList> = 0;
-		virtual auto reset() -> void = 0;
+		virtual auto allocate_command_list() const -> GFXResult<Shared<IGFXCommandList>> = 0;
 	};
 
 	class IGFXCommandList {
@@ -94,19 +93,21 @@ namespace edge::gfx {
 
 		virtual auto get_image() const -> Shared<IGFXImage> = 0;
 		virtual auto get_image_view() const -> Shared<IGFXImageView> = 0;
+
+		virtual auto get_command_list() const -> Shared<IGFXCommandList> = 0;
 	};
 
 	class IGFXPresentationEngine {
 	public:
 		virtual ~IGFXPresentationEngine() = default;
 
-		virtual auto get_current_image_index() const -> uint32_t = 0;
-		virtual auto get_current_image() const -> Shared<IGFXImage> = 0;
+		virtual auto begin(uint32_t* frame_index) -> bool = 0;
+		virtual auto end(const PresentInfo& present_info) -> bool = 0;
 
-		virtual auto acquire_next_image(uint32_t* next_image_index) -> bool = 0;
-		virtual auto present(const PresentInfo& present_info) -> bool = 0;
+		virtual auto get_queue() const -> Shared<IGFXQueue> = 0;
+		virtual auto get_command_allocator() const -> Shared<IGFXCommandAllocator> = 0;
 
-		virtual auto reset() -> bool = 0;
+		virtual auto get_current_frame() const -> Shared<IGFXPresentationFrame> = 0;
 	};
 
 	class IGFXContext {
@@ -115,9 +116,9 @@ namespace edge::gfx {
 
 		virtual auto create(const GraphicsContextCreateInfo& create_info) -> bool = 0;
 
-		virtual auto create_queue(QueueType queue_type) const -> Shared<IGFXQueue> = 0;
-		virtual auto create_semaphore(uint64_t value) const -> Shared<IGFXSemaphore> = 0;
+		virtual auto create_queue(QueueType queue_type) const -> GFXResult<Shared<IGFXQueue>> = 0;
+		virtual auto create_semaphore(uint64_t value) const -> GFXResult<Shared<IGFXSemaphore>> = 0;
 
-		virtual auto create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> Shared<IGFXPresentationEngine> = 0;
+		virtual auto create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> GFXResult<Shared<IGFXPresentationEngine>> = 0;
 	};
 }

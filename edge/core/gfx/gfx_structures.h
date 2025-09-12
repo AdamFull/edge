@@ -1,5 +1,7 @@
 #pragma once
 
+#include <expected>
+
 #include <tiny_imageformat/tinyimageformat.h>
 
 #include "gfx_enum.h"
@@ -18,6 +20,9 @@ namespace edge::gfx {
 	class IGFXCommandList;
 
 	class IGFXImage;
+
+	template<typename T>
+	using GFXResult = std::expected<T, Result>;
 
 	struct Extent2D {
 		uint32_t width, height;
@@ -59,6 +64,7 @@ namespace edge::gfx {
 		uint32_t width, height;
 		uint32_t image_count;
 		TinyImageFormat format;
+		ColorSpace color_space;
 
 		bool vsync;
 		bool hdr;

@@ -9,9 +9,11 @@ namespace edge::gfx::vulkan {
 		}
 	}
 
-	auto Semaphore::construct(const GraphicsContext& ctx, uint64_t initial_value) -> Owned<Semaphore> {
+	auto Semaphore::construct(const GraphicsContext& ctx, uint64_t initial_value) -> GFXResult<Owned<Semaphore>> {
 		auto self = std::make_unique<Semaphore>();
-		self->_construct(ctx, initial_value);
+		if (auto result = self->_construct(ctx, initial_value); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
 		return self;
 	}
 
@@ -49,22 +51,26 @@ namespace edge::gfx::vulkan {
 		}
 	}
 
-	auto Semaphore::is_completed(uint64_t value) const -> bool {
-		return get_value() >= value;
+	auto Semaphore::is_completed(uint64_t value) const -> GFXResult<bool> {
+		auto result = get_value();
+		if (!result.has_value()) {
+			return std::unexpected(result.error());
+		}
+		return result.value() >= value;
 	}
 
-	auto Semaphore::get_value() const -> uint64_t {
+	auto Semaphore::get_value() const -> GFXResult<uint64_t> {
 		auto result = device_->get_semaphore_counter_value(handle_);
 		if (result) {
 			return result.value();
 		}
 
-		EDGE_SLOGE("Failed to get semaphore value. Reason: {}.", vk::to_string(result.error()));
-
-		return ~0ull;
+		auto error_code = result.error();
+		EDGE_SLOGE("Failed to get semaphore value. Reason: {}.", vk::to_string(error_code));
+		return std::unexpected(to_gfx_result(error_code));
 	}
 
-	auto Semaphore::_construct(const GraphicsContext& ctx, uint64_t initial_value) -> bool {
+	auto Semaphore::_construct(const GraphicsContext& ctx, uint64_t initial_value) -> Result {
 		device_ = &ctx.get_device();
 
 		vk::SemaphoreTypeCreateInfo timeline_create_info{};
@@ -74,25 +80,27 @@ namespace edge::gfx::vulkan {
 		vk::SemaphoreCreateInfo create_info{};
 		create_info.pNext = &timeline_create_info;
 
-		if (auto result = device_->create_handle(create_info, handle_); result != vk::Result::eSuccess) {
+		auto result = device_->create_handle(create_info, handle_);
+		if (result != vk::Result::eSuccess) {
 			EDGE_SLOGE("Failed to create semaphore. Reason: {}.", vk::to_string(result));
-			return false;
 		}
 
-		return true;
+		return to_gfx_result(result);
 	}
 
 #undef EDGE_LOGGER_SCOPE // Semaphore
 
 #define EDGE_LOGGER_SCOPE "Queue"
 
-	auto Queue::construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> Owned<Queue> {
+	auto Queue::construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> GFXResult<Owned<Queue>> {
 		auto self = std::make_unique<Queue>();
-		self->_construct(ctx, family_index, queue_index);
+		if (auto result = self->_construct(ctx, family_index, queue_index); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
 		return self;
 	}
 
-	auto Queue::create_command_allocator() const -> Shared<IGFXCommandAllocator> {
+	auto Queue::create_command_allocator() const -> GFXResult<Shared<IGFXCommandAllocator>> {
 		return CommandAllocator::construct(*device_, family_index_);
 	}
 
@@ -144,14 +152,12 @@ namespace edge::gfx::vulkan {
 		}
 	}
 
-	// TODO: Implement present
-
 	auto Queue::wait_idle() -> SyncResult {
 		handle_.waitIdle();
 		return SyncResult::eSuccess;
 	}
 
-	auto Queue::_construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> bool {
+	auto Queue::_construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> Result {
 		device_ = &ctx.get_device();
 
 		family_index_ = family_index;
@@ -163,7 +169,7 @@ namespace edge::gfx::vulkan {
 
 		device_->get_queue(device_queue_info, handle_);
 
-		return true;
+		return Result::eSuccess;
 	}
 
 #undef EDGE_LOGGER_SCOPE // Queue
@@ -176,21 +182,19 @@ namespace edge::gfx::vulkan {
 		}
 	}
 
-	auto CommandAllocator::construct(vkw::Device const& device, uint32_t family_index) -> Owned<CommandAllocator> {
+	auto CommandAllocator::construct(vkw::Device const& device, uint32_t family_index) -> GFXResult<Owned<CommandAllocator>> {
 		auto self = std::make_unique<CommandAllocator>();
-		self->_construct(device, family_index);
+		if (auto result = self->_construct(device, family_index); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
 		return self;
 	}
 
-	auto CommandAllocator::allocate_command_list() const -> Shared<IGFXCommandList> {
+	auto CommandAllocator::allocate_command_list() const -> GFXResult<Shared<IGFXCommandList>> {
 		return CommandList::construct(*device_, handle_);
 	}
 
-	auto CommandAllocator::reset() -> void {
-		// TODO: Not sure do i need individual reset for this one
-	}
-
-	auto CommandAllocator::_construct(vkw::Device const& device, uint32_t family_index) -> bool {
+	auto CommandAllocator::_construct(vkw::Device const& device, uint32_t family_index) -> Result {
 		device_ = &device;
 		family_index_ = family_index;
 
@@ -198,12 +202,12 @@ namespace edge::gfx::vulkan {
 		create_info.queueFamilyIndex = family_index_;
 		create_info.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
 
-		if (auto result = device_->create_handle(create_info, handle_); result != vk::Result::eSuccess) {
+		auto result = device_->create_handle(create_info, handle_);
+		if (result != vk::Result::eSuccess) {
 			EDGE_SLOGE("Failed to create command allocator. Reason: {}.", vk::to_string(result));
-			return false;
 		}
 
-		return true;
+		return to_gfx_result(result);
 	}
 
 #undef EDGE_LOGGER_SCOPE // CommandAllocator
@@ -216,9 +220,11 @@ namespace edge::gfx::vulkan {
 		}
 	}
 
-	auto CommandList::construct(vkw::Device const& device, vk::CommandPool command_pool) -> Owned<CommandList> {
+	auto CommandList::construct(vkw::Device const& device, vk::CommandPool command_pool) ->GFXResult<Owned<CommandList>> {
 		auto self = std::make_unique<CommandList>();
-		self->_construct(device, command_pool);
+		if (auto result = self->_construct(device, command_pool); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
 		return self;
 	}
 
@@ -281,7 +287,7 @@ namespace edge::gfx::vulkan {
 		handle_.debugMarkerEndEXT();
 	}
 
-	auto CommandList::_construct(vkw::Device const& device, vk::CommandPool command_pool) -> bool {
+	auto CommandList::_construct(vkw::Device const& device, vk::CommandPool command_pool) -> Result {
 		device_ = &device;
 		command_pool_ = command_pool;
 
@@ -290,15 +296,130 @@ namespace edge::gfx::vulkan {
 		allocate_info.level = vk::CommandBufferLevel::ePrimary;
 		allocate_info.commandBufferCount = 1;
 
-		if (auto result = device_->allocate_command_buffer(allocate_info, handle_); result != vk::Result::eSuccess) {
+		auto result = device_->allocate_command_buffer(allocate_info, handle_);
+		if (result != vk::Result::eSuccess) {
 			EDGE_SLOGE("Failed to allocate command lists. Reason: {}.", vk::to_string(result));
-			return false;
 		}
 
-		return true;
+		return to_gfx_result(result);
 	}
 
 #undef EDGE_LOGGER_SCOPE // CommandList
+
+#define EDGE_LOGGER_SCOPE "PresentationFrame"
+
+	PresentationFrame::~PresentationFrame() {
+		if (image_available_) {
+			device_->destroy_handle(image_available_);
+		}
+
+		if (rendering_finished_) {
+			device_->destroy_handle(rendering_finished_);
+		}
+
+		if (fence_) {
+			device_->destroy_handle(fence_);
+		}
+	}
+
+	auto PresentationFrame::construct(const GraphicsContext& ctx, Shared<CommandAllocator> cmd_allocator) -> GFXResult<Owned<PresentationFrame>> {
+		auto self = std::make_unique<PresentationFrame>();
+		if (auto result = self->_construct(ctx, cmd_allocator); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return self;
+	}
+
+	auto PresentationFrame::_construct(const GraphicsContext& ctx, Shared<CommandAllocator> cmd_allocator) -> Result {
+		device_ = &ctx.get_device();
+
+		vk::SemaphoreTypeCreateInfo semaphore_type{};
+		semaphore_type.semaphoreType = vk::SemaphoreType::eBinary;
+
+		vk::SemaphoreCreateInfo semaphore_create_info{};
+		semaphore_create_info.pNext = &semaphore_type;
+
+		auto result = device_->create_handle(semaphore_create_info, image_available_);
+		if (result != vk::Result::eSuccess) { return to_gfx_result(result); }
+
+		result = device_->create_handle(semaphore_create_info, rendering_finished_);
+		if (result != vk::Result::eSuccess) { return to_gfx_result(result); }
+
+		vk::FenceCreateInfo fence_create_info{};
+		fence_create_info.flags = vk::FenceCreateFlagBits::eSignaled;
+
+		result = device_->create_handle(fence_create_info, fence_);
+		if (result != vk::Result::eSuccess) { return to_gfx_result(result); }
+
+		auto allocation_result = cmd_allocator->allocate_command_list();
+		if (!allocation_result) {
+			return allocation_result.error();
+		}
+
+		auto new_cmd_list = std::move(allocation_result.value());
+		command_list_ = std::move(std::static_pointer_cast<CommandList>(new_cmd_list));
+
+		return Result::eSuccess;
+	}
+
+#undef EDGE_LOGGER_SCOPE // PresentationFrame
+
+#define EDGE_LOGGER_SCOPE "PresentationEngine"
+
+	PresentationEngine::~PresentationEngine() {
+
+	}
+
+	auto PresentationEngine::construct(const GraphicsContext& ctx, const PresentationEngineCreateInfo& create_info) -> GFXResult<Owned<PresentationEngine>> {
+		auto self = std::make_unique<PresentationEngine>();
+		if (auto result = self->_construct(ctx, create_info); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return self;
+	}
+
+	auto PresentationEngine::_construct(const GraphicsContext& ctx, const PresentationEngineCreateInfo& create_info) -> Result {
+		context_ = &ctx;
+
+		auto queue_creation_result = ctx.create_queue(create_info.queue_type);
+		if (!queue_creation_result) {
+			return queue_creation_result.error();
+		}
+
+		auto new_queue = std::move(queue_creation_result.value());
+		queue_ = std::move(std::static_pointer_cast<Queue>(new_queue));
+
+		auto allocator_creation_result = queue_->create_command_allocator();
+		if (!allocator_creation_result) {
+			return allocator_creation_result.error();
+		}
+
+		auto new_allocator = std::move(allocator_creation_result.value());
+		command_allocator_ = std::move(std::static_pointer_cast<CommandAllocator>(new_allocator));
+
+		auto swapchain_result = vkw::SwapchainBuilder{ ctx.get_device(), ctx.get_surface() }
+			.set_image_extent(create_info.width, create_info.height)
+			.set_image_count(create_info.image_count)
+			.set_image_format(static_cast<vk::Format>(TinyImageFormat_ToVkFormat(create_info.format)))
+			.set_color_space(to_vk_color_space(create_info.color_space))
+			.enable_vsync(create_info.vsync)
+			.enable_hdr(create_info.hdr)
+			.build();
+		
+		if (!swapchain_result) {
+			return to_gfx_result(swapchain_result.error());
+		}
+
+		swapchain_ = std::move(swapchain_result.value());
+
+		// TODO: Create images
+		// TODO: Create views
+		// TODO: Create frames
+
+		return Result::eSuccess;
+	}
+
+#undef EDGE_LOGGER_SCOPE // PresentationEngine
 
 	// Presentation engine
 //	auto VulkanPresentationEngine::construct(const GraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> Owned<VulkanPresentationEngine> {

@@ -256,6 +256,28 @@ namespace edge::foundation {
     private:
         underlying_type value_;
     };
+
+    template<EnumFlag E>
+    constexpr inline auto to_string(E value) -> std::string_view {
+        for (const auto& [v, n] : flag_traits<E>::names()) {
+            if (v == value) {
+                return n;
+            }
+        }
+
+        return "";
+    }
+
+    template<EnumFlag E>
+    constexpr inline auto from_string(std::string_view name) -> E {
+        for (const auto& [v, n] : flag_traits<E>::names()) {
+            if (name.compare(n) == 0) {
+                return v;
+            }
+        }
+
+        return static_cast<E>(0);
+    }
 }
 
 #define EDGE_MAKE_ENUM_FLAGS(FlagsType, EnumType) \
@@ -301,6 +323,8 @@ namespace edge::foundation {
             return flag_entries; \
         } \
     };
+
+#define EDGE_FLAG_ENTRY(Type, Name) flag_name_entry{Type, Name}
 
 // std::format support
 /*template<::edge::foundation::EnumFlag E>
