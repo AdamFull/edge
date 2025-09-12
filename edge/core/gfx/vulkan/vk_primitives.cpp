@@ -378,6 +378,14 @@ namespace edge::gfx::vulkan {
 		return self;
 	}
 
+	auto PresentationEngine::begin(uint32_t* frame_index) -> bool {
+		return false;
+	}
+
+	auto PresentationEngine::end(const PresentInfo& present_info) -> bool {
+		return false;
+	}
+
 	auto PresentationEngine::_construct(const GraphicsContext& ctx, const PresentationEngineCreateInfo& create_info) -> Result {
 		context_ = &ctx;
 

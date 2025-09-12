@@ -543,6 +543,7 @@ namespace edge::vkw {
 			bool hdr;
 		};
 
+		Swapchain() = default;
 		Swapchain(Device const& device, vk::SwapchainKHR swapchain, const State& new_state);
 		Swapchain(std::nullptr_t) noexcept {}
 		~Swapchain();
