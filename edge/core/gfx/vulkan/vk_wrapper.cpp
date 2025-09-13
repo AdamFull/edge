@@ -751,6 +751,10 @@ namespace edge::vkw {
 		logical_.destroySwapchainKHR(handle, allocator_);
 	}
 
+	auto Device::get_buffer_device_address(const vk::BufferDeviceAddressInfo& address_info) const -> uint64_t {
+		return logical_.getBufferAddress(address_info);
+	}
+
 	auto Device::set_object_name(vk::ObjectType object_type, uint64_t object_handle, std::string_view name) const -> void {
 		{
 			vk::DebugUtilsObjectNameInfoEXT name_info{ object_type, object_handle, name.data() };
@@ -1067,6 +1071,18 @@ namespace edge::vkw {
 		}
 
 #undef EDGE_LOGGER_SCOPE // SwapchainBuilder
+
+#define EDGE_LOGGER_SCOPE "Buffer"
+
+	auto Buffer::get_gpu_virtual_address() const -> uint64_t {
+		auto const& device = allocator_->get_device();
+
+		vk::BufferDeviceAddressInfo address_info{};
+		address_info.buffer = handle_;
+		return device->get_buffer_device_address(address_info);
+	}
+
+#undef // Buffer
 
 #define EDGE_LOGGER_SCOPE "MemoryAllocator"
 

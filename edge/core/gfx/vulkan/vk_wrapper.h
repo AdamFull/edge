@@ -517,6 +517,8 @@ namespace edge::vkw {
 		auto create_handle(const vk::SwapchainCreateInfoKHR& create_info, vk::SwapchainKHR& handle) const -> vk::Result;
 		auto destroy_handle(vk::SwapchainKHR handle) const -> void;
 
+		auto get_buffer_device_address(const vk::BufferDeviceAddressInfo& address_info) const -> uint64_t;
+
 		template<typename T>
 		auto set_object_name(T object, std::string_view name) const -> void {
 			set_object_name(T::objectType, reinterpret_cast<uint64_t>(static_cast<T::CType>(object)), name);
@@ -657,6 +659,7 @@ namespace edge::vkw {
 		vk::SurfaceKHR surface_{ VK_NULL_HANDLE };
 	};
 	
+	// TODO: Add aliasing support
 	template<typename T>
 	class MemoryAllocation {
 	public:
@@ -702,7 +705,7 @@ namespace edge::vkw {
 			return *this;
 		}
 
-		auto map() -> Result<Span<uint8_t>> {
+		auto map() const -> Result<Span<uint8_t>> {
 			if (!persistent_ && !is_mapped()) {
 				if (auto result = allocator_->map_memory(allocation_, reinterpret_cast<void**>(&mapped_memory_)); result != vk::Result::eSuccess) {
 					return std::unexpected(result);
@@ -711,7 +714,7 @@ namespace edge::vkw {
 			return Span<uint8_t>(mapped_memory_, allocation_info_.size);
 		}
 
-		auto unmap() {
+		auto unmap() const -> void {
 			if (!persistent_ && is_mapped()) {
 				allocator_->unmap_memory(allocation_);
 				mapped_memory_ = nullptr;
@@ -722,6 +725,31 @@ namespace edge::vkw {
 			if (!coherent_) {
 				return allocator_->flush_memory(allocation_, offset, size);
 			}
+			return vk::Result::eSuccess;
+		}
+
+		auto update(std::span<const uint8_t> data, uint64_t offset) const -> vk::Result {
+			return update(data.data(), data.size(), offset);
+		}
+
+		auto update(const void* data, uint64_t size, uint64_t offset) const -> vk::Result {
+			if (persistent_) {
+				std::memcpy(mapped_memory_ + offset, data, size);
+				return flush(offset, size);
+			}
+			else {
+				if (auto result = map(); !result) {
+					return result.error();
+				}
+
+				std::memcpy(mapped_memory_ + offset, data, size);
+				if (auto result = flush(offset, size); result != vk::Result::eSuccess) {
+					return result;
+				}
+
+				unmap();
+			}
+
 			return vk::Result::eSuccess;
 		}
 
@@ -746,7 +774,7 @@ namespace edge::vkw {
 		bool persistent_{ false };
 		bool coherent_{ false };
 
-		uint8_t* mapped_memory_{ nullptr };
+		mutable uint8_t* mapped_memory_{ nullptr };
 	};
 
 	class Image : public MemoryAllocation<vk::Image> {
@@ -761,6 +789,8 @@ namespace edge::vkw {
 		Buffer(MemoryAllocator const& allocator, vk::Buffer handle, VmaAllocation allocation, VmaAllocationInfo allocation_info)
 			: MemoryAllocation(allocator, handle, allocation, allocation_info) {
 		}
+
+		auto get_gpu_virtual_address() const -> uint64_t;
 	};
 
 	class MemoryAllocator {
@@ -795,6 +825,7 @@ namespace edge::vkw {
 		auto deallocate(vk::Image handle, VmaAllocation allocation) const -> void;
 		auto deallocate(vk::Buffer handle, VmaAllocation allocation) const -> void;
 
+		auto get_device() const -> Device const* { return device_; }
 		operator VmaAllocator() const noexcept { return handle_; }
 		auto get_handle() const noexcept -> VmaAllocator { return handle_; }
 	private:

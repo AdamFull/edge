@@ -59,6 +59,19 @@ namespace edge::gfx {
 		// Pass-through/Raw
 		ePassThrough,           // No color space conversion
 	};
+
+	enum class BufferType {
+		eRaw,
+		eStaging,
+
+		eVertex,
+		eIndex,
+
+		eUniform,
+		eStorage,
+
+		eIndirectArgument
+	};
 }
 
 EDGE_DEFINE_FLAG_NAMES(edge::gfx::GraphicsDeviceType,
