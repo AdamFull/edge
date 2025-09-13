@@ -193,11 +193,6 @@ namespace edge::gfx::vulkan {
     }
 
     GraphicsContext::~GraphicsContext() {
-        if(vma_allocator_) {
-            EDGE_SLOGD("Destroying VMA allocator");
-            vmaDestroyAllocator(vma_allocator_);
-        }
-
         // Destroy debug handles
         if (vk_debug_utils_) {
             vk_instance_.destroyDebugUtilsMessengerEXT(vk_debug_utils_, &vk_alloc_callbacks_);
@@ -365,59 +360,6 @@ namespace edge::gfx::vulkan {
 
         vkw_device_ = std::move(device_selector.value());
 
-        // Make queue family map
-        if (auto family_propersies = vkw_device_.get_queue_family_properties(); !family_propersies.empty()) {
-            for (uint32_t index = 0; index < static_cast<uint32_t>(family_propersies.size()); ++index) {
-                auto const& queue_family_property = family_propersies[index];
-                auto present_supported = vkw_device_.get_physical().getSurfaceSupportKHR(index, vk_surface_) == VK_TRUE;
-
-                bool is_graphics_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eGraphics) == vk::QueueFlagBits::eGraphics;
-                bool is_compute_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eCompute) == vk::QueueFlagBits::eCompute;
-                bool is_copy_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eTransfer) == vk::QueueFlagBits::eTransfer;
-
-                QueueType queue_type{};
-                if (present_supported && is_graphics_commands_supported &&
-                    is_compute_commands_supported && is_copy_commands_supported) {
-                    queue_type = QueueType::eDirect;
-                }
-                else if (present_supported && is_compute_commands_supported && is_copy_commands_supported) {
-                    queue_type = QueueType::eCompute;
-                }
-                else if (is_copy_commands_supported) {
-                    queue_type = QueueType::eCopy;
-                }
-
-                auto& group = queue_family_map_[static_cast<size_t>(queue_type)];
-                auto& family_info = group.emplace_back();
-                family_info.index = index;
-                family_info.queue_indices = vkw::Vector<uint32_t>(queue_family_property.queueCount, &vk_alloc_callbacks_);
-                std::iota(family_info.queue_indices.rbegin(), family_info.queue_indices.rend(), 0u);
-
-#ifndef NDEBUG
-                std::string supported_commands;
-
-                if (present_supported) {
-                    supported_commands += "present|";
-                }
-                if (is_graphics_commands_supported) {
-                    supported_commands += "graphics|";
-                }
-                if (is_compute_commands_supported) {
-                    supported_commands += "compute|";
-                }
-                if (is_copy_commands_supported) {
-                    supported_commands += "transfer";
-                }
-
-                if (!supported_commands.empty()) {
-                    supported_commands.pop_back();
-                }
-
-                EDGE_SLOGD("Found \"{}\" queue that support: {} commands.", foundation::to_string(queue_type), supported_commands);
-#endif
-            }
-        }
-
         // Create debug interface
         vk::DebugUtilsMessengerCreateInfoEXT debug_utils_create_info{};
         debug_utils_create_info.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
@@ -474,56 +416,13 @@ namespace edge::gfx::vulkan {
 		}
 #endif
 
-        // Create vulkan memory allocator
-        VmaVulkanFunctions vma_vulkan_func{};
-        vma_vulkan_func.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
-        vma_vulkan_func.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
-
-        VmaAllocatorCreateInfo vma_allocator_create_info{};
-        vma_allocator_create_info.pVulkanFunctions = &vma_vulkan_func;
-        vma_allocator_create_info.physicalDevice = vkw_device_;
-        vma_allocator_create_info.device = vkw_device_;
-        vma_allocator_create_info.instance = vk_instance_;
-        vma_allocator_create_info.pAllocationCallbacks = (VkAllocationCallbacks*)(&vk_alloc_callbacks_);
-
-        // NOTE: Nsight graphics using VkImportMemoryHostPointerEXT that cannot be used with dedicated memory allocation
-        bool is_nsignt_graphics_attached{ false };
-#ifdef VK_USE_PLATFORM_WIN32_KHR
-        {
-            HMODULE nsight_graphics_module = GetModuleHandle("Nvda.Graphics.Interception.dll");
-            is_nsignt_graphics_attached = (nsight_graphics_module != nullptr);
-        }
-#endif
-        bool can_get_memory_requirements = vkw_device_.is_enabled(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
-        bool has_dedicated_allocation = vkw_device_.is_enabled(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
-
-        if (can_get_memory_requirements && has_dedicated_allocation && !is_nsignt_graphics_attached) {
-            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
-        }
-
-        if (vkw_device_.is_enabled(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
-            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
-        }
-
-        if (vkw_device_.is_enabled(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
-            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
-        }
-
-        if (vkw_device_.is_enabled(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME)) {
-            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT;
-        }
-        
-        if (vkw_device_.is_enabled(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME)) {
-            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT;
-        }
-        
-        if (vkw_device_.is_enabled(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME)) {
-            vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_AMD_DEVICE_COHERENT_MEMORY_BIT;
-        }
-
-        if (auto result = vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator_); result != VK_SUCCESS) {
+        auto allocator_creation_result = vkw_device_.create_allocator(vk_instance_);
+        if (!allocator_creation_result) {
+            EDGE_LOGE("Failed to create memory allocator. Reason: {}.", vk::to_string(allocator_creation_result.error()));
             return false;
         }
+
+        vkw_memory_allocator_ = std::move(allocator_creation_result.value());
 
         auto queue_request_result = create_queue(QueueType::eDirect);
 
@@ -531,18 +430,7 @@ namespace edge::gfx::vulkan {
 	}
 
     auto GraphicsContext::create_queue(QueueType queue_type) const -> GFXResult<Shared<IGFXQueue>> {
-        const auto& family_group = queue_family_map_[static_cast<size_t>(queue_type)];
-        for (auto family : family_group) {
-            if (!family.queue_indices.empty()) {
-                auto queue_index = family.queue_indices.back();
-                family.queue_indices.pop_back();
-
-                // TODO: return queue index back in queue deletion
-                return Queue::construct(*this, family.index, queue_index);
-            }
-        }
-
-        return std::unexpected(Result::eUndefined);
+        return Queue::construct(const_cast<GraphicsContext&>(*this), queue_type);
     }
 
     auto GraphicsContext::create_semaphore(uint64_t value) const -> GFXResult<Shared<IGFXSemaphore>> {

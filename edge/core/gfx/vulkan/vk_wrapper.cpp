@@ -517,14 +517,89 @@ namespace edge::vkw {
 
 #undef EDGE_LOGGER_SCOPE // DeviceSelector
 
-#define EDGE_LOGGER_SCOPE Device
+#define EDGE_LOGGER_SCOPE "Queue"
+	Queue::Queue(Device& device, uint32_t queue_family_index, uint32_t queue_index)
+		: device_{ &device }
+		, queue_family_index_{ queue_family_index }
+		, queue_index_{ queue_index } {
+
+		vk::DeviceQueueInfo2 queue_info{ {}, queue_family_index, queue_index };
+		handle_ = device.get_logical().getQueue2(queue_info);
+	}
+
+	Queue::~Queue() {
+		if (handle_) {
+			device_->release_queue(*this);
+			handle_ = VK_NULL_HANDLE;
+		}
+	}
+
+	auto Queue::submit(const vk::SubmitInfo2& submit_info, vk::Fence fence) const -> vk::Result {
+		return handle_.submit2(1, &submit_info, fence);
+	}
+
+	auto Queue::wait_idle() const -> void {
+		handle_.waitIdle();
+	}
+#undef EDGE_LOGGER_SCOPE
+
+#define EDGE_LOGGER_SCOPE "Device"
 
 	Device::Device(vk::PhysicalDevice physical, vk::Device logical, vk::AllocationCallbacks const* allocator, Vector<const char*>&& enabled_extensions)
-		: physical_{ physical }, logical_{ logical }, allocator_{ allocator }, enabled_extensions_{ std::move(enabled_extensions) },
-		supported_extensions_{ allocator } {
+		: physical_{ physical }
+		, logical_{ logical }
+		, allocator_{ allocator }
+		, enabled_extensions_{ std::move(enabled_extensions) }
+		, supported_extensions_{ allocator }
+		, queue_family_map_{ Vector<QueueFamilyInfo>(allocator), Vector<QueueFamilyInfo>(allocator), Vector<QueueFamilyInfo>(allocator) } {
 		if (physical) {
 			if (auto result = helpers::enumerate_device_extension_properties(physical, nullptr, allocator); result.has_value()) {
 				supported_extensions_ = std::move(result.value());
+			}
+		}
+
+		// Make queue family map
+		if (auto family_propersies = helpers::get_queue_family_properties(physical_, allocator_); !family_propersies.empty()) {
+			for (uint32_t index = 0; index < static_cast<uint32_t>(family_propersies.size()); ++index) {
+				auto const& queue_family_property = family_propersies[index];
+
+				bool is_graphics_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eGraphics) == vk::QueueFlagBits::eGraphics;
+				bool is_compute_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eCompute) == vk::QueueFlagBits::eCompute;
+				bool is_copy_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eTransfer) == vk::QueueFlagBits::eTransfer;
+
+				vk::QueueFlagBits queue_type{};
+				if (is_graphics_commands_supported &&
+					is_compute_commands_supported && is_copy_commands_supported) {
+					queue_type = vk::QueueFlagBits::eGraphics;
+				}
+				else if (is_compute_commands_supported && is_copy_commands_supported) {
+					queue_type = vk::QueueFlagBits::eCompute;
+				}
+				else if (is_copy_commands_supported) {
+					queue_type = vk::QueueFlagBits::eTransfer;
+				}
+
+				auto& group = queue_family_map_[static_cast<size_t>(queue_type) - 1u];
+				auto& family_info = group.emplace_back();
+				family_info.index = index;
+				family_info.queue_indices = vkw::Vector<uint32_t>(queue_family_property.queueCount, allocator_);
+				std::iota(family_info.queue_indices.rbegin(), family_info.queue_indices.rend(), 0u);
+
+#ifndef NDEBUG
+				std::string supported_commands;
+
+				if (is_graphics_commands_supported) {
+					supported_commands += "graphics,";
+				}
+				if (is_compute_commands_supported) {
+					supported_commands += "compute,";
+				}
+				if (is_copy_commands_supported) {
+					supported_commands += "transfer";
+				}
+
+				EDGE_SLOGD("Found \"{}\" queue that support: {} commands.", vk::to_string(queue_type), supported_commands);
+#endif
 			}
 		}
 	}
@@ -535,12 +610,89 @@ namespace edge::vkw {
 		}
 	}
 
+	auto Device::create_allocator(vk::Instance instance) const -> Result<MemoryAllocator> {
+		// Create vulkan memory allocator
+		VmaVulkanFunctions vma_vulkan_func{};
+		vma_vulkan_func.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
+		vma_vulkan_func.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+
+		VmaAllocatorCreateInfo vma_allocator_create_info{};
+		vma_allocator_create_info.pVulkanFunctions = &vma_vulkan_func;
+		vma_allocator_create_info.physicalDevice = physical_;
+		vma_allocator_create_info.device = logical_;
+		vma_allocator_create_info.instance = (VkInstance)instance;
+		vma_allocator_create_info.pAllocationCallbacks = (VkAllocationCallbacks const*)(allocator_);
+
+		// NOTE: Nsight graphics using VkImportMemoryHostPointerEXT that cannot be used with dedicated memory allocation
+		bool is_nsignt_graphics_attached{ false };
+#ifdef VK_USE_PLATFORM_WIN32_KHR
+		{
+			HMODULE nsight_graphics_module = GetModuleHandle("Nvda.Graphics.Interception.dll");
+			is_nsignt_graphics_attached = (nsight_graphics_module != nullptr);
+		}
+#endif
+		bool can_get_memory_requirements = is_enabled(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);
+		bool has_dedicated_allocation = is_enabled(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME);
+
+		if (can_get_memory_requirements && has_dedicated_allocation && !is_nsignt_graphics_attached) {
+			vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
+		}
+
+		if (is_enabled(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)) {
+			vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+		}
+
+		if (is_enabled(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
+			vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+		}
+
+		if (is_enabled(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME)) {
+			vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT;
+		}
+
+		if (is_enabled(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME)) {
+			vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT;
+		}
+
+		if (is_enabled(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME)) {
+			vma_allocator_create_info.flags |= VMA_ALLOCATOR_CREATE_AMD_DEVICE_COHERENT_MEMORY_BIT;
+		}
+
+		VmaAllocator vma_allocator;
+		if (auto result = vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator); result != VK_SUCCESS) {
+			return std::unexpected(static_cast<vk::Result>(result));
+		}
+
+		return MemoryAllocator(*this, vma_allocator);
+	}
+
 	auto Device::get_queue_family_properties() const -> Vector<vk::QueueFamilyProperties> {
 		return helpers::get_queue_family_properties(physical_, allocator_);
 	}
 
-	auto Device::get_queue(const vk::DeviceQueueInfo2& queue_info, vk::Queue& queue) const -> void {
-		logical_.getQueue2(&queue_info, &queue);
+	auto Device::get_queue(vk::QueueFlagBits queue_type) -> Result<Queue> {
+		auto& family_group = queue_family_map_[static_cast<size_t>(queue_type) - 1ull];
+		for (auto& family : family_group) {
+			if (!family.queue_indices.empty()) {
+				auto queue_index = family.queue_indices.back();
+				family.queue_indices.pop_back();
+
+				return Queue(*this, family.index, queue_index);
+			}
+		}
+
+		return std::unexpected(vk::Result::eErrorUnknown);
+	}
+
+	auto Device::release_queue(Queue& queue) -> void {
+		for (auto& group : queue_family_map_) {
+			for (auto& family : group) {
+				if (family.index == queue.get_family_index()) {
+					family.queue_indices.push_back(queue.get_queue_index());
+					return;
+				}
+			}
+		}
 	}
 
 	auto Device::create_handle(const vk::CommandPoolCreateInfo& create_info, vk::CommandPool& handle) const -> vk::Result {
@@ -915,5 +1067,78 @@ namespace edge::vkw {
 		}
 
 #undef EDGE_LOGGER_SCOPE // SwapchainBuilder
+
+#define EDGE_LOGGER_SCOPE "MemoryAllocator"
+
+	MemoryAllocator::MemoryAllocator(Device const& device, VmaAllocator handle)
+		: handle_{ handle }
+		, device_{ &device } {
+	}
+
+	MemoryAllocator::~MemoryAllocator() {
+		if (handle_) {
+			vmaDestroyAllocator(handle_);
+		}
+	}
+
+	auto MemoryAllocator::get_memory_propersies(VmaAllocation allocation) const -> VkMemoryPropertyFlags {
+		VkMemoryPropertyFlags memory_properties;
+		vmaGetAllocationMemoryProperties(handle_, allocation, &memory_properties);
+		return memory_properties;
+	}
+
+	auto MemoryAllocator::map_memory(VmaAllocation allocation, void** mapped_memory) const -> vk::Result {
+		return static_cast<vk::Result>(vmaMapMemory(handle_, allocation, mapped_memory));
+	}
+
+	auto MemoryAllocator::unmap_memory(VmaAllocation allocation) const -> void {
+		vmaUnmapMemory(handle_, allocation);
+	}
+
+	auto MemoryAllocator::flush_memory(VmaAllocation allocation, vk::DeviceSize offset, vk::DeviceSize size) const -> vk::Result {
+		return static_cast<vk::Result>(vmaFlushAllocation(handle_, allocation, offset, size));
+	}
+
+	auto MemoryAllocator::allocate_image(const vk::ImageCreateInfo& create_info, VmaMemoryUsage usage) const -> Result<Image> {
+		VkImage image;
+		VmaAllocationInfo allocation_info;
+		VmaAllocation allocation;
+
+		VkImageCreateInfo image_create_info = static_cast<VkImageCreateInfo>(create_info);
+		VmaAllocationCreateInfo allocation_create_info{};
+		allocation_create_info.usage = usage;
+		if (auto result = vmaCreateImage(handle_, &image_create_info, &allocation_create_info,
+			&image, &allocation, &allocation_info); result != VK_SUCCESS) {
+			return std::unexpected(static_cast<vk::Result>(result));
+		}
+
+		return Image(*this, vk::Image(image), allocation, allocation_info);
+	}
+
+	auto MemoryAllocator::allocate_buffer(const vk::BufferCreateInfo& create_info, VmaMemoryUsage usage) const -> Result<Buffer> {
+		VkBuffer buffer;
+		VmaAllocationInfo allocation_info;
+		VmaAllocation allocation;
+
+		VkBufferCreateInfo buffer_create_info = static_cast<VkBufferCreateInfo>(create_info);
+		VmaAllocationCreateInfo allocation_create_info{};
+		allocation_create_info.usage = usage;
+		if (auto result = vmaCreateBuffer(handle_, &buffer_create_info, &allocation_create_info,
+			&buffer, &allocation, &allocation_info); result != VK_SUCCESS) {
+			return std::unexpected(static_cast<vk::Result>(result));
+		}
+
+		return Buffer(*this, vk::Buffer(buffer), allocation, allocation_info);
+	}
+
+	auto MemoryAllocator::deallocate(vk::Image handle, VmaAllocation allocation) const -> void {
+		vmaDestroyImage(handle_, (VkImage)handle, allocation);
+	}
+
+	auto MemoryAllocator::deallocate(vk::Buffer handle, VmaAllocation allocation) const -> void {
+		vmaDestroyBuffer(handle_, (VkBuffer)handle, allocation);
+	}
+
+#undef EDGE_LOGGER_SCOPE // MemoryAllocator
 
 }

@@ -92,16 +92,16 @@ namespace edge::gfx::vulkan {
 
 #define EDGE_LOGGER_SCOPE "Queue"
 
-	auto Queue::construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> GFXResult<Owned<Queue>> {
+	auto Queue::construct(GraphicsContext& ctx, QueueType type) -> GFXResult<Owned<Queue>> {
 		auto self = std::make_unique<Queue>();
-		if (auto result = self->_construct(ctx, family_index, queue_index); result != Result::eSuccess) {
+		if (auto result = self->_construct(ctx, type); result != Result::eSuccess) {
 			return std::unexpected(result);
 		}
 		return self;
 	}
 
 	auto Queue::create_command_allocator() const -> GFXResult<Shared<IGFXCommandAllocator>> {
-		return CommandAllocator::construct(*device_, family_index_);
+		return CommandAllocator::construct(*device_, handle_.get_family_index());
 	}
 
 	auto Queue::submit(const SubmitQueueInfo& submit_info) -> void {
@@ -146,28 +146,25 @@ namespace edge::gfx::vulkan {
 		submit_info.pCommandBufferInfos = command_buffers.data();
 		submit_info.commandBufferInfoCount = static_cast<uint32_t>(command_buffers.size());
 
-		vk::Result result = handle_.submit2(1, &submit_info, VK_NULL_HANDLE);
-		if (result != vk::Result::eSuccess) {
+		if (auto result = handle_.submit(submit_info); result != vk::Result::eSuccess) {
 			EDGE_SLOGE("Failed while signaling semaphore from gpu. Reason: {}.", vk::to_string(result));
 		}
 	}
 
 	auto Queue::wait_idle() -> SyncResult {
-		handle_.waitIdle();
+		handle_.wait_idle();
 		return SyncResult::eSuccess;
 	}
 
-	auto Queue::_construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> Result {
+	auto Queue::_construct(GraphicsContext& ctx, QueueType type) -> Result {
 		device_ = &ctx.get_device();
 
-		family_index_ = family_index;
-		queue_index_ = queue_index;
+		auto queue_result = device_->get_queue(to_vk_queue_type(type));
+		if (!queue_result) {
+			return to_gfx_result(queue_result.error());
+		}
 
-		vk::DeviceQueueInfo2 device_queue_info{};
-		device_queue_info.queueFamilyIndex = family_index;
-		device_queue_info.queueIndex = queue_index;
-
-		device_->get_queue(device_queue_info, handle_);
+		handle_ = std::move(queue_result.value());
 
 		return Result::eSuccess;
 	}

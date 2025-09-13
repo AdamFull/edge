@@ -30,6 +30,7 @@
 namespace edge::vkw {
 	class Device;
 	class Swapchain;
+	class MemoryAllocator;
 
 	template<typename T>
 	using Result = std::expected<T, vk::Result>;
@@ -176,42 +177,6 @@ namespace edge::vkw {
 
 	template<typename K, typename T, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = Allocator<std::pair<K, T>>>
 	using HashMap = std::unordered_map<K, T, Hasher, KeyEq, Alloc>;
-
-	//template<typename T>
-	//class BaseHandle {
-	//public:
-	//	auto set_name(std::string_view name) const -> void {
-	//		// Try debug utils
-	//		{
-	//			vk::DebugUtilsObjectNameInfoEXT name_info{
-	//				.objectType = T::objectType,
-	//				.objectHandle = reinterpret_cast<uint64_t>(static_cast<T::CType>(handle_)),
-	//				.pObjectName = name.data()
-	//			};
-	//			if (auto result = device_.setDebugUtilsObjectNameEXT(&name_info); result == vk::Result::eSuccess) {
-	//				return;
-	//			}
-	//		}
-	//
-	//		// Try debug marker
-	//		{
-	//			vk::DebugMarkerObjectNameInfoEXT name_info{
-	//				.objectType = T::objectType,
-	//				.object = reinterpret_cast<uint64_t>(static_cast<T::CType>(handle_)),
-	//				.pObjectName = name.data()
-	//			};
-	//			if (auto result = device_.debugMarkerSetObjectNameEXT(&name_into); result == vk::Result::eSuccess) {
-	//				return;
-	//			}
-	//		}
-	//	}
-	//
-	//	auto get_handle() const -> T { return handle_; }
-	//	auto get_device() const -> vk::Device { return device_; }
-	//protected:
-	//	T handle_{ VK_NULL_HANDLE };
-	//	vk::Device device_{ VK_NULL_HANDLE };
-	//};
 
 	inline auto make_color_array(uint32_t in_color, Span<float> out_color) -> void {
 		out_color[3] = static_cast<float>((in_color >> 24) & 0xFF) / 255.0f;
@@ -457,20 +422,65 @@ namespace edge::vkw {
 		void* last_feature_ptr_{ nullptr };
 	};
 
+	class Queue {
+	public:
+		Queue(Device& device, uint32_t queue_family_index, uint32_t queue_index);
+		Queue(std::nullptr_t) noexcept {}
+		~Queue();
+
+		Queue(const Queue&) = delete;
+		auto operator=(const Queue&) -> Queue & = delete;
+
+		Queue(Queue&& other) 
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
+			, queue_family_index_{ std::exchange(other.queue_family_index_, ~0u) }
+			, queue_index_{ std::exchange(other.queue_index_, ~0u) }
+			, device_{ std::exchange(other.device_, nullptr) } {
+		}
+
+		auto operator=(Queue&& other) -> Queue& {
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			queue_family_index_ = std::exchange(other.queue_family_index_, ~0u);
+			queue_index_ = std::exchange(other.queue_index_, ~0u);
+			device_ = std::exchange(other.device_, nullptr);
+			return *this;
+		}
+
+		auto submit(const vk::SubmitInfo2& submit_info, vk::Fence fence = VK_NULL_HANDLE) const -> vk::Result;
+		auto wait_idle() const -> void;
+
+		auto get_family_index() const noexcept -> uint32_t { return queue_family_index_; }
+		auto get_queue_index() const noexcept -> uint32_t { return queue_index_; }
+
+		operator vk::Queue() const noexcept { return handle_; }
+		operator VkQueue() const noexcept { return handle_; }
+		auto get_handle() const noexcept -> vk::Queue { return handle_; }
+	private:
+		vk::Queue handle_{ VK_NULL_HANDLE };
+		uint32_t queue_family_index_{ ~0u };
+		uint32_t queue_index_{ ~0u };
+		Device* device_{ nullptr };
+	};
+
 	class Device {
 	public:
+		struct QueueFamilyInfo {
+			uint32_t index;
+			Vector<uint32_t> queue_indices;
+		};
+
 		Device(vk::PhysicalDevice physical = VK_NULL_HANDLE, vk::Device logical = VK_NULL_HANDLE, vk::AllocationCallbacks const* allocator = nullptr, Vector<const char*>&& enabled_extensions = {});
 		~Device();
 
 		Device(const Device&) = delete;
 		auto operator=(const Device&) -> Device& = delete;
 
-		Device(Device&& other) :
-			logical_{ std::exchange(other.logical_, VK_NULL_HANDLE) },
-			physical_{ std::exchange(other.physical_, VK_NULL_HANDLE) },
-			allocator_{ std::exchange(other.allocator_, nullptr) },
-			enabled_extensions_{ std::exchange(other.enabled_extensions_, {}) },
-			supported_extensions_{ std::exchange(other.supported_extensions_, {}) } {
+		Device(Device&& other) 
+			: logical_{ std::exchange(other.logical_, VK_NULL_HANDLE) }
+			, physical_{ std::exchange(other.physical_, VK_NULL_HANDLE) }
+			, allocator_{ std::exchange(other.allocator_, nullptr) }
+			, enabled_extensions_{ std::exchange(other.enabled_extensions_, {}) }
+			, supported_extensions_{ std::exchange(other.supported_extensions_, {}) } {
 
 		}
 
@@ -483,9 +493,12 @@ namespace edge::vkw {
 			return *this;
 		}
 
+		auto create_allocator(vk::Instance instance) const -> Result<MemoryAllocator>;
+
 		auto get_queue_family_properties() const -> Vector<vk::QueueFamilyProperties>;
 
-		auto get_queue(const vk::DeviceQueueInfo2& queue_info, vk::Queue& queue) const -> void;
+		auto get_queue(vk::QueueFlagBits queue_type) -> Result<Queue>;
+		auto release_queue(Queue& queue) -> void;
 
 		auto create_handle(const vk::CommandPoolCreateInfo& create_info, vk::CommandPool& handle) const -> vk::Result;
 		auto destroy_handle(vk::CommandPool handle) const -> void;
@@ -530,6 +543,8 @@ namespace edge::vkw {
 
 		Vector<const char*> enabled_extensions_;
 		Vector<vk::ExtensionProperties> supported_extensions_;
+
+		Array<Vector<QueueFamilyInfo>, 3ull> queue_family_map_;
 	};
 
 	class Swapchain {
@@ -551,9 +566,9 @@ namespace edge::vkw {
 		Swapchain(const Swapchain&) = delete;
 		auto operator=(const Swapchain&) -> Swapchain & = delete;
 
-		Swapchain(Swapchain&& other) :
-			handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) },
-			device_{ std::exchange(other.device_, nullptr) } {
+		Swapchain(Swapchain&& other) 
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
+			, device_{ std::exchange(other.device_, nullptr) } {
 		}
 
 		auto operator=(Swapchain&& other) -> Swapchain& {
@@ -640,5 +655,150 @@ namespace edge::vkw {
 
 		Device const* device_{ nullptr };
 		vk::SurfaceKHR surface_{ VK_NULL_HANDLE };
+	};
+	
+	template<typename T>
+	class MemoryAllocation {
+	public:
+		MemoryAllocation() = default;
+		MemoryAllocation(std::nullptr_t) noexcept {}
+
+		MemoryAllocation(MemoryAllocator const& allocator, T handle, VmaAllocation allocation, VmaAllocationInfo allocation_info)
+			: allocator_{ &allocator }
+			, handle_{ handle }
+			, allocation_{ allocation }
+			, allocation_info_{ allocation_info } {
+
+			auto memory_properties = allocator_->get_memory_propersies(allocation_);
+			coherent_ = (memory_properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+			persistent_ = allocation_info_.pMappedData != nullptr;
+		}
+
+		~MemoryAllocation() {
+			if (handle_ && allocation_) {
+				unmap();
+				allocator_->deallocate(handle_, allocation_);
+				handle_ = VK_NULL_HANDLE;
+				allocation_ = VK_NULL_HANDLE;
+			}
+		}
+
+		MemoryAllocation(const MemoryAllocation&) = delete;
+		auto operator=(const MemoryAllocation&) -> MemoryAllocation & = delete;
+
+		MemoryAllocation(MemoryAllocation&& other)
+			: allocator_{ std::exchange(other.allocator_, nullptr) }
+			, handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
+			, allocation_{ std::exchange(other.allocation_, VK_NULL_HANDLE) }
+			, allocation_info_{ std::exchange(other.allocation_info_, {}) }
+			, mapped_memory_{ std::exchange(other.mapped_memory_, {}) } {}
+
+		auto operator=(MemoryAllocation&& other) -> MemoryAllocation& {
+			allocator_ = std::exchange(other.allocator_, nullptr);
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			allocation_ = std::exchange(other.allocation_, VK_NULL_HANDLE);
+			allocation_info_ = std::exchange(other.allocation_info_, {});
+			mapped_memory_ = std::exchange(other.mapped_memory_, nullptr);
+			return *this;
+		}
+
+		auto map() -> Result<Span<uint8_t>> {
+			if (!persistent_ && !is_mapped()) {
+				if (auto result = allocator_->map_memory(allocation_, reinterpret_cast<void**>(&mapped_memory_)); result != vk::Result::eSuccess) {
+					return std::unexpected(result);
+				}
+			}
+			return Span<uint8_t>(mapped_memory_, allocation_info_.size);
+		}
+
+		auto unmap() {
+			if (!persistent_ && is_mapped()) {
+				allocator_->unmap_memory(allocation_);
+				mapped_memory_ = nullptr;
+			}
+		}
+
+		auto flush(vk::DeviceSize offset, vk::DeviceSize size) const -> vk::Result {
+			if (!coherent_) {
+				return allocator_->flush_memory(allocation_, offset, size);
+			}
+			return vk::Result::eSuccess;
+		}
+
+		auto is_coherent() const -> bool { return coherent_; }
+		auto is_persistent() const -> bool { return persistent_; }
+		auto is_mapped() const -> bool { return mapped_memory_ != nullptr; }
+
+		auto get_memory() const -> vk::DeviceMemory {
+			return (vk::DeviceMemory)allocation_info_.deviceMemory;
+		}
+
+		operator T() const noexcept { return handle_; }
+		operator T::CType() const noexcept { return handle_; }
+		auto get_handle() const noexcept -> T { return handle_; }
+		auto get_allocation() const -> VmaAllocation { return allocation_; }
+	protected:
+		MemoryAllocator const* allocator_{ nullptr };
+		T handle_{ VK_NULL_HANDLE };
+		VmaAllocation allocation_{ VK_NULL_HANDLE };
+		VmaAllocationInfo allocation_info_{};
+
+		bool persistent_{ false };
+		bool coherent_{ false };
+
+		uint8_t* mapped_memory_{ nullptr };
+	};
+
+	class Image : public MemoryAllocation<vk::Image> {
+	public:
+		Image(MemoryAllocator const& allocator, vk::Image handle, VmaAllocation allocation, VmaAllocationInfo allocation_info)
+			: MemoryAllocation(allocator, handle, allocation, allocation_info) {
+		}
+	};
+
+	class Buffer : public MemoryAllocation<vk::Buffer> {
+	public:
+		Buffer(MemoryAllocator const& allocator, vk::Buffer handle, VmaAllocation allocation, VmaAllocationInfo allocation_info)
+			: MemoryAllocation(allocator, handle, allocation, allocation_info) {
+		}
+	};
+
+	class MemoryAllocator {
+	public:
+		MemoryAllocator() = default;
+		MemoryAllocator(Device const& device, VmaAllocator handle);
+		MemoryAllocator(std::nullptr_t) noexcept {}
+		~MemoryAllocator();
+
+		MemoryAllocator(const MemoryAllocator&) = delete;
+		auto operator=(const MemoryAllocator&) -> MemoryAllocator& = delete;
+
+		MemoryAllocator(MemoryAllocator&& other) :
+			handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) },
+			device_{ std::exchange(other.device_, nullptr) } {
+		}
+
+		auto operator=(MemoryAllocator&& other) -> MemoryAllocator& {
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			device_ = std::exchange(other.device_, nullptr);
+			return *this;
+		}
+
+		auto get_memory_propersies(VmaAllocation allocation) const -> VkMemoryPropertyFlags;
+
+		auto map_memory(VmaAllocation allocation, void** mapped_memory) const -> vk::Result;
+		auto unmap_memory(VmaAllocation allocation) const -> void;
+		auto flush_memory(VmaAllocation allocation, vk::DeviceSize offset, vk::DeviceSize size) const -> vk::Result;
+
+		auto allocate_image(const vk::ImageCreateInfo& create_info, VmaMemoryUsage usage) const -> Result<Image>;
+		auto allocate_buffer(const vk::BufferCreateInfo& create_info, VmaMemoryUsage usage) const -> Result<Buffer>;
+		auto deallocate(vk::Image handle, VmaAllocation allocation) const -> void;
+		auto deallocate(vk::Buffer handle, VmaAllocation allocation) const -> void;
+
+		operator VmaAllocator() const noexcept { return handle_; }
+		auto get_handle() const noexcept -> VmaAllocator { return handle_; }
+	private:
+		Device const* device_{ nullptr };
+		VmaAllocator handle_{ VK_NULL_HANDLE };
 	};
 }

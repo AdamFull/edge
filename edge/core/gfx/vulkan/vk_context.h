@@ -72,6 +72,16 @@ namespace edge::gfx::vulkan {
 		}
 	}
 
+	inline auto to_vk_queue_type(QueueType type) -> vk::QueueFlagBits {
+		switch (type)
+		{
+		case edge::gfx::QueueType::eDirect: return vk::QueueFlagBits::eGraphics;
+		case edge::gfx::QueueType::eCompute: return vk::QueueFlagBits::eCompute;
+		case edge::gfx::QueueType::eCopy: return vk::QueueFlagBits::eTransfer;
+		default: return vk::QueueFlagBits::eGraphics;
+		}
+	}
+
 	class GraphicsContext;
 	class Queue;
 
@@ -88,11 +98,6 @@ namespace edge::gfx::vulkan {
         std::atomic<size_t> deallocation_count;
         std::mutex mutex;
 		std::unordered_map<void*, MemoryAllocationDesc> allocation_map;
-	};
-
-	struct QueueFamilyInfo {
-		uint32_t index;
-		vkw::Vector<uint32_t> queue_indices;
 	};
 
 	class Semaphore final : public IGFXSemaphore {
@@ -141,19 +146,15 @@ namespace edge::gfx::vulkan {
 
 		Queue(Queue&& other) 
 			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
-			, device_{ std::exchange(other.device_, nullptr) }
-			, family_index_{ std::exchange(other.family_index_, ~0u) }
-			, queue_index_{ std::exchange(other.queue_index_, ~0u) } {}
+			, device_{ std::exchange(other.device_, nullptr) } {}
 
 		auto operator=(Queue&& other) -> Queue& {
 			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
 			device_ = std::exchange(other.device_, nullptr);
-			family_index_ = std::exchange(other.family_index_, ~0u);
-			queue_index_ = std::exchange(other.queue_index_, ~0u);
 			return *this;
 		}
 
-		static auto construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> GFXResult<Owned<Queue>>;
+		static auto construct(GraphicsContext& ctx, QueueType type) -> GFXResult<Owned<Queue>>;
 
 		auto create_command_allocator() const -> GFXResult<Shared<IGFXCommandAllocator>> override;
 
@@ -161,16 +162,12 @@ namespace edge::gfx::vulkan {
 		auto submit(Span<const vk::SemaphoreSubmitInfo> wait_semaphores, Span<const vk::SemaphoreSubmitInfo> signal_semaphores, Span<const vk::CommandBufferSubmitInfo> command_buffers) -> void;
 		auto wait_idle() -> SyncResult override;
 
-		auto get_handle() const -> vk::Queue { return handle_; }
-		auto get_family_index() const -> uint32_t { return family_index_; }
+		auto get_handle() const -> vkw::Queue const& { return handle_; }
 	private:
-		auto _construct(const GraphicsContext& ctx, uint32_t family_index, uint32_t queue_index) -> Result;
+		auto _construct(GraphicsContext& ctx, QueueType type) -> Result;
 
-		vkw::Device const* device_{ nullptr };
-
-		vk::Queue handle_{ VK_NULL_HANDLE };
-		uint32_t family_index_{ 0u };
-		uint32_t queue_index_{ 0u };
+		vkw::Device* device_{ nullptr };
+		vkw::Queue handle_{ VK_NULL_HANDLE };
 	};
 
 	class CommandAllocator final : public IGFXCommandAllocator {
@@ -341,6 +338,7 @@ namespace edge::gfx::vulkan {
 		auto create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> GFXResult<Shared<IGFXPresentationEngine>> override;
 
 		auto get_device() const -> vkw::Device const& { return vkw_device_; }
+		auto get_device() -> vkw::Device& { return vkw_device_; }
 		auto get_allocation_callbacks() const -> vk::AllocationCallbacks const* { return &vk_alloc_callbacks_; }
 
 		auto get_surface() const -> vk::SurfaceKHR { return vk_surface_; }
@@ -356,8 +354,6 @@ namespace edge::gfx::vulkan {
 		vk::DebugReportCallbackEXT vk_debug_report_{ VK_NULL_HANDLE };
 
 		vkw::Device vkw_device_;
-		mutable Array<FixedVector<QueueFamilyInfo, 3ull>, 3ull> queue_family_map_;
-
-        VmaAllocator vma_allocator_{ VK_NULL_HANDLE };
+		vkw::MemoryAllocator vkw_memory_allocator_;
 	};
 }
