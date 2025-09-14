@@ -61,17 +61,35 @@ namespace edge::gfx {
 	};
 
 	enum class BufferType {
-		eRaw,
-		eStaging,
+		eRaw,					// GPU only buffer
+		eStaging,				// CPU to GPU buffer
+		eReadback,
 
 		eVertex,
+		eVertexDynamic,
 		eIndex,
+		eIndexDynamic,
 
 		eUniform,
 		eStorage,
+		eStorageDynamic,
 
-		eIndirectArgument
+		eIndirectArgument,
+		eIndirectArgumentDynamic,
+
+		eAccelerationStructureBuild,
+		eAccelerationStructureStorage,
+		eShaderBindingTable
 	};
+
+	enum class ImageFlag : uint16_t {
+		eShaderResource = 1 << 0,
+		eCopyable = 1 << 1,
+		eUnorderedAccess = 1 << 2,
+		eRenderTarget = 1 << 3
+	};
+
+	EDGE_MAKE_ENUM_FLAGS(ImageFlags, edge::gfx::ImageFlag);
 }
 
 EDGE_DEFINE_FLAG_NAMES(edge::gfx::GraphicsDeviceType,
@@ -107,4 +125,28 @@ EDGE_DEFINE_FLAG_NAMES(edge::gfx::ColorSpace,
 	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eAdobeRgbLinear, "Adobe RGB Linear"),
 	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eExtendedSrgbLinear, "Extended sRGB Linear"),
 	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::ePassThrough, "Pass Through")
+);
+
+EDGE_DEFINE_FLAG_NAMES(edge::gfx::BufferType,
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eRaw, "Raw"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eStaging, "Staging"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eVertex, "Vertex"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eVertexDynamic, "VertexDynamic"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eIndex, "Index"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eIndexDynamic, "IndexDynamic"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eUniform, "Uniform"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eStorage, "Storage"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eStorageDynamic, "StorageDynamic"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eIndirectArgument, "IndirectArgument"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eIndirectArgumentDynamic, "IndirectArgumentDynamic"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eAccelerationStructureBuild, "AccelerationStructureBuild"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eAccelerationStructureStorage, "AccelerationStructureStorage"),
+	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eShaderBindingTable, "ShaderBindingTable"),
+);
+
+EDGE_DEFINE_FLAG_NAMES(edge::gfx::ImageFlag,
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eShaderResource, "ShaderResource"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eCopyable, "Copyable"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eUnorderedAccess, "UnorderedAccess"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eRenderTarget, "RenderTarget")
 );

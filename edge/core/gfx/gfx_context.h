@@ -22,23 +22,10 @@ namespace edge::gfx {
 	public:
 		virtual ~IGFXQueue() = default;
 
-		virtual auto create_command_allocator() const -> GFXResult<Shared<IGFXCommandAllocator>> = 0;
+		[[nodiscard]] virtual auto create_command_allocator() const -> GFXResult<Shared<IGFXCommandAllocator>> = 0;
 
 		virtual auto submit(const SubmitQueueInfo& submit_info) -> void = 0;
 		virtual auto wait_idle() -> SyncResult = 0;
-	};
-
-	class IGFXBuffer {
-	public:
-		virtual ~IGFXBuffer() = default;
-
-		[[nodiscard]] virtual auto map() -> GFXResult<std::span<uint8_t>> = 0;
-		virtual auto unmap() noexcept -> void = 0;
-
-		[[nodiscard]] virtual auto update(const void* data, uint64_t size, uint64_t offset = 0ull) -> GFXResult<uint64_t> = 0;
-
-		[[nodiscard]] virtual auto get_size() const noexcept -> uint64_t = 0;
-		[[nodiscard]] virtual auto get_address() const -> uint64_t = 0;
 	};
 
 	class IGFXBufferView {
@@ -46,13 +33,20 @@ namespace edge::gfx {
 		virtual ~IGFXBufferView() = default;
 	};
 
-	class IGFXImage {
+	class IGFXBuffer {
 	public:
-		virtual ~IGFXImage() = default;
+		virtual ~IGFXBuffer() = default;
 
-		[[nodiscard]] virtual auto get_extent() const noexcept -> Extent3D = 0;
-		[[nodiscard]] virtual auto get_mip_count() const noexcept -> uint32_t = 0;
-		[[nodiscard]] virtual auto get_layer_count() const noexcept -> uint32_t = 0;
+		[[nodiscard]] virtual auto create_view(uint64_t offset, uint64_t size, TinyImageFormat format) const -> GFXResult<Shared<IGFXBufferView>> = 0;
+
+		[[nodiscard]] virtual auto map() -> GFXResult<std::span<uint8_t>> = 0;
+		virtual auto unmap() -> void = 0;
+		virtual auto flush(uint64_t size, uint64_t offset) -> Result = 0;
+
+		[[nodiscard]] virtual auto update(const void* data, uint64_t size, uint64_t offset = 0ull) -> GFXResult<uint64_t> = 0;
+
+		[[nodiscard]] virtual auto get_size() const noexcept -> uint64_t = 0;
+		[[nodiscard]] virtual auto get_address() const -> uint64_t = 0;
 	};
 
 	class IGFXImageView {
@@ -60,11 +54,22 @@ namespace edge::gfx {
 		virtual ~IGFXImageView() = default;
 	};
 
+	class IGFXImage {
+	public:
+		virtual ~IGFXImage() = default;
+
+		[[nodiscard]] virtual auto create_view(/* TODO: view info */) const -> GFXResult<Shared<IGFXImageView>> = 0;
+
+		[[nodiscard]] virtual auto get_extent() const noexcept -> Extent3D = 0;
+		[[nodiscard]] virtual auto get_mip_count() const noexcept -> uint32_t = 0;
+		[[nodiscard]] virtual auto get_layer_count() const noexcept -> uint32_t = 0;
+	};
+
 	class IGFXCommandAllocator {
 	public:
 		virtual ~IGFXCommandAllocator() = default;
 
-		virtual auto allocate_command_list() const -> GFXResult<Shared<IGFXCommandList>> = 0;
+		[[nodiscard]] virtual auto allocate_command_list() const -> GFXResult<Shared<IGFXCommandList>> = 0;
 	};
 
 	class IGFXCommandList {
@@ -116,9 +121,12 @@ namespace edge::gfx {
 
 		virtual auto create(const GraphicsContextCreateInfo& create_info) -> bool = 0;
 
-		virtual auto create_queue(QueueType queue_type) const -> GFXResult<Shared<IGFXQueue>> = 0;
-		virtual auto create_semaphore(uint64_t value) const -> GFXResult<Shared<IGFXSemaphore>> = 0;
+		[[nodiscard]] virtual auto create_queue(QueueType queue_type) const -> GFXResult<Shared<IGFXQueue>> = 0;
+		[[nodiscard]] virtual auto create_semaphore(uint64_t value) const -> GFXResult<Shared<IGFXSemaphore>> = 0;
 
-		virtual auto create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> GFXResult<Shared<IGFXPresentationEngine>> = 0;
+		[[nodiscard]] virtual auto create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> GFXResult<Shared<IGFXPresentationEngine>> = 0;
+
+		[[nodiscard]] virtual auto create_buffer(const BufferCreateInfo& create_info) -> GFXResult<Shared<IGFXBuffer>> = 0;
+		[[nodiscard]] virtual auto create_image(const ImageCreateInfo& create_info) -> GFXResult<Shared<IGFXImage>> = 0;
 	};
 }

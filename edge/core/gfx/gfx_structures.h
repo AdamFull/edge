@@ -69,4 +69,19 @@ namespace edge::gfx {
 		bool vsync;
 		bool hdr;
 	};
+
+	struct BufferCreateInfo {
+		uint64_t block_size;
+		uint64_t count_block;
+		BufferType type;
+	};
+
+	struct ImageCreateInfo {
+		Extent3D extent;
+		uint32_t layers;
+		uint32_t levels;
+
+		TinyImageFormat format;
+		ImageFlags flags;
+	};
 }

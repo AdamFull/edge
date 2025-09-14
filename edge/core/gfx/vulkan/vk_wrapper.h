@@ -517,6 +517,12 @@ namespace edge::vkw {
 		auto create_handle(const vk::SwapchainCreateInfoKHR& create_info, vk::SwapchainKHR& handle) const -> vk::Result;
 		auto destroy_handle(vk::SwapchainKHR handle) const -> void;
 
+		auto create_handle(const vk::BufferViewCreateInfo& create_info, vk::BufferView& handle) const -> vk::Result;
+		auto destroy_handle(vk::BufferView handle) const -> void;
+
+		auto create_handle(const vk::ImageViewCreateInfo& create_info, vk::ImageView& handle) const -> vk::Result;
+		auto destroy_handle(vk::ImageView handle) const -> void;
+
 		auto get_buffer_device_address(const vk::BufferDeviceAddressInfo& address_info) const -> uint64_t;
 
 		template<typename T>
@@ -675,6 +681,7 @@ namespace edge::vkw {
 			auto memory_properties = allocator_->get_memory_propersies(allocation_);
 			coherent_ = (memory_properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 			persistent_ = allocation_info_.pMappedData != nullptr;
+			mapped_memory_ = static_cast<uint8_t*>(allocation_info.pMappedData);
 		}
 
 		~MemoryAllocation() {
@@ -743,15 +750,17 @@ namespace edge::vkw {
 				}
 
 				std::memcpy(mapped_memory_ + offset, data, size);
+				unmap();
+
 				if (auto result = flush(offset, size); result != vk::Result::eSuccess) {
 					return result;
 				}
-
-				unmap();
 			}
 
 			return vk::Result::eSuccess;
 		}
+
+		auto get_size() const -> uint64_t { return allocation_info_.size; }
 
 		auto is_coherent() const -> bool { return coherent_; }
 		auto is_persistent() const -> bool { return persistent_; }
@@ -765,6 +774,7 @@ namespace edge::vkw {
 		operator T::CType() const noexcept { return handle_; }
 		auto get_handle() const noexcept -> T { return handle_; }
 		auto get_allocation() const -> VmaAllocation { return allocation_; }
+		auto get_allocator() const -> MemoryAllocator const& { return *allocator_; }
 	protected:
 		MemoryAllocator const* allocator_{ nullptr };
 		T handle_{ VK_NULL_HANDLE };
@@ -779,18 +789,81 @@ namespace edge::vkw {
 
 	class Image : public MemoryAllocation<vk::Image> {
 	public:
+		Image() = default;
+		Image(std::nullptr_t) noexcept {}
+
 		Image(MemoryAllocator const& allocator, vk::Image handle, VmaAllocation allocation, VmaAllocationInfo allocation_info)
 			: MemoryAllocation(allocator, handle, allocation, allocation_info) {
 		}
+
+		auto get_extent() const -> vk::Extent3D;
+		auto get_layer_count() const -> uint32_t;
+		auto gat_level_count() const -> uint32_t;
+	private:
+
+	};
+
+	class ImageView {
+	public:
+	private:
+		Device const* device_{ nullptr };
+		vk::ImageView handle_{ VK_NULL_HANDLE };
 	};
 
 	class Buffer : public MemoryAllocation<vk::Buffer> {
 	public:
+		Buffer() = default;
+		Buffer(std::nullptr_t) noexcept {}
+
 		Buffer(MemoryAllocator const& allocator, vk::Buffer handle, VmaAllocation allocation, VmaAllocationInfo allocation_info)
 			: MemoryAllocation(allocator, handle, allocation, allocation_info) {
 		}
 
+		auto create_view(uint64_t offset, uint64_t size, vk::Format format) const -> Result<BufferView>;
+
 		auto get_gpu_virtual_address() const -> uint64_t;
+	};
+
+	class BufferView {
+	public:
+		BufferView() = default;
+		BufferView(std::nullptr_t) noexcept {}
+		BufferView(Device const& device, vk::BufferView handle, uint64_t offset, uint64_t size, vk::Format format);
+		~BufferView();
+
+		BufferView(const BufferView&) = delete;
+		auto operator=(const BufferView&) -> BufferView & = delete;
+
+		BufferView(BufferView&& other)
+			: device_{ std::exchange(other.device_, nullptr) }
+			, handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
+			, offset_{ std::exchange(other.offset_, ~0ull) }
+			, size_{ std::exchange(other.size_, ~0ull) }
+			, format_{ std::exchange(other.format_, vk::Format::eUndefined) } {
+		}
+
+		auto operator=(BufferView&& other) -> BufferView& {
+			device_ = std::exchange(other.device_, nullptr);
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			offset_ = std::exchange(other.offset_, ~0ull);
+			size_ = std::exchange(other.size_, ~0ull);
+			format_ = std::exchange(other.format_, vk::Format::eUndefined);
+			return *this;
+		}
+
+		auto get_offset() const -> uint64_t { return offset_; }
+		auto get_size() const -> uint64_t { return size_; }
+		auto get_format() const -> vk::Format { return format_; }
+
+		operator vk::BufferView() const noexcept { return handle_; }
+		operator VkBufferView() const noexcept { return handle_; }
+		auto get_handle() const noexcept -> vk::BufferView { return handle_; }
+		auto get_device() const -> Device const& { return *device_; }
+	private:
+		Device const* device_{ nullptr };
+		vk::BufferView handle_{ VK_NULL_HANDLE };
+		uint64_t offset_, size_;
+		vk::Format format_;
 	};
 
 	class MemoryAllocator {
@@ -820,8 +893,8 @@ namespace edge::vkw {
 		auto unmap_memory(VmaAllocation allocation) const -> void;
 		auto flush_memory(VmaAllocation allocation, vk::DeviceSize offset, vk::DeviceSize size) const -> vk::Result;
 
-		auto allocate_image(const vk::ImageCreateInfo& create_info, VmaMemoryUsage usage) const -> Result<Image>;
-		auto allocate_buffer(const vk::BufferCreateInfo& create_info, VmaMemoryUsage usage) const -> Result<Buffer>;
+		auto allocate_image(const vk::ImageCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Result<Image>;
+		auto allocate_buffer(const vk::BufferCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Result<Buffer>;
 		auto deallocate(vk::Image handle, VmaAllocation allocation) const -> void;
 		auto deallocate(vk::Buffer handle, VmaAllocation allocation) const -> void;
 

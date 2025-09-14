@@ -440,4 +440,12 @@ namespace edge::gfx::vulkan {
     auto GraphicsContext::create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> GFXResult<Shared<IGFXPresentationEngine>> {
         return nullptr;
     }
+
+    auto GraphicsContext::create_buffer(const BufferCreateInfo& create_info) -> GFXResult<Shared<IGFXBuffer>> {
+        return Buffer::construct(*this, create_info);
+    }
+
+    auto GraphicsContext::create_image(const ImageCreateInfo& create_info) -> GFXResult<Shared<IGFXImage>> {
+        return Image::construct(*this, create_info);
+    }
 }

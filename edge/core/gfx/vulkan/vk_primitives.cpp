@@ -1,5 +1,7 @@
 #include "vk_context.h"
 
+#include <numeric>
+
 namespace edge::gfx::vulkan {
 #define EDGE_LOGGER_SCOPE "Semaphore"
 
@@ -303,6 +305,213 @@ namespace edge::gfx::vulkan {
 
 #undef EDGE_LOGGER_SCOPE // CommandList
 
+#define EDGE_LOGGER_SCOPE "Buffer"
+
+	auto Buffer::construct(const GraphicsContext& ctx, const BufferCreateInfo& create_info) -> GFXResult<Owned<Buffer>> {
+		auto self = std::make_unique<Buffer>();
+		if (auto result = self->_construct(ctx, create_info); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return self;
+	}
+
+	auto Buffer::create_view(uint64_t offset, uint64_t size, TinyImageFormat format) const -> GFXResult<Shared<IGFXBufferView>> {
+		return nullptr;
+	}
+
+	auto Buffer::map() -> GFXResult<std::span<uint8_t>> {
+		auto result = handle_.map();
+		if (!result) {
+			return std::unexpected(to_gfx_result(result.error()));
+		}
+		return result.value();
+	}
+
+	auto Buffer::unmap() -> void {
+		handle_.unmap();
+	}
+
+	auto Buffer::flush(uint64_t offset, uint64_t size) -> Result {
+		return to_gfx_result(handle_.flush(offset, size));
+	}
+
+	auto Buffer::update(const void* data, uint64_t size, uint64_t offset) -> GFXResult<uint64_t> {
+		if (auto result = handle_.update(data, size, offset); result != vk::Result::eSuccess) {
+			return std::unexpected(to_gfx_result(result));
+		}
+		return size;
+	}
+
+	auto Buffer::get_size() const noexcept -> uint64_t {
+		return handle_.get_size();
+	}
+
+	auto Buffer::get_address() const -> uint64_t {
+		return handle_.get_gpu_virtual_address();
+	}
+
+	auto Buffer::_construct(const GraphicsContext& ctx, const BufferCreateInfo& create_info) -> Result {
+		uint64_t minimal_alignment{ 1ull };
+		vk::BufferCreateInfo buffer_create_info{};
+		buffer_create_info.usage |= vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eShaderDeviceAddressKHR;
+
+		VmaAllocationCreateInfo allocation_create_info{};
+		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+
+		constexpr VmaAllocationCreateFlags DYNAMIC_BUFFER_FLAGS =
+			VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+			VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+			VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		
+		switch (create_info.type)
+		{
+		case BufferType::eRaw: {
+			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+			break;
+		}
+		case BufferType::eStaging: {
+			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			break;
+		}
+		case BufferType::eReadback: {
+			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+			break;
+		}
+		case BufferType::eVertex:
+		case BufferType::eVertexDynamic: {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eVertexBuffer;
+			if (create_info.type == BufferType::eVertexDynamic) {
+				allocation_create_info.flags = DYNAMIC_BUFFER_FLAGS;
+			}
+			break;
+		}
+		case BufferType::eIndex:
+		case BufferType::eIndexDynamic: {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eIndexBuffer;
+			if (create_info.type == BufferType::eVertexDynamic) {
+				allocation_create_info.flags = DYNAMIC_BUFFER_FLAGS;
+			}
+			break;
+		}
+		case BufferType::eUniform: {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eUniformBuffer;
+			break;
+		}
+		case BufferType::eStorage:
+		case BufferType::eStorageDynamic: {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eStorageBuffer;
+			if (create_info.type == BufferType::eVertexDynamic) {
+				allocation_create_info.flags = DYNAMIC_BUFFER_FLAGS;
+			}
+			break;
+		}
+		case BufferType::eIndirectArgument:
+		case BufferType::eIndirectArgumentDynamic: {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eIndirectBuffer;
+			if (create_info.type == BufferType::eVertexDynamic) {
+				allocation_create_info.flags = DYNAMIC_BUFFER_FLAGS;
+			}
+			break;
+		}
+		case BufferType::eAccelerationStructureBuild: {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR;
+			break;
+		}
+		case BufferType::eAccelerationStructureStorage: {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR;
+			break;
+		}
+		case BufferType::eShaderBindingTable: {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eShaderBindingTableKHR;
+			break;
+		}
+		default:
+			break;
+		}
+
+		auto const& allocator = ctx.get_memory_allocator();
+		auto result = allocator.allocate_buffer(buffer_create_info, allocation_create_info);
+		if (!result) {
+			return to_gfx_result(result.error());
+		}
+		handle_ = std::move(result.value());
+
+		return Result::eSuccess;
+	}
+
+#undef EDGE_LOGGER_SCOPE // Buffer
+
+#define EDGE_LOGGER_SCOPE "Image"
+
+	auto Image::construct(const GraphicsContext& ctx, const ImageCreateInfo& create_info)->GFXResult<Owned<Image>> {
+		auto self = std::make_unique<Image>();
+		if (auto result = self->_construct(ctx, create_info); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return self;
+	}
+
+	auto Image::create_view(/* TODO: view info */) const -> GFXResult<Shared<IGFXImageView>> {
+		return nullptr;
+	}
+	
+	auto Image::_construct(const GraphicsContext& ctx, const ImageCreateInfo& create_info) -> Result {
+		VmaAllocationCreateInfo allocation_create_info{};
+		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+
+		vk::ImageCreateInfo image_create_info{};
+		image_create_info.extent.width = create_info.extent.width;
+		image_create_info.extent.height = create_info.extent.height;
+		image_create_info.extent.depth = create_info.extent.depth;
+		image_create_info.arrayLayers = create_info.layers;
+		image_create_info.mipLevels = create_info.levels;
+		image_create_info.format = static_cast<vk::Format>(TinyImageFormat_ToVkFormat(create_info.format));
+		image_create_info.flags = (create_info.layers == 6u) ? vk::ImageCreateFlagBits::eCubeCompatible : vk::ImageCreateFlagBits::eExtendedUsage;
+		image_create_info.imageType = (create_info.extent.depth > 1u) ? vk::ImageType::e3D : (create_info.extent.height > 1u) ? vk::ImageType::e2D : vk::ImageType::e1D;
+		image_create_info.sharingMode = vk::SharingMode::eExclusive;
+
+		if (create_info.flags & ImageFlag::eShaderResource) {
+			image_create_info.usage |= vk::ImageUsageFlagBits::eSampled;
+		}
+
+		if (create_info.flags & ImageFlag::eUnorderedAccess) {
+			image_create_info.usage |= vk::ImageUsageFlagBits::eStorage;
+		}
+
+		if (create_info.flags & ImageFlag::eCopyable) {
+			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst;
+		}
+
+		if (create_info.flags & ImageFlag::eRenderTarget) {
+			image_create_info.usage |= ((TinyImageFormat_IsDepthAndStencil(create_info.format) || TinyImageFormat_IsDepthOnly(create_info.format)) ? vk::ImageUsageFlagBits::eDepthStencilAttachment : vk::ImageUsageFlagBits::eColorAttachment);
+			allocation_create_info.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			allocation_create_info.priority = 1.0f;
+		}
+
+		auto const& device = ctx.get_device();
+		auto queue_family_properties = device.get_queue_family_properties();
+		vkw::Vector<uint32_t> queue_family_indices(queue_family_properties.size(), device.get_allocator());
+		std::iota(queue_family_indices.begin(), queue_family_indices.end(), 0);
+
+		if (queue_family_indices.size() > 1) {
+			image_create_info.queueFamilyIndexCount = static_cast<uint32_t>(queue_family_indices.size());
+			image_create_info.pQueueFamilyIndices = queue_family_indices.data();
+			image_create_info.sharingMode = vk::SharingMode::eConcurrent;
+		}
+
+		auto const& allocator = ctx.get_memory_allocator();
+		auto result = allocator.allocate_image(image_create_info, allocation_create_info);
+		if (!result) {
+			return to_gfx_result(result.error());
+		}
+		handle_ = std::move(result.value());
+
+		return Result::eSuccess;
+	}
+
+#undef EDGE_LOGGER_SCOPE // Image
+
 #define EDGE_LOGGER_SCOPE "PresentationFrame"
 
 	PresentationFrame::~PresentationFrame() {
@@ -425,140 +634,4 @@ namespace edge::gfx::vulkan {
 	}
 
 #undef EDGE_LOGGER_SCOPE // PresentationEngine
-
-	// Presentation engine
-//	auto VulkanPresentationEngine::construct(const GraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> Owned<VulkanPresentationEngine> {
-//		auto self = std::make_unique<VulkanPresentationEngine>();
-//		self->_construct(ctx, queue_type, frames_in_flight);
-//		return self;
-//	}
-//
-//	auto VulkanPresentationEngine::next_frame() -> void {
-//
-//	}
-//
-//	auto VulkanPresentationEngine::present(const PresentInfo& present_info) -> void {
-//		// End all command lists 
-//		for (auto& command_list : command_lists_) {
-//			command_list->end();
-//		}
-//
-//		SubmitQueueInfo submit_info{};
-//		submit_info.command_lists = command_lists_;
-//		submit_info.wait_semaphores = present_info.wait_semaphores;
-//		submit_info.signal_semaphores = present_info.signal_semaphores;
-//		queue_->submit(submit_info);
-//
-//
-//	}
-//
-//	auto VulkanPresentationEngine::get_frame_index() const -> uint32_t {
-//		return 0;
-//	}
-//
-//	auto VulkanPresentationEngine::_construct(const GraphicsContext& ctx, QueueType queue_type, uint32_t frames_in_flight) -> bool {
-//		device_ = ctx.get_logical_device();
-//		physical_ = ctx.get_physical_device();
-//		surface_ = ctx.get_surface();
-//		allocator_ = ctx.get_allocation_callbacks();
-//
-//		queue_ = std::static_pointer_cast<Queue>(ctx.create_queue(queue_type));
-//		command_allocator_ = std::static_pointer_cast<CommandAllocator>(queue_->create_command_allocator());
-//		
-//		if (!update_swapchain()) {
-//			return false;
-//		}
-//
-//		return true;
-//	}
-//
-//	auto VulkanPresentationEngine::update_swapchain() -> bool {
-//#ifdef EDGE_PLATFORM_ANDROID
-//		vk::PresentModeKHR present_mode = vsync_ ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_MAILBOX_KHR;
-//		static constexpr std::array<vk::PresentModeKHR, 3ull> present_mode_priority_list{ VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR };
-//#else
-//		vk::PresentModeKHR present_mode = vsync_ ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_MAILBOX_KHR;
-//		static constexpr std::array<vk::PresentModeKHR, 3ull> present_mode_priority_list{ VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR };
-//#endif
-//
-//		uint32_t surface_format_count;
-//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_, surface_, &surface_format_count, nullptr), 
-//			"Failed to request surface supported format count.");
-//
-//		std::vector<vk::SurfaceFormatKHR> surface_formats(surface_format_count);
-//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_, surface_, &surface_format_count, surface_formats.data()),
-//			"Failed to request surface supported formats.");
-//
-//		uint32_t present_mode_count;
-//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_, surface_, &present_mode_count, nullptr),
-//			"Failed to request surface supported mode count.");
-//
-//		std::vector<vk::PresentModeKHR> present_modes(present_mode_count);
-//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_, surface_, &present_mode_count, present_modes.data()),
-//			"Failed to request surface supported modes.");
-//
-//		VkSurfaceCapabilitiesKHR surface_caps;
-//		VK_CHECK_RESULT(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_, surface_, &surface_caps),
-//			"Failed to request surface caps.");
-//
-//		auto potential_extent = requested_extent_;
-//		if (potential_extent.width == 1 || potential_extent.height == 1) {
-//			potential_extent = surface_caps.currentExtent;
-//		}
-//
-//		VkSwapchainKHR old_swapchain{ handle_ };
-//		swapchain_create_info.oldSwapchain = old_swapchain;
-//		swapchain_create_info.minImageCount = std::clamp(requested_image_count_, surface_caps.minImageCount, surface_caps.maxImageCount ? surface_caps.maxImageCount : std::numeric_limits<uint32_t>::max());
-//		swapchain_create_info.imageExtent = choose_extent(potential_extent, surface_caps.minImageExtent, surface_caps.maxImageExtent, surface_caps.currentExtent);
-//		swapchain_create_info.imageArrayLayers = 1;
-//
-//		static const std::array<vk::SurfaceFormatKHR, 2ull> surface_format_priority_list = {
-//			vk::SurfaceFormatKHR(VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR),
-//			vk::SurfaceFormatKHR(VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-//		};
-//
-//		auto surface_format = choose_surface_format({}, surface_formats, surface_format_priority_list);
-//		swapchain_create_info.imageFormat = surface_format.format;
-//
-//		VkFormatProperties format_properties;
-//		vkGetPhysicalDeviceFormatProperties(physical_, swapchain_create_info.imageFormat, &format_properties);
-//
-//		std::set<vk::ImageUsageFlagBits> image_usage_flags{ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_IMAGE_USAGE_TRANSFER_SRC_BIT };
-//		image_usage_flags = choose_image_usage(image_usage_flags, surface_caps.supportedUsageFlags, format_properties.optimalTilingFeatures);
-//
-//		swapchain_create_info.imageUsage = composite_image_flags(image_usage_flags);
-//		swapchain_create_info.preTransform = choose_transform(requested_transform_, surface_caps.supportedTransforms, surface_caps.currentTransform);
-//		swapchain_create_info.compositeAlpha = choose_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surface_caps.supportedCompositeAlpha);
-//		swapchain_create_info.presentMode = choose_present_mode(present_mode, present_modes, present_mode_priority_list);
-//
-//		swapchain_create_info.surface = surface_;
-//		swapchain_create_info.imageFormat = surface_format.format;
-//		swapchain_create_info.imageColorSpace = surface_format.colorSpace;
-//		swapchain_create_info.clipped = VK_TRUE;
-//		swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-//
-//		//auto queue_families = device.get_queue_family_indices();
-//		//if (queue_families.size() > 1) {
-//		//	swapchain_create_info.queueFamilyIndexCount = static_cast<uint32_t>(queue_families.size());
-//		//	swapchain_create_info.pQueueFamilyIndices = &queue_families[0];
-//		//	swapchain_create_info.imageSharingMode = vk::SharingMode::eConcurrent;
-//		//}
-//
-//		VK_CHECK_RESULT(vkCreateSwapchainKHR(device_, &swapchain_create_info, allocator_, &handle_),
-//			"Failed to create swapchain.");
-//
-//		uint32_t swapchain_image_count;
-//		VK_CHECK_RESULT(vkGetSwapchainImagesKHR(device_, handle_, &swapchain_image_count, nullptr),
-//			"Failed to request number of swapchain images.");
-//
-//		std::vector<VkImage> swapchain_images(swapchain_image_count);
-//		VK_CHECK_RESULT(vkGetSwapchainImagesKHR(device_, handle_, &swapchain_image_count, swapchain_images.data()),
-//			"Failed to request swapchain images.");
-//
-//		// TODO: create images and update them
-//
-//#ifdef NDEBUG
-//		
-//#endif
-//	}
 }

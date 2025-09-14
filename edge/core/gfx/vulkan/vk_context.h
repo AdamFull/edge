@@ -252,6 +252,81 @@ namespace edge::gfx::vulkan {
 		vk::CommandPool command_pool_{ VK_NULL_HANDLE };
 	};
 
+	class Buffer final : public IGFXBuffer {
+	public:
+		Buffer() = default;
+		~Buffer() override = default;
+
+		Buffer(const Buffer&) = delete;
+		auto operator=(const Buffer&) -> Buffer & = delete;
+
+		Buffer(Buffer&& other)
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) } {
+		}
+
+		auto operator=(Buffer&& other) -> Buffer& {
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			return *this;
+		}
+
+		static auto construct(const GraphicsContext& ctx, const BufferCreateInfo& create_info) -> GFXResult<Owned<Buffer>>;
+
+		auto create_view(uint64_t offset, uint64_t size, TinyImageFormat format) const -> GFXResult<Shared<IGFXBufferView>> override;
+
+		auto map() -> GFXResult<std::span<uint8_t>> override;
+		auto unmap() -> void override;
+		auto flush(uint64_t offset, uint64_t size) -> Result override;
+
+		auto update(const void* data, uint64_t size, uint64_t offset = 0ull) -> GFXResult<uint64_t> override;
+
+		auto get_size() const noexcept -> uint64_t override;
+		auto get_address() const -> uint64_t override;
+	private:
+		auto _construct(const GraphicsContext& ctx, const BufferCreateInfo& create_info) -> Result;
+
+		vkw::Buffer handle_;
+	};
+
+	class BufferView final : public IGFXBufferView {
+	public:
+	private:
+	};
+
+	class Image final : public IGFXImage {
+	public:
+		Image() = default;
+		~Image() override = default;
+
+		Image(const Image&) = delete;
+		auto operator=(const Image&) -> Image & = delete;
+
+		Image(Image&& other)
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) } {
+		}
+
+		auto operator=(Image&& other) -> Image& {
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			return *this;
+		}
+
+		static auto construct(const GraphicsContext& ctx, const ImageCreateInfo& create_info) -> GFXResult<Owned<Image>>;
+
+		auto create_view(/* TODO: view info */) const -> GFXResult<Shared<IGFXImageView>> override;
+
+		auto get_extent() const noexcept -> Extent3D override { return {}; }
+		auto get_mip_count() const noexcept -> uint32_t override { return ~0u; }
+		auto get_layer_count() const noexcept -> uint32_t override { return ~0u; }
+	private:
+		auto _construct(const GraphicsContext& ctx, const ImageCreateInfo& create_info) -> Result;
+
+		vkw::Image handle_;
+	};
+
+	class ImageView final : public IGFXImageView {
+	public:
+	private:
+	};
+
 	class PresentationFrame final : public IGFXPresentationFrame {
 	public:
 		~PresentationFrame() override;
@@ -337,9 +412,14 @@ namespace edge::gfx::vulkan {
 
 		auto create_presentation_engine(const PresentationEngineCreateInfo& create_info) -> GFXResult<Shared<IGFXPresentationEngine>> override;
 
+		auto create_buffer(const BufferCreateInfo& create_info) -> GFXResult<Shared<IGFXBuffer>> override;
+		auto create_image(const ImageCreateInfo& create_info) -> GFXResult<Shared<IGFXImage>> override;
+
 		auto get_device() const -> vkw::Device const& { return vkw_device_; }
 		auto get_device() -> vkw::Device& { return vkw_device_; }
 		auto get_allocation_callbacks() const -> vk::AllocationCallbacks const* { return &vk_alloc_callbacks_; }
+
+		auto get_memory_allocator() const -> vkw::MemoryAllocator const& { return vkw_memory_allocator_; }
 
 		auto get_surface() const -> vk::SurfaceKHR { return vk_surface_; }
 	private:

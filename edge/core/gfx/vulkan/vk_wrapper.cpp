@@ -751,6 +751,22 @@ namespace edge::vkw {
 		logical_.destroySwapchainKHR(handle, allocator_);
 	}
 
+	auto Device::create_handle(const vk::BufferViewCreateInfo& create_info, vk::BufferView& handle) const -> vk::Result {
+		return logical_.createBufferView(&create_info, allocator_, &handle);
+	}
+
+	auto Device::destroy_handle(vk::BufferView handle) const -> void {
+		logical_.destroyBufferView(handle, allocator_);
+	}
+
+	auto Device::create_handle(const vk::ImageViewCreateInfo& create_info, vk::ImageView& handle) const -> vk::Result {
+		return logical_.createImageView(&create_info, allocator_, &handle);
+	}
+
+	auto Device::destroy_handle(vk::ImageView handle) const -> void {
+		logical_.destroyImageView(handle, allocator_);
+	}
+
 	auto Device::get_buffer_device_address(const vk::BufferDeviceAddressInfo& address_info) const -> uint64_t {
 		return logical_.getBufferAddress(address_info);
 	}
@@ -1074,6 +1090,23 @@ namespace edge::vkw {
 
 #define EDGE_LOGGER_SCOPE "Buffer"
 
+	auto Buffer::create_view(uint64_t offset, uint64_t size, vk::Format format) const -> Result<BufferView> {
+		vk::BufferViewCreateInfo create_info{};
+		create_info.buffer = handle_;
+		create_info.format = format;
+		create_info.offset = offset;
+		create_info.range = size;
+
+		auto const& device = allocator_->get_device();
+
+		vk::BufferView buffer_view;
+		if (auto result = device->create_handle(create_info, buffer_view); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return BufferView(*device, buffer_view, offset, size, format);
+	}
+
 	auto Buffer::get_gpu_virtual_address() const -> uint64_t {
 		auto const& device = allocator_->get_device();
 
@@ -1082,7 +1115,18 @@ namespace edge::vkw {
 		return device->get_buffer_device_address(address_info);
 	}
 
-#undef // Buffer
+	BufferView::BufferView(Device const& device, vk::BufferView handle, uint64_t offset, uint64_t size, vk::Format format)
+		: device_{ &device }, handle_{ handle }, offset_{ offset }, size_{ size }, format_{ format } {
+
+	}
+
+	BufferView::~BufferView() {
+		if (handle_) {
+			device_->destroy_handle(handle_);
+		}
+	}
+
+#undef EDGE_LOGGER_SCOPE // Buffer
 
 #define EDGE_LOGGER_SCOPE "MemoryAllocator"
 
@@ -1115,14 +1159,12 @@ namespace edge::vkw {
 		return static_cast<vk::Result>(vmaFlushAllocation(handle_, allocation, offset, size));
 	}
 
-	auto MemoryAllocator::allocate_image(const vk::ImageCreateInfo& create_info, VmaMemoryUsage usage) const -> Result<Image> {
+	auto MemoryAllocator::allocate_image(const vk::ImageCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Result<Image> {
 		VkImage image;
 		VmaAllocationInfo allocation_info;
 		VmaAllocation allocation;
 
 		VkImageCreateInfo image_create_info = static_cast<VkImageCreateInfo>(create_info);
-		VmaAllocationCreateInfo allocation_create_info{};
-		allocation_create_info.usage = usage;
 		if (auto result = vmaCreateImage(handle_, &image_create_info, &allocation_create_info,
 			&image, &allocation, &allocation_info); result != VK_SUCCESS) {
 			return std::unexpected(static_cast<vk::Result>(result));
@@ -1131,14 +1173,12 @@ namespace edge::vkw {
 		return Image(*this, vk::Image(image), allocation, allocation_info);
 	}
 
-	auto MemoryAllocator::allocate_buffer(const vk::BufferCreateInfo& create_info, VmaMemoryUsage usage) const -> Result<Buffer> {
+	auto MemoryAllocator::allocate_buffer(const vk::BufferCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Result<Buffer> {
 		VkBuffer buffer;
 		VmaAllocationInfo allocation_info;
 		VmaAllocation allocation;
 
 		VkBufferCreateInfo buffer_create_info = static_cast<VkBufferCreateInfo>(create_info);
-		VmaAllocationCreateInfo allocation_create_info{};
-		allocation_create_info.usage = usage;
 		if (auto result = vmaCreateBuffer(handle_, &buffer_create_info, &allocation_create_info,
 			&buffer, &allocation, &allocation_info); result != VK_SUCCESS) {
 			return std::unexpected(static_cast<vk::Result>(result));
