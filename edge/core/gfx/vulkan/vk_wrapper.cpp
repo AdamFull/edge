@@ -822,6 +822,10 @@ namespace edge::vkw {
 		device_ = nullptr;
 	}
 
+	auto Swapchain::get_images() const -> Vector<Image> {
+		Vector<Image> images;
+	}
+
 #undef EDGE_LOGGER_SCOPE // Swapchain
 
 #define EDGE_LOGGER_SCOPE "SwapchainBuilder"
@@ -1087,6 +1091,44 @@ namespace edge::vkw {
 		}
 
 #undef EDGE_LOGGER_SCOPE // SwapchainBuilder
+
+#define EDGE_LOGGER_SCOPE "Image"
+
+	auto Image::create_view(uint32_t first_layer, uint32_t layers, uint32_t first_level, uint32_t levels, vk::ImageViewType type) const -> Result<ImageView> {
+		vk::ImageViewCreateInfo create_info{};
+		create_info.image = handle_;
+		create_info.format = format_;
+		create_info.components.r = vk::ComponentSwizzle::eR;
+		create_info.components.g = vk::ComponentSwizzle::eG;
+		create_info.components.b = vk::ComponentSwizzle::eB;
+		create_info.components.a = vk::ComponentSwizzle::eA;
+		create_info.subresourceRange.baseArrayLayer = first_layer;
+		create_info.subresourceRange.layerCount = layers;
+		create_info.subresourceRange.baseMipLevel = first_level;
+		create_info.subresourceRange.levelCount = levels;
+		create_info.viewType = type;
+
+		auto const& device = allocator_->get_device();
+
+		vk::ImageView view;
+		if (auto result = device->create_handle(create_info, view); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return ImageView(*device, view, create_info.subresourceRange);
+	}
+
+	ImageView::ImageView(Device const& device, vk::ImageView handle, const vk::ImageSubresourceRange& range)
+		: device_{ &device }, handle_{ handle }, subresource_range_{ range } {
+
+	}
+
+	ImageView::~ImageView() {
+		if (handle_) {
+			device_->destroy_handle(handle_);
+		}
+	}
+
+#undef EDGE_LOGGER_SCOPE // Image
 
 #define EDGE_LOGGER_SCOPE "Buffer"
 

@@ -33,6 +33,11 @@
 #endif
 
 namespace edge {
+    inline constexpr uint64_t aligned_size(uint64_t size, uint64_t alignment) {
+        return (size + alignment - 1ull) & ~(alignment - 1ull);
+    }
+
+
 	template<typename T, size_t Size>
 	using Array = std::array<T, Size>;
 

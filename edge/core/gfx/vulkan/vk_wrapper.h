@@ -31,6 +31,11 @@ namespace edge::vkw {
 	class Device;
 	class Swapchain;
 	class MemoryAllocator;
+	class Image;
+	class ImageView;
+	class Buffer;
+	class BufferView;
+	class MemoryAllocator;
 
 	template<typename T>
 	using Result = std::expected<T, vk::Result>;
@@ -587,6 +592,8 @@ namespace edge::vkw {
 
 		auto reset() -> void;
 
+		auto get_images() const -> Vector<Image>;
+
 		auto get_image_count() const noexcept -> uint32_t { return state_.image_count; }
 		auto get_format() const noexcept -> vk::Format { return state_.format.format; }
 		auto get_color_space() const noexcept -> vk::ColorSpaceKHR { return state_.format.colorSpace; }
@@ -796,18 +803,49 @@ namespace edge::vkw {
 			: MemoryAllocation(allocator, handle, allocation, allocation_info) {
 		}
 
-		auto get_extent() const -> vk::Extent3D;
-		auto get_layer_count() const -> uint32_t;
-		auto gat_level_count() const -> uint32_t;
-	private:
+		auto create_view(uint32_t first_layer, uint32_t layers, uint32_t first_level, uint32_t levels, vk::ImageViewType type) const -> Result<ImageView>;
 
+		auto get_extent() const -> vk::Extent3D { return extent_; }
+		auto get_layer_count() const -> uint32_t { return layer_count_; }
+		auto gat_level_count() const -> uint32_t { return level_count_; }
+	private:
+		vk::Extent3D extent_;
+		uint32_t layer_count_;
+		uint32_t level_count_;
+		vk::Format format_;
 	};
 
 	class ImageView {
 	public:
+		ImageView() = default;
+		ImageView(std::nullptr_t) noexcept {}
+		ImageView(Device const& device, vk::ImageView handle, const vk::ImageSubresourceRange& range);
+		~ImageView();
+
+		ImageView(const ImageView&) = delete;
+		auto operator=(const ImageView&) -> ImageView & = delete;
+
+		ImageView(ImageView&& other)
+			: device_{ std::exchange(other.device_, nullptr) }
+			, handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
+			, subresource_range_{ std::exchange(other.subresource_range_, {}) } {
+		}
+
+		auto operator=(ImageView&& other) -> ImageView& {
+			device_ = std::exchange(other.device_, nullptr);
+			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			subresource_range_ = std::exchange(other.subresource_range_, {});
+			return *this;
+		}
+
+		auto get_first_layer() const -> uint32_t { return subresource_range_.baseArrayLayer; }
+		auto get_layer_count() const -> uint32_t { return subresource_range_.layerCount; }
+		auto get_first_level() const -> uint32_t { return subresource_range_.baseMipLevel; }
+		auto gat_level_count() const -> uint32_t { return subresource_range_.levelCount; }
 	private:
 		Device const* device_{ nullptr };
 		vk::ImageView handle_{ VK_NULL_HANDLE };
+		vk::ImageSubresourceRange subresource_range_;
 	};
 
 	class Buffer : public MemoryAllocation<vk::Buffer> {

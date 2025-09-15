@@ -31,13 +31,17 @@ namespace edge::gfx {
 	class IGFXBufferView {
 	public:
 		virtual ~IGFXBufferView() = default;
+
+		[[nodiscard]] virtual auto get_offset() const noexcept -> uint64_t = 0;
+		[[nodiscard]] virtual auto get_size() const noexcept -> uint64_t = 0;
+		[[nodiscard]] virtual auto get_format() const noexcept -> TinyImageFormat = 0;
 	};
 
 	class IGFXBuffer {
 	public:
 		virtual ~IGFXBuffer() = default;
 
-		[[nodiscard]] virtual auto create_view(uint64_t offset, uint64_t size, TinyImageFormat format) const -> GFXResult<Shared<IGFXBufferView>> = 0;
+		[[nodiscard]] virtual auto create_view(const BufferViewCreateInfo& create_info) const -> GFXResult<Shared<IGFXBufferView>> = 0;
 
 		[[nodiscard]] virtual auto map() -> GFXResult<std::span<uint8_t>> = 0;
 		virtual auto unmap() -> void = 0;
@@ -52,17 +56,23 @@ namespace edge::gfx {
 	class IGFXImageView {
 	public:
 		virtual ~IGFXImageView() = default;
+
+		[[nodiscard]] virtual auto get_first_level() const noexcept -> uint32_t = 0;
+		[[nodiscard]] virtual auto get_level_count() const noexcept -> uint32_t = 0;
+		[[nodiscard]] virtual auto get_first_layer() const noexcept -> uint32_t = 0;
+		[[nodiscard]] virtual auto get_layer_count() const noexcept -> uint32_t = 0;
 	};
 
 	class IGFXImage {
 	public:
 		virtual ~IGFXImage() = default;
 
-		[[nodiscard]] virtual auto create_view(/* TODO: view info */) const -> GFXResult<Shared<IGFXImageView>> = 0;
+		[[nodiscard]] virtual auto create_view(const ImageViewCreateInfo& create_info) const -> GFXResult<Shared<IGFXImageView>> = 0;
 
 		[[nodiscard]] virtual auto get_extent() const noexcept -> Extent3D = 0;
-		[[nodiscard]] virtual auto get_mip_count() const noexcept -> uint32_t = 0;
+		[[nodiscard]] virtual auto get_level_count() const noexcept -> uint32_t = 0;
 		[[nodiscard]] virtual auto get_layer_count() const noexcept -> uint32_t = 0;
+		[[nodiscard]] virtual auto get_size() const noexcept -> uint64_t = 0;
 	};
 
 	class IGFXCommandAllocator {

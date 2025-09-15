@@ -33,55 +33,69 @@ namespace edge::gfx {
 	};
 
 	struct GraphicsContextCreateInfo {
-		GraphicsDeviceType physical_device_type;
-		platform::IPlatformWindow* window;
+		GraphicsDeviceType physical_device_type{ GraphicsDeviceType::eDiscrete };
+		platform::IPlatformWindow* window{ nullptr };
 
 		struct RequireFeatures {
-			bool mesh_shading{};
-			bool ray_tracing{};
+			bool mesh_shading{ false };
+			bool ray_tracing{ false };
 		} require_features{};
 	};
 
 	struct SemaphoreSubmitInfo {
 		Shared<IGFXSemaphore> semaphore;
-		uint64_t value;
+		uint64_t value{ 0ull };
 	};
 
 	struct SubmitQueueInfo {
-		std::vector<SemaphoreSubmitInfo> wait_semaphores;
-		std::vector<SemaphoreSubmitInfo> signal_semaphores;
-		std::vector<Shared<IGFXCommandList>> command_lists;
+		Span<SemaphoreSubmitInfo> wait_semaphores;
+		Span<SemaphoreSubmitInfo> signal_semaphores;
+		Span<Shared<IGFXCommandList>> command_lists;
 	};
 
 	struct PresentInfo {
-		std::vector<SemaphoreSubmitInfo> wait_semaphores;
-		std::vector<SemaphoreSubmitInfo> signal_semaphores;
+		Span<SemaphoreSubmitInfo> wait_semaphores;
+		Span<SemaphoreSubmitInfo> signal_semaphores;
 	};
 
 	struct PresentationEngineCreateInfo {
-		QueueType queue_type;
+		QueueType queue_type{ QueueType::eDirect };
 
-		uint32_t width, height;
-		uint32_t image_count;
-		TinyImageFormat format;
-		ColorSpace color_space;
+		Extent2D extent{ 1u, 1u };
+		uint32_t image_count{ 1u };
+		TinyImageFormat format{ TinyImageFormat_UNDEFINED };
+		ColorSpace color_space{};
 
-		bool vsync;
-		bool hdr;
+		bool vsync{ false };
+		bool hdr{ false };
 	};
 
 	struct BufferCreateInfo {
-		uint64_t block_size;
-		uint64_t count_block;
-		BufferType type;
+		uint64_t block_size{ 1ull };
+		uint64_t count_block{ 1ull };
+		BufferType type{};
+	};
+
+	struct BufferViewCreateInfo {
+		uint64_t byte_offset{ 0ull };
+		uint64_t size{ 1ull };
+		TinyImageFormat format{ TinyImageFormat_UNDEFINED };
 	};
 
 	struct ImageCreateInfo {
-		Extent3D extent;
-		uint32_t layers;
-		uint32_t levels;
+		Extent3D extent{ 1u, 1u, 1u };
+		uint32_t layers{ 1u };
+		uint32_t levels{ 1u };
 
-		TinyImageFormat format;
-		ImageFlags flags;
+		TinyImageFormat format{ TinyImageFormat_UNDEFINED };
+		ImageFlags flags{};
+	};
+
+	struct ImageViewCreateInfo {
+		uint32_t first_layer{ 0u };
+		uint32_t layers{ 1u };
+		uint32_t first_level{ 0u };
+		uint32_t levels{ 1u };
+		ImageViewType type{};
 	};
 }

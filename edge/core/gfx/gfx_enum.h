@@ -89,6 +89,16 @@ namespace edge::gfx {
 		eRenderTarget = 1 << 3
 	};
 
+	enum class ImageViewType {
+		e1D,
+		e2D,
+		e3D,
+		eCube,
+		e1DArray,
+		e2DArray,
+		eCubeArray
+	};
+
 	EDGE_MAKE_ENUM_FLAGS(ImageFlags, edge::gfx::ImageFlag);
 }
 
@@ -149,4 +159,14 @@ EDGE_DEFINE_FLAG_NAMES(edge::gfx::ImageFlag,
 	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eCopyable, "Copyable"),
 	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eUnorderedAccess, "UnorderedAccess"),
 	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eRenderTarget, "RenderTarget")
+);
+
+EDGE_DEFINE_FLAG_NAMES(edge::gfx::ImageViewType,
+	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e1D, "1D"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e2D, "2D"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e3D, "3D"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::eCube, "RenderTarget"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e1DArray, "1DArray"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e2DArray, "2DArray"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::eCubeArray, "CubeArray"),
 );

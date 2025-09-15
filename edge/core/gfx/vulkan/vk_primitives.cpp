@@ -315,8 +315,8 @@ namespace edge::gfx::vulkan {
 		return self;
 	}
 
-	auto Buffer::create_view(uint64_t offset, uint64_t size, TinyImageFormat format) const -> GFXResult<Shared<IGFXBufferView>> {
-		return nullptr;
+	auto Buffer::create_view(const BufferViewCreateInfo& create_info) const -> GFXResult<Shared<IGFXBufferView>> {
+		return BufferView::construct(*this, create_info);
 	}
 
 	auto Buffer::map() -> GFXResult<std::span<uint8_t>> {
@@ -351,6 +351,9 @@ namespace edge::gfx::vulkan {
 	}
 
 	auto Buffer::_construct(const GraphicsContext& ctx, const BufferCreateInfo& create_info) -> Result {
+		auto const& device = ctx.get_device();
+		auto properties = device.get_physical().getProperties();
+
 		uint64_t minimal_alignment{ 1ull };
 		vk::BufferCreateInfo buffer_create_info{};
 		buffer_create_info.usage |= vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eShaderDeviceAddressKHR;
@@ -380,6 +383,7 @@ namespace edge::gfx::vulkan {
 		}
 		case BufferType::eVertex:
 		case BufferType::eVertexDynamic: {
+			minimal_alignment = std::max<uint64_t>(minimal_alignment, 4ull);
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eVertexBuffer;
 			if (create_info.type == BufferType::eVertexDynamic) {
 				allocation_create_info.flags = DYNAMIC_BUFFER_FLAGS;
@@ -388,6 +392,7 @@ namespace edge::gfx::vulkan {
 		}
 		case BufferType::eIndex:
 		case BufferType::eIndexDynamic: {
+			minimal_alignment = std::max<uint64_t>(minimal_alignment, 1ull);
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eIndexBuffer;
 			if (create_info.type == BufferType::eVertexDynamic) {
 				allocation_create_info.flags = DYNAMIC_BUFFER_FLAGS;
@@ -395,11 +400,13 @@ namespace edge::gfx::vulkan {
 			break;
 		}
 		case BufferType::eUniform: {
+			minimal_alignment = std::lcm(properties.limits.minUniformBufferOffsetAlignment, properties.limits.nonCoherentAtomSize);
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eUniformBuffer;
 			break;
 		}
 		case BufferType::eStorage:
 		case BufferType::eStorageDynamic: {
+			minimal_alignment = std::max(minimal_alignment, properties.limits.minStorageBufferOffsetAlignment);
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eStorageBuffer;
 			if (create_info.type == BufferType::eVertexDynamic) {
 				allocation_create_info.flags = DYNAMIC_BUFFER_FLAGS;
@@ -430,6 +437,8 @@ namespace edge::gfx::vulkan {
 			break;
 		}
 
+		buffer_create_info.size = aligned_size(create_info.block_size, minimal_alignment) * create_info.count_block;
+
 		auto const& allocator = ctx.get_memory_allocator();
 		auto result = allocator.allocate_buffer(buffer_create_info, allocation_create_info);
 		if (!result) {
@@ -442,6 +451,43 @@ namespace edge::gfx::vulkan {
 
 #undef EDGE_LOGGER_SCOPE // Buffer
 
+#define EDGE_LOGGER_SCOPE "BufferView"
+
+	auto BufferView::construct(const Buffer& buffer, const BufferViewCreateInfo& create_info) -> GFXResult<Owned<BufferView>> {
+		auto self = std::make_unique<BufferView>();
+		if (auto result = self->_construct(buffer, create_info); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return self;
+	}
+
+	auto BufferView::get_offset() const noexcept -> uint64_t {
+		return handle_.get_offset();
+	}
+
+	auto BufferView::get_size() const noexcept -> uint64_t {
+		return handle_.get_size();
+	}
+
+	auto BufferView::get_format() const noexcept -> TinyImageFormat {
+		return TinyImageFormat_FromVkFormat(static_cast<TinyImageFormat_VkFormat>(handle_.get_format()));
+	}
+
+	auto BufferView::_construct(const Buffer& buffer, const BufferViewCreateInfo& create_info) -> Result {
+		auto const& buffer_handle = buffer.get_handle();
+
+		auto result = buffer_handle.create_view(create_info.byte_offset, create_info.size, static_cast<vk::Format>(TinyImageFormat_ToVkFormat(create_info.format)));
+		if (!result) {
+			return to_gfx_result(result.error());
+		}
+
+		handle_ = std::move(result.value());
+
+		return Result::eSuccess;
+	}
+
+#undef EDGE_LOGGER_SCOPE // BufferView
+
 #define EDGE_LOGGER_SCOPE "Image"
 
 	auto Image::construct(const GraphicsContext& ctx, const ImageCreateInfo& create_info)->GFXResult<Owned<Image>> {
@@ -452,7 +498,7 @@ namespace edge::gfx::vulkan {
 		return self;
 	}
 
-	auto Image::create_view(/* TODO: view info */) const -> GFXResult<Shared<IGFXImageView>> {
+	auto Image::create_view(const ImageViewCreateInfo& create_info) const -> GFXResult<Shared<IGFXImageView>> {
 		return nullptr;
 	}
 	
@@ -507,6 +553,26 @@ namespace edge::gfx::vulkan {
 		}
 		handle_ = std::move(result.value());
 
+		return Result::eSuccess;
+	}
+
+	auto ImageView::construct(const Image& image, const ImageViewCreateInfo& create_info) -> GFXResult<Owned<ImageView>> {
+		auto self = std::make_unique<ImageView>();
+		if (auto result = self->_construct(image, create_info); result != Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return self;
+	}
+
+	auto ImageView::_construct(const Image& image, const ImageViewCreateInfo& create_info) -> Result {
+		auto const& image_handle = image.get_handle();
+
+		auto result = image_handle.create_view(create_info.first_layer, create_info.layers, create_info.first_level, create_info.levels, to_vk_image_view_type(create_info.type));
+		if (!result) {
+			return to_gfx_result(result.error());
+		}
+
+		handle_ = std::move(result.value());
 		return Result::eSuccess;
 	}
 
@@ -612,7 +678,7 @@ namespace edge::gfx::vulkan {
 		command_allocator_ = std::move(std::static_pointer_cast<CommandAllocator>(new_allocator));
 
 		auto swapchain_result = vkw::SwapchainBuilder{ ctx.get_device(), ctx.get_surface() }
-			.set_image_extent(create_info.width, create_info.height)
+			.set_image_extent(create_info.extent.width, create_info.extent.height)
 			.set_image_count(create_info.image_count)
 			.set_image_format(static_cast<vk::Format>(TinyImageFormat_ToVkFormat(create_info.format)))
 			.set_color_space(to_vk_color_space(create_info.color_space))
