@@ -9,9 +9,6 @@
 [submodule "edge/core/gfx/vulkan/external/vma"]
 	path = external/vma
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-[submodule "edge/core/gfx/directx12/external/dxma"]
-	path = edge/core/gfx/directx12/external/dxma
-	url = https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator.git
 [submodule "external/tiny_imageformat"]
 	path = external/tiny_imageformat
 	url = https://github.com/DeanoC/tiny_imageformat.git
