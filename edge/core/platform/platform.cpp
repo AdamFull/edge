@@ -39,14 +39,26 @@ namespace edge::platform {
             return false;
         }
 
-		if (!graphics_->create({
-			.physical_device_type = gfx::GraphicsDeviceType::eDiscrete,
+		auto gfx_creation_result = gfx::Context::construct(gfx::ContextInfo{
+			.preferred_device_type = vk::PhysicalDeviceType::eDiscreteGpu,
 			.window = window_.get()
-			})) {
-			graphics_.reset();
-			spdlog::error("[Platform Context]: Failed to create graphics context.");
+			});
+
+		if (!gfx_creation_result) {
+			EDGE_LOGE("Failed to create graphics context. Reason: {}.", vk::to_string(gfx_creation_result.error()));
 			return false;
 		}
+
+		gfx::RendererCreateInfo renderer_create_info{};
+		renderer_create_info.enable_hdr = true;
+
+		auto gfx_renderer_result = gfx::Renderer::construct(std::move(gfx_creation_result.value()), renderer_create_info);
+		if (!gfx_renderer_result) {
+			EDGE_LOGE("Failed to create renderer. Reason: {}.", vk::to_string(gfx_renderer_result.error()));
+			return false;
+		}
+
+		renderer_ = std::move(gfx_renderer_result.value());
 
 		return true;
 	}

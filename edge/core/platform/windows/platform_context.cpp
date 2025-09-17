@@ -72,16 +72,6 @@ namespace edge::platform {
 			return false;
 		}
 
-#if EDGE_GFX_BACKEND_DIRECTX12
-		graphics_ = gfx::d3d12::GraphicsContext::construct();
-#elif EDGE_GFX_BACKEND_VULKAN
-		graphics_ = gfx::vulkan::GraphicsContext::construct();
-#endif
-		if (!graphics_) {
-			spdlog::error("[Windows Runtime Context]: Graphics construction failed");
-			return false;
-		}
-
 		return true;
 	}
 

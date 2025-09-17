@@ -164,6 +164,7 @@ endif()
 
 add_subdirectory("external")
 add_subdirectory("edge/core")
+#add_subdirectory("edge/graphics")
 
 target_link_libraries(${PROJECT_NAME} 
         PUBLIC

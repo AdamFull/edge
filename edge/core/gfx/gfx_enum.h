@@ -3,111 +3,50 @@
 #include "../foundation/enum_flags.h"
 
 namespace edge::gfx {
-	enum class GraphicsDeviceType {
-		eUnknown,
-		eDiscrete,
-		eIntegrated,
-		eSoftware
-	};
-
-	enum class SyncResult {
-		eSuccess,
-		eTimeout,
-		eDeviceLost,
-		eError
-	};
-
 	enum class QueueType {
 		eDirect,
 		eCompute,
 		eCopy
 	};
 
-	enum class Result {
-		eUndefined = -9999,
-		eDeviceLost = -2,
-		eTimeout = -1,
-		eSuccess = 0
+	enum class BufferFlag {
+		eReadback = 1 << 0,
+		eStaging = 1 << 1,
+		eDynamic = 1 << 2,
+		eVertex = 1 << 3,
+		eIndex = 1 << 4,
+		eUniform = 1 << 5,
+		eStorage = 1 << 6,
+		eIndirect = 1 << 7,
+		eAccelerationBuild = 1 << 8,
+		eAccelerationStore = 1 << 9,
+		eShaderBindingTable = 1 << 10,
 	};
 
-	enum class ColorSpace {
-		// sRGB color spaces
-		eSrgbNonLinear = 0,		// Standard sRGB with gamma correction
-		//eSrgbLinear,			// Linear sRGB (gamma = 1.0)
+	EDGE_MAKE_ENUM_FLAGS(BufferFlags, BufferFlag);
 
-		// Rec.709 (HDTV standard)
-		eRec709NonLinear,       // Rec.709 with gamma correction
-		eRec709Linear,          // Linear Rec.709
-
-		// Rec.2020 (UHD/4K standard)  
-		//eRec2020NonLinear,      // Rec.2020 with gamma correction
-		eRec2020Linear,         // Linear Rec.2020
-		eRec2020Pq,             // Rec.2020 with ST.2084 PQ transfer function (HDR10)
-		eRec2020Hlg,            // Rec.2020 with HLG transfer function
-
-		// Display P3 (Apple displays)
-		eDisplayP3NonLinear,	// Display P3 with gamma correction
-		eDisplayP3Linear,		// Linear Display P3
-
-		// Adobe RGB
-		eAdobeRgbNonLinear,		// Adobe RGB with gamma correction
-		eAdobeRgbLinear,		// Linear Adobe RGB
-
-		// Extended sRGB (for HDR content)
-		eExtendedSrgbLinear,	// Extended linear sRGB
-
-		// Pass-through/Raw
-		ePassThrough,           // No color space conversion
-	};
-
-	enum class BufferType {
-		eRaw,					// GPU only buffer
-		eStaging,				// CPU to GPU buffer
-		eReadback,
-
-		eVertex,
-		eVertexDynamic,
-		eIndex,
-		eIndexDynamic,
-
-		eUniform,
-		eStorage,
-		eStorageDynamic,
-
-		eIndirectArgument,
-		eIndirectArgumentDynamic,
-
-		eAccelerationStructureBuild,
-		eAccelerationStructureStorage,
-		eShaderBindingTable
-	};
+	static constexpr BufferFlags kReadbackBuffer{ BufferFlag::eReadback };
+	static constexpr BufferFlags kStagingBuffer{ BufferFlag::eStaging };
+	static constexpr BufferFlags kVertexBuffer{ BufferFlag::eVertex };
+	static constexpr BufferFlags kDynamicVertexBuffer{ BufferFlag::eVertex | BufferFlag::eDynamic };
+	static constexpr BufferFlags kIndexBuffer{ BufferFlag::eIndex };
+	static constexpr BufferFlags kDynamicIndexBuffer{ BufferFlag::eIndex | BufferFlag::eDynamic };
+	static constexpr BufferFlags kUniformBuffer{ BufferFlag::eUniform };
+	static constexpr BufferFlags kDynamicUniformBuffer{ BufferFlag::eUniform | BufferFlag::eDynamic };
+	static constexpr BufferFlags kStorageBuffer{ BufferFlag::eStorage };
+	static constexpr BufferFlags kDynamicStorageBuffer{ BufferFlag::eStorage | BufferFlag::eDynamic };
+	static constexpr BufferFlags kIndirectBuffer{ BufferFlag::eIndirect };
+	static constexpr BufferFlags kDynamicIndirectBuffer{ BufferFlag::eIndirect | BufferFlag::eDynamic };
 
 	enum class ImageFlag : uint16_t {
-		eShaderResource = 1 << 0,
-		eCopyable = 1 << 1,
-		eUnorderedAccess = 1 << 2,
-		eRenderTarget = 1 << 3
+		eSample = 1 << 0,
+		eCopy = 1 << 1,
+		eStorage = 1 << 2,
+		eWriteColor = 1 << 3
 	};
 
-	enum class ImageViewType {
-		e1D,
-		e2D,
-		e3D,
-		eCube,
-		e1DArray,
-		e2DArray,
-		eCubeArray
-	};
-
-	EDGE_MAKE_ENUM_FLAGS(ImageFlags, edge::gfx::ImageFlag);
+	EDGE_MAKE_ENUM_FLAGS(ImageFlags, ImageFlag);
 }
-
-EDGE_DEFINE_FLAG_NAMES(edge::gfx::GraphicsDeviceType,
-	EDGE_FLAG_ENTRY(edge::gfx::GraphicsDeviceType::eUnknown, "Unknown"),
-	EDGE_FLAG_ENTRY(edge::gfx::GraphicsDeviceType::eDiscrete, "Discrete"),
-	EDGE_FLAG_ENTRY(edge::gfx::GraphicsDeviceType::eIntegrated, "Integrated"),
-	EDGE_FLAG_ENTRY(edge::gfx::GraphicsDeviceType::eSoftware, "Software")
-);
 
 EDGE_DEFINE_FLAG_NAMES(edge::gfx::QueueType,
 	EDGE_FLAG_ENTRY(edge::gfx::QueueType::eDirect, "Direct"),
@@ -115,58 +54,9 @@ EDGE_DEFINE_FLAG_NAMES(edge::gfx::QueueType,
 	EDGE_FLAG_ENTRY(edge::gfx::QueueType::eCopy, "Copy")
 );
 
-EDGE_DEFINE_FLAG_NAMES(edge::gfx::Result,
-	EDGE_FLAG_ENTRY(edge::gfx::Result::eUndefined, "Undefined"),
-	EDGE_FLAG_ENTRY(edge::gfx::Result::eDeviceLost, "DeviceLost"),
-	EDGE_FLAG_ENTRY(edge::gfx::Result::eTimeout, "Timeout"),
-	EDGE_FLAG_ENTRY(edge::gfx::Result::eSuccess, "Success")
-);
-
-EDGE_DEFINE_FLAG_NAMES(edge::gfx::ColorSpace,
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eSrgbNonLinear, "sRGB NonLinear"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eRec709NonLinear, "Rec809 NonLinear"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eRec709Linear, "Rec709 Linear"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eRec2020Linear, "Rec2020 Linear"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eRec2020Pq, "Rec2020 ST2084 PQ"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eRec2020Hlg, "Rec2020 HLG"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eDisplayP3NonLinear, "Display P3 NonLinear"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eDisplayP3Linear, "Display P3 Linear"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eAdobeRgbNonLinear, "Adobe RGB NonLinear"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eAdobeRgbLinear, "Adobe RGB Linear"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::eExtendedSrgbLinear, "Extended sRGB Linear"),
-	EDGE_FLAG_ENTRY(edge::gfx::ColorSpace::ePassThrough, "Pass Through")
-);
-
-EDGE_DEFINE_FLAG_NAMES(edge::gfx::BufferType,
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eRaw, "Raw"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eStaging, "Staging"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eVertex, "Vertex"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eVertexDynamic, "VertexDynamic"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eIndex, "Index"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eIndexDynamic, "IndexDynamic"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eUniform, "Uniform"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eStorage, "Storage"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eStorageDynamic, "StorageDynamic"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eIndirectArgument, "IndirectArgument"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eIndirectArgumentDynamic, "IndirectArgumentDynamic"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eAccelerationStructureBuild, "AccelerationStructureBuild"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eAccelerationStructureStorage, "AccelerationStructureStorage"),
-	EDGE_FLAG_ENTRY(edge::gfx::BufferType::eShaderBindingTable, "ShaderBindingTable"),
-);
-
 EDGE_DEFINE_FLAG_NAMES(edge::gfx::ImageFlag,
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eShaderResource, "ShaderResource"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eCopyable, "Copyable"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eUnorderedAccess, "UnorderedAccess"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eRenderTarget, "RenderTarget")
-);
-
-EDGE_DEFINE_FLAG_NAMES(edge::gfx::ImageViewType,
-	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e1D, "1D"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e2D, "2D"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e3D, "3D"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::eCube, "RenderTarget"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e1DArray, "1DArray"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::e2DArray, "2DArray"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageViewType::eCubeArray, "CubeArray"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eSample, "Sample"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eCopy, "Copy"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eStorage, "Storage"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eWriteColor, "WriteColor")
 );
