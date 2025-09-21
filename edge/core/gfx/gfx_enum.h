@@ -46,6 +46,32 @@ namespace edge::gfx {
 	};
 
 	EDGE_MAKE_ENUM_FLAGS(ImageFlags, ImageFlag);
+
+	enum class ResourceStateFlag : uint16_t {
+		eUndefined = 0,
+
+		eVertexRead = 1 << 0,
+		eIndexRead = 1 << 1,
+		eRenderTarget = 1 << 2,
+		eUnorderedAccess = 1 << 3,
+		eDepthWrite = 1 << 4,
+		eDepthRead = 1 << 5,
+		eStencilWrite = 1 << 6,
+		eStencilRead = 1 << 7,
+		eDepthStencilWrite = eDepthWrite | eStencilWrite,
+		eDepthStencilRead = eDepthRead | eStencilRead,
+		eNonGraphicsShader = 1 << 8,
+		eGraphicsShader = 1 << 9,
+		eShaderResource = eNonGraphicsShader | eGraphicsShader,
+		eIndirectArgument = 1 << 10,
+		eCopyDst = 1 << 11,
+		eCopySrc = 1 << 12,
+		ePresent = 1 << 13,
+		eAccelerationStructureRead = 1 << 14,
+		eAccelerationStructureWrite = 1 << 15
+	};
+
+	EDGE_MAKE_ENUM_FLAGS(ResourceStateFlags, ResourceStateFlag);
 }
 
 EDGE_DEFINE_FLAG_NAMES(edge::gfx::QueueType,

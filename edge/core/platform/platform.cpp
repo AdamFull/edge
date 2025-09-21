@@ -105,8 +105,12 @@ namespace edge::platform {
 			//	application_->fixed_update(fixed_delta_time_);
 			//	accumulated_delta_time_ -= fixed_delta_time_;
 			//}
+
+			renderer_->begin_frame(delta_time);
 		
 			application_->update(delta_time);
+
+			renderer_->end_frame();
 		}
 		else {
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));

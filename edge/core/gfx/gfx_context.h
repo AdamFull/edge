@@ -12,9 +12,12 @@ namespace edge::gfx {
 	class Surface;
 	class Adapter;
 	class Device;
+	class Queue;
 	class MemoryAllocator;
 	class Image;
 	class Buffer;
+	class CommandPool;
+	class CommandBuffer;
 
 	template<typename T>
 	class Handle {
@@ -41,6 +44,8 @@ namespace edge::gfx {
 			return *this;
 		}
 
+		auto operator->() const noexcept -> T { return handle_; }
+		operator bool() const noexcept { return handle_; }
 		operator T() const noexcept { return handle_; }
 		operator T::CType() const noexcept { return handle_; }
 		auto get_handle() const noexcept -> T { return handle_; }
@@ -267,6 +272,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
+		auto get_core_extension_names(uint32_t core_version) const -> Vector<const char*>;
 		auto is_supported(const char* extension_name) const -> bool;
 	private:
 		Vector<vk::ExtensionProperties> supported_extensions_;
@@ -274,24 +280,34 @@ namespace edge::gfx {
 
 	class Device : public Handle<vk::Device> {
 	public:
+		struct QueueFamilyInfo {
+			uint32_t index;
+			Vector<uint32_t> queue_indices;
+		};
+
 		Device(std::nullptr_t) noexcept {};
-		Device(vk::Device handle, Vector<const char*>&& enabled_extensions, vk::AllocationCallbacks const* allocator);
+		Device(vk::Device handle, Vector<const char*>&& enabled_extensions, vk::AllocationCallbacks const* allocator, Array<Vector<QueueFamilyInfo>, 3ull>&& queue_family_map);
 		~Device();
 
 		Device(Device&& other)
 			: Handle(std::move(other))
-			, enabled_extensions_{ std::exchange(other.enabled_extensions_, {}) } {
+			, enabled_extensions_{ std::exchange(other.enabled_extensions_, {}) }
+			, queue_family_map_{ std::exchange(other.queue_family_map_, {}) } {
 		}
 
 		auto operator=(Device&& other) -> Device& {
 			Handle::operator=(std::move(other));
 			enabled_extensions_ = std::exchange(other.enabled_extensions_, {});
+			queue_family_map_ = std::exchange(other.queue_family_map_, {});
 			return *this;
 		}
+
+		auto get_queue(QueueType type) const -> Result<Queue>;
 
 		auto is_enabled(const char* extension_name) const -> bool;
 	private:
 		Vector<const char*> enabled_extensions_;
+		mutable Array<Vector<QueueFamilyInfo>, 3ull> queue_family_map_;
 	};
 
 	class DeviceSelector {
@@ -431,6 +447,9 @@ namespace edge::gfx {
 			, queue_index_{ queue_index } {
 		}
 
+		auto create_command_pool() const -> Result<CommandPool>;
+
+		// create command pool
 		auto get_family_index() const -> uint32_t { return family_index_; }
 		auto get_queue_index() const -> uint32_t { return queue_index_; }
 		auto get_device() const -> Device const* { return device_; }
@@ -445,6 +464,9 @@ namespace edge::gfx {
 		Fence(Device const* device = nullptr, vk::Fence handle = VK_NULL_HANDLE)
 			: DeviceHandle{ device, handle } {
 		}
+
+		auto wait(uint64_t timeout = std::numeric_limits<uint64_t>::max()) const -> vk::Result;
+		auto reset() const -> vk::Result;
 	};
 
 	class Semaphore : public DeviceHandle<vk::Semaphore> {
@@ -628,15 +650,16 @@ namespace edge::gfx {
 
 	class Image : public MemoryAllocation<vk::Image> {
 	public:
-		Image(std::nullptr_t) noexcept {}
+		Image() = default;
+		Image(std::nullptr_t) noexcept {};
 
-		Image(vk::Image handle = VK_NULL_HANDLE, const vk::ImageCreateInfo& create_info = {})
+		Image(vk::Image handle, const vk::ImageCreateInfo& create_info)
 			: MemoryAllocation{ nullptr, handle, VK_NULL_HANDLE, {} }
 			, create_info_{ create_info } {
 
 		}
 
-		Image(MemoryAllocator const* allocator = nullptr, vk::Image handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {}, const vk::ImageCreateInfo& create_info = {})
+		Image(MemoryAllocator const* allocator, vk::Image handle, VmaAllocation allocation, VmaAllocationInfo allocation_info, const vk::ImageCreateInfo& create_info)
 			: MemoryAllocation{ allocator, handle, allocation, allocation_info }
 			, create_info_{ create_info } {
 		}
@@ -771,6 +794,7 @@ namespace edge::gfx {
 
 		auto get_images() const -> Result<Vector<Image>>;
 
+		auto get_state() const -> State const& { return state_; }
 		auto get_image_count() const noexcept -> uint32_t { return state_.image_count; }
 		auto get_format() const noexcept -> vk::Format { return state_.format.format; }
 		auto get_color_space() const noexcept -> vk::ColorSpaceKHR { return state_.format.colorSpace; }
@@ -847,6 +871,68 @@ namespace edge::gfx {
 		Surface const* surface_{ nullptr };
 	};
 
+	struct ImageBarrier {
+		Image const* image;
+		ResourceStateFlags src_state;
+		ResourceStateFlags dst_state;
+		vk::ImageSubresourceRange subresource_range;
+	};
+
+	struct Barrier {
+		Span<const ImageBarrier> image_barriers;
+	};
+
+	class CommandBuffer : public Handle<vk::CommandBuffer> {
+	public:
+		CommandBuffer(Device const* device = nullptr, vk::CommandPool command_pool = VK_NULL_HANDLE, vk::CommandBuffer handle = VK_NULL_HANDLE)
+			: Handle{ handle, device ? device->get_allocator() : nullptr }
+			, device_{ device }
+			, command_pool_{ command_pool } {
+
+		}
+
+		~CommandBuffer() {
+			if (handle_ && command_pool_) {
+				auto device_handle = device_->get_handle();
+				device_handle.freeCommandBuffers(command_pool_, 1u, &handle_);
+				handle_ = VK_NULL_HANDLE;
+				command_pool_ = VK_NULL_HANDLE;
+			}
+		}
+
+		CommandBuffer(CommandBuffer&& other)
+			: Handle(std::move(other))
+			, device_{ std::exchange(other.device_, nullptr) }
+			, command_pool_{ std::exchange(other.command_pool_, VK_NULL_HANDLE) } {
+		}
+
+		auto operator=(CommandBuffer&& other) -> CommandBuffer& {
+			Handle::operator=(std::move(other));
+			device_ = std::exchange(other.device_, nullptr);
+			command_pool_ = std::exchange(other.command_pool_, VK_NULL_HANDLE);
+			return *this;
+		}
+
+		auto begin() const -> vk::Result;
+		auto end() const -> vk::Result;
+
+		auto push_barrier(const Barrier& barrier) const -> void;
+		auto push_barrier(const ImageBarrier& barrier) const -> void;
+	private:
+		Device const* device_{ nullptr };
+		vk::CommandPool command_pool_{ VK_NULL_HANDLE };
+	};
+
+	class CommandPool : public DeviceHandle<vk::CommandPool> {
+	public:
+		CommandPool(Device const* device = nullptr, vk::CommandPool handle = VK_NULL_HANDLE)
+			: DeviceHandle{ device, handle } {
+
+		}
+
+		auto allocate_command_buffer(vk::CommandBufferLevel level = vk::CommandBufferLevel::ePrimary) const -> Result<CommandBuffer>;
+	};
+
 	class Sampler : public DeviceHandle<vk::Sampler> {
 	public:
 		Sampler(Device const* device = nullptr, vk::Sampler handle = VK_NULL_HANDLE, const vk::SamplerCreateInfo& create_info = {})
@@ -918,8 +1004,6 @@ namespace edge::gfx {
 		auto create_buffer(const BufferCreateInfo& create_info) const -> Result<Buffer>;
 		auto create_buffer_view(const Buffer& buffer, vk::DeviceSize size, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined) const -> Result<BufferView>;
 
-		// TODO: CommandPool
-		// TODO: CommandList
 		// TODO: Shader
 		auto create_sampler(const vk::SamplerCreateInfo& create_info) const -> Result<Sampler>;
 		// TODO: RootSignature
@@ -928,6 +1012,7 @@ namespace edge::gfx {
 		// TODO: QueryPool
 		// TODO: Descriptors
 
+		auto get_allocator() const -> vk::AllocationCallbacks const* { return allocator_; }
 		auto get_instance() const -> Instance const& { return instance_; }
 		auto get_surface() const -> Surface const& { return surface_; }
 		auto get_adapter() const -> Adapter const& { return adapter_; }

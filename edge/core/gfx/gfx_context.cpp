@@ -242,6 +242,158 @@ namespace edge::gfx {
 			auto tinyimageformat = TinyImageFormat_FromVkFormat(static_cast<TinyImageFormat_VkFormat>(format));
 			return TinyImageFormat_IsDepthAndStencil(tinyimageformat);
 		}
+
+		struct ResourceState {
+			vk::AccessFlags2KHR access_flags;
+			vk::PipelineStageFlags2KHR stage_flags;
+		};
+
+		inline auto get_resource_state(ResourceStateFlags flags) -> ResourceState {
+			ResourceState state{};
+
+			if (flags == ResourceStateFlag::eUndefined) {
+				state.access_flags = vk::AccessFlagBits2KHR::eNone;
+				state.stage_flags = vk::PipelineStageFlagBits2KHR::eAllCommands;
+				return state;
+			}
+
+			if (flags & ResourceStateFlag::eVertexRead) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eVertexAttributeRead;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eVertexAttributeInput;
+			}
+
+			if (flags & ResourceStateFlag::eIndexRead) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eIndexRead;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eIndexInput;
+			}
+
+			if (flags & ResourceStateFlag::eRenderTarget) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eColorAttachmentWrite | vk::AccessFlagBits2KHR::eColorAttachmentRead;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eColorAttachmentOutput;
+			}
+
+			if (flags & ResourceStateFlag::eUnorderedAccess) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eShaderStorageRead | vk::AccessFlagBits2KHR::eShaderStorageWrite;
+			}
+
+			if (flags & ResourceStateFlag::eDepthWrite) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eDepthStencilAttachmentWrite;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eEarlyFragmentTests | vk::PipelineStageFlagBits2KHR::eLateFragmentTests;
+			}
+
+			if (flags & ResourceStateFlag::eDepthRead) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eDepthStencilAttachmentRead;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eEarlyFragmentTests | vk::PipelineStageFlagBits2KHR::eLateFragmentTests;
+			}
+
+			if (flags & ResourceStateFlag::eStencilWrite) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eDepthStencilAttachmentWrite;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eEarlyFragmentTests | vk::PipelineStageFlagBits2KHR::eLateFragmentTests;
+			}
+
+			if (flags & ResourceStateFlag::eStencilRead) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eDepthStencilAttachmentWrite;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eEarlyFragmentTests | vk::PipelineStageFlagBits2KHR::eLateFragmentTests;
+			}
+
+			if (flags & ResourceStateFlag::eNonGraphicsShader) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eShaderSampledRead | vk::AccessFlagBits2KHR::eShaderStorageRead;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eComputeShader;
+			}
+
+			if (flags & ResourceStateFlag::eGraphicsShader) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eShaderSampledRead | vk::AccessFlagBits2KHR::eShaderStorageRead;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eVertexShader |
+					vk::PipelineStageFlagBits2KHR::eTessellationControlShader |
+					vk::PipelineStageFlagBits2KHR::eTessellationEvaluationShader |
+					vk::PipelineStageFlagBits2KHR::eGeometryShader |
+					vk::PipelineStageFlagBits2KHR::eFragmentShader;
+			}
+
+			if (flags & ResourceStateFlag::eIndirectArgument) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eIndirectCommandRead;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eDrawIndirect;
+			}
+
+			if (flags & ResourceStateFlag::eCopyDst) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eTransferWrite;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eTransfer;
+			}
+
+			if (flags & ResourceStateFlag::eCopySrc) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eTransferRead;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eTransfer;
+			}
+
+			if (flags & ResourceStateFlag::ePresent) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eNone;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eAllCommands;
+			}
+
+			if (flags & ResourceStateFlag::eAccelerationStructureRead) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eAccelerationStructureReadKHR;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eRayTracingShaderKHR;
+			}
+
+			// Acceleration structure write
+			if (flags & ResourceStateFlag::eAccelerationStructureWrite) {
+				state.access_flags |= vk::AccessFlagBits2KHR::eAccelerationStructureWriteKHR;
+				state.stage_flags |= vk::PipelineStageFlagBits2KHR::eAccelerationStructureBuildKHR;
+			}
+
+			return state;
+		}
+
+		inline auto get_image_layout(ResourceStateFlags flags) -> vk::ImageLayout {
+			if (flags & ResourceStateFlag::ePresent) {
+				return vk::ImageLayout::ePresentSrcKHR;
+			}
+
+			bool has_depth_write = (flags & ResourceStateFlag::eDepthWrite) == ResourceStateFlag::eDepthWrite;
+			bool has_stencil_write = (flags & ResourceStateFlag::eStencilWrite) == ResourceStateFlag::eStencilWrite;
+			bool has_depth_read = (flags & ResourceStateFlag::eDepthRead) == ResourceStateFlag::eDepthRead;
+			bool has_stencil_read = (flags & ResourceStateFlag::eStencilRead) == ResourceStateFlag::eStencilRead;
+
+			if (has_depth_write && has_stencil_write) {
+				return vk::ImageLayout::eDepthStencilAttachmentOptimal;
+			}
+			if (has_depth_read && has_stencil_read) {
+				return vk::ImageLayout::eDepthStencilReadOnlyOptimal;
+			}
+			if (has_depth_write) {
+				return vk::ImageLayout::eDepthAttachmentOptimal;
+			}
+			if (has_depth_read) {
+				return vk::ImageLayout::eDepthReadOnlyOptimal;
+			}
+			if (has_stencil_write) {
+				return vk::ImageLayout::eStencilAttachmentOptimal;
+			}
+			if (has_stencil_read) {
+				return vk::ImageLayout::eStencilReadOnlyOptimal;
+			}
+
+			if (flags & ResourceStateFlag::eRenderTarget) {
+				return vk::ImageLayout::eColorAttachmentOptimal;
+			}
+
+			if (flags & ResourceStateFlag::eUnorderedAccess) {
+				return vk::ImageLayout::eGeneral;
+			}
+
+			if (flags & ResourceStateFlag::eCopyDst) {
+				return vk::ImageLayout::eTransferDstOptimal;
+			}
+			if (flags & ResourceStateFlag::eCopySrc) {
+				return vk::ImageLayout::eTransferSrcOptimal;
+			}
+
+			if (flags & ResourceStateFlag::eShaderResource) {
+				return vk::ImageLayout::eShaderReadOnlyOptimal;
+			}
+
+			return vk::ImageLayout::eUndefined;
+		}
 	}
 
 #undef EDGE_LOGGER_SCOPE // gfx util
@@ -604,6 +756,116 @@ namespace edge::gfx {
 		, supported_extensions_{ std::move(device_extensions) } {
 	}
 
+	auto Adapter::get_core_extension_names(uint32_t core_version) const -> Vector<const char*> {
+		typedef struct {
+			const char* extension_name;
+			uint32_t promoted_in_version;
+		} ExtensionPromotion;
+
+		static const ExtensionPromotion promoted_extensions[] = {
+			// Vulkan 1.1 promotions
+			{"VK_KHR_16bit_storage", VK_API_VERSION_1_1},
+			{"VK_KHR_bind_memory2", VK_API_VERSION_1_1},
+			{"VK_KHR_dedicated_allocation", VK_API_VERSION_1_1},
+			{"VK_KHR_descriptor_update_template", VK_API_VERSION_1_1},
+			{"VK_KHR_device_group", VK_API_VERSION_1_1},
+			{"VK_KHR_device_group_creation", VK_API_VERSION_1_1},
+			{"VK_KHR_external_fence", VK_API_VERSION_1_1},
+			{"VK_KHR_external_fence_capabilities", VK_API_VERSION_1_1},
+			{"VK_KHR_external_memory", VK_API_VERSION_1_1},
+			{"VK_KHR_external_memory_capabilities", VK_API_VERSION_1_1},
+			{"VK_KHR_external_semaphore", VK_API_VERSION_1_1},
+			{"VK_KHR_external_semaphore_capabilities", VK_API_VERSION_1_1},
+			{"VK_KHR_get_memory_requirements2", VK_API_VERSION_1_1},
+			{"VK_KHR_get_physical_device_properties2", VK_API_VERSION_1_1},
+			{"VK_KHR_maintenance1", VK_API_VERSION_1_1},
+			{"VK_KHR_maintenance2", VK_API_VERSION_1_1},
+			{"VK_KHR_maintenance3", VK_API_VERSION_1_1},
+			{"VK_KHR_multiview", VK_API_VERSION_1_1},
+			{"VK_KHR_relaxed_block_layout", VK_API_VERSION_1_1},
+			{"VK_KHR_sampler_ycbcr_conversion", VK_API_VERSION_1_1},
+			{"VK_KHR_shader_draw_parameters", VK_API_VERSION_1_1},
+			{"VK_KHR_storage_buffer_storage_class", VK_API_VERSION_1_1},
+			{"VK_KHR_variable_pointers", VK_API_VERSION_1_1},
+
+			// Vulkan 1.2 promotions
+			{"VK_KHR_8bit_storage", VK_API_VERSION_1_2},
+			{"VK_KHR_buffer_device_address", VK_API_VERSION_1_2},
+			{"VK_KHR_create_renderpass2", VK_API_VERSION_1_2},
+			{"VK_KHR_depth_stencil_resolve", VK_API_VERSION_1_2},
+			{"VK_KHR_draw_indirect_count", VK_API_VERSION_1_2},
+			{"VK_KHR_driver_properties", VK_API_VERSION_1_2},
+			{"VK_KHR_image_format_list", VK_API_VERSION_1_2},
+			{"VK_KHR_imageless_framebuffer", VK_API_VERSION_1_2},
+			{"VK_KHR_sampler_mirror_clamp_to_edge", VK_API_VERSION_1_2},
+			{"VK_KHR_separate_depth_stencil_layouts", VK_API_VERSION_1_2},
+			{"VK_KHR_shader_atomic_int64", VK_API_VERSION_1_2},
+			{"VK_KHR_shader_float16_int8", VK_API_VERSION_1_2},
+			{"VK_KHR_shader_float_controls", VK_API_VERSION_1_2},
+			{"VK_KHR_shader_subgroup_extended_types", VK_API_VERSION_1_2},
+			{"VK_KHR_spirv_1_4", VK_API_VERSION_1_2},
+			{"VK_KHR_timeline_semaphore", VK_API_VERSION_1_2},
+			{"VK_KHR_uniform_buffer_standard_layout", VK_API_VERSION_1_2},
+			{"VK_KHR_vulkan_memory_model", VK_API_VERSION_1_2},
+			{"VK_EXT_descriptor_indexing", VK_API_VERSION_1_2},
+			{"VK_EXT_host_query_reset", VK_API_VERSION_1_2},
+			{"VK_EXT_sampler_filter_minmax", VK_API_VERSION_1_2},
+			{"VK_EXT_scalar_block_layout", VK_API_VERSION_1_2},
+			{"VK_EXT_separate_stencil_usage", VK_API_VERSION_1_2},
+			{"VK_EXT_shader_viewport_index_layer", VK_API_VERSION_1_2},
+
+			// Vulkan 1.3 promotions
+			{"VK_KHR_copy_commands2", VK_API_VERSION_1_3},
+			{"VK_KHR_dynamic_rendering", VK_API_VERSION_1_3},
+			{"VK_KHR_format_feature_flags2", VK_API_VERSION_1_3},
+			{"VK_KHR_maintenance4", VK_API_VERSION_1_3},
+			{"VK_KHR_shader_integer_dot_product", VK_API_VERSION_1_3},
+			{"VK_KHR_shader_non_semantic_info", VK_API_VERSION_1_3},
+			{"VK_KHR_shader_terminate_invocation", VK_API_VERSION_1_3},
+			{"VK_KHR_synchronization2", VK_API_VERSION_1_3},
+			{"VK_KHR_zero_initialize_workgroup_memory", VK_API_VERSION_1_3},
+			{"VK_EXT_4444_formats", VK_API_VERSION_1_3},
+			{"VK_EXT_extended_dynamic_state", VK_API_VERSION_1_3},
+			{"VK_EXT_extended_dynamic_state2", VK_API_VERSION_1_3},
+			{"VK_EXT_image_robustness", VK_API_VERSION_1_3},
+			{"VK_EXT_inline_uniform_block", VK_API_VERSION_1_3},
+			{"VK_EXT_pipeline_creation_cache_control", VK_API_VERSION_1_3},
+			{"VK_EXT_pipeline_creation_feedback", VK_API_VERSION_1_3},
+			{"VK_EXT_private_data", VK_API_VERSION_1_3},
+			{"VK_EXT_shader_demote_to_helper_invocation", VK_API_VERSION_1_3},
+			{"VK_EXT_subgroup_size_control", VK_API_VERSION_1_3},
+			{"VK_EXT_texel_buffer_alignment", VK_API_VERSION_1_3},
+			{"VK_EXT_texture_compression_astc_hdr", VK_API_VERSION_1_3},
+			{"VK_EXT_tooling_info", VK_API_VERSION_1_3},
+			{"VK_EXT_ycbcr_2plane_444_formats", VK_API_VERSION_1_3},
+
+			// Vulkan 1.4 promotions
+			{"VK_KHR_dynamic_rendering_local_read", VK_API_VERSION_1_4},
+			{"VK_EXT_host_image_copy", VK_API_VERSION_1_4},
+			{"VK_KHR_push_descriptor", VK_API_VERSION_1_4},
+			{"VK_EXT_pipeline_protected_access", VK_API_VERSION_1_4},
+			{"VK_KHR_line_rasterization", VK_API_VERSION_1_4},
+			{"VK_KHR_shader_subgroup_rotate", VK_API_VERSION_1_4},
+			{"VK_KHR_global_priority", VK_API_VERSION_1_4},
+			{"VK_KHR_shader_float_controls2", VK_API_VERSION_1_4},
+			{"VK_KHR_shader_expect_assume", VK_API_VERSION_1_4},
+			{"VK_KHR_maintenance5", VK_API_VERSION_1_4},
+			{"VK_KHR_maintenance6", VK_API_VERSION_1_4},
+			{"VK_EXT_index_type_uint8", VK_API_VERSION_1_4},
+			{"VK_EXT_pipeline_robustness", VK_API_VERSION_1_4},
+			{"VK_EXT_vertex_attribute_divisor", VK_API_VERSION_1_4}
+		};
+
+		Vector<const char*> output{ allocator_ };
+		for (int32_t i = 0; i < std::size(promoted_extensions); ++i) {
+			auto& extension = promoted_extensions[i];
+			if (is_supported(extension.extension_name) && extension.promoted_in_version <= core_version) {
+				output.push_back(extension.extension_name);
+			}
+		}
+		return output;
+	}
+
 	auto Adapter::is_supported(const char* extension_name) const -> bool {
 		return std::find_if(supported_extensions_.begin(), supported_extensions_.end(),
 			[&extension_name](const vk::ExtensionProperties& props) -> bool {
@@ -615,15 +877,37 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::Device"
 
-	Device::Device(vk::Device handle, Vector<const char*>&& enabled_extensions, vk::AllocationCallbacks const* allocator)
+	Device::Device(vk::Device handle, Vector<const char*>&& enabled_extensions, vk::AllocationCallbacks const* allocator, Array<Vector<QueueFamilyInfo>, 3ull>&& queue_family_map)
 		: Handle{ handle, allocator }
-		, enabled_extensions_{ std::move(enabled_extensions) } {
+		, enabled_extensions_{ std::move(enabled_extensions) }
+		, queue_family_map_{ std::move(queue_family_map) } {
 	}
 
 	Device::~Device() {
 		if (handle_) {
 			handle_.destroy(allocator_);
 		}
+	}
+
+	auto Device::get_queue(QueueType type) const -> Result<Queue> {
+		auto& family_group = queue_family_map_[static_cast<size_t>(type)];
+		for (auto& family : family_group) {
+			if (!family.queue_indices.empty()) {
+				auto queue_index = family.queue_indices.back();
+				family.queue_indices.pop_back();
+
+				vk::DeviceQueueInfo2 queue_info{};
+				queue_info.queueFamilyIndex = family.index;
+				queue_info.queueIndex = queue_index;
+
+				vk::Queue queue;
+				handle_.getQueue2(&queue_info, &queue);
+
+				return Queue(this, queue, family.index, queue_index);
+			}
+		}
+
+		return std::unexpected(vk::Result::eErrorUnknown);
 	}
 
 	auto Device::is_enabled(const char* extension_name) const -> bool {
@@ -673,28 +957,39 @@ namespace edge::gfx {
 				continue;
 			}
 
-			auto check_ext_support = [&available_extensions](const char* extension_name) {
+			auto check_ext_support = [&available_extensions](const char* extension_name) -> bool {
 				return std::find_if(available_extensions.begin(), available_extensions.end(),
 					[extension_name](const vk::ExtensionProperties& props) {
 						return std::strcmp(props.extensionName, extension_name) == 0;
 					}) != available_extensions.end();
 				};
 
+			auto& requested_extensions = per_device_extensions[device_idx];
+			requested_extensions = adapters[device_idx].get_core_extension_names(properties.apiVersion);
+
+			auto check_ext_alresdy_enabled = [&requested_extensions](const char* extension_name) -> bool {
+				return std::find_if(requested_extensions.begin(), requested_extensions.end(), [&extension_name](const char* name) {
+					return strcmp(name, extension_name) == 0;
+					}) != requested_extensions.end();
+				};
+
 			// Check for all required extension support
 			bool all_extension_supported{ true };
-			auto& requested_extensions = per_device_extensions[device_idx];
 			for (auto& ext : requested_extensions_) {
-				if (!check_ext_support(ext.first)) {
-					if (ext.second) {
-						EDGE_SLOGE("Device \"{}\" is not support required extension \"{}\"", std::string_view(properties.deviceName), ext.first);
-						all_extension_supported = false;
+				if (check_ext_support(ext.first)) {
+					if (!check_ext_alresdy_enabled(ext.first)) {
+						requested_extensions.push_back(ext.first);
 					}
-
-					EDGE_SLOGW("Device \"{}\" is not support optional extension \"{}\"", std::string_view(properties.deviceName), ext.first);
 					continue;
 				}
 
-				requested_extensions.push_back(ext.first);
+				if (ext.second) {
+					EDGE_SLOGE("Device \"{}\" is not support required extension \"{}\"", std::string_view(properties.deviceName), ext.first);
+					all_extension_supported = false;
+				}
+
+				EDGE_SLOGW("Device \"{}\" is not support optional extension \"{}\"", std::string_view(properties.deviceName), ext.first);
+				continue;
 			}
 
 			// TODO: Add all extension names that is in requested core version
@@ -765,6 +1060,50 @@ namespace edge::gfx {
 			queue_create_info.pQueuePriorities = queue_priorities.data();
 		}
 
+		// Make queue family map. TODO: merge with prev for
+		Array<Vector<Device::QueueFamilyInfo>, 3ull> queue_family_map{ Vector<Device::QueueFamilyInfo>{allocator} };
+		for (uint32_t index = 0; index < static_cast<uint32_t>(queue_family_properties.size()); ++index) {
+			auto const& queue_family_property = queue_family_properties[index];
+
+			bool is_graphics_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eGraphics) == vk::QueueFlagBits::eGraphics;
+			bool is_compute_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eCompute) == vk::QueueFlagBits::eCompute;
+			bool is_copy_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eTransfer) == vk::QueueFlagBits::eTransfer;
+
+			QueueType queue_type{};
+			if (is_graphics_commands_supported &&
+				is_compute_commands_supported && is_copy_commands_supported) {
+				queue_type = QueueType::eDirect;
+			}
+			else if (is_compute_commands_supported && is_copy_commands_supported) {
+				queue_type = QueueType::eCompute;
+			}
+			else if (is_copy_commands_supported) {
+				queue_type = QueueType::eCopy;
+			}
+
+			auto& group = queue_family_map[static_cast<size_t>(queue_type)];
+			auto& family_info = group.emplace_back();
+			family_info.index = index;
+			family_info.queue_indices = Vector<uint32_t>(queue_family_property.queueCount, allocator);
+			std::iota(family_info.queue_indices.rbegin(), family_info.queue_indices.rend(), 0u);
+
+#ifndef NDEBUG
+			std::string supported_commands;
+
+			if (is_graphics_commands_supported) {
+				supported_commands += "graphics,";
+			}
+			if (is_compute_commands_supported) {
+				supported_commands += "compute,";
+			}
+			if (is_copy_commands_supported) {
+				supported_commands += "transfer";
+			}
+
+			//EDGE_SLOGD("Found \"{}\" queue that support: {} commands.", vk::to_string(queue_type), supported_commands);
+#endif
+		}
+
 		vk::DeviceCreateInfo create_info{};
 		create_info.queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size());
 		create_info.pQueueCreateInfos = queue_create_infos.data();
@@ -823,10 +1162,43 @@ namespace edge::gfx {
 			return std::unexpected(result);
 		}
 
-		return std::tuple(std::move(adapters[selected_device_index]), Device{ device, std::move(enabled_extensions), instance_->get_allocator() });
+		return std::tuple(std::move(adapters[selected_device_index]), Device{ device, std::move(enabled_extensions), instance_->get_allocator(), std::move(queue_family_map) });
 	}
 
 #undef EDGE_LOGGER_SCOPE // DeviceSelector
+
+#define EDGE_LOGGER_SCOPE "gfx::Queue"
+
+	auto Queue::create_command_pool() const -> Result<CommandPool> {
+		auto device_handle = device_->get_handle();
+
+		vk::CommandPoolCreateInfo create_info{};
+		create_info.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+		create_info.queueFamilyIndex = queue_index_;
+
+		vk::CommandPool command_pool;
+		if (auto result = device_handle.createCommandPool(&create_info, allocator_, &command_pool); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return CommandPool{ device_, command_pool };
+	}
+
+#undef EDGE_LOGGER_SCOPE // Queue
+
+#define EDGE_LOGGER_SCOPE "gfx::Fence"
+
+	auto Fence::wait(uint64_t timeout) const -> vk::Result {
+		vk::Device device = *device_;
+		return device.waitForFences(1u, &handle_, VK_TRUE, timeout);
+	}
+
+	auto Fence::reset() const -> vk::Result {
+		vk::Device device = *device_;
+		return device.resetFences(1u, &handle_);
+	}
+
+#undef EDGE_LOGGER_SCOPE // Fence
 
 #define EDGE_LOGGER_SCOPE "gfx::MemoryAllocator"
 
@@ -1163,6 +1535,89 @@ namespace edge::gfx {
 
 #undef EDGE_LOGGER_SCOPE // SwapchainBuilder
 
+#define EDGE_LOGGER_SCOPE "gfx::CommandBuffer"
+
+	auto CommandBuffer::begin() const -> vk::Result {
+		if (auto result = handle_.reset(vk::CommandBufferResetFlagBits::eReleaseResources); result != vk::Result::eSuccess) {
+			return result;
+		}
+
+		vk::CommandBufferBeginInfo begin_info{};
+		begin_info.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
+
+		return handle_.begin(&begin_info);
+	}
+
+	auto CommandBuffer::end() const -> vk::Result {
+		return handle_.end();
+	}
+
+	auto CommandBuffer::push_barrier(const Barrier& barrier) const -> void {
+		Vector<vk::MemoryBarrier2KHR> memory_barriers{ allocator_ };
+
+		Vector<vk::BufferMemoryBarrier2KHR> buffer_barriers{ allocator_ };
+
+		Vector<vk::ImageMemoryBarrier2KHR> image_barriers{ allocator_ };
+		if (!barrier.image_barriers.empty()) {
+			image_barriers.resize(barrier.image_barriers.size());
+		}
+
+		for (int32_t i = 0; i < static_cast<int32_t>(barrier.image_barriers.size()); ++i) {
+			auto const& src_barrier = barrier.image_barriers[i];
+			auto& dst_barrier = image_barriers[i];
+			dst_barrier.image = src_barrier.image->get_handle();
+			dst_barrier.subresourceRange = src_barrier.subresource_range;
+
+			auto src_state = util::get_resource_state(src_barrier.src_state);
+			dst_barrier.srcAccessMask = src_state.access_flags;
+			dst_barrier.srcStageMask = src_state.stage_flags;
+			dst_barrier.oldLayout = util::get_image_layout(src_barrier.src_state);
+
+			auto new_state = util::get_resource_state(src_barrier.dst_state);
+			dst_barrier.dstAccessMask = new_state.access_flags;
+			dst_barrier.dstStageMask = new_state.stage_flags;
+			dst_barrier.newLayout = util::get_image_layout(src_barrier.dst_state);
+		}
+
+		vk::DependencyInfoKHR dependency_info{};
+		dependency_info.pMemoryBarriers = memory_barriers.data();
+		// TODO: set count
+		dependency_info.pBufferMemoryBarriers = buffer_barriers.data();
+		// TODO: set count
+		dependency_info.pImageMemoryBarriers = image_barriers.data();
+		dependency_info.imageMemoryBarrierCount = static_cast<uint32_t>(barrier.image_barriers.size());
+
+		handle_.pipelineBarrier2KHR(&dependency_info);
+	}
+
+	auto CommandBuffer::push_barrier(const ImageBarrier& image_barrier) const -> void {
+		Barrier barrier{};
+		barrier.image_barriers = { &image_barrier, 1ull };
+		push_barrier(barrier);
+	}
+
+#undef EDGE_LOGGER_SCOPE // CommandBuffer
+
+#define EDGE_LOGGER_SCOPE "gfx::CommandPool"
+
+	auto CommandPool::allocate_command_buffer(vk::CommandBufferLevel level) const -> Result<CommandBuffer> {
+		auto device_handle = device_->get_handle();
+
+		vk::CommandBufferAllocateInfo allocate_info{};
+		allocate_info.commandPool = handle_;
+		allocate_info.level = level;
+		allocate_info.commandBufferCount = 1u;
+
+		vk::CommandBuffer command_buffer;
+		if (auto result = device_handle.allocateCommandBuffers(&allocate_info, &command_buffer); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return CommandBuffer{ device_, handle_, command_buffer };
+	}
+
+#undef EDGE_LOGGER_SCOPE // CommandPool
+
 #define EDGE_LOGGER_SCOPE "gfx::Context"
 
 	Context::Context()
@@ -1247,7 +1702,7 @@ namespace edge::gfx {
 	}
 
 	auto Context::get_queue(QueueType type) const -> Result<Queue> {
-		return std::unexpected(vk::Result::eErrorDeviceLost);
+		return device_.get_queue(type);
 	}
 
 	auto Context::create_image(const ImageCreateInfo& create_info) const -> Result<Image> {
