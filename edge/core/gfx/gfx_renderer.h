@@ -12,17 +12,13 @@ namespace edge::gfx {
 		auto operator=(const Frame&) -> Frame& = delete;
 
 		Frame(Frame&& other)
-			: image_{ std::exchange(other.image_, nullptr) }
-			, image_view_{ std::exchange(other.image_view_, nullptr) }
-			, image_available_{ std::exchange(other.image_available_, nullptr) }
+			: image_available_{ std::exchange(other.image_available_, nullptr) }
 			, rendering_finished_{ std::exchange(other.rendering_finished_, nullptr) }
 			, fence_{ std::exchange(other.fence_, nullptr) }
 			, command_buffer_{ std::exchange(other.command_buffer_, nullptr) } {
 		}
 
 		auto operator=(Frame&& other) -> Frame& {
-			image_ = std::exchange(other.image_, nullptr);
-			image_view_ = std::exchange(other.image_view_, nullptr);
 			image_available_ = std::exchange(other.image_available_, nullptr);
 			rendering_finished_ = std::exchange(other.rendering_finished_, nullptr);
 			fence_ = std::exchange(other.fence_, nullptr);
@@ -30,10 +26,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto construct(const Context& ctx, Image&& image, CommandBuffer&& command_buffer) -> Result<Frame>;
-
-		auto get_image() const -> Image const& { return image_; }
-		auto get_image_view() const -> ImageView const& { return image_view_; }
+		static auto construct(const Context& ctx, CommandBuffer&& command_buffer) -> Result<Frame>;
 
 		auto get_image_available_semaphore() const -> Semaphore const& { return image_available_; }
 		auto get_rendering_finished_semaphore() const -> Semaphore const& { return rendering_finished_; }
@@ -41,9 +34,6 @@ namespace edge::gfx {
 		auto get_command_buffer() const -> CommandBuffer const& { return command_buffer_; }
 	private:
 		auto _construct(const Context& ctx) -> vk::Result;
-
-		Image image_;
-		ImageView image_view_;
 
 		Semaphore image_available_;
 		Semaphore rendering_finished_;
@@ -73,7 +63,11 @@ namespace edge::gfx {
 			, queue_{ std::exchange(other.queue_, nullptr) }
 			, command_pool_{ std::exchange(other.command_pool_, nullptr) }
 			, swapchain_{ std::exchange(other.swapchain_, nullptr) }
-			, frames_{ std::exchange(other.frames_, {}) } {
+			, swapchain_images_{ std::exchange(other.swapchain_images_, {}) }
+			, swapchain_image_views_{ std::exchange(other.swapchain_image_views_, {}) }
+			, swapchain_image_index_{ std::exchange(other.swapchain_image_index_, {}) }
+			, frames_{ std::exchange(other.frames_, {}) }
+			, frame_number_{ std::exchange(other.frame_number_, {}) } {
 		}
 
 		auto operator=(Renderer&& other) -> Renderer& {
@@ -81,7 +75,11 @@ namespace edge::gfx {
 			queue_ = std::exchange(other.queue_, nullptr);
 			command_pool_ = std::exchange(other.command_pool_, nullptr);
 			swapchain_ = std::exchange(other.swapchain_, nullptr);
+			swapchain_images_ = std::exchange(other.swapchain_images_, {});
+			swapchain_image_views_ = std::exchange(other.swapchain_image_views_, {});
+			swapchain_image_index_ = std::exchange(other.swapchain_image_index_, {});
 			frames_ = std::exchange(other.frames_, {});
+			frame_number_ = std::exchange(other.frame_number_, {});
 			return *this;
 		}
 
@@ -89,6 +87,9 @@ namespace edge::gfx {
 
 		auto begin_frame(float delta_time) -> void;
 		auto end_frame() -> void;
+
+		auto get_current_frame_index() const -> uint32_t { return frame_number_ % k_frame_overlap_; }
+		auto get_current_frame() const -> Frame const* { return frames_.data() + get_current_frame_index(); }
 	private:
 		auto _construct(const RendererCreateInfo& create_info) -> vk::Result;
 
@@ -99,12 +100,16 @@ namespace edge::gfx {
 		CommandPool command_pool_;
 
 		Swapchain swapchain_;
+		Vector<Image> swapchain_images_;
+		Vector<ImageView> swapchain_image_views_;
+		uint32_t swapchain_image_index_{ 0u };
 
 		Vector<Frame> frames_{};
-		uint32_t active_frame_infex_{ 0u };
+		uint32_t frame_number_{ 0u };
+		static constexpr uint32_t k_frame_overlap_{ 2u };
 
-		Semaphore const* acquired_senmaphore_{ nullptr };
-		Frame* active_frame_{ nullptr };
+		vk::Semaphore acquired_senmaphore_{ VK_NULL_HANDLE };
+		Frame const* active_frame_{ nullptr };
 		float delta_time_{ 0.0f };
 	};
 }

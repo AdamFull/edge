@@ -8,9 +8,8 @@ namespace edge::gfx {
 
 	}
 
-	auto Frame::construct(const Context& ctx, Image&& image, CommandBuffer&& command_buffer) -> Result<Frame> {
+	auto Frame::construct(const Context& ctx, CommandBuffer&& command_buffer) -> Result<Frame> {
 		Frame self{};
-		self.image_ = std::move(image);
 		self.command_buffer_ = std::move(command_buffer);
 		if (auto result = self._construct(ctx); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
@@ -19,20 +18,6 @@ namespace edge::gfx {
 	}
 
 	auto Frame::_construct(const Context& ctx) -> vk::Result {
-		vk::ImageSubresourceRange subresource_range{};
-		subresource_range.aspectMask = vk::ImageAspectFlagBits::eColor;
-		subresource_range.baseArrayLayer = 0u;
-		subresource_range.layerCount = 1u;
-		subresource_range.baseMipLevel = 0u;
-		subresource_range.levelCount = 1u;
-
-		if (auto result = ctx.create_image_view(image_, subresource_range, vk::ImageViewType::e2D); !result.has_value()) {
-			return result.error();
-		}
-		else {
-			image_view_ = std::move(result.value());
-		}
-
 		if (auto result = ctx.create_semaphore(); !result.has_value()) {
 			EDGE_SLOGE("Failed to create image available semaphore handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
@@ -68,6 +53,8 @@ namespace edge::gfx {
 	auto Renderer::construct(Context&& context, const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>> {
 		auto self = std::make_unique<Renderer>();
 		self->context_ = std::move(context);
+		self->swapchain_images_ = Vector<Image>(self->context_.get_allocator());
+		self->swapchain_image_views_ = Vector<ImageView>(self->context_.get_allocator());
 		self->frames_ = Vector<Frame>(self->context_.get_allocator());
 		if (auto result = self->_construct(create_info); result != vk::Result::eSuccess) {
 			context = std::move(self->context_);
@@ -82,37 +69,35 @@ namespace edge::gfx {
 			return;
 		}
 
-		delta_time_ = delta_time;
-
 		auto swapchain_recreated = handle_surface_change();
 
-		auto* prev_frame = frames_.data() + active_frame_infex_;
-		auto& acquired_semaphore = prev_frame->get_image_available_semaphore();
+		auto* current_frame = get_current_frame();
+
+		auto const& frame_fence = current_frame->get_fence();
+		frame_fence.wait(1000000000ull);
+		frame_fence.reset();
+
+		auto const& semaphore = current_frame->get_image_available_semaphore();
+		acquired_senmaphore_ = semaphore.get_handle();
 
 		vk::Device device = context_.get_device();
 		if (swapchain_) {
-			auto result = device.acquireNextImageKHR(swapchain_, ~0ull, acquired_semaphore, VK_NULL_HANDLE, &active_frame_infex_);
+			auto result = device.acquireNextImageKHR(swapchain_, ~0ull, acquired_senmaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
 			if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
 				swapchain_recreated = handle_surface_change(true);
 
 				// Try to acquire next image again after recreation
 				if (swapchain_recreated) {
-					result = device.acquireNextImageKHR(swapchain_, ~0ull, acquired_semaphore, VK_NULL_HANDLE, &active_frame_infex_);
+					result = device.acquireNextImageKHR(swapchain_, ~0ull, acquired_senmaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
 				}
 
-				//if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
-				//	
-				//	return;
-				//}
+				if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+					return;
+				}
 			}
 		}
 
-		active_frame_ = frames_.data() + active_frame_infex_;
-		acquired_senmaphore_ = &acquired_semaphore;
-
-		auto const& frame_fence = active_frame_->get_fence();
-		frame_fence.wait();
-		frame_fence.reset();
+		active_frame_ = current_frame;
 
 		auto const& cmdbuf = active_frame_->get_command_buffer();
 		if (auto result = cmdbuf.begin(); result != vk::Result::eSuccess) {
@@ -121,6 +106,7 @@ namespace edge::gfx {
 			return;
 		}
 
+		delta_time_ = delta_time;
 		// TODO: add query pool for performance measures
 	}
 
@@ -132,7 +118,7 @@ namespace edge::gfx {
 
 		auto const& cmdbuf = active_frame_->get_command_buffer();
 		cmdbuf.push_barrier(ImageBarrier{
-			.image = &active_frame_->get_image(),
+			.image = &swapchain_images_[swapchain_image_index_],
 			.src_state = ResourceStateFlag::eUndefined,
 			.dst_state = ResourceStateFlag::ePresent,
 			.subresource_range = { vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u }
@@ -141,7 +127,7 @@ namespace edge::gfx {
 		cmdbuf.end();
 
 		Vector<vk::SemaphoreSubmitInfo> wait_semaphores{ context_.get_allocator() };
-		wait_semaphores.push_back(vk::SemaphoreSubmitInfo{ acquired_senmaphore_->get_handle(), 0ull, vk::PipelineStageFlagBits2::eColorAttachmentOutput });
+		wait_semaphores.push_back(vk::SemaphoreSubmitInfo{ acquired_senmaphore_, 0ull, vk::PipelineStageFlagBits2::eColorAttachmentOutput });
 
 		Vector<vk::SemaphoreSubmitInfo> signal_semaphores{ context_.get_allocator() };
 
@@ -173,7 +159,7 @@ namespace edge::gfx {
 			present_info.pWaitSemaphores = &rendering_finished_sem;
 			present_info.swapchainCount = 1u;
 			present_info.pSwapchains = &swapchain;
-			present_info.pImageIndices = &active_frame_infex_;
+			present_info.pImageIndices = &swapchain_image_index_;
 
 			if (auto result = queue.presentKHR(&present_info); result != vk::Result::eSuccess) {
 				EDGE_SLOGE("Failed to present images. Reason: {}", vk::to_string(result));
@@ -182,6 +168,7 @@ namespace edge::gfx {
 		}
 
 		active_frame_ = nullptr;
+		frame_number_++;
 	}
 
 	auto Renderer::_construct(const RendererCreateInfo& create_info) -> vk::Result {
@@ -221,25 +208,38 @@ namespace edge::gfx {
 			return result.error();
 		}
 		else {
-			auto images = std::move(result.value());
-			for (int32_t i = 0; i < static_cast<int32_t>(images.size()); ++i) {
-				auto command_list_result = command_pool_.allocate_command_buffer();
-				if (!command_list_result) {
-					EDGE_SLOGE("Failed to allocate command list for frame at index {}. Reason: {}.", i, vk::to_string(command_list_result.error()));
-					return command_list_result.error();
-				}
-
-				if (auto frame_result = Frame::construct(context_, std::move(images[i]), std::move(command_list_result.value())); !frame_result.has_value()) {
-					EDGE_SLOGE("Failed to create frame at index {}. Reason: {}.", i, vk::to_string(frame_result.error()));
-					return frame_result.error();
-				}
-				else {
-					frames_.push_back(std::move(frame_result.value()));
-				}
-			}
+			swapchain_images_ = std::move(result.value());
 		}
 
-		active_frame_infex_ = frames_.size() - 1ull;
+		for (int32_t i = 0; i < static_cast<int32_t>(swapchain_images_.size()); ++i) {
+			vk::ImageSubresourceRange subresource_range{};
+			subresource_range.aspectMask = vk::ImageAspectFlagBits::eColor;
+			subresource_range.baseArrayLayer = 0u;
+			subresource_range.layerCount = 1u;
+			subresource_range.baseMipLevel = 0u;
+			subresource_range.levelCount = 1u;
+
+			if (auto result = context_.create_image_view(swapchain_images_[i], subresource_range, vk::ImageViewType::e2D); !result.has_value()) {
+				return result.error();
+			}
+			else {
+				swapchain_image_views_.push_back(std::move(result.value()));
+			}
+
+			auto command_list_result = command_pool_.allocate_command_buffer();
+			if (!command_list_result) {
+				EDGE_SLOGE("Failed to allocate command list for frame at index {}. Reason: {}.", i, vk::to_string(command_list_result.error()));
+				return command_list_result.error();
+			}
+
+			if (auto frame_result = Frame::construct(context_, std::move(command_list_result.value())); !frame_result.has_value()) {
+				EDGE_SLOGE("Failed to create frame at index {}. Reason: {}.", i, vk::to_string(frame_result.error()));
+				return frame_result.error();
+			}
+			else {
+				frames_.push_back(std::move(frame_result.value()));
+			}
+		}
 
 		return vk::Result::eSuccess;
 	}
@@ -289,7 +289,7 @@ namespace edge::gfx {
 			}
 
 			active_frame_ = nullptr;
-			active_frame_infex_ = frames_.size() - 1ull;
+			swapchain_image_index_ = 0u;
 			return true;
 		}
 
