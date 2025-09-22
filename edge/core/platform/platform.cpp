@@ -17,7 +17,7 @@ namespace edge::platform {
                     self->on_any_window_event(e);
                 }, this);
 
-        frame_handler_.set_limit(60);
+        //frame_handler_.set_limit(60);
         frame_handler_.setup_callback([](float delta_time, void* user_data) -> int32_t {
             auto* self = static_cast<IPlatformContext*>(user_data);
             return self->main_loop_tick(delta_time);
@@ -51,6 +51,7 @@ namespace edge::platform {
 
 		gfx::RendererCreateInfo renderer_create_info{};
 		renderer_create_info.enable_hdr = true;
+		renderer_create_info.enable_vsync = false;
 
 		auto gfx_renderer_result = gfx::Renderer::construct(std::move(gfx_creation_result.value()), renderer_create_info);
 		if (!gfx_renderer_result) {
@@ -93,8 +94,8 @@ namespace edge::platform {
 	}
 
 	auto IPlatformContext::main_loop_tick(float delta_time) -> int32_t {
-		spdlog::trace("[Android Platform] Frame time: {:.2f}", delta_time * 1000.f);
-		auto new_windows_name = std::format("{} [{} fps; {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time());
+		//spdlog::trace("[Android Platform] Frame time: {:.2f}", delta_time * 1000.f);
+		auto new_windows_name = std::format("{} [cpu {} fps; {:.2f} ms] [gpu {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time(), renderer_->get_gpu_delta_time());
 		window_->set_title(new_windows_name);
 
 		window_->poll_events();

@@ -44,7 +44,12 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		auto operator->() const noexcept -> T { return handle_; }
+		auto operator*() const noexcept -> T const& { return handle_; }
+		auto operator*() noexcept -> T& { return handle_; }
+
+		auto operator->() const noexcept -> T const* { return &handle_; }
+		auto operator->() noexcept -> T* { return &handle_; }
+
 		operator bool() const noexcept { return handle_; }
 		operator T() const noexcept { return handle_; }
 		operator T::CType() const noexcept { return handle_; }
@@ -98,33 +103,31 @@ namespace edge::gfx {
 	public:
 		InstanceHandle(Instance const* instance = nullptr, T handle = VK_NULL_HANDLE)
 			: Handle<T>{ handle, instance ? instance->get_allocator() : nullptr }
-			, instance_{ instance } {
+			, instance_{ instance ? instance->get_handle() : VK_NULL_HANDLE } {
 		}
 
 		~InstanceHandle() {
 			if (handle_ && instance_) {
-				auto instance_handle = instance_->get_handle();
-				instance_handle.destroy(handle_, allocator_);
+				instance_.destroy(handle_, allocator_);
+				handle_ = VK_NULL_HANDLE;
 			}
 		}
 
 		InstanceHandle(InstanceHandle&& other)
 			: Handle<T>{ std::move(other) }
-			, instance_{ std::exchange(other.instance_, nullptr) } {
+			, instance_{ std::exchange(other.instance_, VK_NULL_HANDLE) } {
 		}
 
 		auto operator=(InstanceHandle&& other) -> InstanceHandle& {
 			Handle<T>::operator=(std::move(other));
-			instance_ = std::exchange(other.instance_, nullptr);
+			instance_ = std::exchange(other.instance_, VK_NULL_HANDLE);
 			return *this;
 		}
-
-		auto get_instance() const -> Instance const* { return instance_; }
 	protected:
 		using Handle<T>::handle_;
 		using Handle<T>::allocator_;
 
-		Instance const* instance_{ nullptr };
+		vk::Instance instance_{ VK_NULL_HANDLE };
 	};
 
 	class Surface : public InstanceHandle<vk::SurfaceKHR> {
@@ -936,8 +939,11 @@ namespace edge::gfx {
 	class Sampler : public DeviceHandle<vk::Sampler> {
 	public:
 		Sampler(Device const* device = nullptr, vk::Sampler handle = VK_NULL_HANDLE, const vk::SamplerCreateInfo& create_info = {})
-			: DeviceHandle{ device, handle } {
+			: DeviceHandle{ device, handle }
+			, create_info_{ create_info } {
 		}
+
+		// TODO: implement move 
 
 		auto get_mag_filter() const -> vk::Filter { return create_info_.magFilter; }
 		auto get_min_filter() const -> vk::Filter { return create_info_.minFilter; }
@@ -955,6 +961,36 @@ namespace edge::gfx {
 		auto get_border_color() const -> vk::BorderColor { return create_info_.borderColor; }
 	private:
 		vk::SamplerCreateInfo create_info_;
+	};
+
+	class QueryPool : public DeviceHandle<vk::QueryPool> {
+	public:
+		QueryPool(Device const* device = nullptr, vk::QueryPool handle = VK_NULL_HANDLE, vk::QueryType type = {}, uint32_t max_query = 0u)
+			: DeviceHandle{ device, handle }
+			, type_{ type }
+			, max_query_{ max_query } {
+		}
+
+		QueryPool(QueryPool&& other)
+			: DeviceHandle(std::move(other))
+			, type_{ std::exchange(other.type_, {}) }
+			, max_query_{ std::exchange(other.max_query_, {}) } {
+		}
+
+		auto operator=(QueryPool&& other) -> QueryPool& {
+			DeviceHandle::operator=(std::move(other));
+			type_ = std::exchange(other.type_, {});
+			max_query_ = std::exchange(other.max_query_, {});
+			return *this;
+		}
+
+		auto get_data(uint32_t query_index, void* data) const -> vk::Result;
+		auto get_data(uint32_t first_query, uint32_t query_count, void* data) const -> vk::Result;
+
+		auto reset(uint32_t start_query, uint32_t query_count = 0u) const -> void;
+	private:
+		vk::QueryType type_;
+		uint32_t max_query_;
 	};
 
 	class Context {
@@ -1009,7 +1045,7 @@ namespace edge::gfx {
 		// TODO: RootSignature
 		// TODO: Pipeline
 		// TODO: PipelineCache
-		// TODO: QueryPool
+		auto create_query_pool(vk::QueryType type, uint32_t query_count) const -> Result<QueryPool>;
 		// TODO: Descriptors
 
 		auto get_allocator() const -> vk::AllocationCallbacks const* { return allocator_; }
@@ -1021,8 +1057,7 @@ namespace edge::gfx {
 	private:
 		auto _construct(const ContextInfo& info) -> vk::Result;
 
-		vk::AllocationCallbacks* allocator_{ nullptr };
-
+		vk::AllocationCallbacks const* allocator_{ nullptr };
 		vk::detail::DynamicLoader loader_;
 		Instance instance_;
 		Surface surface_;

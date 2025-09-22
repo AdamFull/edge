@@ -22,7 +22,191 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
 
 namespace edge::gfx {
-	static MemoryAllocationStats malloc_stats{};
+#define EDGE_LOGGER_SCOPE "gfx::VulkanLifetime"
+	class VulkanLifetime {
+	public:
+		VulkanLifetime() {
+			total_bytes_allocated_ = 0ull;
+			allocation_count_ = 0ull;
+			deallocation_count_ = 0ull;
+
+			// Create allocation callbacks
+			callbacks_ = std::make_unique<vk::AllocationCallbacks>();
+			callbacks_->pfnAllocation = (vk::PFN_AllocationFunction)memalloc;
+			callbacks_->pfnFree = (vk::PFN_FreeFunction)memfree;
+			callbacks_->pfnReallocation = (vk::PFN_ReallocationFunction)memrealloc;
+			callbacks_->pfnInternalAllocation = (vk::PFN_InternalAllocationNotification)internalmemalloc;
+			callbacks_->pfnInternalFree = (vk::PFN_InternalFreeNotification)internalmemfree;
+			callbacks_->pUserData = this;
+
+			volkInitialize();
+			VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr); 
+		}
+
+		~VulkanLifetime() {
+			if (allocation_count_ != deallocation_count_) {
+				EDGE_SLOGE("Memory leaks detected!\n Allocated: {}, Deallocated: {} objects. Leaked {} bytes.",
+					allocation_count_.load(), deallocation_count_.load(), total_bytes_allocated_.load());
+
+				for (const auto& allocation : allocation_map_) {
+					EDGE_SLOGW("{:#010x} : {} bytes, {} byte alignment, {} scope",
+						reinterpret_cast<uintptr_t>(allocation.first), allocation.second.size, allocation.second.align, vk::to_string(allocation.second.scope));
+				}
+			}
+			else {
+				EDGE_SLOGI("All memory correctly deallocated");
+			}
+
+			volkFinalize();
+		}
+
+		static auto get_instance() -> VulkanLifetime& {
+			static VulkanLifetime lifetime;
+			return lifetime;
+		}
+
+		auto get_allocator() const -> vk::AllocationCallbacks const* { return callbacks_.get(); }
+	private:
+		auto do_allocation(size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) -> void* {
+			void* ptr = nullptr;
+
+#ifdef EDGE_PLATFORM_WINDOWS
+			ptr = _aligned_malloc(size, alignment);
+#else
+			// Ensure alignment meets POSIX requirements
+			if (alignment < sizeof(void*)) {
+				alignment = sizeof(void*);
+			}
+
+			// Ensure alignment is power of 2
+			if (alignment & (alignment - 1)) {
+				alignment = 1;
+				while (alignment < size) alignment <<= 1;
+			}
+
+			// POSIX aligned allocation
+			if (posix_memalign(&ptr, alignment, size) != 0) {
+				EDGE_SLOGE("Failed to allocate {} bytes with {} bytes alignment in {} scope.",
+					size, alignment, get_allocation_scope_str(allocation_scope));
+				ptr = nullptr;
+			}
+#endif
+
+			if (ptr) {
+				total_bytes_allocated_.fetch_add(size);
+				allocation_count_.fetch_add(1ull);
+
+				std::lock_guard<std::mutex> lock(mutex_);
+				allocation_map_[ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
+
+#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
+				EDGE_SLOGT("Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
+					reinterpret_cast<uintptr_t>(ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
+#endif
+			}
+
+			return ptr;
+		}
+
+		auto do_deallocation(void* mem) -> void {
+			if (!mem) {
+				return;
+			}
+
+			std::lock_guard<std::mutex> lock(mutex_);
+			if (auto found = allocation_map_.find(mem); found != allocation_map_.end()) {
+				total_bytes_allocated_.fetch_sub(found->second.size);
+				deallocation_count_.fetch_add(1ull);
+
+#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
+				EDGE_SLOGT("[Vulkan Graphics Context]: Deallocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
+					reinterpret_cast<uintptr_t>(mem), found->second.size, found->second.align, get_allocation_scope_str(found->second.scope), std::this_thread::get_id());
+#endif
+				allocation_map_.erase(found);
+			}
+			else {
+				EDGE_SLOGE("[Vulkan Graphics Context]: Found invalid memory allocation: {:#010x}.", reinterpret_cast<uintptr_t>(mem));
+			}
+
+#ifdef EDGE_PLATFORM_WINDOWS
+			_aligned_free(mem);
+#else
+			free(mem);
+#endif
+		}
+
+		auto do_reallocation(void* old, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) -> void* {
+			if (!old) {
+				return do_allocation(size, alignment, allocation_scope);
+			}
+
+			if (size == 0ull) {
+				// Behave like free
+				do_deallocation(old);
+				return nullptr;
+			}
+
+#if EDGE_PLATFORM_WINDOWS
+			auto* new_ptr = _aligned_realloc(old, size, alignment);
+			if (new_ptr) {
+				std::lock_guard<std::mutex> lock(mutex_);
+				if (auto found = allocation_map_.find(old); found != allocation_map_.end()) {
+					total_bytes_allocated_.fetch_sub(found->second.size);
+					deallocation_count_.fetch_add(1ull);
+					allocation_map_.erase(found);
+				}
+
+				total_bytes_allocated_.fetch_add(size);
+				allocation_count_.fetch_add(1ull);
+				allocation_map_[new_ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
+
+#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
+				EDGE_SLOGT("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
+					reinterpret_cast<uintptr_t>(new_ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
+#endif
+			}
+#else
+			void* new_ptr = do_allocation(size, alignment, allocation_scope);
+			if (new_ptr && old) {
+				memcpy(new_ptr, old, size);
+				do_deallocation(old);
+			}
+#endif
+			return new_ptr;
+		}
+
+		static void* VKAPI_CALL memalloc(void* user_data, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
+			VulkanLifetime* self = static_cast<VulkanLifetime*>(user_data);
+			return self ? self->do_allocation(size, alignment, allocation_scope) : nullptr;
+		}
+
+		static void VKAPI_CALL memfree(void* user_data, void* mem) {
+			VulkanLifetime* self = static_cast<VulkanLifetime*>(user_data);
+			self->do_deallocation(mem);
+		}
+
+		static void* VKAPI_CALL memrealloc(void* user_data, void* old, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
+			VulkanLifetime* self = static_cast<VulkanLifetime*>(user_data);
+			return self ? self->do_reallocation(old, size, alignment, allocation_scope) : nullptr;
+		}
+
+		static void VKAPI_CALL internalmemalloc(void* user_data, size_t size, vk::InternalAllocationType allocation_type, vk::SystemAllocationScope allocation_scope) {
+
+		}
+
+		static void VKAPI_CALL internalmemfree(void* user_data, size_t size, vk::InternalAllocationType allocation_type, vk::SystemAllocationScope allocation_scope) {
+
+		}
+
+		std::unique_ptr<vk::AllocationCallbacks> callbacks_;
+		std::atomic<size_t> total_bytes_allocated_;
+		std::atomic<size_t> allocation_count_;
+		std::atomic<size_t> deallocation_count_;
+		std::mutex mutex_;
+		std::unordered_map<void*, MemoryAllocationDesc> allocation_map_;
+	};
+
+#undef EDGE_LOGGER_SCOPE // VulkanLifetime
 
 #define EDGE_LOGGER_SCOPE "Validation"
 
@@ -397,125 +581,6 @@ namespace edge::gfx {
 	}
 
 #undef EDGE_LOGGER_SCOPE // gfx util
-
-#define EDGE_LOGGER_SCOPE "Allocator"
-
-	extern "C" void* VKAPI_CALL vkmemalloc(void* user_data, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
-		void* ptr = nullptr;
-
-#ifdef EDGE_PLATFORM_WINDOWS
-		ptr = _aligned_malloc(size, alignment);
-#else
-		// Ensure alignment meets POSIX requirements
-		if (alignment < sizeof(void*)) {
-			alignment = sizeof(void*);
-		}
-
-		// Ensure alignment is power of 2
-		if (alignment & (alignment - 1)) {
-			alignment = 1;
-			while (alignment < size) alignment <<= 1;
-		}
-
-		// POSIX aligned allocation
-		if (posix_memalign(&ptr, alignment, size) != 0) {
-			EDGE_SLOGE("Failed to allocate {} bytes with {} bytes alignment in {} scope.",
-				size, alignment, get_allocation_scope_str(allocation_scope));
-			ptr = nullptr;
-		}
-#endif
-		if (ptr) {
-			malloc_stats.total_bytes_allocated.fetch_add(size);
-			malloc_stats.allocation_count.fetch_add(1ull);
-
-			std::lock_guard<std::mutex> lock(malloc_stats.mutex);
-			malloc_stats.allocation_map[ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
-
-#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
-			EDGE_SLOGT("Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
-				reinterpret_cast<uintptr_t>(ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
-#endif
-		}
-
-		return ptr;
-	}
-
-	extern "C" void VKAPI_CALL vkmemfree(void* user_data, void* mem) {
-		if (!mem) {
-			return;
-		}
-
-		std::lock_guard<std::mutex> lock(malloc_stats.mutex);
-		if (auto found = malloc_stats.allocation_map.find(mem); found != malloc_stats.allocation_map.end()) {
-			malloc_stats.total_bytes_allocated.fetch_sub(found->second.size);
-			malloc_stats.deallocation_count.fetch_add(1ull);
-
-#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
-			EDGE_SLOGT("[Vulkan Graphics Context]: Deallocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
-				reinterpret_cast<uintptr_t>(mem), found->second.size, found->second.align, get_allocation_scope_str(found->second.scope), std::this_thread::get_id());
-#endif
-			malloc_stats.allocation_map.erase(found);
-		}
-		else {
-			EDGE_SLOGE("[Vulkan Graphics Context]: Found invalid memory allocation: {:#010x}.", reinterpret_cast<uintptr_t>(mem));
-		}
-
-#ifdef EDGE_PLATFORM_WINDOWS
-		_aligned_free(mem);
-#else
-		free(mem);
-#endif
-	}
-
-	extern "C" void* VKAPI_CALL vkmemrealloc(void* user_data, void* old, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
-		if (!old) {
-			return vkmemalloc(user_data, size, alignment, allocation_scope);
-		}
-
-		if (size == 0ull) {
-			// Behave like free
-			vkmemfree(user_data, old);
-			return nullptr;
-		}
-
-#if EDGE_PLATFORM_WINDOWS
-		auto* new_ptr = _aligned_realloc(old, size, alignment);
-		if (new_ptr) {
-			std::lock_guard<std::mutex> lock(malloc_stats.mutex);
-			if (auto found = malloc_stats.allocation_map.find(old); found != malloc_stats.allocation_map.end()) {
-				malloc_stats.total_bytes_allocated.fetch_sub(found->second.size);
-				malloc_stats.deallocation_count.fetch_add(1ull);
-				malloc_stats.allocation_map.erase(found);
-			}
-
-			malloc_stats.total_bytes_allocated.fetch_add(size);
-			malloc_stats.allocation_count.fetch_add(1ull);
-			malloc_stats.allocation_map[new_ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
-
-#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
-			EDGE_SLOGT("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
-				reinterpret_cast<uintptr_t>(new_ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
-#endif
-		}
-#else
-		void* new_ptr = vkmemalloc(user_data, size, alignment, allocation_scope);
-		if (new_ptr && old) {
-			memcpy(new_ptr, old, size);
-			vkmemfree(user_data, old);
-		}
-#endif
-		return new_ptr;
-	}
-
-	extern "C" void VKAPI_CALL vkinternalmemalloc(void* user_data, size_t size, vk::InternalAllocationType allocation_type, vk::SystemAllocationScope allocation_scope) {
-
-	}
-
-	extern "C" void VKAPI_CALL vkinternalmemfree(void* user_data, size_t size, vk::InternalAllocationType allocation_type, vk::SystemAllocationScope allocation_scope) {
-
-	}
-
-#undef EDGE_LOGGER_SCOPE // Allocator
 
 #define EDGE_LOGGER_SCOPE "gfx::Instance"
 
@@ -1618,6 +1683,57 @@ namespace edge::gfx {
 
 #undef EDGE_LOGGER_SCOPE // CommandPool
 
+#define EDGE_LOGGER_SCOPE "gfx::QueryPool"
+
+	auto QueryPool::get_data(uint32_t query_index, void* data) const -> vk::Result {
+		auto result = vk::Result::eSuccess;
+		switch (type_)
+		{
+		case vk::QueryType::eOcclusion: {
+			result = (*device_)->getQueryPoolResults(handle_, query_index, 1u, sizeof(uint64_t), data, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
+			break;
+		}
+		case vk::QueryType::ePipelineStatistics: {
+			assert(false && "NOT IMPLEMENTED");
+			break;
+		}
+		case vk::QueryType::eTimestamp: {
+			result = (*device_)->getQueryPoolResults(handle_, query_index * 2u, 2u, sizeof(uint64_t) * 2u, data, sizeof(uint64_t), vk::QueryResultFlagBits::e64);
+			break;
+		}
+		default:
+			assert(false && "NOT IMPLEMENTED");
+			break;
+		}
+
+		return result;
+	}
+
+	auto QueryPool::get_data(uint32_t first_query, uint32_t query_count, void* data) const -> vk::Result {
+		auto result = vk::Result::eSuccess;
+		switch (type_) {
+		case vk::QueryType::eOcclusion:
+		case vk::QueryType::eTimestamp: {
+			result = (*device_)->getQueryPoolResults(handle_, first_query, query_count, static_cast<uint32_t>(sizeof(uint64_t) * query_count), data, sizeof(uint64_t), vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+			break;
+		}
+		case vk::QueryType::ePipelineStatistics: {
+			assert(false && "NOT IMPLEMENTED");
+			break;
+		}
+		default:
+			assert(false && "NOT IMPLEMENTED");
+			break;
+		}
+		return result;
+	}
+
+	auto QueryPool::reset(uint32_t start_query, uint32_t query_count) const -> void {
+		(*device_)->resetQueryPool(handle_, start_query, query_count ? query_count : max_query_);
+	}
+
+#undef EDGE_LOGGER_SCOPE // QueryPool
+
 #define EDGE_LOGGER_SCOPE "gfx::Context"
 
 	Context::Context()
@@ -1626,43 +1742,11 @@ namespace edge::gfx {
 		, adapter_{ nullptr }
 		, device_{ nullptr }
 		, memory_allocator_{ nullptr } {
-		malloc_stats.total_bytes_allocated = 0ull;
-		malloc_stats.allocation_count = 0ull;
-		malloc_stats.deallocation_count = 0ull;
-
-		// Create allocation callbacks
-		allocator_ = new vk::AllocationCallbacks{};
-		allocator_->pfnAllocation = (vk::PFN_AllocationFunction)vkmemalloc;
-		allocator_->pfnFree = (vk::PFN_FreeFunction)vkmemfree;
-		allocator_->pfnReallocation = (vk::PFN_ReallocationFunction)vkmemrealloc;
-		allocator_->pfnInternalAllocation = (vk::PFN_InternalAllocationNotification)vkinternalmemalloc;
-		allocator_->pfnInternalFree = (vk::PFN_InternalFreeNotification)vkinternalmemfree;
-
-		volkInitialize();
-
-		VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
+		
+		allocator_ = VulkanLifetime::get_instance().get_allocator();
 	}
 
 	Context::~Context() {
-		if (allocator_) {
-			if (malloc_stats.allocation_count != malloc_stats.deallocation_count) {
-				EDGE_SLOGE("Memory leaks detected!\n Allocated: {}, Deallocated: {} objects. Leaked {} bytes.",
-					malloc_stats.allocation_count.load(), malloc_stats.deallocation_count.load(), malloc_stats.total_bytes_allocated.load());
-
-				for (const auto& allocation : malloc_stats.allocation_map) {
-					EDGE_SLOGW("{:#010x} : {} bytes, {} byte alignment, {} scope",
-						reinterpret_cast<uintptr_t>(allocation.first), allocation.second.size, allocation.second.align, vk::to_string(allocation.second.scope));
-				}
-			}
-			else {
-				EDGE_SLOGI("All memory correctly deallocated");
-			}
-
-			delete allocator_;
-			allocator_ = nullptr;
-
-			volkFinalize();
-		}
 	}
 
 	auto Context::construct(const ContextInfo& info) -> Result<Context> {
@@ -1841,10 +1925,8 @@ namespace edge::gfx {
 		create_info.offset = offset;
 		create_info.range = size;
 
-		vk::Device device = device_;
-
 		vk::BufferView buffer_view;
-		if (auto result = device.createBufferView(&create_info, allocator_, &buffer_view); result != vk::Result::eSuccess) {
+		if (auto result = device_->createBufferView(&create_info, allocator_, &buffer_view); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
 
@@ -1852,14 +1934,28 @@ namespace edge::gfx {
 	}
 
 	auto Context::create_sampler(const vk::SamplerCreateInfo& create_info) const -> Result<Sampler> {
-		vk::Device device = device_;
-
 		vk::Sampler sampler;
-		if (auto result = device.createSampler(&create_info, allocator_, &sampler); result != vk::Result::eSuccess) {
+		if (auto result = device_->createSampler(&create_info, allocator_, &sampler); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
 
 		return Sampler{ &device_, sampler, create_info };
+	}
+
+	auto Context::create_query_pool(vk::QueryType type, uint32_t query_count) const -> Result<QueryPool> {
+		vk::QueryPoolCreateInfo create_info{};
+		create_info.queryType = type;
+		create_info.queryCount = query_count;
+
+		if (type == vk::QueryType::eTimestamp) {
+			create_info.queryCount *= 2;
+		}
+
+		vk::QueryPool query_pool;
+		if (auto result = device_->createQueryPool(&create_info, allocator_, &query_pool); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return QueryPool(&device_, query_pool, type, create_info.queryCount);
 	}
 
 	auto Context::_construct(const ContextInfo& info) -> vk::Result {

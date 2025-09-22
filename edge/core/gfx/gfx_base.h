@@ -165,12 +165,4 @@ namespace edge::gfx {
 		vk::SystemAllocationScope scope;
 		std::thread::id thread_id;
 	};
-
-	struct MemoryAllocationStats {
-		std::atomic<size_t> total_bytes_allocated;
-		std::atomic<size_t> allocation_count;
-		std::atomic<size_t> deallocation_count;
-		std::mutex mutex;
-		std::unordered_map<void*, MemoryAllocationDesc> allocation_map;
-	};
 }

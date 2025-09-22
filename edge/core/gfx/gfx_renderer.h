@@ -54,6 +54,7 @@ namespace edge::gfx {
 	class Renderer {
 	public:
 		Renderer() = default;
+		~Renderer();
 
 		Renderer(const Renderer&) = delete;
 		auto operator=(const Renderer&) -> Renderer& = delete;
@@ -90,14 +91,19 @@ namespace edge::gfx {
 
 		auto get_current_frame_index() const -> uint32_t { return frame_number_ % k_frame_overlap_; }
 		auto get_current_frame() const -> Frame const* { return frames_.data() + get_current_frame_index(); }
+
+		auto get_gpu_delta_time() const -> float { return gpu_delta_time_; }
 	private:
 		auto _construct(const RendererCreateInfo& create_info) -> vk::Result;
 
 		auto handle_surface_change(bool force = false) -> bool;
+		auto create_swapchain(const Swapchain::State& state) -> vk::Result;
 
 		Context context_;
 		Queue queue_;
 		CommandPool command_pool_;
+		QueryPool timestamp_query_;
+		double timestamp_frequency_{ 1.0 };
 
 		Swapchain swapchain_;
 		Vector<Image> swapchain_images_;
@@ -111,5 +117,6 @@ namespace edge::gfx {
 		vk::Semaphore acquired_senmaphore_{ VK_NULL_HANDLE };
 		Frame const* active_frame_{ nullptr };
 		float delta_time_{ 0.0f };
+		float gpu_delta_time_{ 0.0f };
 	};
 }
