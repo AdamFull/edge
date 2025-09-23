@@ -120,9 +120,15 @@ target_link_libraries(vma INTERFACE vulkan)
 
 add_library(GPUOpen::VulkanMemoryAllocator ALIAS vma)
 
+add_library(argparse INTERFACE)
+set(ARGPARSE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/argparse")
+target_include_directories(argparse SYSTEM INTERFACE "${ARGPARSE_DIR}/include")
+
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
     INTERFACE
+
+    argparse
     spdlog::spdlog
     tiny_imageformat
 

@@ -12,3 +12,6 @@
 [submodule "external/tiny_imageformat"]
 	path = external/tiny_imageformat
 	url = https://github.com/DeanoC/tiny_imageformat.git
+[submodule "external/argparse"]
+	path = external/argparse
+	url = https://github.com/p-ranav/argparse.git
