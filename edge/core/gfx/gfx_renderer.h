@@ -12,9 +12,9 @@ namespace edge::gfx {
 		};
 
 	public:
-		UniformArena(Context const& ctx, vk::DeviceSize block_size = k_uniform_pool_default_block_size)
-			: context_{ &ctx }
-			, arena_frames_{ ctx.get_allocator() }
+		UniformArena(Context const* ctx = nullptr, vk::DeviceSize block_size = k_uniform_pool_default_block_size)
+			: context_{ ctx }
+			, arena_frames_{ ctx ? ctx->get_allocator() : nullptr }
 			, block_size_{ block_size } {
 
 		}
@@ -35,15 +35,15 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto construct(Context const& ctx, vk::DeviceSize block_size = k_uniform_pool_default_block_size) -> Result<UniformArena>;
+		static auto construct(Context const* ctx, vk::DeviceSize block_size = k_uniform_pool_default_block_size) -> Result<UniformArena>;
 
 		auto begin() -> void;
 		auto end() -> void;
 		auto allocate(vk::DeviceSize size) -> Result<BufferRange>;
 	private:
-		auto _lookup_arena(vk::DeviceSize size) -> Result<Frame&>;
-		auto _new_buffer() -> Result<Frame&>;
-		auto _construct(Context const& ctx) -> vk::Result;
+		auto _lookup_arena(vk::DeviceSize size) -> Result<Frame*>;
+		auto _new_buffer() -> Result<Frame*>;
+		auto _construct(Context const* ctx) -> vk::Result;
 
 		Context const* context_{ nullptr };
 		vk::DeviceSize minimal_alignment_{ 1ull };
@@ -77,6 +77,9 @@ namespace edge::gfx {
 		}
 
 		static auto construct(const Context& ctx, CommandBuffer&& command_buffer) -> Result<Frame>;
+
+		auto begin() -> void;
+		auto end() -> void;
 
 		auto get_image_available_semaphore() const -> Semaphore const& { return image_available_; }
 		auto get_rendering_finished_semaphore() const -> Semaphore const& { return rendering_finished_; }

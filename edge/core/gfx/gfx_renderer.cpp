@@ -6,7 +6,7 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::UniformArena"
 
-	auto UniformArena::construct(Context const& ctx, vk::DeviceSize block_size) -> Result<UniformArena> {
+	auto UniformArena::construct(Context const* ctx, vk::DeviceSize block_size) -> Result<UniformArena> {
 		UniformArena self{ ctx, block_size };
 		if (auto result = self._construct(ctx); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
@@ -35,12 +35,12 @@ namespace edge::gfx {
 
 		auto& frame = found_frame.value();
 
-		auto offset = frame.offset;
-		frame.offset += aligned_buffer_size;
-		return BufferRange::construct(&frame.buffer, offset, size);
+		auto offset = frame->offset;
+		frame->offset += aligned_buffer_size;
+		return BufferRange::construct(&frame->buffer, offset, size);
 	}
 
-	auto UniformArena::_new_buffer() -> Result<Frame&> {
+	auto UniformArena::_new_buffer() -> Result<Frame*> {
 		BufferCreateInfo create_info{};
 		create_info.flags = kDynamicUniformBuffer;
 		create_info.size = aligned_size(block_size_, minimal_alignment_);
@@ -49,27 +49,27 @@ namespace edge::gfx {
 
 		auto result = context_->create_buffer(create_info);
 		if (result) {
-			return arena_frames_.emplace_back(std::move(result.value()), 0ull);
+			return &arena_frames_.emplace_back(std::move(result.value()), 0ull);
 		}
 
 		return std::unexpected(result.error());
 	}
 
-	auto UniformArena::_lookup_arena(vk::DeviceSize requested_size) -> Result<Frame&> {
+	auto UniformArena::_lookup_arena(vk::DeviceSize requested_size) -> Result<Frame*> {
 		for (auto& frame : arena_frames_) {
 			auto size = frame.buffer.get_size();
 			if (frame.offset + requested_size > size) {
 				continue;
 			}
 
-			return frame;
+			return &frame;
 		}
 
 		return _new_buffer();
 	}
 
-	auto UniformArena::_construct(Context const& ctx) -> vk::Result {
-		auto const& adapter = ctx.get_adapter();
+	auto UniformArena::_construct(Context const* ctx) -> vk::Result {
+		auto const& adapter = ctx->get_adapter();
 
 		vk::PhysicalDeviceProperties properties;
 		adapter->getProperties(&properties);
