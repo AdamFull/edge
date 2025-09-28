@@ -1,6 +1,89 @@
 #include "gfx_renderer.h"
 
+#include <numeric>
+
 namespace edge::gfx {
+
+#define EDGE_LOGGER_SCOPE "gfx::UniformArena"
+
+	auto UniformArena::construct(Context const& ctx, vk::DeviceSize block_size) -> Result<UniformArena> {
+		UniformArena self{ ctx, block_size };
+		if (auto result = self._construct(ctx); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return self;
+	}
+
+	auto UniformArena::begin() -> void {
+		for (auto& frame : arena_frames_) {
+			frame.offset = 0ull;
+		}
+	}
+
+	auto UniformArena::end() -> void {
+		for (auto& frame : arena_frames_) {
+			frame.buffer.flush();
+		}
+	}
+
+	auto UniformArena::allocate(vk::DeviceSize size) -> Result<BufferRange> {
+		auto aligned_buffer_size = aligned_size(size, minimal_alignment_);
+		auto found_frame = _lookup_arena(aligned_buffer_size);
+		if (!found_frame) {
+			return std::unexpected(found_frame.error());
+		}
+
+		auto& frame = found_frame.value();
+
+		auto offset = frame.offset;
+		frame.offset += aligned_buffer_size;
+		return BufferRange::construct(&frame.buffer, offset, size);
+	}
+
+	auto UniformArena::_new_buffer() -> Result<Frame&> {
+		BufferCreateInfo create_info{};
+		create_info.flags = kDynamicUniformBuffer;
+		create_info.size = aligned_size(block_size_, minimal_alignment_);
+		create_info.count = 1ull;
+		create_info.minimal_alignment = minimal_alignment_;
+
+		auto result = context_->create_buffer(create_info);
+		if (result) {
+			return arena_frames_.emplace_back(std::move(result.value()), 0ull);
+		}
+
+		return std::unexpected(result.error());
+	}
+
+	auto UniformArena::_lookup_arena(vk::DeviceSize requested_size) -> Result<Frame&> {
+		for (auto& frame : arena_frames_) {
+			auto size = frame.buffer.get_size();
+			if (frame.offset + requested_size > size) {
+				continue;
+			}
+
+			return frame;
+		}
+
+		return _new_buffer();
+	}
+
+	auto UniformArena::_construct(Context const& ctx) -> vk::Result {
+		auto const& adapter = ctx.get_adapter();
+
+		vk::PhysicalDeviceProperties properties;
+		adapter->getProperties(&properties);
+
+		minimal_alignment_ = std::lcm(properties.limits.minUniformBufferOffsetAlignment, properties.limits.nonCoherentAtomSize);
+
+		if (auto result = _new_buffer(); !result.has_value()) {
+			return result.error();
+		}
+
+		return vk::Result::eSuccess;
+	}
+
+#undef EDGE_LOGGER_SCOPE // UniformArena
 
 #define EDGE_LOGGER_SCOPE "gfx::Frame"
 

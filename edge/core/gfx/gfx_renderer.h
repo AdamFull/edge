@@ -3,6 +3,54 @@
 #include "gfx_context.h"
 
 namespace edge::gfx {
+	constexpr vk::DeviceSize k_uniform_pool_default_block_size{ 4ull * 1024ull * 1024ull };
+
+	class UniformArena {
+		struct Frame {
+			Buffer buffer;
+			vk::DeviceSize offset;
+		};
+
+	public:
+		UniformArena(Context const& ctx, vk::DeviceSize block_size = k_uniform_pool_default_block_size)
+			: context_{ &ctx }
+			, arena_frames_{ ctx.get_allocator() }
+			, block_size_{ block_size } {
+
+		}
+
+		UniformArena(const UniformArena&) = delete;
+		auto operator=(const UniformArena&) -> UniformArena & = delete;
+
+		UniformArena(UniformArena&& other)
+			: minimal_alignment_{ std::exchange(other.minimal_alignment_, 0ull) }
+			, block_size_{ std::exchange(other.block_size_, 0ull) }
+			, arena_frames_{ std::exchange(other.arena_frames_, {}) } {
+		}
+
+		auto operator=(UniformArena&& other) -> UniformArena& {
+			minimal_alignment_ = std::exchange(other.minimal_alignment_, 0ull);
+			block_size_ = std::exchange(other.block_size_, 0ull);
+			arena_frames_ = std::exchange(other.arena_frames_, {});
+			return *this;
+		}
+
+		static auto construct(Context const& ctx, vk::DeviceSize block_size = k_uniform_pool_default_block_size) -> Result<UniformArena>;
+
+		auto begin() -> void;
+		auto end() -> void;
+		auto allocate(vk::DeviceSize size) -> Result<BufferRange>;
+	private:
+		auto _lookup_arena(vk::DeviceSize size) -> Result<Frame&>;
+		auto _new_buffer() -> Result<Frame&>;
+		auto _construct(Context const& ctx) -> vk::Result;
+
+		Context const* context_{ nullptr };
+		vk::DeviceSize minimal_alignment_{ 1ull };
+		vk::DeviceSize block_size_{ k_uniform_pool_default_block_size };
+		Vector<Frame> arena_frames_;
+	};
+
 	class Frame {
 	public:
 		Frame() = default;
@@ -15,7 +63,8 @@ namespace edge::gfx {
 			: image_available_{ std::exchange(other.image_available_, nullptr) }
 			, rendering_finished_{ std::exchange(other.rendering_finished_, nullptr) }
 			, fence_{ std::exchange(other.fence_, nullptr) }
-			, command_buffer_{ std::exchange(other.command_buffer_, nullptr) } {
+			, command_buffer_{ std::exchange(other.command_buffer_, nullptr) }
+			, uniform_arena_{ std::exchange(other.uniform_arena_, nullptr) } {
 		}
 
 		auto operator=(Frame&& other) -> Frame& {
@@ -23,6 +72,7 @@ namespace edge::gfx {
 			rendering_finished_ = std::exchange(other.rendering_finished_, nullptr);
 			fence_ = std::exchange(other.fence_, nullptr);
 			command_buffer_ = std::exchange(other.command_buffer_, nullptr);
+			uniform_arena_ = std::exchange(other.uniform_arena_, nullptr);
 			return *this;
 		}
 
@@ -40,6 +90,8 @@ namespace edge::gfx {
 		Fence fence_;
 
 		CommandBuffer command_buffer_;
+
+		UniformArena uniform_arena_;
 	};
 
 	struct RendererCreateInfo {

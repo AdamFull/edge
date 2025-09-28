@@ -1304,6 +1304,33 @@ namespace edge::gfx {
 
 #undef EDGE_LOGGER_SCOPE // MemoryAllocator
 
+#define EDGE_LOGGER_SCOPE "gfx::BufferRange"
+
+	auto BufferRange::construct(Buffer const* buffer, vk::DeviceSize offset, vk::DeviceSize size) -> Result<BufferRange> {
+		BufferRange self{ buffer->get_handle(), offset};
+		if (auto result = self._construct(buffer, size); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return self;
+	}
+
+	auto BufferRange::_construct(Buffer const* buffer, vk::DeviceSize size) -> vk::Result {
+		auto map_result = buffer->map();
+		if (!map_result) {
+			return map_result.error();
+		}
+
+		auto mapped_range = std::move(map_result.value());
+		if (mapped_range.size() - offset_ < size) {
+			return vk::Result::eErrorNotEnoughSpaceKHR;
+		}
+
+		range_ = mapped_range.subspan(offset_, size);
+		return vk::Result::eSuccess;
+	}
+
+#undef EDGE_LOGGER_SCOPE // BufferRange
+
 #define EDGE_LOGGER_SCOPE "gfx::Swapchain"
 
 	auto Swapchain::reset() -> void {
@@ -1734,6 +1761,24 @@ namespace edge::gfx {
 
 #undef EDGE_LOGGER_SCOPE // QueryPool
 
+#define EDGE_LOGGER_SCOPE "gfx::PipelineCache"
+
+	auto PipelineCache::get_data(std::vector<uint8_t>& data) const -> vk::Result {
+		size_t cache_size{ 0ull };
+		if (auto result = (*device_)->getPipelineCacheData(handle_, &cache_size, nullptr); result != vk::Result::eSuccess) {
+			return result;
+		}
+
+		data.resize(cache_size, '\0');
+		return (*device_)->getPipelineCacheData(handle_, &cache_size, data.data());
+	}
+
+	auto PipelineCache::get_data(void*& data, size_t& size) const -> vk::Result {
+		return (*device_)->getPipelineCacheData(handle_, &size, data);
+	}
+
+#undef EDGE_LOGGER_SCOPE // PipelineCache
+
 #define EDGE_LOGGER_SCOPE "gfx::Context"
 
 	Context::Context()
@@ -1940,6 +1985,16 @@ namespace edge::gfx {
 		}
 
 		return Sampler{ &device_, sampler, create_info };
+	}
+
+	auto Context::create_pipeline_cache(Span<const uint8_t> data) const -> Result<PipelineCache> {
+		vk::PipelineCacheCreateInfo create_info{};
+
+		vk::PipelineCache pipeline_cache;
+		if (auto result = device_->createPipelineCache(&create_info, allocator_, &pipeline_cache); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return PipelineCache{ &device_, pipeline_cache };
 	}
 
 	auto Context::create_query_pool(vk::QueryType type, uint32_t query_count) const -> Result<QueryPool> {

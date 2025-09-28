@@ -18,6 +18,13 @@ namespace edge::gfx {
 	class Buffer;
 	class CommandPool;
 	class CommandBuffer;
+	class QueryPool;
+	class PipelineCache;
+	class Pipeline;
+	class PipelineLayout;
+	class DescriptorSetLayout;
+	class DescriptorPool;
+	class DescriptorSet;
 
 	template<typename T>
 	class Handle {
@@ -598,7 +605,7 @@ namespace edge::gfx {
 			}
 		}
 
-		auto flush(vk::DeviceSize offset, vk::DeviceSize size) const -> vk::Result {
+		auto flush(vk::DeviceSize offset = 0, vk::DeviceSize size = VK_WHOLE_SIZE) const -> vk::Result {
 			if (!coherent_) {
 				auto vma_handle = memory_allocator_->get_handle();
 				return static_cast<vk::Result>(vmaFlushAllocation(vma_handle, allocation_, offset, size));
@@ -721,6 +728,43 @@ namespace edge::gfx {
 		}
 	private:
 		vk::BufferCreateInfo create_info_;
+	};
+
+	class BufferRange {
+	public:
+		BufferRange(vk::Buffer buffer = VK_NULL_HANDLE, vk::DeviceSize offset = 0ull)
+			: buffer_{ buffer }
+			, offset_{ offset } {
+
+		}
+
+		BufferRange(const BufferRange&) = delete;
+		auto operator=(const BufferRange&) -> BufferRange & = delete;
+
+		BufferRange(BufferRange&& other)
+			: buffer_{ std::exchange(other.buffer_, VK_NULL_HANDLE) }
+			, range_{ std::exchange(other.range_, {}) }
+			, offset_{ std::exchange(other.offset_, {}) } {
+		}
+
+		auto operator=(BufferRange&& other) -> BufferRange& {
+			buffer_ = std::exchange(other.buffer_, VK_NULL_HANDLE);
+			range_ = std::exchange(other.range_, {});
+			offset_ = std::exchange(other.offset_, {});
+			return *this;
+		}
+
+		static auto construct(Buffer const* buffer = nullptr, vk::DeviceSize offset = 0ull, vk::DeviceSize size = 0ull) -> Result<BufferRange>;
+
+		auto get_offset() const -> vk::DeviceSize { return offset_; }
+		auto get_range() const -> Span<uint8_t> { return range_; }
+		auto get_buffer() const -> vk::Buffer { return buffer_; }
+	private:
+		auto _construct(Buffer const* buffer, vk::DeviceSize size) -> vk::Result;
+
+		vk::Buffer buffer_{ VK_NULL_HANDLE };
+		vk::DeviceSize offset_{ 0ull };
+		Span<uint8_t> range_;
 	};
 
 	class BufferView : public DeviceHandle<vk::BufferView> {
@@ -993,6 +1037,60 @@ namespace edge::gfx {
 		uint32_t max_query_;
 	};
 
+	class PipelineCache : public DeviceHandle<vk::PipelineCache> {
+	public:
+		PipelineCache(Device const* device = nullptr, vk::PipelineCache handle = VK_NULL_HANDLE) 
+			: DeviceHandle{ device, handle } {
+		}
+
+		auto get_data(std::vector<uint8_t>& data) const -> vk::Result;
+		auto get_data(void*& data, size_t& size) const -> vk::Result;
+	};
+
+	class Pipeline : public DeviceHandle<vk::Pipeline> {
+	public:
+		Pipeline(Device const* device = nullptr, vk::Pipeline handle = VK_NULL_HANDLE)
+			: DeviceHandle{ device, handle } {
+		}
+	};
+
+	class ShaderModule : public DeviceHandle<vk::ShaderModule> {
+	public:
+		ShaderModule(Device const* device = nullptr, vk::ShaderModule handle = VK_NULL_HANDLE)
+			: DeviceHandle{ device, handle } {
+		}
+	private:
+		vk::PipelineShaderStageCreateInfo shader_stage_create_info_;
+	};
+
+	class PipelineLayout : public DeviceHandle<vk::PipelineLayout> {
+	public:
+		PipelineLayout(Device const* device = nullptr, vk::PipelineLayout handle = VK_NULL_HANDLE)
+			: DeviceHandle{ device, handle } {
+		}
+	};
+
+	class DescriptorSetLayout : public DeviceHandle<vk::DescriptorSetLayout> {
+	public:
+		DescriptorSetLayout(Device const* device = nullptr, vk::DescriptorSetLayout handle = VK_NULL_HANDLE)
+			: DeviceHandle{ device, handle } {
+		}
+	};
+
+	class DescriptorPool : public DeviceHandle<vk::DescriptorPool> {
+	public:
+		DescriptorPool(Device const* device = nullptr, vk::DescriptorPool handle = VK_NULL_HANDLE)
+			: DeviceHandle{ device, handle } {
+		}
+	};
+
+	class DescriptorSet : public Handle<vk::DescriptorSet> {
+	public:
+		//DescriptorPool(Device const* device = nullptr, vk::DescriptorPool handle = VK_NULL_HANDLE)
+		//	: DeviceHandle{ device, handle } {
+		//}
+	};
+
 	class Context {
 	public:
 		Context();
@@ -1044,7 +1142,8 @@ namespace edge::gfx {
 		auto create_sampler(const vk::SamplerCreateInfo& create_info) const -> Result<Sampler>;
 		// TODO: RootSignature
 		// TODO: Pipeline
-		// TODO: PipelineCache
+
+		auto create_pipeline_cache(Span<const uint8_t> data) const -> Result<PipelineCache>;
 		auto create_query_pool(vk::QueryType type, uint32_t query_count) const -> Result<QueryPool>;
 		// TODO: Descriptors
 
