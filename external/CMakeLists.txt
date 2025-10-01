@@ -103,9 +103,9 @@ endif()
 add_library(volk::volk ALIAS volk)
 
 # vma
-add_library(vma INTERFACE)
-set(VMA_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vma/include)
-set(VMA_IMPL_C "${CMAKE_CURRENT_BINARY_DIR}/vk_mem_alloc_impl.c")
+set(VMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vma/include")
+set(VMA_IMPL_DIR "${CMAKE_CURRENT_BINARY_DIR}/vma_impl")
+set(VMA_IMPL_C "${VMA_IMPL_DIR}/vk_mem_alloc_impl.cpp")
 
 file(WRITE "${VMA_IMPL_C}"
 "#ifndef VMA_IMPLEMENTATION\n"
@@ -114,9 +114,9 @@ file(WRITE "${VMA_IMPL_C}"
 "#endif\n"
 )
 
-target_sources(vma INTERFACE ${VMA_DIR}/vk_mem_alloc.h)
-target_include_directories(vma SYSTEM INTERFACE ${VMA_DIR})
-target_link_libraries(vma INTERFACE vulkan)
+add_library(vma STATIC ${VMA_IMPL_C})
+target_include_directories(vma PUBLIC ${VMA_DIR})
+target_link_libraries(vma PUBLIC vulkan)
 
 add_library(GPUOpen::VulkanMemoryAllocator ALIAS vma)
 
@@ -223,6 +223,43 @@ target_link_libraries(ktx PUBLIC
 
 add_library(KTX::ktx ALIAS ktx)
 
+# stb
+set(STB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/stb")
+set(STB_IMAGE_IMPL_DIR "${CMAKE_CURRENT_BINARY_DIR}/stb_impl")
+
+set(STB_IMAGE_IMPL_C "${STB_IMAGE_IMPL_DIR}/stb_image.c")
+set(STB_IMAGE_RESIZE2_IMPL_C "${STB_IMAGE_IMPL_DIR}/stb_image_resize2.c")
+set(STB_IMAGE_WRITE_IMPL_C "${STB_IMAGE_IMPL_DIR}/stb_image_write.c")
+
+file(WRITE "${STB_IMAGE_IMPL_C}"
+"#ifndef STB_IMAGE_IMPLEMENTATION\n"
+"#define STB_IMAGE_IMPLEMENTATION\n"
+"#include \"stb_image.h\"\n"
+"#endif\n"
+)
+
+file(WRITE "${STB_IMAGE_RESIZE2_IMPL_C}"
+"#ifndef STB_IMAGE_RESIZE_IMPLEMENTATION\n"
+"#define STB_IMAGE_RESIZE_IMPLEMENTATION\n"
+"#include \"stb_image_resize2.h\"\n"
+"#endif\n"
+)
+
+file(WRITE "${STB_IMAGE_WRITE_IMPL_C}"
+"#ifndef STB_IMAGE_WRITE_IMPLEMENTATION\n"
+"#define STB_IMAGE_WRITE_IMPLEMENTATION\n"
+"#include \"stb_image_write.h\"\n"
+"#endif\n"
+)
+
+add_library(stb STATIC
+    ${STB_IMAGE_IMPL_C}
+    ${STB_IMAGE_RESIZE2_IMPL_C}
+    ${STB_IMAGE_WRITE_IMPL_C}
+)
+
+target_include_directories(stb PUBLIC ${STB_DIR})
+
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
     INTERFACE
@@ -232,6 +269,7 @@ target_link_libraries(${PROJECT_NAME}
     tiny_imageformat
 
     KTX::ktx
+    stb
 
     Vulkan::Headers
     volk::volk
