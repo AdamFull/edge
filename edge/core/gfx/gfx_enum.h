@@ -40,7 +40,8 @@ namespace edge::gfx {
 
 	enum class ImageFlag : uint16_t {
 		eSample = 1 << 0,
-		eCopy = 1 << 1,
+		eCopySource = 1 << 1,
+		eCopyTarget = 1 << 1,
 		eStorage = 1 << 2,
 		eWriteColor = 1 << 3
 	};
@@ -82,7 +83,8 @@ EDGE_DEFINE_FLAG_NAMES(edge::gfx::QueueType,
 
 EDGE_DEFINE_FLAG_NAMES(edge::gfx::ImageFlag,
 	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eSample, "Sample"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eCopy, "Copy"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eCopySource, "CopySource"),
+	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eCopyTarget, "CopyTarget"),
 	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eStorage, "Storage"),
 	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eWriteColor, "WriteColor")
 );

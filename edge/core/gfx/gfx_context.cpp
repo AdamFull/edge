@@ -1854,8 +1854,12 @@ namespace edge::gfx {
 			image_create_info.usage |= vk::ImageUsageFlagBits::eStorage;
 		}
 
-		if (create_info.flags & ImageFlag::eCopy) {
-			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst;
+		if (create_info.flags & ImageFlag::eCopySource) {
+			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferSrc;
+		}
+
+		if (create_info.flags & ImageFlag::eCopyTarget) {
+			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferDst;
 		}
 
 		if (create_info.flags & ImageFlag::eWriteColor) {

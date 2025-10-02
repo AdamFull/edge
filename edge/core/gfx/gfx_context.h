@@ -27,7 +27,7 @@ namespace edge::gfx {
 	class DescriptorSet;
 
 	template<typename T>
-	class Handle {
+	class Handle : public NonCopyable {
 	public:
 		Handle(std::nullptr_t) noexcept {};
 
@@ -35,10 +35,6 @@ namespace edge::gfx {
 			: handle_{ handle }
 			, allocator_{ allocator } {
 		}
-
-		// Non copyable
-		Handle(const Handle&) = delete;
-		auto operator=(const Handle&) -> Handle& = delete;
 
 		Handle(Handle&& other)
 			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
@@ -488,7 +484,7 @@ namespace edge::gfx {
 		auto signal(uint64_t value) const -> vk::Result;
 	};
 
-	class MemoryAllocator {
+	class MemoryAllocator : public NonCopyable {
 	public:
 		MemoryAllocator(std::nullptr_t) noexcept {};
 		MemoryAllocator(Device const* device = nullptr, VmaAllocator handle = VK_NULL_HANDLE)
@@ -498,10 +494,6 @@ namespace edge::gfx {
 		}
 
 		~MemoryAllocator();
-
-		// Non copyable
-		MemoryAllocator(const MemoryAllocator&) = delete;
-		auto operator=(const MemoryAllocator&) -> MemoryAllocator & = delete;
 
 		MemoryAllocator(MemoryAllocator&& other)
 			: allocator_{ std::exchange(other.allocator_, nullptr) }
@@ -562,9 +554,6 @@ namespace edge::gfx {
 				allocation_ = VK_NULL_HANDLE;
 			}
 		}
-
-		MemoryAllocation(const MemoryAllocation&) = delete;
-		auto operator=(const MemoryAllocation&) -> MemoryAllocation & = delete;
 
 		MemoryAllocation(MemoryAllocation&& other)
 			: Handle<T>{ std::move(other) }
@@ -711,7 +700,7 @@ namespace edge::gfx {
 
 	class Buffer : public MemoryAllocation<vk::Buffer> {
 	public:
-		Buffer(MemoryAllocator const* allocator, vk::Buffer handle, VmaAllocation allocation, VmaAllocationInfo allocation_info, const vk::BufferCreateInfo& create_info)
+		Buffer(MemoryAllocator const* allocator = nullptr, vk::Buffer handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {}, const vk::BufferCreateInfo& create_info = {})
 			: MemoryAllocation{ allocator, handle, allocation, allocation_info }
 			, create_info_{ create_info } {
 		}
@@ -1091,7 +1080,7 @@ namespace edge::gfx {
 		//}
 	};
 
-	class Context {
+	class Context : public NonCopyable {
 	public:
 		Context();
 		Context(std::nullptr_t) noexcept
@@ -1102,10 +1091,6 @@ namespace edge::gfx {
 			, memory_allocator_{ nullptr } {
 		}
 		~Context();
-
-		// Non copyable
-		Context(const Context&) = delete;
-		auto operator=(const Context&) -> Context& = delete;
 
 		Context(Context&& other)
 			: allocator_{ std::exchange(other.allocator_, VK_NULL_HANDLE) }
