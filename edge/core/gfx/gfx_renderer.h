@@ -2,53 +2,86 @@
 
 #include "gfx_context.h"
 
+#include <future>
+
 namespace edge::gfx {
 	constexpr vk::DeviceSize k_uniform_pool_default_block_size{ 4ull * 1024ull * 1024ull };
+	constexpr vk::DeviceSize k_staging_allocator_default_block_size{ 64ull * 1024ull * 1024ull };
 
-	class UniformArena {
-		struct Frame {
-			Buffer buffer;
-			vk::DeviceSize offset;
-		};
-
+	class BufferArena : public NonCopyable {
 	public:
-		UniformArena(Context const* ctx = nullptr, vk::DeviceSize block_size = k_uniform_pool_default_block_size)
-			: context_{ ctx }
-			, arena_frames_{ ctx ? ctx->get_allocator() : nullptr }
-			, block_size_{ block_size } {
+		BufferArena(Context const* ctx = nullptr)
+			: context_{ ctx } {
 
 		}
 
-		UniformArena(const UniformArena&) = delete;
-		auto operator=(const UniformArena&) -> UniformArena & = delete;
-
-		UniformArena(UniformArena&& other)
-			: minimal_alignment_{ std::exchange(other.minimal_alignment_, 0ull) }
-			, block_size_{ std::exchange(other.block_size_, 0ull) }
-			, arena_frames_{ std::exchange(other.arena_frames_, {}) } {
+		BufferArena(BufferArena&& other)
+			: context_{ std::exchange(other.context_, nullptr) }
+			, buffer_{ std::exchange(other.buffer_, nullptr) }
+			, offset_{ other.offset_.load(std::memory_order_relaxed) } {
+			other.offset_.store(0ull, std::memory_order_relaxed);
 		}
 
-		auto operator=(UniformArena&& other) -> UniformArena& {
-			minimal_alignment_ = std::exchange(other.minimal_alignment_, 0ull);
-			block_size_ = std::exchange(other.block_size_, 0ull);
-			arena_frames_ = std::exchange(other.arena_frames_, {});
+		auto operator=(BufferArena&& other) -> BufferArena& {
+			context_ = std::exchange(other.context_, nullptr);
+			buffer_ = std::exchange(other.buffer_, nullptr);
+			offset_.store(other.offset_.load(std::memory_order_relaxed), std::memory_order_relaxed);
+			other.offset_.store(0ull, std::memory_order_relaxed);
 			return *this;
 		}
 
-		static auto construct(Context const* ctx, vk::DeviceSize block_size = k_uniform_pool_default_block_size) -> Result<UniformArena>;
+		static auto construct(Context const* ctx, vk::DeviceSize size, BufferFlags flags) -> Result<BufferArena>;
 
-		auto begin() -> void;
-		auto end() -> void;
-		auto allocate(vk::DeviceSize size) -> Result<BufferRange>;
+		auto allocate(vk::DeviceSize size, vk::DeviceSize alignment = 1ull) -> Result<BufferRange>;
+		auto reset() -> void;
+		auto is_fits(vk::DeviceSize size, vk::DeviceSize alignment = 1ull) -> bool;
+
+		auto get_buffer() -> Buffer const& { return buffer_; }
 	private:
-		auto _lookup_arena(vk::DeviceSize size) -> Result<Frame*>;
-		auto _new_buffer() -> Result<Frame*>;
-		auto _construct(Context const* ctx) -> vk::Result;
+		auto _construct(vk::DeviceSize size, BufferFlags flags) -> vk::Result;
+		Context const* context_{ nullptr };
+
+		Buffer buffer_;
+		std::atomic<vk::DeviceSize> offset_;
+	};
+
+	class ResourceLoader : public NonCopyable {
+	public:
+		using ImagePromise = std::promise<Result<Image>>;
+		using ImageFuture = std::future<Result<Image>>;
+
+		ResourceLoader(Context const* ctx = nullptr)
+			: context_{ ctx }
+			, staging_arenas_{ ctx ? ctx->get_allocator() : nullptr } {
+
+		}
+		~ResourceLoader() {}
+
+		ResourceLoader(ResourceLoader&& other)
+			: context_{ std::exchange(other.context_, nullptr) }
+			, staging_arenas_{ std::exchange(other.staging_arenas_, {}) } {
+		}
+
+		auto operator=(ResourceLoader&& other) -> ResourceLoader& {
+			context_ = std::exchange(other.context_, nullptr);
+			staging_arenas_ = std::exchange(other.staging_arenas_, {});
+			return *this;
+		}
+
+		static auto construct(Context const* ctx, vk::DeviceSize arena_size,uint32_t frames_in_flight) -> Result<ResourceLoader>;
+
+		auto load_image_from_memory(Span<uint8_t> image_data) -> Result<Image>;
+	private:
+		auto _construct(vk::DeviceSize arena_size, uint32_t frames_in_flight) -> vk::Result;
+
+		auto _load_image_from_stbi(Span<uint8_t> image_data) -> Result<Image>;
+		auto _load_image_from_ktx(Span<uint8_t> image_data) -> Result<Image>;
+
+		auto _allocate_staging_memory(vk::DeviceSize image_size) -> Result<BufferRange>;
 
 		Context const* context_{ nullptr };
-		vk::DeviceSize minimal_alignment_{ 1ull };
-		vk::DeviceSize block_size_{ k_uniform_pool_default_block_size };
-		Vector<Frame> arena_frames_;
+		Vector<BufferArena> staging_arenas_;
+
 	};
 
 	class Frame {
@@ -63,8 +96,7 @@ namespace edge::gfx {
 			: image_available_{ std::exchange(other.image_available_, nullptr) }
 			, rendering_finished_{ std::exchange(other.rendering_finished_, nullptr) }
 			, fence_{ std::exchange(other.fence_, nullptr) }
-			, command_buffer_{ std::exchange(other.command_buffer_, nullptr) }
-			, uniform_arena_{ std::exchange(other.uniform_arena_, nullptr) } {
+			, command_buffer_{ std::exchange(other.command_buffer_, nullptr) } {
 		}
 
 		auto operator=(Frame&& other) -> Frame& {
@@ -72,7 +104,6 @@ namespace edge::gfx {
 			rendering_finished_ = std::exchange(other.rendering_finished_, nullptr);
 			fence_ = std::exchange(other.fence_, nullptr);
 			command_buffer_ = std::exchange(other.command_buffer_, nullptr);
-			uniform_arena_ = std::exchange(other.uniform_arena_, nullptr);
 			return *this;
 		}
 
@@ -93,8 +124,6 @@ namespace edge::gfx {
 		Fence fence_;
 
 		CommandBuffer command_buffer_;
-
-		UniformArena uniform_arena_;
 	};
 
 	struct RendererCreateInfo {
@@ -146,6 +175,7 @@ namespace edge::gfx {
 
 		auto get_current_frame_index() const -> uint32_t { return frame_number_ % k_frame_overlap_; }
 		auto get_current_frame() const -> Frame const* { return frames_.data() + get_current_frame_index(); }
+		auto get_current_frame() -> Frame* { return frames_.data() + get_current_frame_index(); }
 
 		auto get_gpu_delta_time() const -> float { return gpu_delta_time_; }
 	private:
@@ -170,7 +200,7 @@ namespace edge::gfx {
 		static constexpr uint32_t k_frame_overlap_{ 2u };
 
 		vk::Semaphore acquired_senmaphore_{ VK_NULL_HANDLE };
-		Frame const* active_frame_{ nullptr };
+		Frame* active_frame_{ nullptr };
 		float delta_time_{ 0.0f };
 		float gpu_delta_time_{ 0.0f };
 	};
