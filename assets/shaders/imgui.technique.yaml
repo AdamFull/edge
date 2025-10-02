@@ -1,0 +1,13 @@
+name: imgui
+type: graphics
+source: imgui.slang
+output: spirv_1_4
+# TODO: May be add support for enable/disable reflection
+attachments:
+    - format: backbuffer
+      blending: true
+      src_color: src_alpha
+      dst_color: one_minus_src_alpha
+      src_alpha: one_nimus_src_alpha
+      dst_alpha: zero
+primitive_topology: triangle_list
