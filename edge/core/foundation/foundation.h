@@ -5,6 +5,9 @@
 #include <format>
 #include <span>
 
+#include <string>
+#include <fstream>
+
 #include <spdlog/spdlog.h>
 
 #ifndef EDGE_LOGGER_PATTERN
@@ -253,5 +256,134 @@ namespace edge {
             }
             return _instance;
         }
+    };
+
+    class BinaryWriter;
+
+    template<typename T>
+    concept Serializable = requires(const T & obj, BinaryWriter & writer) {
+        { obj.serialize(writer) } -> std::same_as<void>;
+    };
+
+    class BinaryWriter : public NonCopyMovable {
+    public:
+        explicit BinaryWriter(std::ofstream& stream) : stream_(stream) {}
+
+        // Write trivially copyable types
+        template<typename T>
+            requires std::is_trivially_copyable_v<T> && (!Serializable<T>)
+        void write(const T& value) {
+            stream_.write(reinterpret_cast<const char*>(&value), sizeof(T));
+        }
+
+        // Write custom serializable types
+        template<Serializable T>
+        void write(const T& value) {
+            value.serialize(*this);
+        }
+
+        // Write array of trivially copyable types
+        template<typename T>
+            requires std::is_trivially_copyable_v<T>
+        void write_array(const T* data, std::size_t count) {
+            stream_.write(reinterpret_cast<const char*>(data), count * sizeof(T));
+        }
+
+        // Write span
+        template<typename T>
+            requires std::is_trivially_copyable_v<T>
+        void write_span(std::span<const T> data) {
+            write_array(data.data(), data.size());
+        }
+
+        // Write vector of trivially copyable types
+        template<typename T>
+            requires std::is_trivially_copyable_v<T>
+        void write_vector(const std::vector<T>& vec) {
+            auto len = static_cast<std::uint32_t>(vec.size());
+            write(len);
+            write_array(vec.data(), vec.size());
+        }
+
+        // Write vector of serializable types
+        template<Serializable T>
+        void write_vector(const std::vector<T>& vec) {
+            auto len = static_cast<std::uint32_t>(vec.size());
+            write(len);
+            for (const auto& item : vec) {
+                write(item);
+            }
+        }
+
+        // Write string (with length prefix)
+        void write_string(const std::string& str) {
+            auto len = static_cast<std::uint32_t>(str.size());
+            write(len);
+            stream_.write(str.data(), str.size());
+        }
+
+        // Write string without length prefix
+        void write_string_raw(const std::string& str) {
+            stream_.write(str.data(), str.size());
+        }
+
+        // Write null-terminated string
+        void write_cstring(const char* str) {
+            stream_.write(str, std::strlen(str) + 1);
+        }
+
+        // Write bytes
+        void write_bytes(const void* data, std::size_t size) {
+            stream_.write(static_cast<const char*>(data), size);
+        }
+
+        // Endianness conversion helpers (C++23 <bit>)
+        template<typename T>
+            requires std::integral<T>
+        void write_le(T value) {
+            if constexpr (std::endian::native == std::endian::little) {
+                write(value);
+            }
+            else {
+                T swapped = std::byteswap(value);
+                write(swapped);
+            }
+        }
+
+        template<typename T>
+            requires std::integral<T>
+        void write_be(T value) {
+            if constexpr (std::endian::native == std::endian::big) {
+                write(value);
+            }
+            else {
+                T swapped = std::byteswap(value);
+                write(swapped);
+            }
+        }
+
+        // Positioning
+        std::streampos tell() const {
+            return stream_.tellp();
+        }
+
+        void seek(std::streampos pos) {
+            stream_.seekp(pos);
+        }
+
+        void seek_relative(std::streamoff offset) {
+            stream_.seekp(offset, std::ios::cur);
+        }
+
+        // Stream state
+        bool good() const { return stream_.good(); }
+        bool fail() const { return stream_.fail(); }
+        explicit operator bool() const { return good(); }
+
+        void flush() {
+            stream_.flush();
+        }
+    private:
+        std::ofstream& stream_;
     };
 }
