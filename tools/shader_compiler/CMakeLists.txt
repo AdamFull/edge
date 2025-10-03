@@ -12,7 +12,9 @@ endif()
 target_link_libraries(${PROJECT_NAME}
 	PRIVATE
 	argparse
+	ryml::ryml
 	Vulkan::Headers
 	spdlog::spdlog
 	slang::slang
+	ZSTD::ZSTD
 )

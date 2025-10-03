@@ -1,10 +1,10 @@
 #pragma once
 
+#ifdef __cplusplus
+
 #include <glm/glm.hpp>
 #include <glm/packing.hpp>
 #include <glm/gtx/compatibility.hpp>
-
-#ifdef __cplusplus
 
 using int8_t2 = glm::i8vec2;
 using int8_t3 = glm::i8vec3;

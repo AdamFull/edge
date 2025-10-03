@@ -279,6 +279,9 @@ endif()
 
 add_library(glm::glm ALIAS glm)
 
+# rapidyaml
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/rapidyaml")
+
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
     INTERFACE
@@ -295,4 +298,6 @@ target_link_libraries(${PROJECT_NAME}
     Vulkan::Headers
     volk::volk
     GPUOpen::VulkanMemoryAllocator
+
+    ryml::ryml
 )

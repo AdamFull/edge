@@ -1,13 +1,15 @@
 name: imgui
 type: graphics
 source: imgui.slang
-output: spirv_1_4
+profile: spirv_1_1
 # TODO: May be add support for enable/disable reflection
-attachments:
+color_blending:
+    attachments:
     - format: backbuffer
       blending: true
       src_color: src_alpha
       dst_color: one_minus_src_alpha
       src_alpha: one_nimus_src_alpha
       dst_alpha: zero
-primitive_topology: triangle_list
+input_assembly:
+    primitive_topology: triangle_list
