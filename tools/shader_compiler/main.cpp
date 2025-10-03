@@ -13,6 +13,7 @@
 
 #include <fstream>
 #include <filesystem>
+#include <optional>
 
 #include "../../edge/core/gfx/gfx_shader_effect.h"
 
@@ -37,7 +38,7 @@ struct TechniqueStage {
 	}
 };
 
-inline auto init_color_attachmenr(gfx::ColorAttachment& attachment) {
+inline auto init_color_attachment(gfx::ColorAttachment& attachment) {
 	attachment.blend_enable = 0;
 	attachment.src_color_blend_factor = static_cast<uint8_t>(vk::BlendFactor::eZero);
 	attachment.dst_color_blend_factor = static_cast<uint8_t>(vk::BlendFactor::eZero);
@@ -532,6 +533,7 @@ int main(int argc, char* argv[]) {
 
 	// Write technique data
 	writer.write_string(technique_name);
+	writer.write(static_cast<uint32_t>(pipeline_bind_point));
 
 	// Serialize shader stages
 	writer.write_vector(shader_stages);
