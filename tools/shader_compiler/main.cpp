@@ -97,11 +97,196 @@ inline auto init_pipeline_state_header(gfx::PipelineStateHeader& pipeline_state)
 	pipeline_state.stencil_state_back_compare_mask = 0;
 	pipeline_state.stencil_state_back_write_mask = 0;
 	pipeline_state.stencil_state_back_reference = 0;
-
+	
 	pipeline_state.color_blending_state_logic_op_enable = 0;
 	pipeline_state.color_blending_state_logic_op = static_cast<uint8_t>(vk::LogicOp::eClear);
 	pipeline_state.color_blending_state_attachment_count = 0;
 	memset(pipeline_state.color_blending_state_blend_constants, 0, sizeof(float) * 4ull);
+}
+
+inline auto parse_fill_mode(const std::string& mode) -> vk::PolygonMode {
+	static const std::unordered_map<std::string, vk::PolygonMode> map = {
+			{"fill", vk::PolygonMode::eFill},
+			{"line", vk::PolygonMode::eLine},
+			{"point", vk::PolygonMode::ePoint}
+	};
+	auto it = map.find(mode);
+	if (it == map.end()) {
+		spdlog::warn("Unknown polygon mode type: \"{}\".", mode);
+		return vk::PolygonMode::eFill;
+	}
+	return it->second;
+}
+
+inline auto parse_cull_mode(const std::string& mode) -> vk::CullModeFlags {
+	static const std::unordered_map<std::string, vk::CullModeFlags> map = {
+		{"none", vk::CullModeFlagBits::eNone},
+		{"front", vk::CullModeFlagBits::eFront},
+		{"back", vk::CullModeFlagBits::eBack},
+		{"front_and_back", vk::CullModeFlagBits::eFrontAndBack}
+	};
+	auto it = map.find(mode);
+	if (it == map.end()) {
+		spdlog::warn("Unknown cull mode type: \"{}\".", mode);
+		return vk::CullModeFlagBits::eNone;
+	}
+	return it->second;
+}
+
+inline auto parse_front_face(const std::string& mode) -> vk::FrontFace {
+	static const std::unordered_map<std::string, vk::FrontFace> map = {
+		{"ccw", vk::FrontFace::eCounterClockwise},
+		{"cw", vk::FrontFace::eClockwise}
+	};
+	auto it = map.find(mode);
+	if (it == map.end()) {
+		spdlog::warn("Unknown front face type: \"{}\".", mode);
+		return vk::FrontFace::eCounterClockwise;
+	}
+	return it->second;
+}
+
+inline auto parse_compare_op(const std::string& op) -> vk::CompareOp {
+	static const std::unordered_map<std::string, vk::CompareOp> map = {
+		{"never", vk::CompareOp::eNever},
+		{"less", vk::CompareOp::eLess},
+		{"equal", vk::CompareOp::eEqual},
+		{"less_or_equal", vk::CompareOp::eLessOrEqual},
+		{"greater", vk::CompareOp::eGreater},
+		{"not_equal", vk::CompareOp::eNotEqual},
+		{"greater_or_equal", vk::CompareOp::eGreaterOrEqual},
+		{"always", vk::CompareOp::eAlways}
+	};
+	auto it = map.find(op);
+	if (it == map.end()) {
+		spdlog::warn("Unknown compare op: \"{}\".", op);
+		return vk::CompareOp::eNever;
+	}
+	return it->second;
+}
+
+inline auto parse_stencil_op(const std::string& op) -> vk::StencilOp {
+	static const std::unordered_map<std::string, vk::StencilOp> map = {
+		{"keep", vk::StencilOp::eKeep},
+		{"zero", vk::StencilOp::eZero},
+		{"replace", vk::StencilOp::eReplace},
+		{"increment_and_clamp", vk::StencilOp::eIncrementAndClamp},
+		{"decrement_and_clamp", vk::StencilOp::eDecrementAndClamp},
+		{"invert", vk::StencilOp::eInvert},
+		{"increment_and_wrap", vk::StencilOp::eIncrementAndWrap},
+		{"decrement_and_wrap", vk::StencilOp::eDecrementAndWrap}
+	};
+	auto it = map.find(op);
+	if (it == map.end()) {
+		spdlog::warn("Unknown stencil op: \"{}\".", op);
+		return vk::StencilOp::eKeep;
+	}
+	return it->second;
+}
+
+inline auto parse_logic_op(const std::string& op) -> vk::LogicOp {
+	static const std::unordered_map<std::string, vk::LogicOp> map = {
+		{"clear", vk::LogicOp::eClear},
+		{"and", vk::LogicOp::eAnd},
+		{"and_reverse", vk::LogicOp::eAndReverse},
+		{"copy", vk::LogicOp::eCopy},
+		{"and_inverted", vk::LogicOp::eAndInverted},
+		{"no_op", vk::LogicOp::eNoOp},
+		{"xor", vk::LogicOp::eXor},
+		{"or", vk::LogicOp::eOr},
+		{"nor", vk::LogicOp::eNor},
+		{"equivalent", vk::LogicOp::eEquivalent},
+		{"invert", vk::LogicOp::eInvert},
+		{"or_reverse", vk::LogicOp::eOrReverse},
+		{"copy_inverted", vk::LogicOp::eCopyInverted},
+		{"or_inverted", vk::LogicOp::eOrInverted},
+		{"nand", vk::LogicOp::eNand},
+		{"set", vk::LogicOp::eSet}
+	};
+	auto it = map.find(op);
+	if (it == map.end()) {
+		spdlog::warn("Unknown logic op: \"{}\".", op);
+		return vk::LogicOp::eClear;
+	}
+	return it->second;
+}
+
+inline auto parse_blend_factor(const std::string& factor) -> vk::BlendFactor {
+	static const std::unordered_map<std::string, vk::BlendFactor> map = {
+		{"zero", vk::BlendFactor::eZero},
+		{"one", vk::BlendFactor::eOne},
+		{"src_color", vk::BlendFactor::eSrcColor},
+		{"one_minus_src_color", vk::BlendFactor::eOneMinusSrcColor},
+		{"dst_color", vk::BlendFactor::eDstColor},
+		{"one_minus_dst_color", vk::BlendFactor::eOneMinusDstColor},
+		{"src_alpha", vk::BlendFactor::eSrcAlpha},
+		{"one_minus_src_alpha", vk::BlendFactor::eOneMinusSrcAlpha},
+		{"dst_alpha", vk::BlendFactor::eDstAlpha},
+		{"one_minus_dst_alpha", vk::BlendFactor::eOneMinusDstAlpha},
+		{"constant_color", vk::BlendFactor::eConstantColor},
+		{"one_minus_constant_color", vk::BlendFactor::eOneMinusConstantColor},
+		{"constant_alpha", vk::BlendFactor::eConstantAlpha},
+		{"one_minus_constant_alpha", vk::BlendFactor::eOneMinusConstantAlpha},
+		{"src_alpha_saturate", vk::BlendFactor::eSrcAlphaSaturate}
+	};
+	auto it = map.find(factor);
+	if (it == map.end()) {
+		spdlog::warn("Unknown blend factor: \"{}\".", factor);
+		return vk::BlendFactor::eZero;
+	}
+	return it->second;
+}
+
+inline auto parse_blend_op(const std::string& op) -> vk::BlendOp {
+	static const std::unordered_map<std::string, vk::BlendOp> map = {
+		{"add", vk::BlendOp::eAdd},
+		{"subtract", vk::BlendOp::eSubtract},
+		{"reverse_subtract", vk::BlendOp::eReverseSubtract},
+		{"min", vk::BlendOp::eMin},
+		{"max", vk::BlendOp::eMax}
+	};
+	auto it = map.find(op);
+	if (it == map.end()) {
+		spdlog::warn("Unknown blend op: \"{}\".", op);
+		return vk::BlendOp::eAdd;
+	}
+	return it->second;
+}
+
+inline auto parse_primitive_topology(const std::string& topology) -> vk::PrimitiveTopology {
+	static const std::unordered_map<std::string, vk::PrimitiveTopology> map = {
+		{"point_list", vk::PrimitiveTopology::ePointList},
+		{"line_list", vk::PrimitiveTopology::eLineList},
+		{"line_strip", vk::PrimitiveTopology::eLineStrip},
+		{"triangle_list", vk::PrimitiveTopology::eTriangleList},
+		{"triangle_strip", vk::PrimitiveTopology::eTriangleStrip},
+		{"triangle_fan", vk::PrimitiveTopology::eTriangleFan},
+		{"line_list_with_adjacency", vk::PrimitiveTopology::eLineListWithAdjacency},
+		{"line_strip_with_adjacency", vk::PrimitiveTopology::eLineStripWithAdjacency},
+		{"triangle_list_with_adjacency", vk::PrimitiveTopology::eTriangleListWithAdjacency},
+		{"triangle_strip_with_adjacency", vk::PrimitiveTopology::eTriangleStripWithAdjacency},
+		{"patch_list", vk::PrimitiveTopology::ePatchList}
+	};
+	auto it = map.find(topology);
+	if (it == map.end()) {
+		spdlog::warn("Unknown primitive topology: \"{}\".", topology);
+		return vk::PrimitiveTopology::ePointList;
+	}
+	return it->second;
+}
+
+inline auto parse_pipeline_bind_point(const std::string& bind_point) -> vk::PipelineBindPoint {
+	static const std::unordered_map<std::string, vk::PipelineBindPoint> map = {
+		{"graphics", vk::PipelineBindPoint::eGraphics},
+		{"compute", vk::PipelineBindPoint::eCompute},
+		{"ray_tracing", vk::PipelineBindPoint::eRayTracingKHR}
+	};
+	auto it = map.find(bind_point);
+	if (it == map.end()) {
+		spdlog::warn("Unknown pipeline type: \"{}\".", bind_point);
+		return vk::PipelineBindPoint::eGraphics;
+	}
+	return it->second;
 }
 
 // TODO: write pipeline state parsing from yaml
@@ -373,46 +558,345 @@ int main(int argc, char* argv[]) {
 	auto root = techniaue_tree.rootref();
 
 	if (root.has_child("name")) {
-		ryml::csubstr name_value = root["name"].val();
-		technique_name = std::string(name_value.data(), name_value.size());
+		root["name"] >> technique_name;
 	}
 
-	std::string pipeline_type_str{ "unknown" };
-	if (!root.has_child("type")) {
+	if (root.has_child("type")) {
+		std::string pipeline_type_str{ "unknown" };
+		root["type"] >> pipeline_type_str;
+		pipeline_bind_point = parse_pipeline_bind_point(pipeline_type_str);
+	}
+	else {
 		spdlog::critical("Required parameter \"type\" is not set in \"{}\" technique description.", technique_name);
 		return 3;
 	}
 
-	ryml::csubstr pipeline_type_value = root["type"].val();
-	pipeline_type_str = std::string(pipeline_type_value.data(), pipeline_type_value.size());
-
-	// Parse pipeline type
-	if (pipeline_type_str.compare("graphics") == 0) {
-		pipeline_bind_point = vk::PipelineBindPoint::eGraphics;
-	}
-	else if (pipeline_type_str.compare("compute") == 0) {
-		pipeline_bind_point = vk::PipelineBindPoint::eCompute;
-	}
-	else if (pipeline_type_str.compare("ray_tracing") == 0) {
-		pipeline_bind_point = vk::PipelineBindPoint::eRayTracingKHR;
+	std::string source_file_name_str{};
+	if (root.has_child("source")) {
+		root["source"] >> source_file_name_str;
 	}
 	else {
-		spdlog::critical("Unknown type \"{}\" is set \"{}\" in technique description.", pipeline_type_str, technique_name);
-	}
-
-	if (!root.has_child("source")) {
 		spdlog::critical("Required parameter \"source\" is not set in \"{}\" technique description.", technique_name);
 		return 3;
 	}
 
 	std::string compiler_profile{ "spirv_1_4" };
 	if (root.has_child("profile")) {
-		ryml::csubstr value = root["profile"].val();
-		compiler_profile = std::string(value.data(), value.size());
+		root["profile"] >> compiler_profile;
 	}
 
-	ryml::csubstr source_value = root["source"].val();
-	auto source_file_name_str = std::string(source_value.data(), source_value.size());
+	if (root.has_child("tessellation")) {
+		auto tess = root["tessellation"];
+		if (tess.has_child("control_points")) {
+			uint32_t tessellation_controll_points{ 0u };
+			tess["control_points"] >> tessellation_controll_points;
+
+			pipeline_state.tessellation_state_control_points = static_cast<uint8_t>(tessellation_controll_points);
+		}
+	}
+
+	if (root.has_child("rasterization")) {
+		auto rast = root["rasterization"];
+		
+		if (rast.has_child("clamp_enable")) {
+			bool clamp_enable = false;
+			rast["clamp_enable"] >> clamp_enable;
+			pipeline_state.rasterization_state_depth_clamp_enable = static_cast<uint8_t>(clamp_enable);
+		}
+
+		if (rast.has_child("discard_enable")) {
+			bool discard_enable = false;
+			rast["discard_enable"] >> discard_enable;
+			pipeline_state.rasterization_state_discard_enable = static_cast<uint8_t>(discard_enable);
+		}
+
+		if (rast.has_child("polygon_mode")) {
+			std::string polygon_mode_str;
+			rast["polygon_mode"] >> polygon_mode_str;
+			pipeline_state.rasterization_state_polygon_mode = static_cast<uint8_t>(parse_fill_mode(polygon_mode_str));
+		}
+
+		if (rast.has_child("cull_mode")) {
+			std::string cull_mode_str;
+			rast["cull_mode"] >> cull_mode_str;
+			pipeline_state.rasterization_state_cull_mode = static_cast<uint32_t>(parse_cull_mode(cull_mode_str));
+		}
+
+		if (rast.has_child("front_face")) {
+			std::string front_face_str;
+			rast["front_face"] >> front_face_str;
+			pipeline_state.rasterization_state_front_face = static_cast<uint8_t>(parse_front_face(front_face_str));
+		}
+		if (rast.has_child("depth_bias_enable")) {
+			bool depth_bias_enable = false;
+			rast["depth_bias_enable"] >> depth_bias_enable;
+			pipeline_state.rasterization_state_depth_bias_enable = static_cast<uint8_t>(depth_bias_enable);
+
+			if (depth_bias_enable) {
+				if (rast.has_child("depth_bias_constant_factor")) {
+					rast["depth_bias_constant_factor"] >> pipeline_state.rasterization_state_depth_bias_constant_factor;
+				}
+
+				if (rast.has_child("depth_bias_clamp")) {
+					rast["depth_bias_clamp"] >> pipeline_state.rasterization_state_depth_bias_clamp;
+				}
+
+				if (rast.has_child("depth_bias_slope_factor")) {
+					rast["depth_bias_slope_factor"] >> pipeline_state.rasterization_state_depth_bias_slope_factor;
+				}
+			}
+		}
+		
+		if (rast.has_child("line_width")) {
+			rast["line_width"] >> pipeline_state.rasterization_state_line_width;
+		}
+	}
+
+	if (root.has_child("multisample")) {
+		auto ms = root["multisample"];
+
+		if (ms.has_child("sample_count")) {
+			uint32_t sample_count = 1;
+			ms["sample_count"] >> sample_count;
+			pipeline_state.multisample_state_sample_count = static_cast<uint8_t>(sample_count);
+		}
+
+		if (ms.has_child("sample_shading_enable")) {
+			bool sample_shading_enable = false;
+			ms["sample_shading_enable"] >> sample_shading_enable;
+		}
+
+		if (ms.has_child("min_sample_shading")) {
+			ms["min_sample_shading"] >> pipeline_state.multisample_state_min_sample_shading;
+		}
+
+		// TODO: it should be array with the same size as sample_count
+		if (ms.has_child("sample_mask")) { 
+			ms["sample_mask"] >> pipeline_state.multisample_state_sample_mask; 
+		}
+
+		if (ms.has_child("alpha_to_coverage_enable")) {
+			bool alpha_to_coverage = false;
+			ms["alpha_to_coverage_enable"] >> alpha_to_coverage;
+			pipeline_state.multisample_state_alpha_to_coverage_enable = static_cast<uint8_t>(alpha_to_coverage);
+		}
+
+		if (ms.has_child("alpha_to_one_enable")) {
+			bool alpha_to_one = false;
+			ms["alpha_to_one_enable"] >> alpha_to_one;
+			pipeline_state.multisample_state_alpha_to_one_enable = static_cast<uint8_t>(alpha_to_one);
+		}
+	}
+
+	if (root.has_child("depth_stencil")) {
+		auto ds = root["depth_stencil"];
+
+		if (ds.has_child("depth_test_enable")) {
+			bool depth_test = false;
+			ds["depth_test_enable"] >> depth_test;
+			pipeline_state.depth_state_depth_test_enable = static_cast<uint8_t>(depth_test);
+		}
+		
+		if (ds.has_child("depth_write_enable")) {
+			bool depth_write = false;
+			ds["depth_write_enable"] >> depth_write;
+			pipeline_state.depth_state_depth_write_enable = static_cast<uint8_t>(depth_write);
+		}
+
+		if (ds.has_child("compare_op")) {
+			std::string compare_op_str;
+			ds["compare_op"] >> compare_op_str;
+			pipeline_state.depth_state_depth_compare_op = static_cast<uint8_t>(parse_compare_op(compare_op_str));
+		}
+
+		if (ds.has_child("bounds_test_enable")) { 
+			bool bounds_test = false;
+			ds["bounds_test_enable"] >> bounds_test; 
+			pipeline_state.depth_state_depth_bounds_test_enable = static_cast<uint8_t>(bounds_test);
+
+			if (bounds_test) {
+				if (ds.has_child("min_depth_bounds")) {
+					ds["min_depth_bounds"] >> pipeline_state.depth_state_min_depth_bounds;
+				}
+
+				if (ds.has_child("max_depth_bounds")) {
+					ds["max_depth_bounds"] >> pipeline_state.depth_state_max_depth_bounds;
+				}
+			}
+		}
+
+		if (ds.has_child("stencil_test_enable")) {
+			bool stencil_test = false;
+			ds["stencil_test_enable"] >> stencil_test;
+			pipeline_state.stencil_state_stencil_test_enable = static_cast<uint8_t>(stencil_test);
+
+			if (stencil_test) {
+				if (ds.has_child("front_fail_op")) {
+					std::string front_fail_str;
+					ds["front_fail_op"] >> front_fail_str;
+					pipeline_state.stencil_state_front_fail_op = static_cast<uint8_t>(parse_stencil_op(front_fail_str));
+				}
+
+				if (ds.has_child("front_pass_op")) {
+					std::string front_pass_str;
+					ds["front_pass_op"] >> front_pass_str;
+					pipeline_state.stencil_state_front_pass_op = static_cast<uint8_t>(parse_stencil_op(front_pass_str));
+				}
+
+				if (ds.has_child("front_depth_fail_op")) {
+					std::string front_depth_fail_str;
+					ds["front_depth_fail_op"] >> front_depth_fail_str;
+					pipeline_state.stencil_state_front_depth_fail_op = static_cast<uint8_t>(parse_stencil_op(front_depth_fail_str));
+				}
+
+				if (ds.has_child("front_compare_op")) {
+					std::string front_compare_str;
+					ds["front_compare_op"] >> front_compare_str;
+					pipeline_state.stencil_state_front_compare_op = static_cast<uint8_t>(parse_compare_op(front_compare_str));
+				}
+
+				if (ds.has_child("front_compare_mask")) {
+					ds["front_compare_mask"] >> pipeline_state.stencil_state_front_compare_mask;
+				}
+
+				if (ds.has_child("front_write_mask")) {
+					uint32_t front_write_mask = 0;
+					ds["front_write_mask"] >> pipeline_state.stencil_state_front_write_mask;
+				}
+
+				if (ds.has_child("front_reference")) {
+					ds["front_reference"] >> pipeline_state.stencil_state_front_reference;
+				}
+
+				if (ds.has_child("back_fail_op")) {
+					std::string back_fail_str;
+					ds["back_fail_op"] >> back_fail_str;
+					pipeline_state.stencil_state_back_fail_op = static_cast<uint8_t>(parse_stencil_op(back_fail_str));
+				}
+
+				if (ds.has_child("back_pass_op")) {
+					std::string back_pass_str;
+					ds["back_pass_op"] >> back_pass_str;
+					pipeline_state.stencil_state_back_pass_op = static_cast<uint8_t>(parse_stencil_op(back_pass_str));
+				}
+
+				if (ds.has_child("back_depth_fail_op")) {
+					std::string back_depth_fail_str;
+					ds["back_depth_fail_op"] >> back_depth_fail_str;
+					pipeline_state.stencil_state_back_depth_fail_op = static_cast<uint8_t>(parse_stencil_op(back_depth_fail_str));
+				}
+
+				if (ds.has_child("back_compare_op")) {
+					std::string back_compare_str;
+					ds["back_compare_op"] >> back_compare_str;
+					pipeline_state.stencil_state_back_compare_op = static_cast<uint8_t>(parse_compare_op(back_compare_str));
+				}
+
+				if (ds.has_child("back_compare_mask")) {
+					ds["back_compare_mask"] >> pipeline_state.stencil_state_back_compare_mask;
+				}
+
+				if (ds.has_child("back_write_mask")) {
+					ds["back_write_mask"] >> pipeline_state.stencil_state_back_write_mask;
+				}
+
+				if (ds.has_child("back_reference")) {
+					ds["back_reference"] >> pipeline_state.stencil_state_back_reference;
+				}
+			}
+		}
+	}
+
+	if (root.has_child("color_blending")) {
+		auto cb = root["color_blending"];
+
+		if (cb.has_child("logic_op_enable")) {
+			bool logic_op_enable = false;
+			cb["logic_op_enable"] >> logic_op_enable;
+			pipeline_state.color_blending_state_logic_op_enable = static_cast<uint8_t>(logic_op_enable);
+		}
+
+		if (cb.has_child("logic_op")) {
+			std::string logic_op_str;
+			cb["logic_op"] >> logic_op_str;
+			pipeline_state.color_blending_state_logic_op = static_cast<uint8_t>(parse_logic_op(logic_op_str));
+		}
+
+		if (cb.has_child("attachments")) {
+			auto attachments = cb["attachments"];
+			for (auto attachment : attachments) {
+				gfx::ColorAttachment gfx_attachment{};
+				init_color_attachment(gfx_attachment);
+
+				if (attachment.has_child("blending")) {
+					bool blending = false;
+					attachment["blending"] >> blending;
+					gfx_attachment.blend_enable = static_cast<uint8_t>(blending);
+
+					if (attachment.has_child("src_color")) {
+						std::string src_color_str;
+						attachment["src_color"] >> src_color_str;
+						gfx_attachment.src_color_blend_factor = static_cast<uint8_t>(parse_blend_factor(src_color_str));
+					}
+
+					if (attachment.has_child("dst_color")) {
+						std::string dst_color_str;
+						attachment["dst_color"] >> dst_color_str;
+						gfx_attachment.dst_color_blend_factor = static_cast<uint8_t>(parse_blend_factor(dst_color_str));
+					}
+
+					if (attachment.has_child("color_blend_op")) {
+						std::string color_blend_op_str;
+						attachment["color_blend_op"] >> color_blend_op_str;
+						gfx_attachment.color_blend_op = static_cast<uint8_t>(parse_blend_op(color_blend_op_str));
+					}
+
+					if (attachment.has_child("src_alpha")) {
+						std::string src_alpha_str;
+						attachment["src_alpha"] >> src_alpha_str;
+						gfx_attachment.src_alpha_blend_factor = static_cast<uint8_t>(parse_blend_factor(src_alpha_str));
+					}
+
+					if (attachment.has_child("dst_alpha")) {
+						std::string dst_alpha_str;
+						attachment["dst_alpha"] >> dst_alpha_str;
+						gfx_attachment.dst_alpha_blend_factor = static_cast<uint8_t>(parse_blend_factor(dst_alpha_str));
+					}
+
+					if (attachment.has_child("alpha_blend_op")) {
+						std::string alpha_blend_op_str;
+						attachment["alpha_blend_op"] >> alpha_blend_op_str;
+						gfx_attachment.alpha_blend_op = static_cast<uint8_t>(parse_blend_op(alpha_blend_op_str));
+					}
+
+					if (attachment.has_child("color_write_mask")) {
+						uint32_t color_write_mask = 0u;
+						attachment["color_write_mask"] >> color_write_mask;
+						gfx_attachment.color_write_mask = color_write_mask;
+					}
+				}
+
+				color_attachments.push_back(gfx_attachment);
+			}
+		}
+	}
+
+	if (root.has_child("input_assembly")) {
+		auto ia = root["input_assembly"];
+
+		if (ia.has_child("primitive_topology")) {
+			std::string topology_str;
+			ia["primitive_topology"] >> topology_str;
+			pipeline_state.input_assembly_state_primitive_topology = static_cast<uint8_t>(parse_primitive_topology(topology_str));
+		}
+
+		if (ia.has_child("primitive_restart")) {
+			bool primitive_restart = false;
+			ia["primitive_restart"] >> primitive_restart;
+			pipeline_state.input_assembly_state_primitive_restart_enable = static_cast<uint8_t>(primitive_restart);
+		}
+	}
+
 	auto source_module_path = std::filesystem::path(g_session.input).parent_path() / source_file_name_str;
 	auto source_module_path_string = source_module_path.string();
 
