@@ -2,8 +2,12 @@ name: imgui
 type: graphics
 source: imgui.slang
 profile: spirv_1_1
-# TODO: May be add support for enable/disable reflection
+rasterization:
+    cull_mode: back
+    front_face: ccw
 color_blending:
+    logic_op_enable: false
+    logic_op: clear
     attachments:
     - format: backbuffer
       blending: true
