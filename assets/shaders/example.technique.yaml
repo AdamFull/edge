@@ -1,0 +1,431 @@
+# Pipeline Configuration Example & Documentation
+
+# name: Unique identifier for this pipeline configuration
+# Used to reference this pipeline in your application
+name: example
+
+# type: Specifies the pipeline type
+# Available types:
+#   - graphics: For rendering operations (vertex, fragment, geometry shaders)
+#   - compute: For compute shader operations (parallel processing, GPU calculations)
+# Default: graphics
+type: graphics
+
+# source: Local file path to the shader source code
+# Can contain multiple shader stages (vertex, fragment, etc.) in a single file
+# Supports format .slang
+source: example.slang
+
+# profile: Compiler profile/target for the shader compiler
+# Specifies the output format and feature level
+# Common values: spirv_1_0, spirv_1_1, spirv_1_3, spirv_1_5, spirv_1_6
+# Default: spirv_1_0
+profile: spirv_1_1
+
+# ============================================================================
+# GRAPHICS PIPELINE STATE (only used when type is graphics)
+# ============================================================================
+
+# ----------------------------------------------------------------------------
+# TESSELLATION STATE
+# Controls tessellation shader behavior for subdividing primitives
+# ----------------------------------------------------------------------------
+tessellation:
+    # control_points: Number of control points per patch
+    # Valid range: 1-32 (hardware dependent, commonly up to 32)
+    # Used by tessellation control shader to define patch size
+    # Example: 4 for quad patches, 3 for triangle patches
+    control_points: 4
+
+# ----------------------------------------------------------------------------
+# RASTERIZATION STATE
+# Controls how primitives are rasterized into fragments
+# ----------------------------------------------------------------------------
+rasterization:
+    # clamp_enable: Enable depth clamping instead of clipping
+    # - true: Clamp depth values to [0,1] range (useful for shadow mapping)
+    # - false: Clip primitives outside the depth range
+    # Default: false
+    clamp_enable: false
+
+    # discard_enable: Disable rasterization (primitives are discarded)
+    # - true: Primitives don't produce fragments (useful for transform feedback only)
+    # - false: Normal rasterization occurs
+    # Default: false
+    discard_enable: false
+
+    # polygon_mode: How polygons are rasterized
+    # Available types:
+    #   - fill: Solid filled polygons (standard rendering)
+    #   - line: Wireframe mode (edges only)
+    #   - point: Vertices only (point cloud)
+    # Default: fill
+    polygon_mode: fill
+
+    # cull_mode: Which face(s) of polygons to cull (not render)
+    # Available types:
+    #   - none: Render both front and back faces
+    #   - back: Cull back-facing polygons (most common for opaque objects)
+    #   - front: Cull front-facing polygons (useful for inside-out rendering)
+    #   - front_and_back: Cull all polygons (effectively disables rendering)
+    # Default: none
+    cull_mode: back
+
+    # front_face: Winding order that defines front-facing polygons
+    # Available types:
+    #   - ccw (Counter Clockwise): Vertices ordered counter-clockwise = front face
+    #   - cw (Clockwise): Vertices ordered clockwise = front face
+    # Default: ccw
+    # Note: Affects cull_mode and front/back face determination
+    front_face: ccw
+
+    # depth_bias_enable: Enable depth bias (offset) for polygons
+    # - true: Apply depth bias (useful for shadow mapping to prevent z-fighting)
+    # - false: No depth bias applied
+    # Default: false
+    depth_bias_enable: false
+
+    # depth_bias_constant_factor: Constant depth bias added to each fragment
+    # Measured in depth buffer units
+    # Higher values push geometry further away from camera
+    # Default: 0.0
+    depth_bias_constant_factor: 0.0
+
+    # depth_bias_clamp: Maximum depth bias value (clamps the bias)
+    # Prevents extreme depth bias values
+    # 0.0 means no clamping
+    # Default: 0.0
+    depth_bias_clamp: 0.0
+
+    # depth_bias_slope_factor: Depth bias proportional to polygon slope
+    # Multiplied by polygon slope before adding to fragment depth
+    # Useful for angled surfaces in shadow mapping
+    # Default: 0.0
+    depth_bias_slope_factor: 0.0
+
+    # line_width: Width of rasterized lines (in pixels)
+    # Only used when polygon_mode is 'line' or for line primitives
+    # Values > 1.0 may require wide lines support
+    # Default: 1.0
+    line_width: 1.0
+
+# ----------------------------------------------------------------------------
+# MULTISAMPLE STATE
+# Controls anti-aliasing through multisampling (MSAA)
+# ----------------------------------------------------------------------------
+multisample:
+    # sample_count: Number of samples per pixel for MSAA
+    # Available values: 1, 2, 4, 8, 16, 32, 64
+    # Higher values = better quality but lower performance
+    # Must be supported by your render target
+    # 1 = no multisampling (disabled)
+    # Default: 1
+    sample_count: 4
+
+    # sample_shading_enable: Enable per-sample shading instead of per-fragment
+    # - true: Run fragment shader for each sample (higher quality, slower)
+    # - false: Run fragment shader once per fragment (faster)
+    # Default: false
+    sample_shading_enable: false
+
+    # min_sample_shading: Minimum fraction of samples to shade per fragment
+    # Range: 0.0 to 1.0
+    # Only used when sample_shading_enable is true
+    # 0.0 = shader runs once per fragment
+    # 1.0 = shader runs for all samples
+    # Default: 0.0
+    min_sample_shading: 0
+
+    # sample_mask: Bitmask controlling which samples are written
+    # If declared, array length must equal sample_count
+    # Each element is a 32-bit mask for coverage control
+    # 0x00000000 = all samples masked (disabled)
+    # 0xFFFFFFFF = all samples enabled
+    # Optional: Omit this field to enable all samples
+    sample_mask:
+        - 0x00000000
+        - 0x00000000
+        - 0x00000000
+        - 0x00000000
+
+    # alpha_to_coverage_enable: Generate coverage mask from alpha channel
+    # - true: Use fragment shader alpha output to generate sample coverage
+    #   (useful for transparency with MSAA)
+    # - false: Coverage not affected by alpha
+    # Default: false
+    alpha_to_coverage_enable: false
+
+    # alpha_to_one_enable: Force alpha channel to 1.0 after alpha-to-coverage
+    # - true: Alpha is set to maximum value (opaque)
+    # - false: Alpha remains unchanged
+    # Default: false
+    alpha_to_one_enable: false
+
+# ----------------------------------------------------------------------------
+# DEPTH STENCIL STATE
+# Controls depth testing, depth writing, and stencil operations
+# ----------------------------------------------------------------------------
+depth_stencil:
+    # depth_test_enable: Enable depth testing
+    # - true: Compare fragment depth against depth buffer
+    # - false: All fragments pass (depth ignored)
+    # Default: false
+    depth_test_enable: false
+
+    # depth_write_enable: Enable writing to depth buffer
+    # - true: Fragments update depth buffer when they pass
+    # - false: Depth buffer is read-only
+    # Default: false
+    # Note: Can be false even when depth_test_enable is true (depth-test-only mode)
+    depth_write_enable: false
+
+    # compare_op: Depth comparison operation
+    # Determines when fragments pass the depth test
+    # Available types:
+    #   - never: Fragments never pass (effectively disables rendering)
+    #   - less: Pass if fragment depth < buffer depth (most common for opaque)
+    #   - equal: Pass if fragment depth == buffer depth
+    #   - less_or_equal: Pass if fragment depth <= buffer depth
+    #   - greater: Pass if fragment depth > buffer depth (for reverse Z)
+    #   - not_equal: Pass if fragment depth != buffer depth
+    #   - greater_or_equal: Pass if fragment depth >= buffer depth
+    #   - always: Fragments always pass (effectively disables depth test)
+    # Default: never
+    compare_op: never
+
+    # bounds_test_enable: Enable depth bounds testing
+    # - true: Fragments outside [min_depth_bounds, max_depth_bounds] are discarded
+    # - false: No bounds testing
+    # Default: false
+    bounds_test_enable: false
+
+    # min_depth_bounds: Minimum depth for bounds test
+    # Range: 0.0 to 1.0
+    # Fragments with depth < this value are discarded (if bounds_test_enable)
+    # Default: 0.0
+    min_depth_bounds: 0.0
+
+    # max_depth_bounds: Maximum depth for bounds test
+    # Range: 0.0 to 1.0
+    # Fragments with depth > this value are discarded (if bounds_test_enable)
+    # Default: 1.0
+    max_depth_bounds: 1.0
+
+    # stencil_test_enable: Enable stencil testing
+    # - true: Perform stencil operations and testing
+    # - false: Stencil buffer is ignored
+    # Default: false
+    stencil_test_enable: false
+    
+    # ---- FRONT FACE STENCIL OPERATIONS ----
+    # Operations for front-facing polygons
+
+    # front_fail_op: Stencil operation when stencil test fails
+    # Available types:
+    #   - keep: Keep existing stencil value (no change)
+    #   - zero: Set stencil value to 0
+    #   - replace: Replace with reference value
+    #   - increment_and_clamp: Increment, clamp at maximum
+    #   - decrement_and_clamp: Decrement, clamp at 0
+    #   - invert: Bitwise invert stencil value
+    #   - increment_and_wrap: Increment with wraparound
+    #   - decrement_and_wrap: Decrement with wraparound
+    # Default: keep
+    front_fail_op: keep
+
+    # front_pass_op: Stencil operation when both stencil and depth tests pass
+    # Available types: (same as front_fail_op)
+    # Default: keep
+    front_pass_op: keep
+
+    # front_depth_fail_op: Stencil operation when stencil passes but depth fails
+    # Available types: (same as front_fail_op)
+    # Default: keep
+    front_depth_fail_op: keep
+
+    # front_compare_op: Stencil comparison operation
+    # Available types:
+    #   - never: Test never passes
+    #   - less: Pass if (ref & compare_mask) < (stencil & compare_mask)
+    #   - equal: Pass if (ref & compare_mask) == (stencil & compare_mask)
+    #   - less_or_equal: Pass if (ref & compare_mask) <= (stencil & compare_mask)
+    #   - greater: Pass if (ref & compare_mask) > (stencil & compare_mask)
+    #   - not_equal: Pass if (ref & compare_mask) != (stencil & compare_mask)
+    #   - greater_or_equal: Pass if (ref & compare_mask) >= (stencil & compare_mask)
+    #   - always: Test always passes
+    # Default: never
+    front_compare_op: never
+
+    # front_compare_mask: Bitmask for stencil comparison
+    # ANDed with both reference and stencil values before comparison
+    # 0xFF = compare all bits, 0x00 = comparison always passes
+    # Default: 0
+    front_compare_mask: 0
+
+    # front_write_mask: Bitmask for stencil write operations
+    # Controls which bits can be written by stencil operations
+    # 0xFF = all bits writable, 0x00 = stencil buffer read-only
+    # Default: 0
+    front_write_mask: 0
+
+    # front_reference: Reference value for stencil comparison
+    # Used in stencil test comparison and potentially written to buffer
+    # Range: 0-255 (8-bit value)
+    # Default: 0
+    front_reference: 0
+
+    # ---- BACK FACE STENCIL OPERATIONS ----
+    # Operations for back-facing polygons (same options as front face)
+    
+    back_fail_op: keep
+    back_pass_op: keep
+    back_depth_fail_op: keep
+    back_compare_op: never
+    back_compare_mask: 0
+    back_write_mask: 0
+    back_reference: 0
+
+# ----------------------------------------------------------------------------
+# COLOR BLENDING STATE
+# Controls how fragment colors are blended with framebuffer colors
+# ----------------------------------------------------------------------------
+color_blending:
+    # logic_op_enable: Enable logical operations instead of blending
+    # - true: Use logical operations (AND, OR, XOR, etc.) - disables blending
+    # - false: Use standard blending operations
+    # Default: false
+    # Note: Cannot be used simultaneously with blending
+    logic_op_enable: false
+
+    # logic_op: Logical operation to apply between source and destination
+    # Available types:
+    #   - clear: Result = 0 (all bits cleared)
+    #   - and: Result = src & dst (bitwise AND)
+    #   - and_reverse: Result = src & ~dst
+    #   - copy: Result = src (copy source)
+    #   - and_inverted: Result = ~src & dst
+    #   - no_op: Result = dst (no operation, keep destination)
+    #   - xor: Result = src ^ dst (bitwise XOR)
+    #   - or: Result = src | dst (bitwise OR)
+    #   - nor: Result = ~(src | dst) (bitwise NOR)
+    #   - equivalent: Result = ~(src ^ dst) (bitwise equivalence)
+    #   - invert: Result = ~dst (invert destination)
+    #   - or_reverse: Result = src | ~dst
+    #   - copy_inverted: Result = ~src (inverted source)
+    #   - or_inverted: Result = ~src | dst
+    #   - nand: Result = ~(src & dst) (bitwise NAND)
+    #   - set: Result = all bits set (0xFFFFFFFF)
+    # Default: clear
+    logic_op: clear
+    
+    # attachments: Array of color attachment blending configurations
+    # One entry per render target (color attachment)
+    attachments:
+    - 
+      # format: Target format identifier
+      # 'backbuffer' is a special identifier for the main framebuffer
+      # Can also specify explicit formats like: rgba8, rgba16f, etc.
+      format: backbuffer
+
+      # blending: Enable color blending for this attachment
+      # - true: Blend fragment color with framebuffer color using blend equations
+      # - false: Replace framebuffer color with fragment color (overwrite)
+      # Default: false
+      blending: true
+
+      # --- COLOR BLENDING EQUATION ---
+      # Final color = (src_color * srcColor) [color_blend_op] (dst_color * dstColor)
+      
+      # src_color: Source color blend factor
+      # Available types:
+      #   - zero: Factor = (0,0,0,0)
+      #   - one: Factor = (1,1,1,1)
+      #   - src_color: Factor = source color
+      #   - one_minus_src_color: Factor = (1,1,1,1) - source color
+      #   - dst_color: Factor = destination color
+      #   - one_minus_dst_color: Factor = (1,1,1,1) - destination color
+      #   - src_alpha: Factor = (src.a, src.a, src.a, src.a)
+      #   - one_minus_src_alpha: Factor = (1-src.a, 1-src.a, 1-src.a, 1-src.a)
+      #   - dst_alpha: Factor = (dst.a, dst.a, dst.a, dst.a)
+      #   - one_minus_dst_alpha: Factor = (1-dst.a, 1-dst.a, 1-dst.a, 1-dst.a)
+      #   - constant_color: Factor = blend constant color
+      #   - one_minus_constant_color: Factor = (1,1,1,1) - blend constant
+      #   - constant_alpha: Factor = (blend_const.a, ..., blend_const.a)
+      #   - one_minus_constant_alpha: Factor = (1-blend_const.a, ..., 1-blend_const.a)
+      #   - src_alpha_saturate: Factor = (min(src.a, 1-dst.a), ..., 1)
+      # Default: zero
+      src_color: src_alpha
+      
+      # dst_color: Destination color blend factor
+      # Available types: (same as src_color)
+      # Default: zero
+      dst_color: one_minus_src_alpha
+
+      # color_blend_op: Operation for combining source and destination colors
+      # Available types:
+      #   - add: Result = src + dst (standard blending)
+      #   - subtract: Result = src - dst
+      #   - reverse_subtract: Result = dst - src
+      #   - min: Result = min(src, dst) (component-wise)
+      #   - max: Result = max(src, dst) (component-wise)
+      # Default: add
+      color_blend_op: add
+
+      # --- ALPHA BLENDING EQUATION ---
+      # Final alpha = (src_alpha * srcAlpha) [alpha_blend_op] (dst_alpha * dstAlpha)
+
+      # src_alpha: Source alpha blend factor
+      # Available types: (same as src_color)
+      # Default: zero
+      # Note: Typo in original (one_nimus_src_alpha) - should be one_minus_src_alpha
+      src_alpha: one_nimus_src_alpha
+
+      # dst_alpha: Destination alpha blend factor
+      # Available types: (same as src_color)
+      # Default: zero
+      dst_alpha: zero
+
+      # alpha_blend_op: Operation for combining source and destination alpha
+      # Available types: (same as color_blend_op)
+      # Default: add
+      alpha_blend_op: add
+
+      # Note: Common blending modes:
+      # - Standard alpha blending (transparency):
+      #   src_color: src_alpha, dst_color: one_minus_src_alpha
+      #   src_alpha: one, dst_alpha: one_minus_src_alpha
+      # - Additive blending (lights, particles):
+      #   src_color: one, dst_color: one
+      # - Multiplicative blending (modulation):
+      #   src_color: dst_color, dst_color: zero
+      # - Premultiplied alpha:
+      #   src_color: one, dst_color: one_minus_src_alpha
+
+# ----------------------------------------------------------------------------
+# INPUT ASSEMBLY STATE
+# Controls how vertices are assembled into primitives
+# ----------------------------------------------------------------------------
+input_assembly:
+    # primitive_topology: Type of primitives to assemble from vertices
+    # Available types:
+    #   - point_list: Each vertex is a separate point
+    #   - line_list: Every 2 vertices form a line (v0-v1, v2-v3, ...)
+    #   - line_strip: Connected lines (v0-v1, v1-v2, v2-v3, ...)
+    #   - triangle_list: Every 3 vertices form a triangle (v0-v1-v2, v3-v4-v5, ...)
+    #   - triangle_strip: Connected triangles sharing edges (v0-v1-v2, v1-v2-v3, ...)
+    #   - triangle_fan: Triangles sharing first vertex (v0-v1-v2, v0-v2-v3, ...)
+    #   - line_list_with_adjacency: Lines with adjacent vertices (4 vertices per line)
+    #   - line_strip_with_adjacency: Line strip with adjacency info
+    #   - triangle_list_with_adjacency: Triangles with adjacent vertices (6 vertices per triangle)
+    #   - triangle_strip_with_adjacency: Triangle strip with adjacency info
+    #   - patch_list: Patch primitives for tessellation (control_points vertices per patch)
+    # Default: point_list
+    primitive_topology: triangle_list
+
+    # primitive_restart: Enable primitive restart with special index
+    # - true: Index value 0xFFFF (16-bit) or 0xFFFFFFFF (32-bit) restarts primitive
+    #   (useful for breaking strips/fans without separate draw calls)
+    # - false: All indices are treated as vertex references
+    # Default: false
+    # Note: Only meaningful for strip/fan topologies
+    primitive_restart: false
