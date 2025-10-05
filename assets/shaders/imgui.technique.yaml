@@ -13,7 +13,7 @@ color_blending:
       blending: true
       src_color: src_alpha
       dst_color: one_minus_src_alpha
-      src_alpha: one_nimus_src_alpha
+      src_alpha: one_mimus_src_alpha
       dst_alpha: zero
 input_assembly:
     primitive_topology: triangle_list
