@@ -18,3 +18,22 @@ target_link_libraries(${PROJECT_NAME}
 	slang::slang
 	ZSTD::ZSTD
 )
+
+function(add_shader_compilation TARGET SHADER_SOURCE OUTPUT_FILE)
+    set(DEPFILE "${OUTPUT_FILE}.d")
+    
+    add_custom_command(
+        OUTPUT ${OUTPUT_FILE}
+        COMMAND $<TARGET_FILE:shader_compiler>
+                -i ${CMAKE_CURRENT_SOURCE_DIR}/${SHADER_SOURCE}
+                -o ${OUTPUT_FILE}
+                --depfile ${DEPFILE}
+                ${ARGN}
+        DEPENDS ${SHADER_SOURCE} shader_compiler
+        DEPFILE ${DEPFILE}
+        COMMENT "Compiling shader: ${SHADER_SOURCE}"
+        VERBATIM
+    )
+    
+    target_sources(${TARGET} PRIVATE ${OUTPUT_FILE})
+endfunction()
