@@ -72,7 +72,6 @@ inline auto init_pipeline_state_header(gfx::PipelineStateHeader& pipeline_state)
 	pipeline_state.multisample_state_sample_count = static_cast<uint8_t>(vk::SampleCountFlagBits::e1);
 	pipeline_state.multisample_state_sample_shading_enable = 0;
 	pipeline_state.multisample_state_min_sample_shading = 0;
-	pipeline_state.multisample_state_sample_mask = 0;
 	pipeline_state.multisample_state_alpha_to_coverage_enable = 0; 
 	pipeline_state.multisample_state_alpha_to_one_enable = 0;
 
@@ -542,6 +541,7 @@ int main(int argc, char* argv[]) {
 	std::vector<gfx::ColorAttachment> color_attachments;
 	std::vector<gfx::VertexInputAttribute> vertex_input_attributes;
 	std::vector<gfx::VertexInputBinding> vertex_input_bindings;
+	std::vector<uint32_t> multisample_sample_masks;
 
 	std::vector<TechniqueStage> shader_stages;
 	std::string technique_name{ "unknown" };
@@ -664,15 +664,30 @@ int main(int argc, char* argv[]) {
 		if (ms.has_child("sample_shading_enable")) {
 			bool sample_shading_enable = false;
 			ms["sample_shading_enable"] >> sample_shading_enable;
+
+			if (sample_shading_enable) {
+				if (ms.has_child("min_sample_shading")) {
+					ms["min_sample_shading"] >> pipeline_state.multisample_state_min_sample_shading;
+				}
+			}
 		}
 
-		if (ms.has_child("min_sample_shading")) {
-			ms["min_sample_shading"] >> pipeline_state.multisample_state_min_sample_shading;
+		if (pipeline_state.multisample_state_sample_count > 1) {
+			if (ms.has_child("sample_mask")) {
+				auto masks = ms["sample_mask"];
+				for (auto mask : masks) {
+					uint32_t sample_mask;
+					mask >> sample_mask;
+					multisample_sample_masks.push_back(sample_mask);
+				}
+			}
+		}
+		else {
+			multisample_sample_masks.push_back(0x00000000);
 		}
 
-		// TODO: it should be array with the same size as sample_count
-		if (ms.has_child("sample_mask")) { 
-			ms["sample_mask"] >> pipeline_state.multisample_state_sample_mask; 
+		if (multisample_sample_masks.size() != pipeline_state.multisample_state_sample_count) {
+			spdlog::warn("Number of samples and number of sample masks should be equal!");
 		}
 
 		if (ms.has_child("alpha_to_coverage_enable")) {
@@ -1026,6 +1041,9 @@ int main(int argc, char* argv[]) {
 	writer.write(pipeline_state);
 	if (!color_attachments.empty()) {
 		writer.write_vector(color_attachments);
+	}
+	if (!multisample_sample_masks.empty()) {
+		writer.write_vector(multisample_sample_masks);
 	}
 	if (!vertex_input_attributes.empty()) {
 		writer.write_vector(vertex_input_attributes);
