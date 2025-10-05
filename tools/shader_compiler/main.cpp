@@ -14,8 +14,28 @@
 #include <fstream>
 #include <filesystem>
 #include <optional>
+#include <unordered_set>
 
 #include "../../edge/core/gfx/gfx_shader_effect.h"
+
+#define APPLICATION_NAME "shader_compiler"
+#define LOG_FILE_NAME "shader_compiler.log"
+
+struct Session {
+	std::string input{};
+	std::string output{};
+	std::vector<std::string> include_directories;
+	std::vector<std::string> definitions;
+	std::string optimization_level{ "none" };
+	std::string debug_level{ "maximal" };
+	bool verbose{ false };
+	bool compress{ true };
+	std::string depfile_path{};
+	std::set<std::string> dependencies;
+	slang::IGlobalSession* slang_session{ nullptr };
+};
+
+static Session g_session;
 
 using namespace edge;
 
@@ -28,13 +48,18 @@ struct TechniqueStage {
 		writer.write(static_cast<uint32_t>(stage));
 		writer.write_string(entry_point_name);
 
-		const auto max_compressed_size = ZSTD_compressBound(code.size());
-		std::vector<uint8_t> compressed_code(max_compressed_size, 0);
+		if (g_session.compress) {
+			const auto max_compressed_size = ZSTD_compressBound(code.size());
+			std::vector<uint8_t> compressed_code(max_compressed_size, 0);
 
-		const auto compressed_size = ZSTD_compress(compressed_code.data(), max_compressed_size, code.data(), code.size(), 15);
-		compressed_code.resize(compressed_size);
-		
-		writer.write_vector(compressed_code);
+			const auto compressed_size = ZSTD_compress(compressed_code.data(), max_compressed_size, code.data(), code.size(), 15);
+			compressed_code.resize(compressed_size);
+
+			writer.write_vector(compressed_code);
+		}
+		else {
+			writer.write_vector(code);
+		}
 	}
 };
 
@@ -315,22 +340,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLin
 }
 #endif
 
-#define APPLICATION_NAME "shader_compiler"
-#define LOG_FILE_NAME "shader_compiler.log"
-
-struct Session {
-	std::string input{};
-	std::string output{};
-	std::vector<std::string> include_directories;
-	std::vector<std::string> definitions;
-	std::string optimization_level{ "none" };
-	std::string debug_level{ "maximal" };
-	bool verbose{ false };
-	slang::IGlobalSession* slang_session{ nullptr };
-};
-
-static Session g_session;
-
 auto slang_stage_to_vulkan(SlangStage stage) -> vk::ShaderStageFlagBits {
 	switch (stage) {
 	case SLANG_STAGE_VERTEX: return vk::ShaderStageFlagBits::eVertex;
@@ -381,6 +390,206 @@ auto read_file(const std::string& path) -> std::string {
 	technique_file.imbue(std::locale("C"));
 	return { std::istreambuf_iterator<char>(technique_file), std::istreambuf_iterator<char>() };
 }
+
+class StringBlob : public ISlangBlob {
+public:
+	StringBlob(std::string&& data)
+		: data(std::move(data)) {
+	}
+
+	static auto create(const char* string) -> Slang::ComPtr<ISlangBlob> {
+		return Slang::ComPtr<ISlangBlob>(new StringBlob(std::string(string)));
+	}
+
+	static auto create(std::string&& string) -> Slang::ComPtr<ISlangBlob> {
+		return Slang::ComPtr<ISlangBlob>(new StringBlob(std::move(string)));
+	}
+
+	// IUnknown methods:
+	virtual SlangResult SLANG_MCALL queryInterface(const SlangUUID& guid, void** outObject) override {
+		if (!outObject) {
+			return SLANG_FAIL;
+		}
+		*outObject = nullptr;
+
+		if (guid == ISlangBlob::getTypeGuid() || guid == ISlangUnknown::getTypeGuid()) {
+			*outObject = static_cast<ISlangBlob*>(this);
+			return SLANG_OK;
+		}
+		return SLANG_E_NO_INTERFACE;
+	}
+	virtual uint32_t SLANG_MCALL addRef() override {
+		return 1;
+	}
+	virtual uint32_t SLANG_MCALL release() override {
+		return 1;
+	}
+
+	// ISlangBlob methods:
+	virtual void const* SLANG_MCALL getBufferPointer() override {
+		return data.data();
+	}
+	virtual size_t SLANG_MCALL getBufferSize() override {
+		return data.size();
+	}
+
+private:
+	std::string data;
+};
+
+class DependencyTrackingFileSystem final : public ISlangFileSystemExt {
+public:
+	DependencyTrackingFileSystem() : ref_cnt{ 1 } {
+	}
+
+	virtual ~DependencyTrackingFileSystem() {
+		clearCache();
+	}
+
+	virtual SlangResult SLANG_MCALL queryInterface(const SlangUUID& guid, void** outObject) override {
+		if (!outObject) {
+			return SLANG_FAIL;
+		}
+		*outObject = nullptr;
+
+		if (guid == ISlangFileSystemExt::getTypeGuid() || guid == ISlangFileSystem::getTypeGuid() ||
+			guid == ISlangUnknown::getTypeGuid()) {
+			*outObject = static_cast<ISlangFileSystemExt*>(this);
+			return SLANG_OK;
+		}
+		return SLANG_E_NO_INTERFACE;
+	}
+
+	virtual uint32_t SLANG_MCALL addRef() override {
+		return ++ref_cnt;
+	}
+
+	virtual uint32_t SLANG_MCALL release() override {
+		uint32_t count = --ref_cnt;
+		if (count == 0) {
+			delete this;
+		}
+		return count;
+	}
+
+	virtual void* SLANG_MCALL castAs(const SlangUUID& guid) override {
+		if (guid == ISlangFileSystemExt::getTypeGuid() || guid == ISlangFileSystem::getTypeGuid() ||
+			guid == ISlangUnknown::getTypeGuid()) {
+			return static_cast<ISlangFileSystemExt*>(this);
+		}
+		return nullptr;
+	}
+
+	SLANG_NO_THROW SlangResult SLANG_MCALL loadFile(char const* path, ISlangBlob** out_blob) SLANG_OVERRIDE {
+		if (!path || !out_blob) {
+			return SLANG_E_INVALID_ARG;
+		}
+		*out_blob = nullptr;
+
+		if (!std::filesystem::exists(path)) {
+			return SLANG_E_NOT_FOUND;
+		}
+
+		auto abs_path = std::filesystem::absolute(path).lexically_normal().string();
+		g_session.dependencies.insert(abs_path);
+
+		auto found_in_cache = file_cache.find(path);
+		if (found_in_cache != file_cache.end()) {
+			found_in_cache->second->addRef();
+			*out_blob = found_in_cache->second;
+			return SLANG_OK;
+		}
+
+		std::string file_data = read_file(path);
+		if (file_data.empty()) {
+			return SLANG_E_NOT_FOUND;
+		}
+
+		auto new_blob = StringBlob::create(std::move(file_data));
+		file_cache[path] = new_blob;
+
+		*out_blob = new_blob;
+
+		return SLANG_OK;
+	}
+
+	virtual SlangResult SLANG_MCALL getFileUniqueIdentity(const char* path, ISlangBlob** outUniqueIdentity) override {
+		if (!path || !outUniqueIdentity) {
+			return SLANG_E_INVALID_ARG;
+		}
+
+		auto normalized = std::filesystem::weakly_canonical(path);
+		*outUniqueIdentity = StringBlob::create(std::move(normalized.string()));
+		return SLANG_OK;
+	}
+
+	virtual SlangResult SLANG_MCALL calcCombinedPath(SlangPathType fromPathType, const char* from_path, const char* path, ISlangBlob** outCombinedPath) override {
+		if (!path || !outCombinedPath) {
+			return SLANG_E_INVALID_ARG;
+		}
+		*outCombinedPath = nullptr;
+
+		auto current_path = std::filesystem::path(from_path).parent_path();
+		auto normalized_path = std::filesystem::weakly_canonical(current_path / path);
+		*outCombinedPath = StringBlob::create(std::move(normalized_path.string()));
+
+		return SLANG_OK;
+	}
+
+	virtual SlangResult SLANG_MCALL getPathType(const char* path, SlangPathType* outPathType) override {
+		if (!path || !outPathType) {
+			return SLANG_E_INVALID_ARG;
+		}
+
+		if (!std::filesystem::exists(path)) {
+			return SLANG_E_NOT_FOUND;
+		}
+
+		*outPathType = std::filesystem::is_directory(path) ? SLANG_PATH_TYPE_DIRECTORY : SLANG_PATH_TYPE_FILE;
+		return SLANG_OK;
+	}
+
+	virtual SlangResult SLANG_MCALL getPath(PathKind /*pathKind*/, const char* path, ISlangBlob** outPath) override {
+		if (!path || !outPath) {
+			return SLANG_E_INVALID_ARG;
+		}
+
+		*outPath = StringBlob::create(std::string(path, path + strlen(path)));
+		return SLANG_OK;
+	}
+
+	virtual void SLANG_MCALL clearCache() override {
+		file_cache.clear();
+	}
+
+	virtual SlangResult SLANG_MCALL enumeratePathContents(const char* path, FileSystemContentsCallBack callback, void* userData) override {
+		if (!path || !callback) {
+			return SLANG_E_INVALID_ARG;
+		}
+
+		if (!std::filesystem::is_directory(path)) {
+			return SLANG_E_NOT_FOUND;
+		}
+
+		for (const auto& entry : std::filesystem::recursive_directory_iterator(path)) {
+			SlangPathType type = entry.is_directory() ? SLANG_PATH_TYPE_DIRECTORY : SLANG_PATH_TYPE_FILE;
+			auto entry_path = entry.path();
+			auto entry_path_string = entry_path.string();
+			callback(type, entry_path_string.c_str(), userData);
+		}
+
+		return SLANG_OK;
+	}
+
+	virtual OSPathKind SLANG_MCALL getOSPathKind() override {
+		return OSPathKind::Direct;
+	}
+private:
+	std::atomic<uint32_t> ref_cnt;
+
+	std::vector<std::string> search_paths{};
+	std::unordered_map<std::string, Slang::ComPtr<ISlangBlob>> file_cache{};
+};
 
 int main(int argc, char* argv[]) {
 	// Initialize argument parser
@@ -433,6 +642,11 @@ int main(int argc, char* argv[]) {
 		.implicit_value(true)
 		.store_into(g_session.verbose);
 
+	argument_parser
+		.add_argument("--depfile")
+		.help("Generate dependency file for build systems (Makefile format)")
+		.store_into(g_session.depfile_path);
+
 	try {
 #ifdef NDEBUG
 		argument_parser.parse_args(argc, argv);
@@ -456,6 +670,11 @@ int main(int argc, char* argv[]) {
 		std::cerr << argument_parser;
 		return 1;
 	}
+
+	g_session.dependencies.clear();
+
+	std::filesystem::path abs_input = std::filesystem::absolute(g_session.input);
+	g_session.dependencies.insert(abs_input.string());
 
 	// Init logger
 	auto log_level = g_session.verbose ? spdlog::level::debug : spdlog::level::info;
@@ -675,7 +894,7 @@ int main(int argc, char* argv[]) {
 		if (pipeline_state.multisample_state_sample_count > 1) {
 			if (ms.has_child("sample_mask")) {
 				auto masks = ms["sample_mask"];
-				for (auto mask : masks) {
+				for (const auto& mask : masks) {
 					uint32_t sample_mask;
 					mask >> sample_mask;
 					multisample_sample_masks.push_back(sample_mask);
@@ -839,7 +1058,7 @@ int main(int argc, char* argv[]) {
 
 		if (cb.has_child("attachments")) {
 			auto attachments = cb["attachments"];
-			for (auto attachment : attachments) {
+			for (const auto& attachment : attachments) {
 				gfx::ColorAttachment gfx_attachment{};
 				init_color_attachment(gfx_attachment);
 
@@ -915,6 +1134,8 @@ int main(int argc, char* argv[]) {
 	auto source_module_path = std::filesystem::path(g_session.input).parent_path() / source_file_name_str;
 	auto source_module_path_string = source_module_path.string();
 
+	auto filesystem = Slang::ComPtr<ISlangFileSystemExt>(new DependencyTrackingFileSystem);
+
 	// Configure target
 	slang::TargetDesc target_desc{};
 	target_desc.format = SLANG_SPIRV;
@@ -934,6 +1155,7 @@ int main(int argc, char* argv[]) {
     session_desc.preprocessorMacroCount = static_cast<SlangInt>(preprocessor_input.size());
     session_desc.compilerOptionEntries = compiler_options.data();
     session_desc.compilerOptionEntryCount = static_cast<SlangInt>(compiler_options.size());
+	session_desc.fileSystem = filesystem;
 
 	Slang::ComPtr<slang::ISession> session{};
 	if (SLANG_FAILED(g_session.slang_session->createSession(session_desc, session.writeRef()))) {
@@ -1056,6 +1278,41 @@ int main(int argc, char* argv[]) {
 
 	spdlog::info("Shader compilation completed successfully!");
 	spdlog::info("Compiled {} stages.", shader_stages.size());
+
+	if (!g_session.depfile_path.empty()) {
+		std::ofstream depfile(g_session.depfile_path);
+		if (!depfile) {
+			spdlog::warn("Could not write depfile : {}", g_session.depfile_path);
+			return 1;
+		}
+
+		auto escape_path = [](const std::string& path) -> std::string {
+			std::string escaped = path;
+			size_t pos = 0;
+			while ((pos = escaped.find(' ', pos)) != std::string::npos) {
+				escaped.insert(pos, "\\");
+				pos += 2;
+			}
+			// Also escape other problematic characters for Make
+			pos = 0;
+			while ((pos = escaped.find('$', pos)) != std::string::npos) {
+				escaped.insert(pos, "$");
+				pos += 2;
+			}
+			return escaped;
+			};
+
+		depfile << escape_path(g_session.output) << ":";
+
+		for (const auto& dep : g_session.dependencies) {
+			depfile << " \\\n  " << escape_path(dep);
+		}
+		depfile << "\n";
+
+		if (g_session.verbose) {
+			spdlog::debug("Wrote {} dependencies to {}", g_session.dependencies.size(), g_session.depfile_path);
+		}
+	}
 
 	return 0;
 }
