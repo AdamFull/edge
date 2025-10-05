@@ -87,7 +87,6 @@ namespace edge::gfx {
 
 		uint8_t pad3;
 
-		uint32_t multisample_state_sample_mask;
 		float multisample_state_min_sample_shading;
 
 		uint32_t stencil_state_front_compare_mask;
