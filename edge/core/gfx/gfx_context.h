@@ -1128,6 +1128,8 @@ namespace edge::gfx {
 		// TODO: RootSignature
 		// TODO: Pipeline
 
+		auto create_shader_module(Span<const uint8_t> code) const -> Result<ShaderModule>;
+
 		auto create_pipeline_cache(Span<const uint8_t> data) const -> Result<PipelineCache>;
 		auto create_query_pool(vk::QueryType type, uint32_t query_count) const -> Result<QueryPool>;
 		// TODO: Descriptors

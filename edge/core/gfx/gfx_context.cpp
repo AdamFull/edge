@@ -6,6 +6,8 @@
 
 #include <vk_mem_alloc.h>
 
+#include <mimalloc.h>
+
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
 #if defined(VKW_DEBUG) || defined(VKW_VALIDATION_LAYERS)
@@ -67,30 +69,7 @@ namespace edge::gfx {
 		auto get_allocator() const -> vk::AllocationCallbacks const* { return callbacks_.get(); }
 	private:
 		auto do_allocation(size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) -> void* {
-			void* ptr = nullptr;
-
-#ifdef EDGE_PLATFORM_WINDOWS
-			ptr = _aligned_malloc(size, alignment);
-#else
-			// Ensure alignment meets POSIX requirements
-			if (alignment < sizeof(void*)) {
-				alignment = sizeof(void*);
-			}
-
-			// Ensure alignment is power of 2
-			if (alignment & (alignment - 1)) {
-				alignment = 1;
-				while (alignment < size) alignment <<= 1;
-			}
-
-			// POSIX aligned allocation
-			if (posix_memalign(&ptr, alignment, size) != 0) {
-				EDGE_SLOGE("Failed to allocate {} bytes with {} bytes alignment in {} scope.",
-					size, alignment, get_allocation_scope_str(allocation_scope));
-				ptr = nullptr;
-			}
-#endif
-
+			void* ptr = mi_aligned_alloc(alignment, size);
 			if (ptr) {
 				total_bytes_allocated_.fetch_add(size);
 				allocation_count_.fetch_add(1ull);
@@ -128,7 +107,7 @@ namespace edge::gfx {
 			}
 
 #ifdef EDGE_PLATFORM_WINDOWS
-			_aligned_free(mem);
+			mi_free(mem);
 #else
 			free(mem);
 #endif
@@ -139,14 +118,15 @@ namespace edge::gfx {
 				return do_allocation(size, alignment, allocation_scope);
 			}
 
+			
+
 			if (size == 0ull) {
 				// Behave like free
 				do_deallocation(old);
 				return nullptr;
 			}
 
-#if EDGE_PLATFORM_WINDOWS
-			auto* new_ptr = _aligned_realloc(old, size, alignment);
+			auto* new_ptr = mi_aligned_recalloc(old, 1, size, alignment);
 			if (new_ptr) {
 				std::lock_guard<std::mutex> lock(mutex_);
 				if (auto found = allocation_map_.find(old); found != allocation_map_.end()) {
@@ -164,13 +144,7 @@ namespace edge::gfx {
 					reinterpret_cast<uintptr_t>(new_ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
 #endif
 			}
-#else
-			void* new_ptr = do_allocation(size, alignment, allocation_scope);
-			if (new_ptr && old) {
-				memcpy(new_ptr, old, size);
-				do_deallocation(old);
-			}
-#endif
+
 			return new_ptr;
 		}
 
@@ -1988,6 +1962,19 @@ namespace edge::gfx {
 		}
 
 		return Sampler{ &device_, sampler, create_info };
+	}
+
+	auto Context::create_shader_module(Span<const uint8_t> code) const -> Result<ShaderModule> {
+		vk::ShaderModuleCreateInfo create_info{};
+		create_info.codeSize = static_cast<uint32_t>(code.size());
+		create_info.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+		vk::ShaderModule shader_module;
+		if (auto result = device_->createShaderModule(&create_info, allocator_, &shader_module); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return ShaderModule{ &device_, shader_module };
 	}
 
 	auto Context::create_pipeline_cache(Span<const uint8_t> data) const -> Result<PipelineCache> {

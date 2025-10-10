@@ -5,8 +5,24 @@
 #include <stb_image.h>
 
 #include <ktx.h>
+#include <zstd.h>
+
+#include "gfx_shader_effect.h"
 
 namespace edge::gfx {
+
+	void TechniqueStage::deserialize(BinaryReader& reader) {
+		stage = reader.read<vk::ShaderStageFlagBits>();
+		entry_point_name = reader.read_string();
+
+		auto compressed_code = reader.read_vector<uint8_t>();
+
+		auto const required_size = ZSTD_getFrameContentSize(compressed_code.data(), compressed_code.size());
+		code.resize(required_size);
+
+		size_t const decompressed_size = ZSTD_decompress(code.data(), code.size(), compressed_code.data(), compressed_code.size());
+		code.resize(decompressed_size);
+	}
 
 #define EDGE_LOGGER_SCOPE "gfx::BufferArena"
 
@@ -207,6 +223,73 @@ namespace edge::gfx {
 			return std::unexpected(result);
 		}
 		return self;
+	}
+
+	auto Renderer::create_shader(const std::string& shader_path) -> void {
+		std::ifstream shader_file(shader_path, std::ios_base::binary);
+		if (!shader_file.is_open()) {
+			return;
+		}
+
+		BinaryReader reader{ shader_file };
+
+		ShaderEffect shader_effect;
+		reader.read(shader_effect);
+
+		// TODO: validate shader effect
+
+		Vector<ShaderModule> shader_modules{ context_.get_allocator() };
+		Vector<vk::PipelineShaderStageCreateInfo> shader_stages{ context_.get_allocator() };
+
+		for (auto const& stage : shader_effect.stages) {
+			auto result = context_.create_shader_module(stage.code);
+			if (!result) {
+				continue;
+			}
+
+			shader_modules.push_back(std::move(result.value()));
+
+			vk::PipelineShaderStageCreateInfo shader_stage_create_info{};
+			shader_stage_create_info.stage = stage.stage;
+			shader_stage_create_info.pName = stage.entry_point_name.c_str();
+			shader_stage_create_info.module = shader_modules.back().get_handle();
+			shader_stages.push_back(shader_stage_create_info);
+		}
+		
+		if (shader_effect.bind_point == vk::PipelineBindPoint::eGraphics) {
+			Vector<vk::VertexInputBindingDescription> vertex_input_binding_descriptions{ context_.get_allocator() };
+			for (auto const& binding_desc : shader_effect.vertex_input_bindings) {
+				vertex_input_binding_descriptions.push_back(binding_desc.to_vulkan());
+			}
+
+			Vector<vk::VertexInputAttributeDescription> vertex_input_attribute_descriptions{ context_.get_allocator() };
+			for (auto const& attribute_desc : shader_effect.vertex_input_attributes) {
+				vertex_input_attribute_descriptions.push_back(attribute_desc.to_vulkan());
+			}
+
+			vk::PipelineVertexInputStateCreateInfo input_state_create_info{};
+			input_state_create_info.vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_input_binding_descriptions.size());
+			input_state_create_info.pVertexBindingDescriptions = vertex_input_binding_descriptions.data();
+			input_state_create_info.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_input_attribute_descriptions.size());
+			input_state_create_info.pVertexAttributeDescriptions = vertex_input_attribute_descriptions.data();
+
+			vk::PipelineInputAssemblyStateCreateInfo input_assembly_state_create_info{};
+			input_assembly_state_create_info.topology = static_cast<vk::PrimitiveTopology>(shader_effect.pipeline_state.input_assembly_state_primitive_topology);
+			input_assembly_state_create_info.primitiveRestartEnable = static_cast<vk::Bool32>(shader_effect.pipeline_state.input_assembly_state_primitive_restart_enable);
+
+			//vk::PipelineTessellationStateCreateInfo 
+
+			vk::GraphicsPipelineCreateInfo create_info{};
+			create_info.stageCount = static_cast<uint32_t>(shader_stages.size());
+			create_info.pStages = shader_stages.data();
+			create_info.pVertexInputState = &input_state_create_info;
+			create_info.pInputAssemblyState = &input_assembly_state_create_info;
+
+		}
+		else if (shader_effect.bind_point == vk::PipelineBindPoint::eCompute) {
+			vk::ComputePipelineCreateInfo create_info{};
+			create_info.stage = shader_stages.front();
+		}
 	}
 
 	auto Renderer::begin_frame(float delta_time) -> void {
@@ -419,6 +502,8 @@ namespace edge::gfx {
 				frames_.push_back(std::move(frame_result.value()));
 			}
 		}
+
+		create_shader("assets/shaders/imgui.shfx");
 
 		return vk::Result::eSuccess;
 	}

@@ -170,6 +170,8 @@ namespace edge::gfx {
 
 		static auto construct(Context&& context, const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>>;
 
+		auto create_shader(const std::string& shader_path) -> void;
+
 		auto begin_frame(float delta_time) -> void;
 		auto end_frame() -> void;
 
