@@ -181,6 +181,6 @@ add_dependencies(edge shader_compiler)
 set(SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/assets/shaders")
 file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
 
-add_shader_compilation(edge "assets/shaders/imgui.technique.yaml" "${SHADER_OUTPUT_DIR}/tmgui.shdr")
+add_shader_compilation(edge "assets/shaders/imgui.technique.yaml" "${SHADER_OUTPUT_DIR}/imgui.shfx")
 endif(WIN32)
 
