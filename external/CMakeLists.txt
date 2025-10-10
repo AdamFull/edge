@@ -282,9 +282,14 @@ add_library(glm::glm ALIAS glm)
 # rapidyaml
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/rapidyaml")
 
+# mimalloc
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/mimalloc")
+
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
     INTERFACE
+
+    mimalloc-static
 
     argparse
     spdlog::spdlog

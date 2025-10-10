@@ -24,3 +24,6 @@
 [submodule "external/rapidyaml"]
 	path = external/rapidyaml
 	url = https://github.com/biojppm/rapidyaml.git
+[submodule "external/mimalloc"]
+	path = external/mimalloc
+	url = https://github.com/microsoft/mimalloc.git
