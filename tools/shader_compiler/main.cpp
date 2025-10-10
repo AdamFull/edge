@@ -39,12 +39,8 @@ static Session g_session;
 
 using namespace edge;
 
-struct TechniqueStage {
-	vk::ShaderStageFlagBits stage;
-	std::string entry_point_name;
-	std::vector<uint8_t> code;
-
-	void serialize(BinaryWriter& writer) const {
+namespace edge::gfx {
+	void TechniqueStage::serialize(BinaryWriter& writer) const {
 		writer.write(static_cast<uint32_t>(stage));
 		writer.write_string(entry_point_name);
 
@@ -61,7 +57,7 @@ struct TechniqueStage {
 			writer.write_vector(code);
 		}
 	}
-};
+}
 
 inline auto init_color_attachment(gfx::ColorAttachment& attachment) {
 	attachment.blend_enable = 0;
@@ -75,8 +71,8 @@ inline auto init_color_attachment(gfx::ColorAttachment& attachment) {
 }
 
 inline auto init_pipeline_state_header(gfx::PipelineStateHeader& pipeline_state) {
-	pipeline_state.vertex_input_state_binding_count = 0;
-	pipeline_state.vertex_input_state_attribute_count = 0;
+	pipeline_state.vertex_input_state_has_bindings = 0;
+	pipeline_state.vertex_input_state_has_attributes = 0;
 
 	pipeline_state.input_assembly_state_primitive_topology = static_cast<uint8_t>(vk::PrimitiveTopology::ePointList);
 	pipeline_state.input_assembly_state_primitive_restart_enable = 0;
@@ -124,7 +120,7 @@ inline auto init_pipeline_state_header(gfx::PipelineStateHeader& pipeline_state)
 	
 	pipeline_state.color_blending_state_logic_op_enable = 0;
 	pipeline_state.color_blending_state_logic_op = static_cast<uint8_t>(vk::LogicOp::eClear);
-	pipeline_state.color_blending_state_attachment_count = 0;
+	pipeline_state.color_blending_state_has_attachments = 0;
 	memset(pipeline_state.color_blending_state_blend_constants, 0, sizeof(float) * 4ull);
 }
 
@@ -754,17 +750,8 @@ int main(int argc, char* argv[]) {
 		slang::CompilerOptionEntry{ slang::CompilerOptionName::EmitSpirvMethod, {.intValue0 = SLANG_EMIT_SPIRV_DIRECTLY } }
 	};
 
-	gfx::PipelineStateHeader pipeline_state{};
-	init_pipeline_state_header(pipeline_state);
-
-	std::vector<gfx::ColorAttachment> color_attachments;
-	std::vector<gfx::VertexInputAttribute> vertex_input_attributes;
-	std::vector<gfx::VertexInputBinding> vertex_input_bindings;
-	std::vector<uint32_t> multisample_sample_masks;
-
-	std::vector<TechniqueStage> shader_stages;
-	std::string technique_name{ "unknown" };
-	vk::PipelineBindPoint pipeline_bind_point;
+	gfx::ShaderEffect shader_effect{};
+	init_pipeline_state_header(shader_effect.pipeline_state);
 
 	auto technique_content = read_file(g_session.input);
 	if (technique_content.empty()) {
@@ -777,16 +764,16 @@ int main(int argc, char* argv[]) {
 	auto root = techniaue_tree.rootref();
 
 	if (root.has_child("name")) {
-		root["name"] >> technique_name;
+		root["name"] >> shader_effect.name;
 	}
 
 	if (root.has_child("type")) {
 		std::string pipeline_type_str{ "unknown" };
 		root["type"] >> pipeline_type_str;
-		pipeline_bind_point = parse_pipeline_bind_point(pipeline_type_str);
+		shader_effect.bind_point = parse_pipeline_bind_point(pipeline_type_str);
 	}
 	else {
-		spdlog::critical("Required parameter \"type\" is not set in \"{}\" technique description.", technique_name);
+		spdlog::critical("Required parameter \"type\" is not set in \"{}\" technique description.", shader_effect.name);
 		return 3;
 	}
 
@@ -795,7 +782,7 @@ int main(int argc, char* argv[]) {
 		root["source"] >> source_file_name_str;
 	}
 	else {
-		spdlog::critical("Required parameter \"source\" is not set in \"{}\" technique description.", technique_name);
+		spdlog::critical("Required parameter \"source\" is not set in \"{}\" technique description.", shader_effect.name);
 		return 3;
 	}
 
@@ -810,7 +797,7 @@ int main(int argc, char* argv[]) {
 			uint32_t tessellation_controll_points{ 0u };
 			tess["control_points"] >> tessellation_controll_points;
 
-			pipeline_state.tessellation_state_control_points = static_cast<uint8_t>(tessellation_controll_points);
+			shader_effect.pipeline_state.tessellation_state_control_points = static_cast<uint8_t>(tessellation_controll_points);
 		}
 	}
 
@@ -820,54 +807,54 @@ int main(int argc, char* argv[]) {
 		if (rast.has_child("clamp_enable")) {
 			bool clamp_enable = false;
 			rast["clamp_enable"] >> clamp_enable;
-			pipeline_state.rasterization_state_depth_clamp_enable = static_cast<uint8_t>(clamp_enable);
+			shader_effect.pipeline_state.rasterization_state_depth_clamp_enable = static_cast<uint8_t>(clamp_enable);
 		}
 
 		if (rast.has_child("discard_enable")) {
 			bool discard_enable = false;
 			rast["discard_enable"] >> discard_enable;
-			pipeline_state.rasterization_state_discard_enable = static_cast<uint8_t>(discard_enable);
+			shader_effect.pipeline_state.rasterization_state_discard_enable = static_cast<uint8_t>(discard_enable);
 		}
 
 		if (rast.has_child("polygon_mode")) {
 			std::string polygon_mode_str;
 			rast["polygon_mode"] >> polygon_mode_str;
-			pipeline_state.rasterization_state_polygon_mode = static_cast<uint8_t>(parse_fill_mode(polygon_mode_str));
+			shader_effect.pipeline_state.rasterization_state_polygon_mode = static_cast<uint8_t>(parse_fill_mode(polygon_mode_str));
 		}
 
 		if (rast.has_child("cull_mode")) {
 			std::string cull_mode_str;
 			rast["cull_mode"] >> cull_mode_str;
-			pipeline_state.rasterization_state_cull_mode = static_cast<uint32_t>(parse_cull_mode(cull_mode_str));
+			shader_effect.pipeline_state.rasterization_state_cull_mode = static_cast<uint32_t>(parse_cull_mode(cull_mode_str));
 		}
 
 		if (rast.has_child("front_face")) {
 			std::string front_face_str;
 			rast["front_face"] >> front_face_str;
-			pipeline_state.rasterization_state_front_face = static_cast<uint8_t>(parse_front_face(front_face_str));
+			shader_effect.pipeline_state.rasterization_state_front_face = static_cast<uint8_t>(parse_front_face(front_face_str));
 		}
 		if (rast.has_child("depth_bias_enable")) {
 			bool depth_bias_enable = false;
 			rast["depth_bias_enable"] >> depth_bias_enable;
-			pipeline_state.rasterization_state_depth_bias_enable = static_cast<uint8_t>(depth_bias_enable);
+			shader_effect.pipeline_state.rasterization_state_depth_bias_enable = static_cast<uint8_t>(depth_bias_enable);
 
 			if (depth_bias_enable) {
 				if (rast.has_child("depth_bias_constant_factor")) {
-					rast["depth_bias_constant_factor"] >> pipeline_state.rasterization_state_depth_bias_constant_factor;
+					rast["depth_bias_constant_factor"] >> shader_effect.pipeline_state.rasterization_state_depth_bias_constant_factor;
 				}
 
 				if (rast.has_child("depth_bias_clamp")) {
-					rast["depth_bias_clamp"] >> pipeline_state.rasterization_state_depth_bias_clamp;
+					rast["depth_bias_clamp"] >> shader_effect.pipeline_state.rasterization_state_depth_bias_clamp;
 				}
 
 				if (rast.has_child("depth_bias_slope_factor")) {
-					rast["depth_bias_slope_factor"] >> pipeline_state.rasterization_state_depth_bias_slope_factor;
+					rast["depth_bias_slope_factor"] >> shader_effect.pipeline_state.rasterization_state_depth_bias_slope_factor;
 				}
 			}
 		}
 		
 		if (rast.has_child("line_width")) {
-			rast["line_width"] >> pipeline_state.rasterization_state_line_width;
+			rast["line_width"] >> shader_effect.pipeline_state.rasterization_state_line_width;
 		}
 	}
 
@@ -877,7 +864,7 @@ int main(int argc, char* argv[]) {
 		if (ms.has_child("sample_count")) {
 			uint32_t sample_count = 1;
 			ms["sample_count"] >> sample_count;
-			pipeline_state.multisample_state_sample_count = static_cast<uint8_t>(sample_count);
+			shader_effect.pipeline_state.multisample_state_sample_count = static_cast<uint8_t>(sample_count);
 		}
 
 		if (ms.has_child("sample_shading_enable")) {
@@ -886,39 +873,36 @@ int main(int argc, char* argv[]) {
 
 			if (sample_shading_enable) {
 				if (ms.has_child("min_sample_shading")) {
-					ms["min_sample_shading"] >> pipeline_state.multisample_state_min_sample_shading;
+					ms["min_sample_shading"] >> shader_effect.pipeline_state.multisample_state_min_sample_shading;
 				}
 			}
 		}
 
-		if (pipeline_state.multisample_state_sample_count > 1) {
+		if (shader_effect.pipeline_state.multisample_state_sample_count > 1) {
 			if (ms.has_child("sample_mask")) {
 				auto masks = ms["sample_mask"];
 				for (const auto& mask : masks) {
 					uint32_t sample_mask;
 					mask >> sample_mask;
-					multisample_sample_masks.push_back(sample_mask);
+					shader_effect.multisample_sample_masks.push_back(sample_mask);
 				}
 			}
 		}
-		else {
-			multisample_sample_masks.push_back(0x00000000);
-		}
 
-		if (multisample_sample_masks.size() != pipeline_state.multisample_state_sample_count) {
+		if (shader_effect.multisample_sample_masks.size() != shader_effect.pipeline_state.multisample_state_sample_count) {
 			spdlog::warn("Number of samples and number of sample masks should be equal!");
 		}
 
 		if (ms.has_child("alpha_to_coverage_enable")) {
 			bool alpha_to_coverage = false;
 			ms["alpha_to_coverage_enable"] >> alpha_to_coverage;
-			pipeline_state.multisample_state_alpha_to_coverage_enable = static_cast<uint8_t>(alpha_to_coverage);
+			shader_effect.pipeline_state.multisample_state_alpha_to_coverage_enable = static_cast<uint8_t>(alpha_to_coverage);
 		}
 
 		if (ms.has_child("alpha_to_one_enable")) {
 			bool alpha_to_one = false;
 			ms["alpha_to_one_enable"] >> alpha_to_one;
-			pipeline_state.multisample_state_alpha_to_one_enable = static_cast<uint8_t>(alpha_to_one);
+			shader_effect.pipeline_state.multisample_state_alpha_to_one_enable = static_cast<uint8_t>(alpha_to_one);
 		}
 	}
 
@@ -928,33 +912,33 @@ int main(int argc, char* argv[]) {
 		if (ds.has_child("depth_test_enable")) {
 			bool depth_test = false;
 			ds["depth_test_enable"] >> depth_test;
-			pipeline_state.depth_state_depth_test_enable = static_cast<uint8_t>(depth_test);
+			shader_effect.pipeline_state.depth_state_depth_test_enable = static_cast<uint8_t>(depth_test);
 		}
 		
 		if (ds.has_child("depth_write_enable")) {
 			bool depth_write = false;
 			ds["depth_write_enable"] >> depth_write;
-			pipeline_state.depth_state_depth_write_enable = static_cast<uint8_t>(depth_write);
+			shader_effect.pipeline_state.depth_state_depth_write_enable = static_cast<uint8_t>(depth_write);
 		}
 
 		if (ds.has_child("compare_op")) {
 			std::string compare_op_str;
 			ds["compare_op"] >> compare_op_str;
-			pipeline_state.depth_state_depth_compare_op = static_cast<uint8_t>(parse_compare_op(compare_op_str));
+			shader_effect.pipeline_state.depth_state_depth_compare_op = static_cast<uint8_t>(parse_compare_op(compare_op_str));
 		}
 
 		if (ds.has_child("bounds_test_enable")) { 
 			bool bounds_test = false;
 			ds["bounds_test_enable"] >> bounds_test; 
-			pipeline_state.depth_state_depth_bounds_test_enable = static_cast<uint8_t>(bounds_test);
+			shader_effect.pipeline_state.depth_state_depth_bounds_test_enable = static_cast<uint8_t>(bounds_test);
 
 			if (bounds_test) {
 				if (ds.has_child("min_depth_bounds")) {
-					ds["min_depth_bounds"] >> pipeline_state.depth_state_min_depth_bounds;
+					ds["min_depth_bounds"] >> shader_effect.pipeline_state.depth_state_min_depth_bounds;
 				}
 
 				if (ds.has_child("max_depth_bounds")) {
-					ds["max_depth_bounds"] >> pipeline_state.depth_state_max_depth_bounds;
+					ds["max_depth_bounds"] >> shader_effect.pipeline_state.depth_state_max_depth_bounds;
 				}
 			}
 		}
@@ -962,80 +946,80 @@ int main(int argc, char* argv[]) {
 		if (ds.has_child("stencil_test_enable")) {
 			bool stencil_test = false;
 			ds["stencil_test_enable"] >> stencil_test;
-			pipeline_state.stencil_state_stencil_test_enable = static_cast<uint8_t>(stencil_test);
+			shader_effect.pipeline_state.stencil_state_stencil_test_enable = static_cast<uint8_t>(stencil_test);
 
 			if (stencil_test) {
 				if (ds.has_child("front_fail_op")) {
 					std::string front_fail_str;
 					ds["front_fail_op"] >> front_fail_str;
-					pipeline_state.stencil_state_front_fail_op = static_cast<uint8_t>(parse_stencil_op(front_fail_str));
+					shader_effect.pipeline_state.stencil_state_front_fail_op = static_cast<uint8_t>(parse_stencil_op(front_fail_str));
 				}
 
 				if (ds.has_child("front_pass_op")) {
 					std::string front_pass_str;
 					ds["front_pass_op"] >> front_pass_str;
-					pipeline_state.stencil_state_front_pass_op = static_cast<uint8_t>(parse_stencil_op(front_pass_str));
+					shader_effect.pipeline_state.stencil_state_front_pass_op = static_cast<uint8_t>(parse_stencil_op(front_pass_str));
 				}
 
 				if (ds.has_child("front_depth_fail_op")) {
 					std::string front_depth_fail_str;
 					ds["front_depth_fail_op"] >> front_depth_fail_str;
-					pipeline_state.stencil_state_front_depth_fail_op = static_cast<uint8_t>(parse_stencil_op(front_depth_fail_str));
+					shader_effect.pipeline_state.stencil_state_front_depth_fail_op = static_cast<uint8_t>(parse_stencil_op(front_depth_fail_str));
 				}
 
 				if (ds.has_child("front_compare_op")) {
 					std::string front_compare_str;
 					ds["front_compare_op"] >> front_compare_str;
-					pipeline_state.stencil_state_front_compare_op = static_cast<uint8_t>(parse_compare_op(front_compare_str));
+					shader_effect.pipeline_state.stencil_state_front_compare_op = static_cast<uint8_t>(parse_compare_op(front_compare_str));
 				}
 
 				if (ds.has_child("front_compare_mask")) {
-					ds["front_compare_mask"] >> pipeline_state.stencil_state_front_compare_mask;
+					ds["front_compare_mask"] >> shader_effect.pipeline_state.stencil_state_front_compare_mask;
 				}
 
 				if (ds.has_child("front_write_mask")) {
 					uint32_t front_write_mask = 0;
-					ds["front_write_mask"] >> pipeline_state.stencil_state_front_write_mask;
+					ds["front_write_mask"] >> shader_effect.pipeline_state.stencil_state_front_write_mask;
 				}
 
 				if (ds.has_child("front_reference")) {
-					ds["front_reference"] >> pipeline_state.stencil_state_front_reference;
+					ds["front_reference"] >> shader_effect.pipeline_state.stencil_state_front_reference;
 				}
 
 				if (ds.has_child("back_fail_op")) {
 					std::string back_fail_str;
 					ds["back_fail_op"] >> back_fail_str;
-					pipeline_state.stencil_state_back_fail_op = static_cast<uint8_t>(parse_stencil_op(back_fail_str));
+					shader_effect.pipeline_state.stencil_state_back_fail_op = static_cast<uint8_t>(parse_stencil_op(back_fail_str));
 				}
 
 				if (ds.has_child("back_pass_op")) {
 					std::string back_pass_str;
 					ds["back_pass_op"] >> back_pass_str;
-					pipeline_state.stencil_state_back_pass_op = static_cast<uint8_t>(parse_stencil_op(back_pass_str));
+					shader_effect.pipeline_state.stencil_state_back_pass_op = static_cast<uint8_t>(parse_stencil_op(back_pass_str));
 				}
 
 				if (ds.has_child("back_depth_fail_op")) {
 					std::string back_depth_fail_str;
 					ds["back_depth_fail_op"] >> back_depth_fail_str;
-					pipeline_state.stencil_state_back_depth_fail_op = static_cast<uint8_t>(parse_stencil_op(back_depth_fail_str));
+					shader_effect.pipeline_state.stencil_state_back_depth_fail_op = static_cast<uint8_t>(parse_stencil_op(back_depth_fail_str));
 				}
 
 				if (ds.has_child("back_compare_op")) {
 					std::string back_compare_str;
 					ds["back_compare_op"] >> back_compare_str;
-					pipeline_state.stencil_state_back_compare_op = static_cast<uint8_t>(parse_compare_op(back_compare_str));
+					shader_effect.pipeline_state.stencil_state_back_compare_op = static_cast<uint8_t>(parse_compare_op(back_compare_str));
 				}
 
 				if (ds.has_child("back_compare_mask")) {
-					ds["back_compare_mask"] >> pipeline_state.stencil_state_back_compare_mask;
+					ds["back_compare_mask"] >> shader_effect.pipeline_state.stencil_state_back_compare_mask;
 				}
 
 				if (ds.has_child("back_write_mask")) {
-					ds["back_write_mask"] >> pipeline_state.stencil_state_back_write_mask;
+					ds["back_write_mask"] >> shader_effect.pipeline_state.stencil_state_back_write_mask;
 				}
 
 				if (ds.has_child("back_reference")) {
-					ds["back_reference"] >> pipeline_state.stencil_state_back_reference;
+					ds["back_reference"] >> shader_effect.pipeline_state.stencil_state_back_reference;
 				}
 			}
 		}
@@ -1047,13 +1031,13 @@ int main(int argc, char* argv[]) {
 		if (cb.has_child("logic_op_enable")) {
 			bool logic_op_enable = false;
 			cb["logic_op_enable"] >> logic_op_enable;
-			pipeline_state.color_blending_state_logic_op_enable = static_cast<uint8_t>(logic_op_enable);
+			shader_effect.pipeline_state.color_blending_state_logic_op_enable = static_cast<uint8_t>(logic_op_enable);
 		}
 
 		if (cb.has_child("logic_op")) {
 			std::string logic_op_str;
 			cb["logic_op"] >> logic_op_str;
-			pipeline_state.color_blending_state_logic_op = static_cast<uint8_t>(parse_logic_op(logic_op_str));
+			shader_effect.pipeline_state.color_blending_state_logic_op = static_cast<uint8_t>(parse_logic_op(logic_op_str));
 		}
 
 		if (cb.has_child("attachments")) {
@@ -1110,9 +1094,11 @@ int main(int argc, char* argv[]) {
 					}
 				}
 
-				color_attachments.push_back(gfx_attachment);
+				shader_effect.color_attachments.push_back(gfx_attachment);
 			}
 		}
+
+		shader_effect.pipeline_state.color_blending_state_has_attachments = !shader_effect.color_attachments.empty();
 	}
 
 	if (root.has_child("input_assembly")) {
@@ -1121,13 +1107,13 @@ int main(int argc, char* argv[]) {
 		if (ia.has_child("primitive_topology")) {
 			std::string topology_str;
 			ia["primitive_topology"] >> topology_str;
-			pipeline_state.input_assembly_state_primitive_topology = static_cast<uint8_t>(parse_primitive_topology(topology_str));
+			shader_effect.pipeline_state.input_assembly_state_primitive_topology = static_cast<uint8_t>(parse_primitive_topology(topology_str));
 		}
 
 		if (ia.has_child("primitive_restart")) {
 			bool primitive_restart = false;
 			ia["primitive_restart"] >> primitive_restart;
-			pipeline_state.input_assembly_state_primitive_restart_enable = static_cast<uint8_t>(primitive_restart);
+			shader_effect.pipeline_state.input_assembly_state_primitive_restart_enable = static_cast<uint8_t>(primitive_restart);
 		}
 	}
 
@@ -1167,16 +1153,16 @@ int main(int argc, char* argv[]) {
 	auto source_content = read_file(source_module_path_string);
 
 	Slang::ComPtr<slang::IBlob> diagnostics; 
-	slang::IModule* slang_module = session->loadModuleFromSourceString(technique_name.c_str(), source_module_path_string.c_str(), source_content.data(), diagnostics.writeRef());
+	slang::IModule* slang_module = session->loadModuleFromSourceString(shader_effect.name.c_str(), source_module_path_string.c_str(), source_content.data(), diagnostics.writeRef());
 	if (!slang_module) {
-		spdlog::critical("Failed to load Slang module \"{}\".", technique_name);
+		spdlog::critical("Failed to load Slang module \"{}\".", shader_effect.name);
 		if (diagnostics) {
 			spdlog::error("Compilation diagnostics:\n{}", static_cast<const char*>(diagnostics->getBufferPointer()));
 		}
 		return 3;
 	}
 
-	spdlog::info("Successfully loaded Slang module: {}", technique_name);
+	spdlog::info("Successfully loaded Slang module: {}", shader_effect.name);
 	
 	spdlog::info("Found {} entry points", slang_module->getDefinedEntryPointCount());
 	for (SlangInt32 entry_point_index = 0; entry_point_index < slang_module->getDefinedEntryPointCount(); ++entry_point_index) {
@@ -1204,7 +1190,7 @@ int main(int argc, char* argv[]) {
 		auto entry_name = entry_layout->getName();
 
 		// Fill shader stage data
-		TechniqueStage technique_stage{};
+		gfx::TechniqueStage technique_stage{};
 		technique_stage.stage = slang_stage_to_vulkan(stage);
 		technique_stage.entry_point_name = entry_name ? entry_name : "main";
 
@@ -1228,18 +1214,13 @@ int main(int argc, char* argv[]) {
 			static_cast<int>(technique_stage.stage),
 			technique_stage.code.size());
 
-		shader_stages.push_back(std::move(technique_stage));
+		shader_effect.stages.push_back(std::move(technique_stage));
 	}
 
-	if (shader_stages.empty()) {
+	if (shader_effect.stages.empty()) {
 		spdlog::critical("No entry points were successfully compiled");
 		return 4;
 	}
-
-	// Post process some structures
-	pipeline_state.color_blending_state_attachment_count = static_cast<uint8_t>(color_attachments.size());
-	pipeline_state.vertex_input_state_attribute_count = static_cast<uint8_t>(vertex_input_attributes.size());
-	pipeline_state.vertex_input_state_binding_count = static_cast<uint8_t>(vertex_input_bindings.size());
 
 	std::ofstream compillation_result_output(g_session.output, std::ios_base::binary);
 	if (!compillation_result_output.is_open()) {
@@ -1248,36 +1229,10 @@ int main(int argc, char* argv[]) {
 	}
 
 	BinaryWriter writer{ compillation_result_output };
-
-	gfx::ShaderEffectHeader header{};
-	writer.write(header);
-
-	// Write technique data
-	writer.write_string(technique_name);
-	writer.write(static_cast<uint32_t>(pipeline_bind_point));
-
-	// Serialize shader stages
-	writer.write_vector(shader_stages);
-
-	// Write pipeline state header
-	writer.write(pipeline_state);
-	if (!color_attachments.empty()) {
-		writer.write_vector(color_attachments);
-	}
-	if (!multisample_sample_masks.empty()) {
-		writer.write_vector(multisample_sample_masks);
-	}
-	if (!vertex_input_attributes.empty()) {
-		writer.write_vector(vertex_input_attributes);
-	}
-	if (!vertex_input_bindings.empty()) {
-		writer.write_vector(vertex_input_bindings);
-	}
-
-	// TODO: serialize bindings
+	writer.write(shader_effect);
 
 	spdlog::info("Shader compilation completed successfully!");
-	spdlog::info("Compiled {} stages.", shader_stages.size());
+	spdlog::info("Compiled {} stages.", shader_effect.stages.size());
 
 	if (!g_session.depfile_path.empty()) {
 		std::ofstream depfile(g_session.depfile_path);

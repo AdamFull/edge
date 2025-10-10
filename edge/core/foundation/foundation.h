@@ -259,15 +259,21 @@ namespace edge {
     };
 
     class BinaryWriter;
+    class BinaryReader;
 
     template<typename T>
     concept Serializable = requires(const T & obj, BinaryWriter & writer) {
         { obj.serialize(writer) } -> std::same_as<void>;
     };
 
+    template<typename T>
+    concept Deserializable = requires(T & obj, BinaryReader & reader) {
+        { obj.deserialize(reader) } -> std::same_as<void>;
+    };
+
     class BinaryWriter : public NonCopyMovable {
     public:
-        explicit BinaryWriter(std::ofstream& stream) : stream_(stream) {}
+        explicit BinaryWriter(std::ostream& stream) : stream_(stream) {}
 
         // Write trivially copyable types
         template<typename T>
@@ -384,6 +390,159 @@ namespace edge {
             stream_.flush();
         }
     private:
-        std::ofstream& stream_;
+        std::ostream& stream_;
+    };
+
+    class BinaryReader {
+    public:
+        explicit BinaryReader(std::istream& stream) : stream_(stream) {}
+
+        // Read trivially copyable types
+        template<typename T>
+            requires std::is_trivially_copyable_v<T> && (!Deserializable<T>)
+        T read() {
+            T value;
+            stream_.read(reinterpret_cast<char*>(&value), sizeof(T));
+            return value;
+        }
+
+        // Read into existing trivially copyable variable
+        template<typename T>
+            requires std::is_trivially_copyable_v<T> && (!Deserializable<T>)
+        void read(T& value) {
+            stream_.read(reinterpret_cast<char*>(&value), sizeof(T));
+        }
+
+        // Read custom deserializable types
+        template<Deserializable T>
+        T read() {
+            T value;
+            value.deserialize(*this);
+            return value;
+        }
+
+        // Read into existing deserializable variable
+        template<Deserializable T>
+        void read(T& value) {
+            value.deserialize(*this);
+        }
+
+        // Read array of trivially copyable types
+        template<typename T>
+            requires std::is_trivially_copyable_v<T>
+        void read_array(T* data, std::size_t count) {
+            stream_.read(reinterpret_cast<char*>(data), count * sizeof(T));
+        }
+
+        // Read span
+        template<typename T>
+            requires std::is_trivially_copyable_v<T>
+        void read_span(std::span<T> data) {
+            read_array(data.data(), data.size());
+        }
+
+        // Read vector of trivially copyable types (with length prefix)
+        template<typename T>
+            requires std::is_trivially_copyable_v<T>
+        std::vector<T> read_vector() {
+            auto len = read<std::uint32_t>();
+            std::vector<T> vec(len);
+            read_array(vec.data(), len);
+            return vec;
+        }
+
+        // Read vector of deserializable types (with length prefix)
+        template<Deserializable T>
+        std::vector<T> read_vector() {
+            auto len = read<std::uint32_t>();
+            std::vector<T> vec;
+            vec.reserve(len);
+            for (std::uint32_t i = 0; i < len; ++i) {
+                vec.push_back(read<T>());
+            }
+            return vec;
+        }
+
+        // Read string (with length prefix)
+        std::string read_string() {
+            auto len = read<std::uint32_t>();
+            std::string str(len, '\0');
+            stream_.read(str.data(), len);
+            return str;
+        }
+
+        // Read fixed-size string without length prefix
+        std::string read_string_raw(std::size_t size) {
+            std::string str(size, '\0');
+            stream_.read(str.data(), size);
+            return str;
+        }
+
+        // Read null-terminated string
+        std::string read_cstring() {
+            std::string str;
+            char ch;
+            while (stream_.read(&ch, 1) && ch != '\0') {
+                str += ch;
+            }
+            return str;
+        }
+
+        // Read bytes
+        void read_bytes(void* data, std::size_t size) {
+            stream_.read(static_cast<char*>(data), size);
+        }
+
+        // Endianness conversion helpers
+        template<typename T>
+            requires std::integral<T>
+        T read_le() {
+            T value = read<T>();
+            if constexpr (std::endian::native != std::endian::little) {
+                value = std::byteswap(value);
+            }
+            return value;
+        }
+
+        template<typename T>
+            requires std::integral<T>
+        T read_be() {
+            T value = read<T>();
+            if constexpr (std::endian::native != std::endian::big) {
+                value = std::byteswap(value);
+            }
+            return value;
+        }
+
+        // Positioning
+        std::streampos tell() const {
+            return stream_.tellg();
+        }
+
+        void seek(std::streampos pos) {
+            stream_.seekg(pos);
+        }
+
+        void seek_relative(std::streamoff offset) {
+            stream_.seekg(offset, std::ios::cur);
+        }
+
+        // Stream state
+        bool good() const { return stream_.good(); }
+        bool fail() const { return stream_.fail(); }
+        bool eof() const { return stream_.eof(); }
+        explicit operator bool() const { return good(); }
+
+        // Check if we can read N bytes
+        bool can_read(std::size_t bytes) {
+            auto current = tell();
+            stream_.seekg(0, std::ios::end);
+            auto end = tell();
+            stream_.seekg(current);
+            return (end - current) >= static_cast<std::streamoff>(bytes);
+        }
+
+    private:
+        std::istream& stream_;
     };
 }

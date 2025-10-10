@@ -12,6 +12,15 @@ namespace edge::gfx {
 		uint32_t flags;
 	};
 
+	struct TechniqueStage {
+		vk::ShaderStageFlagBits stage;
+		std::string entry_point_name;
+		std::vector<uint8_t> code;
+
+		void serialize(BinaryWriter& writer) const;
+		void deserialize(BinaryReader& reader);
+	};
+
 	struct VertexInputBinding {
 		uint16_t stride;
 		uint8_t binding;
@@ -76,16 +85,11 @@ namespace edge::gfx {
 		uint8_t depth_state_depth_bounds_test_enable : 1;
 		uint8_t stencil_state_stencil_test_enable : 1;
 		uint8_t color_blending_state_logic_op_enable : 1;
-		uint8_t pad0 : 1;
+		uint8_t color_blending_state_has_attachments : 1;
 
 		uint8_t tessellation_state_control_points : 6;
-		uint8_t pad1 : 2;
-		uint8_t vertex_input_state_binding_count : 4;
-		uint8_t vertex_input_state_attribute_count : 4;
-		uint8_t color_blending_state_attachment_count : 4;
-		uint8_t pad2 : 4;
-
-		uint8_t pad3;
+		uint8_t vertex_input_state_has_bindings : 1;
+		uint8_t vertex_input_state_has_attributes : 1;
 
 		float multisample_state_min_sample_shading;
 
@@ -104,5 +108,69 @@ namespace edge::gfx {
 		float rasterization_state_line_width;
 
 		float color_blending_state_blend_constants[4];
+	};
+
+	struct ShaderEffect {
+		ShaderEffectHeader header;
+		std::string name;
+		vk::PipelineBindPoint bind_point;
+
+		std::vector<TechniqueStage> stages;
+
+		PipelineStateHeader pipeline_state;
+		std::vector<gfx::ColorAttachment> color_attachments;
+		std::vector<uint32_t> multisample_sample_masks{ 0x00000000 };
+		std::vector<gfx::VertexInputAttribute> vertex_input_attributes;
+		std::vector<gfx::VertexInputBinding> vertex_input_bindings;
+
+		void serialize(BinaryWriter& writer) const {
+			writer.write(header);
+			writer.write_string(name);
+			writer.write(static_cast<uint32_t>(bind_point));
+			writer.write_vector(stages);
+			if (bind_point == vk::PipelineBindPoint::eGraphics) {
+				writer.write(pipeline_state);
+
+				if (!color_attachments.empty()) {
+					writer.write_vector(color_attachments);
+				}
+				if (!multisample_sample_masks.empty()) {
+					writer.write_vector(multisample_sample_masks);
+				}
+				if (!vertex_input_attributes.empty()) {
+					writer.write_vector(vertex_input_attributes);
+				}
+				if (!vertex_input_bindings.empty()) {
+					writer.write_vector(vertex_input_bindings);
+				}
+			}
+		}
+
+		void deserialize(BinaryReader& reader) {
+			reader.read(header);
+			name = reader.read_string();
+			reader.read(bind_point);
+			stages = reader.read_vector<TechniqueStage>();
+
+			if (bind_point == vk::PipelineBindPoint::eGraphics) {
+				reader.read(pipeline_state);
+
+				if (pipeline_state.color_blending_state_has_attachments) {
+					color_attachments = reader.read_vector<ColorAttachment>();
+				}
+
+				if (pipeline_state.multisample_state_sample_count > 1) {
+					multisample_sample_masks = reader.read_vector<uint32_t>();
+				}
+
+				if (pipeline_state.vertex_input_state_has_attributes) {
+					vertex_input_attributes = reader.read_vector<VertexInputAttribute>();
+				}
+
+				if (pipeline_state.vertex_input_state_has_bindings) {
+					vertex_input_bindings = reader.read_vector<VertexInputBinding>();
+				}
+			}
+		}
 	};
 }
