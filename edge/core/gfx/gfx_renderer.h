@@ -155,7 +155,7 @@ namespace edge::gfx {
 			, descriptor_pool_{ std::exchange(other.descriptor_pool_, nullptr) }
 			, descriptor_set_{ std::exchange(other.descriptor_set_, nullptr) }
 			, pipeline_layout_{ std::exchange(other.pipeline_layout_, nullptr) }
-			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, nullptr) } {
+			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, {}) } {
 		}
 
 		auto operator=(Renderer&& other) -> Renderer& {
