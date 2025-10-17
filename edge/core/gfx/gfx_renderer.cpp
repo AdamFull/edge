@@ -367,11 +367,13 @@ namespace edge::gfx {
 		bind_descriptor_info.stageFlags = vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute;
 		bind_descriptor_info.layout = pipeline_layout_.get_handle();
 		bind_descriptor_info.firstSet = 0u;
+		bind_descriptor_info.dynamicOffsetCount = 0u;
+		bind_descriptor_info.pDynamicOffsets = nullptr;
 		bind_descriptor_info.descriptorSetCount = 1u;
 		auto const& descriptor_set_handle = descriptor_set_.get_handle();
 		bind_descriptor_info.pDescriptorSets = &descriptor_set_handle;
 
-		cmdbuf->bindDescriptorSets2(&bind_descriptor_info);
+		cmdbuf->bindDescriptorSets2KHR(&bind_descriptor_info);
 
 		delta_time_ = delta_time;
 	}
