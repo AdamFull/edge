@@ -4,6 +4,7 @@
 #include <memory>
 #include <format>
 #include <span>
+#include <concepts>
 
 #include <string>
 #include <fstream>
@@ -55,6 +56,9 @@ namespace edge {
 
 	template<typename T>
 	using Owned = std::unique_ptr<T>;
+
+    template<typename _Ty>
+    concept Arithmetic = std::is_arithmetic_v<_Ty>;
 
 	template<typename T, size_t Capacity = 16>
 	class FixedVector {
