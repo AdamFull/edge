@@ -84,13 +84,10 @@ namespace edge::gfx {
 
 	};
 
-	class Frame {
+	class Frame : public NonCopyable {
 	public:
 		Frame() = default;
 		~Frame();
-
-		Frame(const Frame&) = delete;
-		auto operator=(const Frame&) -> Frame& = delete;
 
 		Frame(Frame&& other)
 			: image_available_{ std::exchange(other.image_available_, nullptr) }
@@ -107,7 +104,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto construct(const Context& ctx, CommandBuffer&& command_buffer) -> Result<Frame>;
+		static auto construct(const Context& ctx, CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Result<Frame>;
 
 		auto begin() -> void;
 		auto end() -> void;
@@ -117,7 +114,7 @@ namespace edge::gfx {
 		auto get_fence() const -> Fence const& { return fence_; }
 		auto get_command_buffer() const -> CommandBuffer const& { return command_buffer_; }
 	private:
-		auto _construct(const Context& ctx) -> vk::Result;
+		auto _construct(const Context& ctx, DescriptorSetLayout const& descriptor_layout) -> vk::Result;
 
 		Semaphore image_available_;
 		Semaphore rendering_finished_;
@@ -137,7 +134,7 @@ namespace edge::gfx {
 
 	class Renderer {
 	public:
-		Renderer() = default;
+		Renderer(Context&& context);
 		~Renderer();
 
 		Renderer(const Renderer&) = delete;
@@ -152,7 +149,13 @@ namespace edge::gfx {
 			, swapchain_image_views_{ std::exchange(other.swapchain_image_views_, {}) }
 			, swapchain_image_index_{ std::exchange(other.swapchain_image_index_, {}) }
 			, frames_{ std::exchange(other.frames_, {}) }
-			, frame_number_{ std::exchange(other.frame_number_, {}) } {
+			, frame_number_{ std::exchange(other.frame_number_, {}) }
+			
+			, descriptor_layout_{ std::exchange(other.descriptor_layout_, nullptr) }
+			, descriptor_pool_{ std::exchange(other.descriptor_pool_, nullptr) }
+			, descriptor_set_{ std::exchange(other.descriptor_set_, nullptr) }
+			, pipeline_layout_{ std::exchange(other.pipeline_layout_, nullptr) }
+			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, nullptr) } {
 		}
 
 		auto operator=(Renderer&& other) -> Renderer& {
@@ -165,6 +168,12 @@ namespace edge::gfx {
 			swapchain_image_index_ = std::exchange(other.swapchain_image_index_, {});
 			frames_ = std::exchange(other.frames_, {});
 			frame_number_ = std::exchange(other.frame_number_, {});
+
+			descriptor_layout_ = std::exchange(other.descriptor_layout_, nullptr);
+			descriptor_pool_ = std::exchange(other.descriptor_pool_, nullptr);
+			descriptor_set_ = std::exchange(other.descriptor_set_, nullptr);
+			pipeline_layout_ = std::exchange(other.pipeline_layout_, nullptr);
+			push_constant_buffer_ = std::exchange(other.push_constant_buffer_, {});
 			return *this;
 		}
 
@@ -205,5 +214,11 @@ namespace edge::gfx {
 		Frame* active_frame_{ nullptr };
 		float delta_time_{ 0.0f };
 		float gpu_delta_time_{ 0.0f };
+
+		DescriptorSetLayout descriptor_layout_;
+		DescriptorPool descriptor_pool_;
+		DescriptorSet descriptor_set_;
+		PipelineLayout pipeline_layout_;
+		Vector<uint8_t> push_constant_buffer_;
 	};
 }

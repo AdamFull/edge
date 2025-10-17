@@ -1752,6 +1752,98 @@ namespace edge::gfx {
 
 #undef EDGE_LOGGER_SCOPE // PipelineCache
 
+#define EDGE_LOGGER_SCOPE "gfx::DescriptorSetLayoutBuilder"
+
+	DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(Context const& ctx)
+		: ctx_{ &ctx }
+		, layout_bindings_{ ctx.get_allocator() }
+		, binding_flags_{ ctx.get_allocator() } {
+
+	}
+
+	auto DescriptorSetLayoutBuilder::build(vk::DescriptorSetLayoutCreateFlags flags) -> Result<DescriptorSetLayout> {
+		auto const& device = ctx_->get_device();
+
+		vk::DescriptorSetLayoutBindingFlagsCreateInfoEXT ext_create_info{};
+		ext_create_info.bindingCount = static_cast<uint32_t>(binding_flags_.size());
+		ext_create_info.pBindingFlags = binding_flags_.data();
+
+		vk::DescriptorSetLayoutCreateInfo create_info{};
+		create_info.bindingCount = static_cast<uint32_t>(layout_bindings_.size());
+		create_info.pBindings = layout_bindings_.data();
+		create_info.flags = flags;
+		create_info.pNext = &ext_create_info;
+
+		vk::DescriptorSetLayout descriptor_set_layout;
+		if (auto result = device->createDescriptorSetLayout(&create_info, ctx_->get_allocator(), &descriptor_set_layout); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return DescriptorSetLayout{ &device, descriptor_set_layout, pool_sizes_ };
+	}
+
+#undef EDGE_LOGGER_SCOPE // DescriptorSetLayoutBuilder
+
+#define EDGE_LOGGER_SCOPE "gfx::PipelineLayoutBuilder"
+
+	PipelineLayoutBuilder::PipelineLayoutBuilder(Context const& ctx)
+		: ctx_{ &ctx }
+		, descriptor_set_layouts_{ ctx.get_allocator() }
+		, push_constant_ranges_{ ctx.get_allocator() } {
+
+	}
+
+	auto PipelineLayoutBuilder::add_set_layout(DescriptorSetLayout const& set_layout) -> PipelineLayoutBuilder& {
+		descriptor_set_layouts_.push_back(set_layout.get_handle());
+		return *this;
+	}
+
+	auto PipelineLayoutBuilder::build() -> Result<PipelineLayout> {
+		auto const& device = ctx_->get_device();
+
+		vk::PipelineLayoutCreateInfo create_info{};
+		create_info.setLayoutCount = static_cast<uint32_t>(descriptor_set_layouts_.size());
+		create_info.pSetLayouts = descriptor_set_layouts_.data();
+		create_info.pushConstantRangeCount = static_cast<uint32_t>(push_constant_ranges_.size());
+		create_info.pPushConstantRanges = push_constant_ranges_.data();
+
+		vk::PipelineLayout pipeline_layout;
+		if (auto result = device->createPipelineLayout(&create_info, ctx_->get_allocator(), &pipeline_layout); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return PipelineLayout{ &device, pipeline_layout };
+	}
+
+#undef EDGE_LOGGER_SCOPE // PipelineLayoutBuilder
+
+#define EDGE_LOGGER_SCOPE "gfx::DescriptorPool"
+
+	auto DescriptorPool::allocate_descriptor_set(DescriptorSetLayout const& layout) const -> Result<DescriptorSet> {
+		vk::DescriptorSetAllocateInfo alloc_info{};
+		alloc_info.descriptorPool = handle_;
+		alloc_info.descriptorSetCount = 1u;
+		auto set_layout_handle = layout.get_handle();
+		alloc_info.pSetLayouts = &set_layout_handle;
+
+		vk::DescriptorSet descriptor_set;
+		auto result = (*device_)->allocateDescriptorSets(&alloc_info, &descriptor_set);
+		if (result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return DescriptorSet{ device_, descriptor_set, layout.get_pool_sizes() };
+	}
+
+	auto DescriptorPool::free_descriptor_set(DescriptorSet const& set) const -> void {
+		auto const& descriptor_set = set.get_handle();
+		if (auto result = (*device_)->freeDescriptorSets(handle_, 1u, &descriptor_set); result != vk::Result::eSuccess) {
+			EDGE_SLOGE("Failed to free descriptor set.");
+		}
+	}
+
+#undef EDGE_LOGGER_SCOPE // DescriptorPool
+
 #define EDGE_LOGGER_SCOPE "gfx::Context"
 
 	Context::Context()
@@ -2001,6 +2093,28 @@ namespace edge::gfx {
 			return std::unexpected(result);
 		}
 		return QueryPool(&device_, query_pool, type, create_info.queryCount);
+	}
+
+	auto Context::create_descriptor_pool(PoolSizes const& requested_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags) const -> Result<DescriptorPool> {
+		Array<vk::DescriptorPoolSize, PoolSizes::k_max_sizes> pool_sizes{};
+		for (int32_t i = 0; i < pool_sizes.size(); ++i) {
+			auto& size = pool_sizes[i];
+			size.type = static_cast<vk::DescriptorType>(i);
+			size.descriptorCount = std::max(1u, static_cast<uint32_t>(requested_sizes[i]));
+		}
+
+		vk::DescriptorPoolCreateInfo create_info{};
+		create_info.poolSizeCount = static_cast<uint32_t>(PoolSizes::k_max_sizes);
+		create_info.pPoolSizes = pool_sizes.data();
+		create_info.maxSets = max_descriptor_sets;
+		create_info.flags = flags;
+
+		vk::DescriptorPool descriptor_pool;
+		if (auto result = device_->createDescriptorPool(&create_info, allocator_, &descriptor_pool); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return DescriptorPool{ &device_, descriptor_pool };
 	}
 
 	auto Context::_construct(const ContextInfo& info) -> vk::Result {

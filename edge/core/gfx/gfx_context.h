@@ -8,6 +8,7 @@ namespace edge::platform {
 }
 
 namespace edge::gfx {
+	class Context;
 	class Instance;
 	class Surface;
 	class Adapter;
@@ -1059,11 +1060,140 @@ namespace edge::gfx {
 		}
 	};
 
+	struct PoolSizes {
+		using counting_type = int32_t;
+		static constexpr int32_t k_max_sizes{ 11 };
+
+		std::array<counting_type, k_max_sizes> sizes_{};
+
+		// Arithmetic operators (compound-assignment)
+		PoolSizes& operator+=(const PoolSizes& rhs) {
+			std::transform(sizes_.begin(), sizes_.end(), rhs.sizes_.begin(), sizes_.begin(), std::plus{});
+			return *this;
+		}
+
+		PoolSizes& operator-=(const PoolSizes& rhs) {
+			std::transform(sizes_.begin(), sizes_.end(), rhs.sizes_.begin(), sizes_.begin(), std::minus{});
+			return *this;
+		}
+
+		PoolSizes& operator*=(const PoolSizes& rhs) {
+			std::transform(sizes_.begin(), sizes_.end(), rhs.sizes_.begin(), sizes_.begin(), std::multiplies{});
+			return *this;
+		}
+
+		PoolSizes& operator/=(const PoolSizes& rhs) {
+			std::transform(sizes_.begin(), sizes_.end(), rhs.sizes_.begin(), sizes_.begin(), std::divides{});
+			return *this;
+		}
+
+		// Scalar arithmetic operators (compound-assignment)
+		template<Arithmetic T>
+		PoolSizes& operator+=(T rhs) {
+			for (auto& s : sizes_) s += rhs;
+			return *this;
+		}
+
+		template<Arithmetic T>
+		PoolSizes& operator-=(T rhs) {
+			for (auto& s : sizes_) s -= rhs;
+			return *this;
+		}
+
+		template<Arithmetic T>
+		PoolSizes& operator*=(T rhs) {
+			for (auto& s : sizes_) s *= rhs;
+			return *this;
+		}
+
+		template<Arithmetic T>
+		PoolSizes& operator/=(T rhs) {
+			for (auto& s : sizes_) s /= rhs;
+			return *this;
+		}
+
+		// Non-member arithmetic operators
+		friend PoolSizes operator+(PoolSizes lhs, const PoolSizes& rhs) { return lhs += rhs; }
+		friend PoolSizes operator-(PoolSizes lhs, const PoolSizes& rhs) { return lhs -= rhs; }
+		friend PoolSizes operator*(PoolSizes lhs, const PoolSizes& rhs) { return lhs *= rhs; }
+		friend PoolSizes operator/(PoolSizes lhs, const PoolSizes& rhs) { return lhs /= rhs; }
+
+		template<Arithmetic T>
+		friend PoolSizes operator+(PoolSizes lhs, T rhs) { return lhs += rhs; }
+		template<Arithmetic T>
+		friend PoolSizes operator-(PoolSizes lhs, T rhs) { return lhs -= rhs; }
+		template<Arithmetic T>
+		friend PoolSizes operator*(PoolSizes lhs, T rhs) { return lhs *= rhs; }
+		template<Arithmetic T>
+		friend PoolSizes operator/(PoolSizes lhs, T rhs) { return lhs /= rhs; }
+
+		bool operator==(const PoolSizes&) const = default;
+
+		auto operator<=>(const PoolSizes& rhs) const {
+			return sizes_ <=> rhs.sizes_;
+		}
+
+		counting_type& operator[](size_t idx) { return sizes_[idx]; }
+		const counting_type& operator[](size_t idx) const { return sizes_[idx]; }
+	};
+
+	class DescriptorSetLayoutBuilder : public NonCopyable {
+	public:
+		DescriptorSetLayoutBuilder(Context const& ctx);
+
+		auto add_binding(uint32_t binding, vk::DescriptorType descriptor_type, uint32_t descriptor_count, vk::ShaderStageFlags stage_flags, vk::DescriptorBindingFlagsEXT binding_flags = {}) -> DescriptorSetLayoutBuilder& {
+			pool_sizes_[static_cast<uint32_t>(descriptor_type)] += descriptor_count;
+			layout_bindings_.emplace_back(binding, descriptor_type, descriptor_count, stage_flags, nullptr);
+			binding_flags_.emplace_back(binding_flags);
+			return *this;
+		}
+
+		auto build(vk::DescriptorSetLayoutCreateFlags flags = {}) -> Result<DescriptorSetLayout>;
+	private:
+		Context const* ctx_{ nullptr };
+
+		Vector<vk::DescriptorSetLayoutBinding> layout_bindings_;
+		Vector<vk::DescriptorBindingFlagsEXT> binding_flags_;
+		PoolSizes pool_sizes_;
+	};
+
+	class PipelineLayoutBuilder : public NonCopyable {
+	public:
+		PipelineLayoutBuilder(Context const& ctx);
+
+		auto add_set_layout(DescriptorSetLayout const& set_layout) -> PipelineLayoutBuilder&;
+
+		inline auto add_constant_range(vk::PushConstantRange const& range) -> PipelineLayoutBuilder& {
+			push_constant_ranges_.push_back(range);
+			return *this;
+		}
+
+		inline auto add_constant_range(vk::ShaderStageFlags stage_flags, uint32_t offset, uint32_t size) -> PipelineLayoutBuilder& {
+			push_constant_ranges_.emplace_back(stage_flags, offset, size);
+			return *this;
+		}
+
+		auto build() -> Result<PipelineLayout>;
+	private:
+		Context const* ctx_{ nullptr };
+
+		Vector<vk::DescriptorSetLayout> descriptor_set_layouts_;
+		Vector<vk::PushConstantRange> push_constant_ranges_;
+	};
+
 	class DescriptorSetLayout : public DeviceHandle<vk::DescriptorSetLayout> {
 	public:
-		DescriptorSetLayout(Device const* device = nullptr, vk::DescriptorSetLayout handle = VK_NULL_HANDLE)
-			: DeviceHandle{ device, handle } {
+		DescriptorSetLayout(Device const* device = nullptr, vk::DescriptorSetLayout handle = VK_NULL_HANDLE, PoolSizes pool_sizes = {})
+			: DeviceHandle{ device, handle }
+			, pool_sizes_{ pool_sizes } {
 		}
+
+		auto get_pool_sizes() const -> PoolSizes const& {
+			return pool_sizes_;
+		}
+
+	private:
+		PoolSizes pool_sizes_{};
 	};
 
 	class DescriptorPool : public DeviceHandle<vk::DescriptorPool> {
@@ -1071,13 +1201,23 @@ namespace edge::gfx {
 		DescriptorPool(Device const* device = nullptr, vk::DescriptorPool handle = VK_NULL_HANDLE)
 			: DeviceHandle{ device, handle } {
 		}
+
+		auto allocate_descriptor_set(DescriptorSetLayout const& layout) const -> Result<DescriptorSet>;
 	};
 
 	class DescriptorSet : public Handle<vk::DescriptorSet> {
 	public:
-		//DescriptorPool(Device const* device = nullptr, vk::DescriptorPool handle = VK_NULL_HANDLE)
-		//	: DeviceHandle{ device, handle } {
-		//}
+		DescriptorSet(Device const* device = nullptr, vk::DescriptorSet handle = VK_NULL_HANDLE, PoolSizes const& pool_sizes = {})
+			: Handle{ handle, device ? device->get_allocator() : nullptr }
+			, pool_sizes_{ pool_sizes } {
+		}
+
+		auto get_pool_sizes() const -> PoolSizes const& {
+			return pool_sizes_;
+		}
+
+	private:
+		PoolSizes pool_sizes_{};
 	};
 
 	class Context : public NonCopyable {
@@ -1132,7 +1272,7 @@ namespace edge::gfx {
 
 		auto create_pipeline_cache(Span<const uint8_t> data) const -> Result<PipelineCache>;
 		auto create_query_pool(vk::QueryType type, uint32_t query_count) const -> Result<QueryPool>;
-		// TODO: Descriptors
+		auto create_descriptor_pool(PoolSizes const& pool_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags = {}) const -> Result<DescriptorPool>;
 
 		auto get_allocator() const -> vk::AllocationCallbacks const* { return allocator_; }
 		auto get_instance() const -> Instance const& { return instance_; }

@@ -157,10 +157,10 @@ namespace edge::gfx {
 		
 	}
 
-	auto Frame::construct(const Context& ctx, CommandBuffer&& command_buffer) -> Result<Frame> {
+	auto Frame::construct(const Context& ctx, CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Result<Frame> {
 		Frame self{};
 		self.command_buffer_ = std::move(command_buffer);
-		if (auto result = self._construct(ctx); result != vk::Result::eSuccess) {
+		if (auto result = self._construct(ctx, descriptor_layout); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
 		return self;
@@ -175,7 +175,7 @@ namespace edge::gfx {
 	auto Frame::end() -> void {
 	}
 
-	auto Frame::_construct(const Context& ctx) -> vk::Result {
+	auto Frame::_construct(const Context& ctx, DescriptorSetLayout const& descriptor_layout) -> vk::Result {
 		if (auto result = ctx.create_semaphore(); !result.has_value()) {
 			EDGE_SLOGE("Failed to create image available semaphore handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
@@ -208,16 +208,23 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::Renderer"
 
+	Renderer::Renderer(Context&& context)
+		: context_{ std::move(context) }
+		, swapchain_images_{ context_.get_allocator() }
+		, swapchain_image_views_{ context_.get_allocator() }
+		, frames_{ context_.get_allocator() }
+		, push_constant_buffer_{ context_.get_allocator() } {
+
+	}
+
 	Renderer::~Renderer() {
 		queue_->waitIdle();
+
+		descriptor_pool_.free_descriptor_set(descriptor_set_);
 	}
 
 	auto Renderer::construct(Context&& context, const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>> {
-		auto self = std::make_unique<Renderer>();
-		self->context_ = std::move(context);
-		self->swapchain_images_ = Vector<Image>(self->context_.get_allocator());
-		self->swapchain_image_views_ = Vector<ImageView>(self->context_.get_allocator());
-		self->frames_ = Vector<Frame>(self->context_.get_allocator());
+		auto self = std::make_unique<Renderer>(std::move(context));
 		if (auto result = self->_construct(create_info); result != vk::Result::eSuccess) {
 			context = std::move(self->context_);
 			return std::unexpected(result);
@@ -277,13 +284,22 @@ namespace edge::gfx {
 			input_assembly_state_create_info.topology = static_cast<vk::PrimitiveTopology>(shader_effect.pipeline_state.input_assembly_state_primitive_topology);
 			input_assembly_state_create_info.primitiveRestartEnable = static_cast<vk::Bool32>(shader_effect.pipeline_state.input_assembly_state_primitive_restart_enable);
 
-			//vk::PipelineTessellationStateCreateInfo 
+			vk::PipelineTessellationStateCreateInfo tessellation_state_create_info{};
+			tessellation_state_create_info.patchControlPoints = static_cast<uint32_t>(shader_effect.pipeline_state.tessellation_state_control_points);
+
+			auto& image = swapchain_images_[swapchain_image_index_];
+			auto extent = image.get_extent();
+
+			vk::PipelineViewportStateCreateInfo viewport_state_create_info{};
+			vk::Viewport base_viewport{};
+			vk::Rect2D base_scissor{};
 
 			vk::GraphicsPipelineCreateInfo create_info{};
 			create_info.stageCount = static_cast<uint32_t>(shader_stages.size());
 			create_info.pStages = shader_stages.data();
 			create_info.pVertexInputState = &input_state_create_info;
 			create_info.pInputAssemblyState = &input_assembly_state_create_info;
+			create_info.pTessellationState = &tessellation_state_create_info;
 
 		}
 		else if (shader_effect.bind_point == vk::PipelineBindPoint::eCompute) {
@@ -345,6 +361,17 @@ namespace edge::gfx {
 
 		cmdbuf->resetQueryPool(*timestamp_query_, 0u, 2u);
 		cmdbuf->writeTimestamp2KHR(vk::PipelineStageFlagBits2::eTopOfPipe, *timestamp_query_, 0u);
+
+		// Bind global descriptor and layout
+		vk::BindDescriptorSetsInfo bind_descriptor_info{};
+		bind_descriptor_info.stageFlags = vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute;
+		bind_descriptor_info.layout = pipeline_layout_.get_handle();
+		bind_descriptor_info.firstSet = 0u;
+		bind_descriptor_info.descriptorSetCount = 1u;
+		auto const& descriptor_set_handle = descriptor_set_.get_handle();
+		bind_descriptor_info.pDescriptorSets = &descriptor_set_handle;
+
+		cmdbuf->bindDescriptorSets2(&bind_descriptor_info);
 
 		delta_time_ = delta_time;
 	}
@@ -478,6 +505,56 @@ namespace edge::gfx {
 
 		timestamp_frequency_ = adapter_properties.limits.timestampPeriod;
 
+		// Create descriptor layout
+		DescriptorSetLayoutBuilder set_layout_builder{ context_ };
+		set_layout_builder.add_binding(0, vk::DescriptorType::eSampler, 0xffffui16,
+			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
+			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+		set_layout_builder.add_binding(1, vk::DescriptorType::eSampledImage, 0xffffui16,
+			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
+			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+		set_layout_builder.add_binding(2, vk::DescriptorType::eStorageImage, 0xfffui16,
+			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
+			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
+
+		if (auto result = set_layout_builder.build(vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool); !result) {
+			return result.error();
+		}
+		else {
+			descriptor_layout_ = std::move(result.value());
+		}
+
+		auto const& requested_sizes = descriptor_layout_.get_pool_sizes();
+		if (auto result = context_.create_descriptor_pool(requested_sizes, 1u, vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBindEXT); !result) {
+			EDGE_SLOGE("Failed to create frame descriptor pool handle. Reason: {}.", vk::to_string(result.error()));
+			return result.error();
+		}
+		else {
+			descriptor_pool_ = std::move(result.value());
+		}
+
+		if (auto result = descriptor_pool_.allocate_descriptor_set(descriptor_layout_); !result) {
+			EDGE_SLOGE("Failed to create frame descriptor set handle. Reason: {}.", vk::to_string(result.error()));
+			return result.error();
+		}
+		else {
+			descriptor_set_ = std::move(result.value());
+		}
+
+		PipelineLayoutBuilder pipeline_layout_builder{ context_ };
+		// TODO: add ability to set specific set point
+		pipeline_layout_builder.add_set_layout(descriptor_layout_);
+		pipeline_layout_builder.add_constant_range(vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, 0u, adapter_properties.limits.maxPushConstantsSize);
+
+		if (auto result = pipeline_layout_builder.build(); !result) {
+			return result.error();
+		}
+		else {
+			pipeline_layout_ = std::move(result.value());
+		}
+
+		push_constant_buffer_.resize(adapter_properties.limits.maxPushConstantsSize);
+
 		if (auto result = create_swapchain({
 			.format = {create_info.preferred_format, create_info.preferred_color_space},
 			.extent = create_info.extent,
@@ -494,7 +571,7 @@ namespace edge::gfx {
 				return command_list_result.error();
 			}
 
-			if (auto frame_result = Frame::construct(context_, std::move(command_list_result.value())); !frame_result.has_value()) {
+			if (auto frame_result = Frame::construct(context_, std::move(command_list_result.value()), descriptor_layout_); !frame_result.has_value()) {
 				EDGE_SLOGE("Failed to create frame at index {}. Reason: {}.", i, vk::to_string(frame_result.error()));
 				return frame_result.error();
 			}
@@ -503,7 +580,7 @@ namespace edge::gfx {
 			}
 		}
 
-		create_shader("assets/shaders/imgui.shfx");
+		//create_shader("assets/shaders/imgui.shfx");
 
 		return vk::Result::eSuccess;
 	}
