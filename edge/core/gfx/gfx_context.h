@@ -1203,6 +1203,7 @@ namespace edge::gfx {
 		}
 
 		auto allocate_descriptor_set(DescriptorSetLayout const& layout) const -> Result<DescriptorSet>;
+		auto free_descriptor_set(DescriptorSet const& set) const -> void;
 	};
 
 	class DescriptorSet : public Handle<vk::DescriptorSet> {
