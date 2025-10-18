@@ -9,7 +9,7 @@ color_blending:
     logic_op_enable: false
     logic_op: clear
     attachments:
-    - format: backbuffer
+    - format: undefined # for backbuffer
       blending: true
       src_color: src_alpha
       dst_color: one_minus_src_alpha
