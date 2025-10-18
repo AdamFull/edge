@@ -46,7 +46,7 @@ namespace edge::gfx {
 
 		if (g_session.compress) {
 			const auto max_compressed_size = ZSTD_compressBound(code.size());
-			std::vector<uint8_t> compressed_code(max_compressed_size, 0);
+			mi::Vector<uint8_t> compressed_code(max_compressed_size, 0);
 
 			const auto compressed_size = ZSTD_compress(compressed_code.data(), max_compressed_size, code.data(), code.size(), 15);
 			compressed_code.resize(compressed_size);
@@ -1083,7 +1083,9 @@ int main(int argc, char* argv[]) {
 	auto root = techniaue_tree.rootref();
 
 	if (root.has_child("name")) {
-		root["name"] >> shader_effect.name;
+		std::string name_str;
+		root["name"] >> name_str;
+		shader_effect.name = mi::String{ name_str.begin(), name_str.end() };
 	}
 
 	if (root.has_child("type")) {

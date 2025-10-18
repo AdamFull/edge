@@ -14,7 +14,7 @@
 #include "../../gfx/vulkan/vk_context.h"
 
 namespace edge::platform {
-    auto get_package_code_path(android_app* app) -> std::string {
+    auto get_package_code_path(android_app* app) -> mi::String {
         auto* env = get_jni_env(app);
 
         jclass clazz = env->GetObjectClass(app->activity->javaGameActivity);
@@ -22,7 +22,7 @@ namespace edge::platform {
         jstring apk_path_java = (jstring)env->CallObjectMethod(app->activity->javaGameActivity, methodID);
 
         const char* apk_path_chars = env->GetStringUTFChars(apk_path_java, nullptr);
-        return std::string(apk_path_chars ? apk_path_chars : "");
+        return mi::String(apk_path_chars ? apk_path_chars : "");
     }
 
 	auto AndroidPlatformContext::construct(android_app* app)

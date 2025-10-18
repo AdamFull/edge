@@ -14,8 +14,8 @@ namespace edge::gfx {
 
 	struct TechniqueStage {
 		vk::ShaderStageFlagBits stage;
-		std::string entry_point_name;
-		std::vector<uint8_t> code;
+		mi::String entry_point_name;
+		mi::Vector<uint8_t> code;
 
 		void serialize(BinaryWriter& writer) const;
 		void deserialize(BinaryReader& reader);
@@ -210,17 +210,17 @@ namespace edge::gfx {
 
 	struct ShaderEffect {
 		ShaderEffectHeader header;
-		std::string name;
+		mi::String name;
 		vk::PipelineBindPoint bind_point;
 
-		std::vector<TechniqueStage> stages;
+		mi::Vector<TechniqueStage> stages;
 
 		PipelineStateHeader pipeline_state;
-		std::vector<gfx::ColorAttachment> color_attachments;
-		std::vector<uint32_t> multisample_sample_masks{ 0x00000000 };
-		std::vector<gfx::VertexInputAttribute> vertex_input_attributes;
-		std::vector<gfx::VertexInputBinding> vertex_input_bindings;
-		std::vector<vk::Format> attachment_formats;
+		mi::Vector<gfx::ColorAttachment> color_attachments;
+		mi::Vector<uint32_t> multisample_sample_masks{ 0x00000000 };
+		mi::Vector<gfx::VertexInputAttribute> vertex_input_attributes;
+		mi::Vector<gfx::VertexInputBinding> vertex_input_bindings;
+		mi::Vector<vk::Format> attachment_formats;
 		vk::Format depth_format{ vk::Format::eUndefined };
 		vk::Format stencil_format{ vk::Format::eUndefined };
 

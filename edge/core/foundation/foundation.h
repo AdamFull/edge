@@ -326,7 +326,7 @@ namespace edge {
         // Write vector of trivially copyable types
         template<typename T>
             requires std::is_trivially_copyable_v<T>
-        void write_vector(const std::vector<T>& vec) {
+        void write_vector(const mi::Vector<T>& vec) {
             auto len = static_cast<std::uint32_t>(vec.size());
             write(len);
             write_array(vec.data(), vec.size());
@@ -334,7 +334,7 @@ namespace edge {
 
         // Write vector of serializable types
         template<Serializable T>
-        void write_vector(const std::vector<T>& vec) {
+        void write_vector(const mi::Vector<T>& vec) {
             auto len = static_cast<std::uint32_t>(vec.size());
             write(len);
             for (const auto& item : vec) {
@@ -343,14 +343,14 @@ namespace edge {
         }
 
         // Write string (with length prefix)
-        void write_string(const std::string& str) {
+        void write_string(const mi::String& str) {
             auto len = static_cast<std::uint32_t>(str.size());
             write(len);
             stream_.write(str.data(), str.size());
         }
 
         // Write string without length prefix
-        void write_string_raw(const std::string& str) {
+        void write_string_raw(const mi::String& str) {
             stream_.write(str.data(), str.size());
         }
 
@@ -465,18 +465,18 @@ namespace edge {
         // Read vector of trivially copyable types (with length prefix)
         template<typename T>
             requires std::is_trivially_copyable_v<T>
-        std::vector<T> read_vector() {
+        mi::Vector<T> read_vector() {
             auto len = read<std::uint32_t>();
-            std::vector<T> vec(len);
+            mi::Vector<T> vec(len);
             read_array(vec.data(), len);
             return vec;
         }
 
         // Read vector of deserializable types (with length prefix)
         template<Deserializable T>
-        std::vector<T> read_vector() {
+        mi::Vector<T> read_vector() {
             auto len = read<std::uint32_t>();
-            std::vector<T> vec;
+            mi::Vector<T> vec;
             vec.reserve(len);
             for (std::uint32_t i = 0; i < len; ++i) {
                 vec.push_back(read<T>());
@@ -485,23 +485,23 @@ namespace edge {
         }
 
         // Read string (with length prefix)
-        std::string read_string() {
+        mi::String read_string() {
             auto len = read<std::uint32_t>();
-            std::string str(len, '\0');
+            mi::String str(len, '\0');
             stream_.read(str.data(), len);
             return str;
         }
 
         // Read fixed-size string without length prefix
-        std::string read_string_raw(std::size_t size) {
-            std::string str(size, '\0');
+        mi::String read_string_raw(std::size_t size) {
+            mi::String str(size, '\0');
             stream_.read(str.data(), size);
             return str;
         }
 
         // Read null-terminated string
-        std::string read_cstring() {
-            std::string str;
+        mi::String read_cstring() {
+            mi::String str;
             char ch;
             while (stream_.read(&ch, 1) && ch != '\0') {
                 str += ch;

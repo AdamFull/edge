@@ -1468,7 +1468,7 @@ namespace edge::gfx {
 			return request_composite_alpha;
 		}
 
-		static const std::vector<vk::CompositeAlphaFlagBitsKHR> composite_alpha_priority_list = {
+		static const std::array<vk::CompositeAlphaFlagBitsKHR, 4> composite_alpha_priority_list = {
 			vk::CompositeAlphaFlagBitsKHR::eOpaque, vk::CompositeAlphaFlagBitsKHR::ePreMultiplied,
 			vk::CompositeAlphaFlagBitsKHR::ePostMultiplied, vk::CompositeAlphaFlagBitsKHR::eInherit
 		};

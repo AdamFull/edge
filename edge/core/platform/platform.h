@@ -1,10 +1,6 @@
 #pragma once
 
-#include <array>
-#include <bitset>
-#include <memory>
-#include <string>
-#include <string_view>
+#include "../foundation/foundation.h"
 
 #include "frame_handler.h"
 
@@ -38,7 +34,7 @@ namespace edge::platform::window {
 	};
 
 	struct Properties {
-		std::string title{ "Window" };
+		mi::String title{ "Window" };
 		Mode mode = Mode::eDefault;
 		bool resizable = true;
 		Vsync vsync = Vsync::eDefault;

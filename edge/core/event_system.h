@@ -1,7 +1,6 @@
 #pragma once
 
 #include <variant>
-#include <vector>
 #include <memory>
 #include <chrono>
 #include <atomic>
@@ -273,13 +272,13 @@ namespace edge {
                 : id(listener_id), handler(h), user_data(data), accepted_tags(tags) {}
         };
 
-        std::vector<ListenerInfo> listeners_;
+        mi::Vector<ListenerInfo> listeners_;
         std::priority_queue<DeferredEvent> deferred_events_;
         mutable std::mutex deferred_events_mutex_; // For thread-safe access to deferred events
         std::atomic<uint64_t> sequence_counter_{ 0 };
 
         // Pre-computed listener indices for each event type
-        std::array<std::vector<size_t>, sizeof...(SupportedEvents)> event_listener_indices_;
+        std::array<mi::Vector<size_t>, sizeof...(SupportedEvents)> event_listener_indices_;
 
         // Thread-safe listener ID generation
         std::atomic<listener_id_t> next_listener_id_{ 1 };

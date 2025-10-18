@@ -1,13 +1,9 @@
 #pragma once
 
+#include "foundation.h"
+
 #include <type_traits>
-#include <concepts>
-#include <format>
-#include <string>
-#include <string_view>
-#include <array>
 #include <algorithm>
-#include <span>
 
 namespace edge::foundation {
 	template<typename T>
@@ -208,13 +204,13 @@ namespace edge::foundation {
         }
 
         // Convert flags to string representation
-        auto to_string() const -> std::string {
+        auto to_string() const -> mi::String {
             if constexpr (HasFlagTraits<E>) {
                 if (value_ == 0) {
                     return "None";
                 }
 
-                std::string result;
+                mi::String result;
                 auto names = flag_traits<E>::names();
                 bool first = true;
 

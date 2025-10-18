@@ -44,7 +44,7 @@ namespace edge::platform {
         AndroidPlatformContext* platform_context_{ nullptr };
 
         GameTextInputState* input_state_{ nullptr };
-        std::string input_string_{};
+        mi::String input_string_{};
     };
 
     class AndroidPlatformWindow final : public IPlatformWindow {
