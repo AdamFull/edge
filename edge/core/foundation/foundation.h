@@ -5,9 +5,13 @@
 #include <format>
 #include <span>
 #include <concepts>
+#include <vector>
+#include <unordered_map>
 
 #include <string>
 #include <fstream>
+
+#include <mimalloc.h>
 
 #include <spdlog/spdlog.h>
 
@@ -41,6 +45,19 @@ namespace edge {
         return (size + alignment - 1ull) & ~(alignment - 1ull);
     }
 
+    namespace mi {
+        template<typename T>
+        using BasicString = std::basic_string<T, std::char_traits<T>, mi_stl_allocator<T>>;
+
+        using String = BasicString<char>;
+        using WString = BasicString<wchar_t>;
+
+        template<typename T>
+        using Vector = std::vector<T, mi_stl_allocator<T>>;
+
+        template<typename K, typename T, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = mi_stl_allocator<std::pair<const K, T>>>
+        using HashMap = std::unordered_map<K, T, Hasher, KeyEq, Alloc>;
+    }
 
 	template<typename T, size_t Size>
 	using Array = std::array<T, Size>;

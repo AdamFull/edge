@@ -210,10 +210,10 @@ namespace edge::gfx {
 
 	Renderer::Renderer(Context&& context)
 		: context_{ std::move(context) }
-		, swapchain_images_{ context_.get_allocator() }
-		, swapchain_image_views_{ context_.get_allocator() }
-		, frames_{ context_.get_allocator() }
-		, push_constant_buffer_{ context_.get_allocator() } {
+		, swapchain_images_{}
+		, swapchain_image_views_{}
+		, frames_{}
+		, push_constant_buffer_{} {
 
 	}
 
@@ -245,8 +245,8 @@ namespace edge::gfx {
 
 		// TODO: validate shader effect
 
-		Vector<ShaderModule> shader_modules{ context_.get_allocator() };
-		Vector<vk::PipelineShaderStageCreateInfo> shader_stages{ context_.get_allocator() };
+		mi::Vector<ShaderModule> shader_modules{};
+		mi::Vector<vk::PipelineShaderStageCreateInfo> shader_stages{};
 
 		for (auto const& stage : shader_effect.stages) {
 			auto result = context_.create_shader_module(stage.code);
@@ -264,12 +264,12 @@ namespace edge::gfx {
 		}
 		
 		if (shader_effect.bind_point == vk::PipelineBindPoint::eGraphics) {
-			Vector<vk::VertexInputBindingDescription> vertex_input_binding_descriptions{ context_.get_allocator() };
+			mi::Vector<vk::VertexInputBindingDescription> vertex_input_binding_descriptions{};
 			for (auto const& binding_desc : shader_effect.vertex_input_bindings) {
 				vertex_input_binding_descriptions.push_back(binding_desc.to_vulkan());
 			}
 
-			Vector<vk::VertexInputAttributeDescription> vertex_input_attribute_descriptions{ context_.get_allocator() };
+			mi::Vector<vk::VertexInputAttributeDescription> vertex_input_attribute_descriptions{};
 			for (auto const& attribute_desc : shader_effect.vertex_input_attributes) {
 				vertex_input_attribute_descriptions.push_back(attribute_desc.to_vulkan());
 			}
@@ -427,10 +427,10 @@ namespace edge::gfx {
 
 		cmdbuf.end();
 
-		Vector<vk::SemaphoreSubmitInfo> wait_semaphores{ context_.get_allocator() };
+		mi::Vector<vk::SemaphoreSubmitInfo> wait_semaphores{};
 		wait_semaphores.push_back(vk::SemaphoreSubmitInfo{ acquired_senmaphore_, 0ull, vk::PipelineStageFlagBits2::eColorAttachmentOutput });
 
-		Vector<vk::SemaphoreSubmitInfo> signal_semaphores{ context_.get_allocator() };
+		mi::Vector<vk::SemaphoreSubmitInfo> signal_semaphores{};
 
 		vk::Semaphore rendering_finished_sem = active_frame_->get_rendering_finished_semaphore();
 		signal_semaphores.push_back(vk::SemaphoreSubmitInfo{ rendering_finished_sem, 0ull, vk::PipelineStageFlagBits2::eColorAttachmentOutput });

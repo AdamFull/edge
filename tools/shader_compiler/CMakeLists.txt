@@ -11,6 +11,7 @@ endif()
 
 target_link_libraries(${PROJECT_NAME}
 	PRIVATE
+    mimalloc-static
 	argparse
 	ryml::ryml
 	Vulkan::Headers

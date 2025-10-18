@@ -7,15 +7,15 @@
 namespace edge::gfx {
 	ShaderLibrary::ShaderLibrary(Context const& ctx)
 		: ctx_{ &ctx }
-		, pipelines_{ ctx.get_allocator() }
-		, pipeline_cache_path_{ ctx.get_allocator() } {
+		, pipelines_{}
+		, pipeline_cache_path_{} {
 
 	}
 
 	ShaderLibrary::~ShaderLibrary() {
 		if (pipeline_cache_) {
 
-			Vector<uint8_t> pipeline_cache_data{ ctx_->get_allocator() };
+			mi::Vector<uint8_t> pipeline_cache_data{};
 			auto result = pipeline_cache_.get_data(pipeline_cache_data);
 			if (result != vk::Result::eSuccess) {
 				EDGE_SLOGE("Failed to read pipeline cache data.");
@@ -32,7 +32,7 @@ namespace edge::gfx {
 		}
 	}
 
-	auto ShaderLibrary::construct(Context const& ctx, PipelineLayout const& pipeline_layout, WString const& pipeline_cache_path, WString const& shaders_path) -> Result<ShaderLibrary> {
+	auto ShaderLibrary::construct(Context const& ctx, PipelineLayout const& pipeline_layout, mi::WString const& pipeline_cache_path, mi::WString const& shaders_path) -> Result<ShaderLibrary> {
 		ShaderLibrary self{ ctx };
 		self.pipeline_cache_path_ = pipeline_cache_path;
 		if (auto result = self._construct(pipeline_layout, shaders_path); result != vk::Result::eSuccess) {
@@ -41,12 +41,12 @@ namespace edge::gfx {
 		return self;
 	}
 
-	auto ShaderLibrary::_construct(PipelineLayout const& pipeline_layout, WString const& shaders_path) -> vk::Result {
+	auto ShaderLibrary::_construct(PipelineLayout const& pipeline_layout, mi::WString const& shaders_path) -> vk::Result {
 		// Load pipeline cache if exists
-		Vector<uint8_t> pipeline_cache_data{ ctx_->get_allocator() };
+		mi::Vector<uint8_t> pipeline_cache_data{};
 		std::ifstream infile(pipeline_cache_path_.c_str(), std::ios_base::binary);
 		if (infile.is_open()) {
-			pipeline_cache_data = { std::istreambuf_iterator<char>(infile), std::istreambuf_iterator<char>(), ctx_->get_allocator() };
+			pipeline_cache_data = { std::istreambuf_iterator<char>(infile), std::istreambuf_iterator<char>() };
 		}
 
 		if (auto result = ctx_->create_pipeline_cache(pipeline_cache_data); !result) {
@@ -74,8 +74,8 @@ namespace edge::gfx {
 
 				// TODO: validate
 
-				Vector<ShaderModule> shader_modules{ shader_effect.stages.size(), ctx_->get_allocator() };
-				Vector<vk::PipelineShaderStageCreateInfo> shader_stages{ shader_effect.stages.size(), ctx_->get_allocator() };
+				mi::Vector<ShaderModule> shader_modules{ shader_effect.stages.size() };
+				mi::Vector<vk::PipelineShaderStageCreateInfo> shader_stages{ shader_effect.stages.size() };
 
 				for (int32_t i = 0; i < static_cast<int32_t>(shader_effect.stages.size()); ++i) {
 					const auto& stage = shader_effect.stages[i];
@@ -96,12 +96,12 @@ namespace edge::gfx {
 				}
 
 				if (shader_effect.bind_point == vk::PipelineBindPoint::eGraphics) {
-					Vector<vk::VertexInputBindingDescription> vertex_input_binding_descriptions{ ctx_->get_allocator() };
+					mi::Vector<vk::VertexInputBindingDescription> vertex_input_binding_descriptions{};
 					for (auto const& binding_desc : shader_effect.vertex_input_bindings) {
 						vertex_input_binding_descriptions.push_back(binding_desc.to_vulkan());
 					}
 
-					Vector<vk::VertexInputAttributeDescription> vertex_input_attribute_descriptions{ ctx_->get_allocator() };
+					mi::Vector<vk::VertexInputAttributeDescription> vertex_input_attribute_descriptions{};
 					for (auto const& attribute_desc : shader_effect.vertex_input_attributes) {
 						vertex_input_attribute_descriptions.push_back(attribute_desc.to_vulkan());
 					}
@@ -121,7 +121,7 @@ namespace edge::gfx {
 					auto color_blend_state_create_info = shader_effect.pipeline_state.get_color_blending_state();
 					color_blend_state_create_info.attachmentCount = static_cast<uint32_t>(shader_effect.color_attachments.size());
 
-					Vector<vk::PipelineColorBlendAttachmentState> attachment_states{ shader_effect.color_attachments.size(), ctx_->get_allocator() };
+					mi::Vector<vk::PipelineColorBlendAttachmentState> attachment_states{ shader_effect.color_attachments.size() };
 					for (int32_t i = 0; i < static_cast<int32_t>(shader_effect.color_attachments.size()); ++i) {
 						attachment_states[i] = shader_effect.color_attachments[i].to_vulkan();
 					}
@@ -171,7 +171,7 @@ namespace edge::gfx {
 						return result;
 					}
 
-					pipelines_[String(shader_effect.name, ctx_->get_allocator())] = Pipeline{ &device, pipeline };
+					pipelines_[mi::String(shader_effect.name)] = Pipeline{ &device, pipeline };
 				}
 				else if (shader_effect.bind_point == vk::PipelineBindPoint::eCompute) {
 					vk::ComputePipelineCreateInfo create_info{};
@@ -185,7 +185,7 @@ namespace edge::gfx {
 						return result;
 					}
 
-					pipelines_[String(shader_effect.name, ctx_->get_allocator())] = Pipeline{ &device, pipeline };
+					pipelines_[mi::String(shader_effect.name)] = Pipeline{ &device, pipeline };
 				}
 			}
 		}

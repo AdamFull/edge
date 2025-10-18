@@ -27,10 +27,6 @@ namespace edge::gfx {
 	class VulkanLifetime {
 	public:
 		VulkanLifetime() {
-			total_bytes_allocated_ = 0ull;
-			allocation_count_ = 0ull;
-			deallocation_count_ = 0ull;
-
 			// Create allocation callbacks
 			callbacks_ = std::make_unique<vk::AllocationCallbacks>();
 			callbacks_->pfnAllocation = (vk::PFN_AllocationFunction)memalloc;
@@ -45,19 +41,6 @@ namespace edge::gfx {
 		}
 
 		~VulkanLifetime() {
-			if (allocation_count_ != deallocation_count_) {
-				EDGE_SLOGE("Memory leaks detected!\n Allocated: {}, Deallocated: {} objects. Leaked {} bytes.",
-					allocation_count_.load(), deallocation_count_.load(), total_bytes_allocated_.load());
-
-				for (const auto& allocation : allocation_map_) {
-					EDGE_SLOGW("{:#010x} : {} bytes, {} byte alignment, {} scope",
-						reinterpret_cast<uintptr_t>(allocation.first), allocation.second.size, allocation.second.align, vk::to_string(allocation.second.scope));
-				}
-			}
-			else {
-				EDGE_SLOGI("All memory correctly deallocated");
-			}
-
 			volkFinalize();
 		}
 
@@ -69,83 +52,15 @@ namespace edge::gfx {
 		auto get_allocator() const -> vk::AllocationCallbacks const* { return callbacks_.get(); }
 	private:
 		auto do_allocation(size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) -> void* {
-			void* ptr = mi_aligned_alloc(alignment, size);
-			if (ptr) {
-				total_bytes_allocated_.fetch_add(size);
-				allocation_count_.fetch_add(1ull);
-
-				std::lock_guard<std::mutex> lock(mutex_);
-				allocation_map_[ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
-
-#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
-				EDGE_SLOGT("Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
-					reinterpret_cast<uintptr_t>(ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
-#endif
-			}
-
-			return ptr;
+			return mi_aligned_alloc(alignment, size);
 		}
 
 		auto do_deallocation(void* mem) -> void {
-			if (!mem) {
-				return;
-			}
-
-			std::lock_guard<std::mutex> lock(mutex_);
-			if (auto found = allocation_map_.find(mem); found != allocation_map_.end()) {
-				total_bytes_allocated_.fetch_sub(found->second.size);
-				deallocation_count_.fetch_add(1ull);
-
-#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
-				EDGE_SLOGT("[Vulkan Graphics Context]: Deallocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
-					reinterpret_cast<uintptr_t>(mem), found->second.size, found->second.align, get_allocation_scope_str(found->second.scope), std::this_thread::get_id());
-#endif
-				allocation_map_.erase(found);
-			}
-			else {
-				EDGE_SLOGE("[Vulkan Graphics Context]: Found invalid memory allocation: {:#010x}.", reinterpret_cast<uintptr_t>(mem));
-			}
-
-#ifdef EDGE_PLATFORM_WINDOWS
 			mi_free(mem);
-#else
-			free(mem);
-#endif
 		}
 
 		auto do_reallocation(void* old, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) -> void* {
-			if (!old) {
-				return do_allocation(size, alignment, allocation_scope);
-			}
-
-			
-
-			if (size == 0ull) {
-				// Behave like free
-				do_deallocation(old);
-				return nullptr;
-			}
-
-			auto* new_ptr = mi_aligned_recalloc(old, 1, size, alignment);
-			if (new_ptr) {
-				std::lock_guard<std::mutex> lock(mutex_);
-				if (auto found = allocation_map_.find(old); found != allocation_map_.end()) {
-					total_bytes_allocated_.fetch_sub(found->second.size);
-					deallocation_count_.fetch_add(1ull);
-					allocation_map_.erase(found);
-				}
-
-				total_bytes_allocated_.fetch_add(size);
-				allocation_count_.fetch_add(1ull);
-				allocation_map_[new_ptr] = { size, alignment, allocation_scope, std::this_thread::get_id() };
-
-#if VULKAN_DEBUG && !EDGE_PLATFORM_WINDOWS
-				EDGE_SLOGT("[Vulkan Graphics Context]: Allocation({:#010x}, {} bytes, {} byte alignment, scope - {}, in thread - {})",
-					reinterpret_cast<uintptr_t>(new_ptr), size, alignment, get_allocation_scope_str(allocation_scope), std::this_thread::get_id());
-#endif
-			}
-
-			return new_ptr;
+			return mi_aligned_recalloc(old, 1, size, alignment);
 		}
 
 		static void* VKAPI_CALL memalloc(void* user_data, size_t size, size_t alignment, vk::SystemAllocationScope allocation_scope) {
@@ -172,11 +87,6 @@ namespace edge::gfx {
 		}
 
 		std::unique_ptr<vk::AllocationCallbacks> callbacks_;
-		std::atomic<size_t> total_bytes_allocated_;
-		std::atomic<size_t> allocation_count_;
-		std::atomic<size_t> deallocation_count_;
-		std::mutex mutex_;
-		std::unordered_map<void*, MemoryAllocationDesc> allocation_map_;
 	};
 
 #undef EDGE_LOGGER_SCOPE // VulkanLifetime
@@ -208,13 +118,13 @@ namespace edge::gfx {
 #define EDGE_LOGGER_SCOPE "gfx::util"
 
 	namespace util {
-		inline auto enumerate_instance_layer_properties(vk::AllocationCallbacks const* allocator) -> Result<Vector<vk::LayerProperties>> {
+		inline auto enumerate_instance_layer_properties() -> Result<mi::Vector<vk::LayerProperties>> {
 			uint32_t count;
 			if (auto result = vk::enumerateInstanceLayerProperties(&count, nullptr); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
 
-			Vector<vk::LayerProperties> output(count, allocator);
+			mi::Vector<vk::LayerProperties> output(count);
 			if (auto result = vk::enumerateInstanceLayerProperties(&count, output.data()); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
@@ -222,13 +132,13 @@ namespace edge::gfx {
 			return output;
 		}
 
-		inline auto enumerate_instance_extension_properties(const char* layer_name, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::ExtensionProperties>> {
+		inline auto enumerate_instance_extension_properties(const char* layer_name) -> Result<mi::Vector<vk::ExtensionProperties>> {
 			uint32_t count;
 			if (auto result = vk::enumerateInstanceExtensionProperties(layer_name, &count, nullptr); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
 
-			Vector<vk::ExtensionProperties> output(count, allocator);
+			mi::Vector<vk::ExtensionProperties> output(count);
 			if (auto result = vk::enumerateInstanceExtensionProperties(layer_name, &count, output.data()); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
@@ -236,13 +146,13 @@ namespace edge::gfx {
 			return output;
 		}
 
-		inline auto enumerate_physical_devices(vk::Instance instance, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::PhysicalDevice>> {
+		inline auto enumerate_physical_devices(vk::Instance instance) -> Result<mi::Vector<vk::PhysicalDevice>> {
 			uint32_t count;
 			if (auto result = instance.enumeratePhysicalDevices(&count, nullptr); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
 
-			Vector<vk::PhysicalDevice> output(count, allocator);
+			mi::Vector<vk::PhysicalDevice> output(count);
 			if (auto result = instance.enumeratePhysicalDevices(&count, output.data()); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
@@ -250,13 +160,13 @@ namespace edge::gfx {
 			return output;
 		}
 
-		inline auto enumerate_device_extension_properties(vk::PhysicalDevice device, const char* layer_name = nullptr, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::ExtensionProperties>> {
+		inline auto enumerate_device_extension_properties(vk::PhysicalDevice device, const char* layer_name = nullptr) -> Result<mi::Vector<vk::ExtensionProperties>> {
 			uint32_t count;
 			if (auto result = device.enumerateDeviceExtensionProperties(layer_name, &count, nullptr); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
 
-			Vector<vk::ExtensionProperties> output(count, allocator);
+			mi::Vector<vk::ExtensionProperties> output(count);
 			if (auto result = device.enumerateDeviceExtensionProperties(layer_name, &count, output.data()); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
@@ -264,23 +174,23 @@ namespace edge::gfx {
 			return output;
 		}
 
-		inline auto get_queue_family_properties(vk::PhysicalDevice device, vk::AllocationCallbacks const* allocator = nullptr) -> Vector<vk::QueueFamilyProperties> {
+		inline auto get_queue_family_properties(vk::PhysicalDevice device) -> mi::Vector<vk::QueueFamilyProperties> {
 			uint32_t count;
 			device.getQueueFamilyProperties(&count, nullptr);
 
-			Vector<vk::QueueFamilyProperties> output(count, allocator);
+			mi::Vector<vk::QueueFamilyProperties> output(count);
 			device.getQueueFamilyProperties(&count, output.data());
 
 			return output;
 		}
 
-		inline auto get_surface_formats(vk::PhysicalDevice device, vk::SurfaceKHR surface, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::SurfaceFormatKHR>> {
+		inline auto get_surface_formats(vk::PhysicalDevice device, vk::SurfaceKHR surface) -> Result<mi::Vector<vk::SurfaceFormatKHR>> {
 			uint32_t count;
 			if (auto result = device.getSurfaceFormatsKHR(surface, &count, nullptr); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
 
-			Vector<vk::SurfaceFormatKHR> output(count, allocator);
+			mi::Vector<vk::SurfaceFormatKHR> output(count);
 			if (auto result = device.getSurfaceFormatsKHR(surface, &count, output.data()); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
@@ -288,13 +198,13 @@ namespace edge::gfx {
 			return output;
 		}
 
-		inline auto get_surface_present_modes(vk::PhysicalDevice device, vk::SurfaceKHR surface, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::PresentModeKHR>> {
+		inline auto get_surface_present_modes(vk::PhysicalDevice device, vk::SurfaceKHR surface) -> Result<mi::Vector<vk::PresentModeKHR>> {
 			uint32_t count;
 			if (auto result = device.getSurfacePresentModesKHR(surface, &count, nullptr); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
 
-			Vector<vk::PresentModeKHR> output(count, allocator);
+			mi::Vector<vk::PresentModeKHR> output(count);
 			if (auto result = device.getSurfacePresentModesKHR(surface, &count, output.data()); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
@@ -302,13 +212,13 @@ namespace edge::gfx {
 			return output;
 		}
 
-		inline auto get_swapchain_images(vk::Device device, vk::SwapchainKHR swapchain, vk::AllocationCallbacks const* allocator = nullptr) -> Result<Vector<vk::Image>> {
+		inline auto get_swapchain_images(vk::Device device, vk::SwapchainKHR swapchain) -> Result<mi::Vector<vk::Image>> {
 			uint32_t count;
 			if (auto result = device.getSwapchainImagesKHR(swapchain, &count, nullptr); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
 
-			Vector<vk::Image> output(count, allocator);
+			mi::Vector<vk::Image> output(count);
 			if (auto result = device.getSwapchainImagesKHR(swapchain, &count, output.data()); result != vk::Result::eSuccess) {
 				return std::unexpected(result);
 			}
@@ -557,7 +467,7 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::Instance"
 
-	Instance::Instance(vk::Instance handle, vk::DebugUtilsMessengerEXT debug_messenger, vk::AllocationCallbacks const* allocator, Vector<const char*>&& enabled_extensions, Vector<const char*> enabled_layers)
+	Instance::Instance(vk::Instance handle, vk::DebugUtilsMessengerEXT debug_messenger, vk::AllocationCallbacks const* allocator, mi::Vector<const char*>&& enabled_extensions, mi::Vector<const char*> enabled_layers)
 		: Handle{ handle, allocator }
 		, debug_messenger_{ debug_messenger }
 		, enabled_extensions_{ std::move(enabled_extensions) }
@@ -608,19 +518,19 @@ namespace edge::gfx {
 			}) != enabled_layers_.end();
 	}
 
-	auto Instance::get_adapters() const -> Result<Vector<Adapter>> {
-		Vector<Adapter> adapters{ allocator_ };
+	auto Instance::get_adapters() const -> Result<mi::Vector<Adapter>> {
+		mi::Vector<Adapter> adapters{};
 
-		auto result = util::enumerate_physical_devices(handle_, allocator_);
+		auto result = util::enumerate_physical_devices(handle_);
 		if (!result) {
 			return std::unexpected(result.error());
 		}
 
 		for (const auto& adapter : result.value()) {
-			Vector<vk::ExtensionProperties> all_device_extensions{ allocator_ };
+			mi::Vector<vk::ExtensionProperties> all_device_extensions{};
 			for (int32_t layer_index = 0; layer_index < static_cast<int32_t>(enabled_layers_.size() + 1); ++layer_index) {
 				auto* layer_name = (layer_index == 0 ? nullptr : enabled_layers_[layer_index - 1]);
-				if (auto result = util::enumerate_device_extension_properties(adapter, layer_name, allocator_); result.has_value()) {
+				if (auto result = util::enumerate_device_extension_properties(adapter, layer_name); result.has_value()) {
 					auto layer_ext_props = std::move(result.value());
 					all_device_extensions.insert(all_device_extensions.end(), layer_ext_props.begin(), layer_ext_props.end());
 				}
@@ -638,10 +548,10 @@ namespace edge::gfx {
 
 	InstanceBuilder::InstanceBuilder(vk::AllocationCallbacks const* allocator) :
 		allocator_{ allocator },
-		requested_extensions_{ allocator },
-		requested_layers_{ allocator },
-		validation_feature_enables_{ allocator },
-		validation_feature_disables_{ allocator } {
+		requested_extensions_{},
+		requested_layers_{},
+		validation_feature_enables_{},
+		validation_feature_disables_{} {
 		create_info_.pApplicationInfo = &app_info_;
 	}
 
@@ -689,8 +599,8 @@ namespace edge::gfx {
 			add_extension(VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME, true);
 		}
 
-		Vector<vk::LayerProperties> all_layer_properties{ allocator_ };
-		if (auto request = util::enumerate_instance_layer_properties(allocator_); request.has_value()) {
+		mi::Vector<vk::LayerProperties> all_layer_properties{};
+		if (auto request = util::enumerate_instance_layer_properties(); request.has_value()) {
 			all_layer_properties = std::move(request.value());
 		}
 
@@ -702,7 +612,7 @@ namespace edge::gfx {
 			};
 
 		// Check enabled layers
-		Vector<const char*> enabled_layers{ allocator_ };
+		mi::Vector<const char*> enabled_layers{};
 		for (const auto& [layer_name, required] : requested_layers_) {
 			if (!check_layer_support(layer_name) && required) {
 				EDGE_LOGW("Required layer \"{}\" is not supported.", layer_name);
@@ -713,10 +623,10 @@ namespace edge::gfx {
 		}
 
 		// Request all supported extensions including validation layers
-		Vector<vk::ExtensionProperties> all_extension_properties{ allocator_ };
+		mi::Vector<vk::ExtensionProperties> all_extension_properties{};
 		for (int32_t layer_index = 0; layer_index < static_cast<int32_t>(enabled_layers.size() + 1); ++layer_index) {
 			const char* layer_name = (layer_index == 0 ? nullptr : enabled_layers[layer_index - 1]);
-			if (auto result = util::enumerate_instance_extension_properties(layer_name, allocator_); result.has_value()) {
+			if (auto result = util::enumerate_instance_extension_properties(layer_name); result.has_value()) {
 				auto layer_ext_props = std::move(result.value());
 				all_extension_properties.insert(all_extension_properties.end(), layer_ext_props.begin(), layer_ext_props.end());
 			}
@@ -731,7 +641,7 @@ namespace edge::gfx {
 			};
 
 		// Check enabled extensions
-		Vector<const char*> enabled_extensions{ allocator_ };
+		mi::Vector<const char*> enabled_extensions{};
 		for (const auto& [extension_name, required] : requested_extensions_) {
 			if (!check_ext_support(extension_name) && required) {
 				EDGE_LOGW("Required extension \"{}\" is not supported.", extension_name);
@@ -789,12 +699,12 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::Adapter"
 
-	Adapter::Adapter(vk::PhysicalDevice handle, Vector<vk::ExtensionProperties>&& device_extensions, vk::AllocationCallbacks const* allocator)
+	Adapter::Adapter(vk::PhysicalDevice handle, mi::Vector<vk::ExtensionProperties>&& device_extensions, vk::AllocationCallbacks const* allocator)
 		: Handle{ handle, allocator }
 		, supported_extensions_{ std::move(device_extensions) } {
 	}
 
-	auto Adapter::get_core_extension_names(uint32_t core_version) const -> Vector<const char*> {
+	auto Adapter::get_core_extension_names(uint32_t core_version) const -> mi::Vector<const char*> {
 		typedef struct {
 			const char* extension_name;
 			uint32_t promoted_in_version;
@@ -894,7 +804,7 @@ namespace edge::gfx {
 			{"VK_EXT_vertex_attribute_divisor", VK_API_VERSION_1_4}
 		};
 
-		Vector<const char*> output{ allocator_ };
+		mi::Vector<const char*> output{};
 		for (int32_t i = 0; i < std::size(promoted_extensions); ++i) {
 			auto& extension = promoted_extensions[i];
 			if (is_supported(extension.extension_name) && extension.promoted_in_version <= core_version) {
@@ -915,7 +825,7 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::Device"
 
-	Device::Device(vk::Device handle, Vector<const char*>&& enabled_extensions, vk::AllocationCallbacks const* allocator, Array<Vector<QueueFamilyInfo>, 3ull>&& queue_family_map)
+	Device::Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, vk::AllocationCallbacks const* allocator, Array<mi::Vector<QueueFamilyInfo>, 3ull>&& queue_family_map)
 		: Handle{ handle, allocator }
 		, enabled_extensions_{ std::move(enabled_extensions) }
 		, queue_family_map_{ std::move(queue_family_map) } {
@@ -965,7 +875,7 @@ namespace edge::gfx {
 
 		auto const* allocator = instance_->get_allocator();
 
-		Vector<Adapter> adapters{ allocator };
+		mi::Vector<Adapter> adapters{};
 		if (auto result = instance_->get_adapters(); !result.has_value()) {
 			return std::unexpected(result.error());
 		}
@@ -973,15 +883,15 @@ namespace edge::gfx {
 			adapters = std::move(result.value());
 		}
 
-		Vector<Vector<const char*>> per_device_extensions(adapters.size(), Vector<const char*>(allocator), allocator);
+		mi::Vector<mi::Vector<const char*>> per_device_extensions(adapters.size());
 		for (int32_t device_idx = 0; device_idx < static_cast<int32_t>(adapters.size()); ++device_idx) {
 			auto const& adapter = adapters[device_idx].get_handle();
 
 			vk::PhysicalDeviceProperties properties;
 			adapter.getProperties(&properties);
 
-			Vector<vk::ExtensionProperties> available_extensions{ allocator };
-			if (auto result = util::enumerate_device_extension_properties(adapter, nullptr, allocator); !result.has_value()) {
+			mi::Vector<vk::ExtensionProperties> available_extensions{};
+			if (auto result = util::enumerate_device_extension_properties(adapter, nullptr); !result.has_value()) {
 				EDGE_SLOGW("Failed to enumerate extensions for device: \"{}\". Check driver setup.", std::string_view(properties.deviceName));
 				continue;
 			}
@@ -1039,7 +949,7 @@ namespace edge::gfx {
 
 			// Check that device have queue with present support
 			if (surface_) {
-				auto queue_family_props = util::get_queue_family_properties(adapter, allocator);
+				auto queue_family_props = util::get_queue_family_properties(adapter);
 
 				bool surface_supported{ false };
 				for (uint32_t queue_family_index = 0; queue_family_index < static_cast<uint32_t>(queue_family_props.size()); ++queue_family_index) {
@@ -1080,12 +990,12 @@ namespace edge::gfx {
 		vk::PhysicalDeviceProperties properties;
 		selected_adapter.getProperties(&properties);
 
-		auto queue_family_properties = util::get_queue_family_properties(selected_adapter, allocator);
+		auto queue_family_properties = util::get_queue_family_properties(selected_adapter);
 
 		EDGE_SLOGD("{} device \"{}\" selected.", to_string(properties.deviceType), std::string_view(properties.deviceName));
 
-		Vector<vk::DeviceQueueCreateInfo> queue_create_infos(queue_family_properties.size(), allocator);
-		Vector<Vector<float>> family_queue_priorities(queue_family_properties.size(), Vector<float>(allocator), allocator);
+		mi::Vector<vk::DeviceQueueCreateInfo> queue_create_infos(queue_family_properties.size());
+		mi::Vector<mi::Vector<float>> family_queue_priorities(queue_family_properties.size());
 		for (uint32_t family_index = 0u; family_index < static_cast<uint32_t>(queue_create_infos.size()); ++family_index) {
 			auto& family_props = queue_family_properties[family_index];
 
@@ -1099,7 +1009,7 @@ namespace edge::gfx {
 		}
 
 		// Make queue family map. TODO: merge with prev for
-		Array<Vector<Device::QueueFamilyInfo>, 3ull> queue_family_map{ Vector<Device::QueueFamilyInfo>{allocator} };
+		Array<mi::Vector<Device::QueueFamilyInfo>, 3ull> queue_family_map{};
 		for (uint32_t index = 0; index < static_cast<uint32_t>(queue_family_properties.size()); ++index) {
 			auto const& queue_family_property = queue_family_properties[index];
 
@@ -1122,11 +1032,11 @@ namespace edge::gfx {
 			auto& group = queue_family_map[static_cast<size_t>(queue_type)];
 			auto& family_info = group.emplace_back();
 			family_info.index = index;
-			family_info.queue_indices = Vector<uint32_t>(queue_family_property.queueCount, allocator);
+			family_info.queue_indices = mi::Vector<uint32_t>(queue_family_property.queueCount);
 			std::iota(family_info.queue_indices.rbegin(), family_info.queue_indices.rend(), 0u);
 
 #ifndef NDEBUG
-			String supported_commands{ allocator };
+			mi::String supported_commands{};
 
 			if (is_graphics_commands_supported) {
 				supported_commands += "graphics,";
@@ -1310,15 +1220,15 @@ namespace edge::gfx {
 		handle_ = VK_NULL_HANDLE;
 	}
 
-	auto Swapchain::get_images() const -> Result<Vector<Image>> {
+	auto Swapchain::get_images() const -> Result<mi::Vector<Image>> {
 		vk::Device device = *device_;
 
-		auto result = util::get_swapchain_images(device, handle_, allocator_);
+		auto result = util::get_swapchain_images(device, handle_);
 		if (!result) {
 			return std::unexpected(result.error());
 		}
 
-		Vector<Image> images{ device_->get_allocator() };
+		mi::Vector<Image> images{};
 		for (auto& image : result.value()) {
 			vk::ImageCreateInfo image_create_info{};
 			image_create_info.extent.width = state_.extent.width;
@@ -1349,13 +1259,13 @@ namespace edge::gfx {
 		vk::PhysicalDevice adapter = *adapter_;
 		auto const* allocator = adapter_->get_allocator();
 
-		Vector<vk::SurfaceFormatKHR> surface_formats{};
-		if (auto result = util::get_surface_formats(adapter, *surface_, allocator); result.has_value()) {
+		mi::Vector<vk::SurfaceFormatKHR> surface_formats{};
+		if (auto result = util::get_surface_formats(adapter, *surface_); result.has_value()) {
 			surface_formats = std::move(result.value());
 		}
 
-		Vector<vk::PresentModeKHR> present_modes;
-		if (auto result = util::get_surface_present_modes(adapter, *surface_, allocator); result.has_value()) {
+		mi::Vector<vk::PresentModeKHR> present_modes;
+		if (auto result = util::get_surface_present_modes(adapter, *surface_); result.has_value()) {
 			present_modes = std::move(result.value());
 		}
 
@@ -1402,8 +1312,8 @@ namespace edge::gfx {
 		create_info.clipped = VK_TRUE;
 		create_info.imageSharingMode = vk::SharingMode::eExclusive;
 
-		auto queue_family_properties = util::get_queue_family_properties(adapter, allocator);
-		Vector<uint32_t> queue_family_indices(queue_family_properties.size(), allocator);
+		auto queue_family_properties = util::get_queue_family_properties(adapter);
+		mi::Vector<uint32_t> queue_family_indices(queue_family_properties.size());
 		std::iota(queue_family_indices.begin(), queue_family_indices.end(), 0);
 
 		if (queue_family_indices.size() > 1) {
@@ -1448,10 +1358,10 @@ namespace edge::gfx {
 		return request_extent;
 	}
 
-	auto SwapchainBuilder::choose_surface_format(const vk::SurfaceFormatKHR requested_surface_format, const Vector<vk::SurfaceFormatKHR>& available_surface_formats, bool prefer_hdr) -> vk::SurfaceFormatKHR {
+	auto SwapchainBuilder::choose_surface_format(const vk::SurfaceFormatKHR requested_surface_format, const mi::Vector<vk::SurfaceFormatKHR>& available_surface_formats, bool prefer_hdr) -> vk::SurfaceFormatKHR {
 		// Separate formats by hdr support
-		Vector<vk::SurfaceFormatKHR> sdr_fromats{ available_surface_formats.get_allocator() };
-		Vector<vk::SurfaceFormatKHR> hdr_fromats{ available_surface_formats.get_allocator() };
+		mi::Vector<vk::SurfaceFormatKHR> sdr_fromats{};
+		mi::Vector<vk::SurfaceFormatKHR> hdr_fromats{};
 		for (const auto& surface_format : available_surface_formats) {
 			if (util::is_hdr_format(surface_format.format) && util::is_hdr_color_space(surface_format.colorSpace)) {
 				hdr_fromats.push_back(surface_format);
@@ -1618,11 +1528,11 @@ namespace edge::gfx {
 	}
 
 	auto CommandBuffer::push_barrier(const Barrier& barrier) const -> void {
-		Vector<vk::MemoryBarrier2KHR> memory_barriers{ allocator_ };
+		mi::Vector<vk::MemoryBarrier2KHR> memory_barriers{};
 
-		Vector<vk::BufferMemoryBarrier2KHR> buffer_barriers{ allocator_ };
+		mi::Vector<vk::BufferMemoryBarrier2KHR> buffer_barriers{};
 
-		Vector<vk::ImageMemoryBarrier2KHR> image_barriers{ allocator_ };
+		mi::Vector<vk::ImageMemoryBarrier2KHR> image_barriers{};
 		if (!barrier.image_barriers.empty()) {
 			image_barriers.resize(barrier.image_barriers.size());
 		}
@@ -1736,7 +1646,7 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::PipelineCache"
 
-	auto PipelineCache::get_data(Vector<uint8_t>& data) const -> vk::Result {
+	auto PipelineCache::get_data(mi::Vector<uint8_t>& data) const -> vk::Result {
 		size_t cache_size{ 0ull };
 		if (auto result = (*device_)->getPipelineCacheData(handle_, &cache_size, nullptr); result != vk::Result::eSuccess) {
 			return result;
@@ -1756,8 +1666,8 @@ namespace edge::gfx {
 
 	DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(Context const& ctx)
 		: ctx_{ &ctx }
-		, layout_bindings_{ ctx.get_allocator() }
-		, binding_flags_{ ctx.get_allocator() } {
+		, layout_bindings_{}
+		, binding_flags_{} {
 
 	}
 
@@ -1788,8 +1698,8 @@ namespace edge::gfx {
 
 	PipelineLayoutBuilder::PipelineLayoutBuilder(Context const& ctx)
 		: ctx_{ &ctx }
-		, descriptor_set_layouts_{ ctx.get_allocator() }
-		, push_constant_ranges_{ ctx.get_allocator() } {
+		, descriptor_set_layouts_{}
+		, push_constant_ranges_{} {
 
 	}
 
@@ -1935,8 +1845,8 @@ namespace edge::gfx {
 		}
 
 		vk::PhysicalDevice adapter = adapter_;
-		auto queue_family_properties = util::get_queue_family_properties(adapter, allocator_);
-		Vector<uint32_t> queue_family_indices(queue_family_properties.size(), allocator_);
+		auto queue_family_properties = util::get_queue_family_properties(adapter);
+		mi::Vector<uint32_t> queue_family_indices(queue_family_properties.size());
 		std::iota(queue_family_indices.begin(), queue_family_indices.end(), 0);
 
 		if (queue_family_indices.size() > 1) {

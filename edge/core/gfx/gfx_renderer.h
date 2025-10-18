@@ -53,7 +53,7 @@ namespace edge::gfx {
 
 		ResourceLoader(Context const* ctx = nullptr)
 			: context_{ ctx }
-			, staging_arenas_{ ctx ? ctx->get_allocator() : nullptr } {
+			, staging_arenas_{} {
 
 		}
 		~ResourceLoader() {}
@@ -81,7 +81,7 @@ namespace edge::gfx {
 		auto _allocate_staging_memory(vk::DeviceSize image_size) -> Result<BufferRange>;
 
 		Context const* context_{ nullptr };
-		Vector<BufferArena> staging_arenas_;
+		mi::Vector<BufferArena> staging_arenas_;
 
 	};
 
@@ -206,11 +206,11 @@ namespace edge::gfx {
 		double timestamp_frequency_{ 1.0 };
 
 		Swapchain swapchain_;
-		Vector<Image> swapchain_images_;
-		Vector<ImageView> swapchain_image_views_;
+		mi::Vector<Image> swapchain_images_;
+		mi::Vector<ImageView> swapchain_image_views_;
 		uint32_t swapchain_image_index_{ 0u };
 
-		Vector<Frame> frames_{};
+		mi::Vector<Frame> frames_{};
 		uint32_t frame_number_{ 0u };
 		static constexpr uint32_t k_frame_overlap_{ 2u };
 
@@ -223,7 +223,7 @@ namespace edge::gfx {
 		DescriptorPool descriptor_pool_;
 		DescriptorSet descriptor_set_;
 		PipelineLayout pipeline_layout_;
-		Vector<uint8_t> push_constant_buffer_;
+		mi::Vector<uint8_t> push_constant_buffer_;
 
 		ShaderLibrary shader_library_;
 	};

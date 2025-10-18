@@ -68,7 +68,7 @@ namespace edge::gfx {
 	class Instance : public Handle<vk::Instance> {
 	public:
 		Instance(std::nullptr_t) noexcept {};
-		Instance(vk::Instance handle, vk::DebugUtilsMessengerEXT debug_messenger, vk::AllocationCallbacks const* allocator, Vector<const char*>&& enabled_extensions, Vector<const char*> enabled_layers);
+		Instance(vk::Instance handle, vk::DebugUtilsMessengerEXT debug_messenger, vk::AllocationCallbacks const* allocator, mi::Vector<const char*>&& enabled_extensions, mi::Vector<const char*> enabled_layers);
 		~Instance();
 
 		Instance(Instance&& other)
@@ -95,11 +95,11 @@ namespace edge::gfx {
 		auto is_extension_enabled(const char* extension_name) const -> bool;
 		auto is_layer_enabled(const char* layer_name) const -> bool;
 
-		auto get_adapters() const -> Result<Vector<Adapter>>;
+		auto get_adapters() const -> Result<mi::Vector<Adapter>>;
 	private:
 		vk::DebugUtilsMessengerEXT debug_messenger_{ VK_NULL_HANDLE };
-		Vector<const char*> enabled_extensions_{};
-		Vector<const char*> enabled_layers_{};
+		mi::Vector<const char*> enabled_extensions_{};
+		mi::Vector<const char*> enabled_layers_{};
 	};
 
 	template<typename T>
@@ -251,10 +251,10 @@ namespace edge::gfx {
 	private:
 		vk::ApplicationInfo app_info_{};
 		vk::InstanceCreateInfo create_info_{};
-		Vector<std::pair<const char*, bool>> requested_extensions_;
-		Vector<std::pair<const char*, bool>> requested_layers_;
-		Vector<vk::ValidationFeatureEnableEXT> validation_feature_enables_;
-		Vector<vk::ValidationFeatureDisableEXT> validation_feature_disables_;
+		mi::Vector<std::pair<const char*, bool>> requested_extensions_;
+		mi::Vector<std::pair<const char*, bool>> requested_layers_;
+		mi::Vector<vk::ValidationFeatureEnableEXT> validation_feature_enables_;
+		mi::Vector<vk::ValidationFeatureDisableEXT> validation_feature_disables_;
 		const vk::AllocationCallbacks* allocator_{ nullptr };
 
 		bool enable_debug_utils_{ false };
@@ -265,7 +265,7 @@ namespace edge::gfx {
 	class Adapter : public Handle<vk::PhysicalDevice> {
 	public:
 		Adapter(std::nullptr_t) noexcept {};
-		Adapter(vk::PhysicalDevice handle, Vector<vk::ExtensionProperties>&& device_extensions, vk::AllocationCallbacks const* allocator);
+		Adapter(vk::PhysicalDevice handle, mi::Vector<vk::ExtensionProperties>&& device_extensions, vk::AllocationCallbacks const* allocator);
 		~Adapter() = default;
 
 		Adapter(Adapter&& other)
@@ -279,21 +279,21 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		auto get_core_extension_names(uint32_t core_version) const -> Vector<const char*>;
+		auto get_core_extension_names(uint32_t core_version) const -> mi::Vector<const char*>;
 		auto is_supported(const char* extension_name) const -> bool;
 	private:
-		Vector<vk::ExtensionProperties> supported_extensions_;
+		mi::Vector<vk::ExtensionProperties> supported_extensions_;
 	};
 
 	class Device : public Handle<vk::Device> {
 	public:
 		struct QueueFamilyInfo {
 			uint32_t index;
-			Vector<uint32_t> queue_indices;
+			mi::Vector<uint32_t> queue_indices;
 		};
 
 		Device(std::nullptr_t) noexcept {};
-		Device(vk::Device handle, Vector<const char*>&& enabled_extensions, vk::AllocationCallbacks const* allocator, Array<Vector<QueueFamilyInfo>, 3ull>&& queue_family_map);
+		Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, vk::AllocationCallbacks const* allocator, Array<mi::Vector<QueueFamilyInfo>, 3ull>&& queue_family_map);
 		~Device();
 
 		Device(Device&& other)
@@ -313,16 +313,16 @@ namespace edge::gfx {
 
 		auto is_enabled(const char* extension_name) const -> bool;
 	private:
-		Vector<const char*> enabled_extensions_;
-		mutable Array<Vector<QueueFamilyInfo>, 3ull> queue_family_map_;
+		mi::Vector<const char*> enabled_extensions_;
+		mutable Array<mi::Vector<QueueFamilyInfo>, 3ull> queue_family_map_;
 	};
 
 	class DeviceSelector {
 	public:
 		DeviceSelector(const Instance& instance) 
 			: instance_{ &instance }
-			, requested_extensions_{ instance_->get_allocator() }
-			, requested_features_{ instance_->get_allocator() } {
+			, requested_extensions_{}
+			, requested_features_{} {
 		}
 
 		auto set_surface(vk::SurfaceKHR surface) -> DeviceSelector& {
@@ -391,9 +391,9 @@ namespace edge::gfx {
 		uint32_t minimal_api_ver{ VK_VERSION_1_0 };
 		vk::PhysicalDeviceType preferred_type_{ vk::PhysicalDeviceType::eDiscreteGpu };
 
-		Vector<std::pair<const char*, bool>> requested_extensions_;
+		mi::Vector<std::pair<const char*, bool>> requested_extensions_;
 
-		Vector<Shared<void>> requested_features_;
+		mi::Vector<Shared<void>> requested_features_;
 		void* last_feature_ptr_{ nullptr };
 	};
 
@@ -829,7 +829,7 @@ namespace edge::gfx {
 
 		auto reset() -> void;
 
-		auto get_images() const -> Result<Vector<Image>>;
+		auto get_images() const -> Result<mi::Vector<Image>>;
 
 		auto get_state() const -> State const& { return state_; }
 		auto get_image_count() const noexcept -> uint32_t { return state_.image_count; }
@@ -896,7 +896,7 @@ namespace edge::gfx {
 		auto build() -> Result<Swapchain>;
 	private:
 		static auto choose_suitable_extent(vk::Extent2D request_extent, const vk::SurfaceCapabilitiesKHR& surface_caps) -> vk::Extent2D;
-		static auto choose_surface_format(const vk::SurfaceFormatKHR requested_surface_format, const Vector<vk::SurfaceFormatKHR>& available_surface_formats, bool prefer_hdr = false) -> vk::SurfaceFormatKHR;
+		static auto choose_surface_format(const vk::SurfaceFormatKHR requested_surface_format, const mi::Vector<vk::SurfaceFormatKHR>& available_surface_formats, bool prefer_hdr = false) -> vk::SurfaceFormatKHR;
 		static auto choose_suitable_composite_alpha(vk::CompositeAlphaFlagBitsKHR request_composite_alpha, vk::CompositeAlphaFlagsKHR supported_composite_alpha) -> vk::CompositeAlphaFlagBitsKHR;
 		static auto choose_suitable_present_mode(vk::PresentModeKHR request_present_mode, std::span<const vk::PresentModeKHR> available_present_modes, std::span<const vk::PresentModeKHR> present_mode_priority_list) -> vk::PresentModeKHR;
 
@@ -1033,7 +1033,7 @@ namespace edge::gfx {
 			: DeviceHandle{ device, handle } {
 		}
 
-		auto get_data(Vector<uint8_t>& data) const -> vk::Result;
+		auto get_data(mi::Vector<uint8_t>& data) const -> vk::Result;
 		auto get_data(void*& data, size_t& size) const -> vk::Result;
 	};
 
@@ -1152,8 +1152,8 @@ namespace edge::gfx {
 	private:
 		Context const* ctx_{ nullptr };
 
-		Vector<vk::DescriptorSetLayoutBinding> layout_bindings_;
-		Vector<vk::DescriptorBindingFlagsEXT> binding_flags_;
+		mi::Vector<vk::DescriptorSetLayoutBinding> layout_bindings_;
+		mi::Vector<vk::DescriptorBindingFlagsEXT> binding_flags_;
 		PoolSizes pool_sizes_;
 	};
 
@@ -1177,8 +1177,8 @@ namespace edge::gfx {
 	private:
 		Context const* ctx_{ nullptr };
 
-		Vector<vk::DescriptorSetLayout> descriptor_set_layouts_;
-		Vector<vk::PushConstantRange> push_constant_ranges_;
+		mi::Vector<vk::DescriptorSetLayout> descriptor_set_layouts_;
+		mi::Vector<vk::PushConstantRange> push_constant_ranges_;
 	};
 
 	class DescriptorSetLayout : public DeviceHandle<vk::DescriptorSetLayout> {
