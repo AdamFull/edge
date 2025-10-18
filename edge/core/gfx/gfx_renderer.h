@@ -1,6 +1,7 @@
 #pragma once
 
 #include "gfx_context.h"
+#include "gfx_shader_library.h"
 
 #include <future>
 
@@ -155,7 +156,8 @@ namespace edge::gfx {
 			, descriptor_pool_{ std::exchange(other.descriptor_pool_, nullptr) }
 			, descriptor_set_{ std::exchange(other.descriptor_set_, nullptr) }
 			, pipeline_layout_{ std::exchange(other.pipeline_layout_, nullptr) }
-			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, {}) } {
+			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, {}) } 
+			, shader_library_{ std::exchange(other.shader_library_, {}) } {
 		}
 
 		auto operator=(Renderer&& other) -> Renderer& {
@@ -174,6 +176,8 @@ namespace edge::gfx {
 			descriptor_set_ = std::exchange(other.descriptor_set_, nullptr);
 			pipeline_layout_ = std::exchange(other.pipeline_layout_, nullptr);
 			push_constant_buffer_ = std::exchange(other.push_constant_buffer_, {});
+
+			shader_library_ = std::exchange(other.shader_library_, {});
 			return *this;
 		}
 
@@ -220,5 +224,7 @@ namespace edge::gfx {
 		DescriptorSet descriptor_set_;
 		PipelineLayout pipeline_layout_;
 		Vector<uint8_t> push_constant_buffer_;
+
+		ShaderLibrary shader_library_;
 	};
 }

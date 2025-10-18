@@ -557,6 +557,14 @@ namespace edge::gfx {
 
 		push_constant_buffer_.resize(adapter_properties.limits.maxPushConstantsSize);
 
+		if (auto result = ShaderLibrary::construct(context_, pipeline_layout_, L"shader_cache.cache", L"assets/shaders"); !result) {
+			EDGE_SLOGE("Failed to create shader library. Reason: {}.", vk::to_string(result.error()));
+			return result.error();
+		}
+		else {
+			shader_library_ = std::move(result.value());
+		}
+
 		if (auto result = create_swapchain({
 			.format = {create_info.preferred_format, create_info.preferred_color_space},
 			.extent = create_info.extent,

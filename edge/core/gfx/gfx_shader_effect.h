@@ -54,6 +54,19 @@ namespace edge::gfx {
 			uint32_t dst_alpha_blend_factor : 5;
 			uint32_t alpha_blend_op : 3;
 		};
+
+		auto to_vulkan() const noexcept -> vk::PipelineColorBlendAttachmentState {
+			return {
+				static_cast<vk::Bool32>(blend_enable),
+				static_cast<vk::BlendFactor>(src_color_blend_factor),
+				static_cast<vk::BlendFactor>(dst_color_blend_factor),
+				static_cast<vk::BlendOp>(color_blend_op),
+				static_cast<vk::BlendFactor>(src_alpha_blend_factor),
+				static_cast<vk::BlendFactor>(dst_alpha_blend_factor),
+				static_cast<vk::BlendOp>(alpha_blend_op),
+				static_cast<vk::ColorComponentFlags>(color_write_mask)
+			};
+		}
 	};
 
 	struct PipelineStateHeader {
@@ -107,7 +120,92 @@ namespace edge::gfx {
 		float rasterization_state_depth_bias_slope_factor;
 		float rasterization_state_line_width;
 
-		float color_blending_state_blend_constants[4];
+		std::array<float, 4> color_blending_state_blend_constants;
+
+		inline auto get_input_assembly_state() const noexcept -> vk::PipelineInputAssemblyStateCreateInfo {
+			return {
+				{},
+				static_cast<vk::PrimitiveTopology>(input_assembly_state_primitive_topology),
+				static_cast<vk::Bool32>(input_assembly_state_primitive_restart_enable)
+			};
+		}
+
+		inline auto get_tessellation_state() const noexcept -> vk::PipelineTessellationStateCreateInfo {
+			return {
+				{},
+				static_cast<uint32_t>(tessellation_state_control_points)
+			};
+		}
+
+		inline auto get_rasterization_state() const noexcept -> vk::PipelineRasterizationStateCreateInfo {
+			return {
+				{},
+				static_cast<vk::Bool32>(rasterization_state_depth_clamp_enable),
+				static_cast<vk::Bool32>(rasterization_state_discard_enable),
+				static_cast<vk::PolygonMode>(rasterization_state_polygon_mode),
+				static_cast<vk::CullModeFlags>(rasterization_state_cull_mode),
+				static_cast<vk::FrontFace>(rasterization_state_front_face),
+				static_cast<vk::Bool32>(rasterization_state_depth_bias_enable),
+				rasterization_state_depth_bias_constant_factor,
+				rasterization_state_depth_bias_clamp,
+				rasterization_state_depth_bias_slope_factor,
+				rasterization_state_line_width
+			};
+		}
+
+		inline auto get_multisample_state() const noexcept -> vk::PipelineMultisampleStateCreateInfo {
+			return {
+				{},
+				static_cast<vk::SampleCountFlagBits>(multisample_state_sample_count),
+				static_cast<vk::Bool32>(multisample_state_sample_shading_enable),
+				multisample_state_min_sample_shading,
+				nullptr,
+				static_cast<vk::Bool32>(multisample_state_alpha_to_coverage_enable),
+				static_cast<vk::Bool32>(multisample_state_alpha_to_one_enable)
+			};
+		}
+
+		inline auto get_depth_stencil_state() const noexcept -> vk::PipelineDepthStencilStateCreateInfo {
+			return {
+				{},
+				static_cast<vk::Bool32>(depth_state_depth_test_enable),
+				static_cast<vk::Bool32>(depth_state_depth_write_enable),
+				static_cast<vk::CompareOp>(depth_state_depth_compare_op),
+				static_cast<vk::Bool32>(depth_state_depth_bounds_test_enable),
+				static_cast<vk::Bool32>(stencil_state_stencil_test_enable),
+				{
+					static_cast<vk::StencilOp>(stencil_state_front_fail_op),
+					static_cast<vk::StencilOp>(stencil_state_front_pass_op),
+					static_cast<vk::StencilOp>(stencil_state_front_depth_fail_op),
+					static_cast<vk::CompareOp>(stencil_state_front_compare_op),
+					stencil_state_front_compare_mask,
+					stencil_state_front_write_mask,
+					stencil_state_front_reference
+				},
+				{
+					static_cast<vk::StencilOp>(stencil_state_back_fail_op),
+					static_cast<vk::StencilOp>(stencil_state_back_pass_op),
+					static_cast<vk::StencilOp>(stencil_state_back_depth_fail_op),
+					static_cast<vk::CompareOp>(stencil_state_back_compare_op),
+					stencil_state_back_compare_mask,
+					stencil_state_back_write_mask,
+					stencil_state_back_reference
+				},
+				depth_state_min_depth_bounds,
+				depth_state_max_depth_bounds
+			};
+		}
+
+		inline auto get_color_blending_state() const noexcept -> vk::PipelineColorBlendStateCreateInfo {
+			return {
+				{},
+				static_cast<vk::Bool32>(color_blending_state_logic_op_enable),
+				static_cast<vk::LogicOp>(color_blending_state_logic_op),
+				0u,
+				nullptr,
+				color_blending_state_blend_constants
+			};
+		}
 	};
 
 	struct ShaderEffect {
@@ -122,6 +220,9 @@ namespace edge::gfx {
 		std::vector<uint32_t> multisample_sample_masks{ 0x00000000 };
 		std::vector<gfx::VertexInputAttribute> vertex_input_attributes;
 		std::vector<gfx::VertexInputBinding> vertex_input_bindings;
+		std::vector<vk::Format> attachment_formats;
+		vk::Format depth_format{ vk::Format::eUndefined };
+		vk::Format stencil_format{ vk::Format::eUndefined };
 
 		void serialize(BinaryWriter& writer) const {
 			writer.write(header);
@@ -131,8 +232,12 @@ namespace edge::gfx {
 			if (bind_point == vk::PipelineBindPoint::eGraphics) {
 				writer.write(pipeline_state);
 
+				writer.write(static_cast<uint32_t>(depth_format));
+				writer.write(static_cast<uint32_t>(stencil_format));
+
 				if (!color_attachments.empty()) {
 					writer.write_vector(color_attachments);
+					writer.write_vector(attachment_formats);
 				}
 				if (!multisample_sample_masks.empty()) {
 					writer.write_vector(multisample_sample_masks);
@@ -155,8 +260,12 @@ namespace edge::gfx {
 			if (bind_point == vk::PipelineBindPoint::eGraphics) {
 				reader.read(pipeline_state);
 
+				depth_format = static_cast<vk::Format>(reader.read<uint32_t>());
+				stencil_format = static_cast<vk::Format>(reader.read<uint32_t>());
+
 				if (pipeline_state.color_blending_state_has_attachments) {
 					color_attachments = reader.read_vector<ColorAttachment>();
+					attachment_formats = reader.read_vector<vk::Format>();
 				}
 
 				if (pipeline_state.multisample_state_sample_count > 1) {

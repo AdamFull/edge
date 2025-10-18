@@ -1126,7 +1126,7 @@ namespace edge::gfx {
 			std::iota(family_info.queue_indices.rbegin(), family_info.queue_indices.rend(), 0u);
 
 #ifndef NDEBUG
-			std::string supported_commands;
+			String supported_commands{ allocator };
 
 			if (is_graphics_commands_supported) {
 				supported_commands += "graphics,";
@@ -1736,7 +1736,7 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::PipelineCache"
 
-	auto PipelineCache::get_data(std::vector<uint8_t>& data) const -> vk::Result {
+	auto PipelineCache::get_data(Vector<uint8_t>& data) const -> vk::Result {
 		size_t cache_size{ 0ull };
 		if (auto result = (*device_)->getPipelineCacheData(handle_, &cache_size, nullptr); result != vk::Result::eSuccess) {
 			return result;
@@ -2268,6 +2268,10 @@ namespace edge::gfx {
 		{
 			HMODULE nsight_graphics_module = GetModuleHandle("Nvda.Graphics.Interception.dll");
 			is_nsignt_graphics_attached = (nsight_graphics_module != nullptr);
+			if (is_nsignt_graphics_attached) {
+				EDGE_SLOGI("Nsight graphics detected.");
+				CloseHandle(nsight_graphics_module);
+			}
 		}
 #endif
 		bool can_get_memory_requirements = device_.is_enabled(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME);

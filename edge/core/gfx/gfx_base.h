@@ -91,8 +91,14 @@ namespace edge::gfx {
 	template<typename T>
 	using Vector = std::vector<T, Allocator<T>>;
 
-	template<typename K, typename T, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = Allocator<std::pair<K, T>>>
+	template<typename K, typename T, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = Allocator<std::pair<const K, T>>>
 	using HashMap = std::unordered_map<K, T, Hasher, KeyEq, Alloc>;
+
+	template<typename T>
+	using BasicString = std::basic_string<T, std::char_traits<T>, Allocator<T>>;
+
+	using String = BasicString<char>;
+	using WString = BasicString<wchar_t>;
 
 	template<typename T>
 	struct FeatureTraits {

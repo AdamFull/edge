@@ -1033,7 +1033,7 @@ namespace edge::gfx {
 			: DeviceHandle{ device, handle } {
 		}
 
-		auto get_data(std::vector<uint8_t>& data) const -> vk::Result;
+		auto get_data(Vector<uint8_t>& data) const -> vk::Result;
 		auto get_data(void*& data, size_t& size) const -> vk::Result;
 	};
 

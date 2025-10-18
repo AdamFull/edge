@@ -283,6 +283,10 @@ add_library(glm::glm ALIAS glm)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/rapidyaml")
 
 # mimalloc
+set(MI_OVERRIDE OFF CACHE BOOL "Override the standard malloc interface (i.e. define entry points for 'malloc', 'free', etc)" FORCE)
+set(MI_WIN_REDIRECT OFF CACHE BOOL "Use redirection module ('mimalloc-redirect') on Windows if compiling mimalloc as a DLL" FORCE)
+set(MI_BUILD_SHARED OFF CACHE BOOL "Build shared library" FORCE)
+set(MI_BUILD_TESTS OFF CACHE BOOL "Build test executables" FORCE)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/mimalloc")
 
 add_library(${PROJECT_NAME} INTERFACE)
