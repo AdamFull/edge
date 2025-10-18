@@ -429,3 +429,6 @@ input_assembly:
     # Default: false
     # Note: Only meaningful for strip/fan topologies
     primitive_restart: false
+
+depth_format: undefined
+stencil_format: undefined
