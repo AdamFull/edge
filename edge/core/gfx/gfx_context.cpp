@@ -2079,7 +2079,7 @@ namespace edge::gfx {
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
 		vk::AndroidSurfaceCreateInfoKHR surface_create_info{};
-		surface_create_info.window = static_cast<ANativeWindow*>(create_info.window->get_native_handle());
+		surface_create_info.window = static_cast<ANativeWindow*>(info.window->get_native_handle());
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
 		auto hWnd = static_cast<HWND>(info.window->get_native_handle());
 		HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hWnd, GWLP_HINSTANCE);

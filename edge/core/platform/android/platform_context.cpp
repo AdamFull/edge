@@ -10,9 +10,6 @@
 
 #include "jni_helper.h"
 
-
-#include "../../gfx/vulkan/vk_context.h"
-
 namespace edge::platform {
     auto get_package_code_path(android_app* app) -> mi::String {
         auto* env = get_jni_env(app);
@@ -69,12 +66,6 @@ namespace edge::platform {
         input_ = AndroidPlatformInput::construct(this);
         if (!input_) {
             spdlog::error("[Android Runtime Context]: Input construction failed");
-            return false;
-        }
-
-        graphics_ = gfx::VulkanGraphicsContext::construct();
-        if (!graphics_) {
-            spdlog::error("[Android Runtime Context]: Graphics construction failed");
             return false;
         }
 

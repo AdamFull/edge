@@ -509,13 +509,13 @@ namespace edge::gfx {
 
 		// Create descriptor layout
 		DescriptorSetLayoutBuilder set_layout_builder{ context_ };
-		set_layout_builder.add_binding(0, vk::DescriptorType::eSampler, 0xffffui16,
+		set_layout_builder.add_binding(0, vk::DescriptorType::eSampler, UINT16_MAX,
 			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
 			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
-		set_layout_builder.add_binding(1, vk::DescriptorType::eSampledImage, 0xffffui16,
+		set_layout_builder.add_binding(1, vk::DescriptorType::eSampledImage, UINT16_MAX,
 			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
 			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
-		set_layout_builder.add_binding(2, vk::DescriptorType::eStorageImage, 0xfffui16,
+		set_layout_builder.add_binding(2, vk::DescriptorType::eStorageImage, UINT16_MAX,
 			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
 			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
 
