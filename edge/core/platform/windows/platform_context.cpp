@@ -4,12 +4,6 @@
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
-#if EDGE_GFX_BACKEND_DIRECTX12
-#include "../../gfx/directx12/dx12_context.h"
-#elif EDGE_GFX_BACKEND_VULKAN
-#include "../../gfx/vulkan/vk_context.h"
-#endif
-
 namespace edge::platform {
 	auto WindowsPlatformContext::construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
 		-> std::unique_ptr<WindowsPlatformContext> {
