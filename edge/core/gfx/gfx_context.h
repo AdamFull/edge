@@ -56,7 +56,7 @@ namespace edge::gfx {
 
 		operator bool() const noexcept { return handle_; }
 		operator T() const noexcept { return handle_; }
-		operator T::CType() const noexcept { return handle_; }
+		operator typename T::CType() const noexcept { return handle_; }
 		auto get_handle() const noexcept -> T { return handle_; }
 
 		auto get_allocator() const -> vk::AllocationCallbacks const* { return allocator_; }
