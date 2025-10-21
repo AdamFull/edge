@@ -51,12 +51,301 @@ namespace edge {
 
         using String = BasicString<char>;
         using WString = BasicString<wchar_t>;
+        using U8String = BasicString<char8_t>;
+        using U16String = BasicString<char16_t>;
+        using U32String = BasicString<char32_t>;
 
         template<typename T>
         using Vector = std::vector<T, mi_stl_allocator<T>>;
 
         template<typename K, typename T, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = mi_stl_allocator<std::pair<const K, T>>>
         using HashMap = std::unordered_map<K, T, Hasher, KeyEq, Alloc>;
+    }
+
+    namespace unicode {
+        static inline constexpr auto is_continuation_byte(char8_t c) noexcept -> bool {
+            return (static_cast<char8_t>(c) & 0xC0) == 0x80;
+        }
+
+        static inline constexpr auto char_byte_count(char8_t fb) noexcept -> size_t {
+            auto uc = static_cast<unsigned char>(fb);
+            if ((uc & 0x80) == 0) return 1;
+            if ((uc & 0xE0) == 0xC0) return 2;
+            if ((uc & 0xF0) == 0xE0) return 3;
+            if ((uc & 0xF8) == 0xF0) return 4;
+            return 0;
+        }
+
+        template<typename T>
+        static inline auto validate_utf8(std::basic_string_view<T, std::char_traits<T>> sv) noexcept -> bool {
+            size_t i = 0;
+            while (i < sv.size()) {
+                auto len = char_byte_count(sv[i]);
+                if (len == 0 || i + len > sv.size()) return false;
+
+                for (size_t j = 1; j < len; ++j) {
+                    if (!is_continuation_byte(sv[i + j])) return false;
+                }
+                i += len;
+            }
+            return true;
+        }
+
+        inline constexpr auto is_surrogate(char32_t cp) -> bool {
+            return cp >= 0xD800u && cp <= 0xDFFFu;
+        }
+
+        inline constexpr auto is_high_surrogate(char16_t cp) -> bool {
+            return cp >= 0xD800u && cp <= 0xDBFFu;
+        }
+
+        inline constexpr auto is_high_surrogate_invalid(char16_t cp) -> bool {
+            return cp < 0xD800u || cp > 0xDBFFu;
+        }
+
+        inline constexpr auto is_low_surrogate(char16_t cp) -> bool {
+            return cp >= 0xDC00u && cp <= 0xDFFFu;
+        }
+
+        inline constexpr auto is_low_surrogate_invalid(char16_t cp) -> bool {
+            return cp < 0xDC00u || cp > 0xDFFF;
+        }
+
+        // UTF-32 codepoint encoding to UTF-8
+        inline constexpr auto encode_utf8(char32_t cp, mi::U8String& out) -> bool {
+            if (is_surrogate(cp)) {
+                return false;
+            }
+
+            if (cp <= 0x7F) {
+                // 1-byte sequence: 0xxxxxxx
+                out += static_cast<char8_t>(cp);
+            }
+            else if (cp <= 0x7FF) {
+                // 2-byte sequence: 110xxxxx 10xxxxxx
+                out += static_cast<char8_t>(0xC0 | (cp >> 6));
+                out += static_cast<char8_t>(0x80 | (cp & 0x3F));
+            }
+            else if (cp <= 0xFFFF) {
+                // 3-byte sequence: 1110xxxx 10xxxxxx 10xxxxxx
+                out += static_cast<char8_t>(0xE0 | (cp >> 12));
+                out += static_cast<char8_t>(0x80 | ((cp >> 6) & 0x3F));
+                out += static_cast<char8_t>(0x80 | (cp & 0x3F));
+            }
+            else if (cp <= 0x10FFFF) {
+                // 4-byte sequence: 11110xxx 10xxxxxx 10xxxxxx 10xxxxxx
+                out += static_cast<char8_t>(0xF0 | (cp >> 18));
+                out += static_cast<char8_t>(0x80 | ((cp >> 12) & 0x3F));
+                out += static_cast<char8_t>(0x80 | ((cp >> 6) & 0x3F));
+                out += static_cast<char8_t>(0x80 | (cp & 0x3F));
+            }
+            else {
+                return false;
+            }
+
+            return true;
+        }
+
+        // UTF-16 codepoint encoding to UTF-8
+        inline constexpr auto encode_utf8(char16_t cp, mi::U8String& out) -> bool {
+            if (is_high_surrogate(cp) || is_low_surrogate(cp)) {
+                return false;
+            }
+
+            return encode_utf8(static_cast<char32_t>(cp), out);
+        }
+
+        // UTF-16 surrogate encoding to UTF-8
+        inline constexpr auto encode_utf8(char16_t cp_high, char16_t cp_low, mi::U8String& out) -> bool {
+            if (is_high_surrogate_invalid(cp_high) || is_low_surrogate_invalid(cp_low)) {
+                return false;
+            }
+
+            auto codepoint = static_cast<char32_t>(0x10000u + ((cp_high - 0xD800u) << 10) + (cp_low - 0xDC00u));
+            return encode_utf8(codepoint, out);
+        }
+
+        inline constexpr auto encode_utf8(std::u16string_view str, mi::U8String& out) -> bool {
+            for (int32_t i = 0; i < static_cast<int32_t>(str.size()); ++i) {
+                auto const& c = str[i];
+                if (is_high_surrogate(c)) {
+                    // Check for incomplete surrogate pair
+                    if (i + 1 >= static_cast<int32_t>(str.size())) {
+                        return false;
+                    }
+
+                    auto const& low = str[i + 1];
+                    if (!encode_utf8(c, low, out)) {
+                        return false;
+                    }
+                    // Skip the low surrogate
+                    ++i;
+                }
+                else {
+                    if (!encode_utf8(c, out)) {
+                        return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
+        inline constexpr auto encode_utf8(std::u32string_view str, mi::U8String& out) -> bool {
+            for (int32_t i = 0; i < static_cast<int32_t>(str.size()); ++i) {
+                if (!encode_utf8(str[i], out)) {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        inline constexpr auto decode_utf8(const char8_t* utf8, size_t& bytes_readed, char32_t& codepoint) -> bool {
+            auto uc0 = utf8[0];
+
+            if ((uc0 & 0x80) == 0) {
+                bytes_readed = 1;
+                codepoint = static_cast<char32_t>(uc0);
+                return true;
+            }
+            else if ((uc0 & 0xE0) == 0xC0) {
+                if (!is_continuation_byte(utf8[1])) {
+                    return false;
+                }
+                bytes_readed = 2;
+                codepoint = static_cast<char32_t>(((uc0 & 0x1F) << 6) | (utf8[1] & 0x3F));
+                return true;
+            }
+            else if ((uc0 & 0xF0) == 0xE0) {
+                if (!is_continuation_byte(utf8[1]) || !is_continuation_byte(utf8[2])) {
+                    return false;
+                }
+                bytes_readed = 3;
+                codepoint = static_cast<char32_t>(((uc0 & 0x0F) << 12) | ((utf8[1] & 0x3F) << 6) | (utf8[2] & 0x3F));
+                return true;
+            }
+            else if ((uc0 & 0xF8) == 0xF0) {
+                if (!is_continuation_byte(utf8[1]) || !is_continuation_byte(utf8[2]) || !is_continuation_byte(utf8[3])) {
+                    return false;
+                }
+                bytes_readed = 4;
+                codepoint = static_cast<char32_t>(((uc0 & 0x07) << 18) | ((utf8[1] & 0x3F) << 12) | ((utf8[2] & 0x3F) << 6) | (utf8[3] & 0x3F));
+                return true;
+            }
+
+            bytes_readed = 1;
+            codepoint = 0xFFFD;
+            return false;
+        }
+
+        inline auto decode_utf8(std::u8string_view utf8, mi::U16String& out) -> bool {
+            int32_t i = 0;
+            while (i < static_cast<int32_t>(utf8.size())) {
+                size_t bytes_readed;
+                char32_t cp;
+                decode_utf8(utf8.data() + i, bytes_readed, cp);
+
+                if (cp <= 0xFFFF) {
+                    out += static_cast<char16_t>(cp);
+                }
+                else {
+                    // Encode as surrogate pair
+                    cp -= 0x10000;
+                    out += static_cast<char16_t>(0xD800 + (cp >> 10));
+                    out += static_cast<char16_t>(0xDC00 + (cp & 0x3FF));
+                }
+
+                i += bytes_readed;
+            }
+
+            return true;
+        }
+
+        inline auto decode_utf8(std::u8string_view utf8, mi::U32String& out) -> bool {
+            int32_t i = 0;
+            while (i < static_cast<int32_t>(utf8.size())) {
+                size_t bytes_readed;
+                char32_t cp;
+                decode_utf8(utf8.data() + i, bytes_readed, cp);
+                out += cp;
+                i += bytes_readed;
+            }
+            return true;
+        }
+
+        inline auto make_utf8_string(std::string_view sv) -> mi::U8String {
+            // TODO: handle validation
+            if (!validate_utf8(sv)) {
+                return {};
+            }
+            return mi::U8String{ reinterpret_cast<const char8_t*>(sv.data()), sv.size() };
+        }
+
+        inline auto make_utf8_string(char16_t cp) -> mi::U8String {
+            mi::U8String result{};
+            if (!encode_utf8(cp, result)) {
+                return {};
+            }
+            return result;
+        }
+
+        inline auto make_utf8_string(char16_t cp_high, char16_t cp_low) -> mi::U8String {
+            mi::U8String result{};
+            if (!encode_utf8(cp_high, cp_low, result)) {
+                return {};
+            }
+            return result;
+        }
+
+        inline auto make_utf8_string(std::u16string_view sv) -> mi::U8String {
+            mi::U8String result{};
+            if (!encode_utf8(sv, result)) {
+                return {};
+            }
+            return result;
+        }
+
+        inline auto make_utf8_string(char32_t cp) -> mi::U8String {
+            mi::U8String result{};
+            if (!encode_utf8(cp, result)) {
+                return {};
+            }
+            return result;
+        }
+
+        inline auto make_utf8_string(int32_t c) -> mi::U8String {
+            const auto* p = reinterpret_cast<const char8_t*>(&c);
+            auto byte_count = char_byte_count(p[0]);
+            if (byte_count == 0) {
+                return {};
+            }
+            return { p, byte_count };
+        }
+
+        inline auto make_utf8_string(std::u32string_view sv) -> mi::U8String {
+            mi::U8String result{};
+            if (!encode_utf8(sv, result)) {
+                return {};
+            }
+            return result;
+        }
+
+        inline auto make_utf16_string(std::u8string_view sv) -> mi::U16String {
+            mi::U16String result;
+            if (!decode_utf8(sv, result)) {
+                return {};
+            }
+            return result;
+        }
+
+        inline auto make_utf32_string(std::u8string_view sv) -> mi::U32String {
+            mi::U32String result;
+            if (!decode_utf8(sv, result)) {
+                return {};
+            }
+            return result;
+        }
     }
 
 	template<typename T, size_t Size>
@@ -364,31 +653,6 @@ namespace edge {
             stream_.write(static_cast<const char*>(data), size);
         }
 
-        // Endianness conversion helpers (C++23 <bit>)
-        template<typename T>
-            requires std::integral<T>
-        void write_le(T value) {
-            if constexpr (std::endian::native == std::endian::little) {
-                write(value);
-            }
-            else {
-                T swapped = std::byteswap(value);
-                write(swapped);
-            }
-        }
-
-        template<typename T>
-            requires std::integral<T>
-        void write_be(T value) {
-            if constexpr (std::endian::native == std::endian::big) {
-                write(value);
-            }
-            else {
-                T swapped = std::byteswap(value);
-                write(swapped);
-            }
-        }
-
         // Positioning
         std::streampos tell() const {
             return stream_.tellp();
@@ -512,27 +776,6 @@ namespace edge {
         // Read bytes
         void read_bytes(void* data, std::size_t size) {
             stream_.read(static_cast<char*>(data), size);
-        }
-
-        // Endianness conversion helpers
-        template<typename T>
-            requires std::integral<T>
-        T read_le() {
-            T value = read<T>();
-            if constexpr (std::endian::native != std::endian::little) {
-                value = std::byteswap(value);
-            }
-            return value;
-        }
-
-        template<typename T>
-            requires std::integral<T>
-        T read_be() {
-            T value = read<T>();
-            if constexpr (std::endian::native != std::endian::big) {
-                value = std::byteswap(value);
-            }
-            return value;
         }
 
         // Positioning
