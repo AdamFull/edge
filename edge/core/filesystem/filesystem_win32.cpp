@@ -5,30 +5,32 @@
 #include <direct.h>
 
 namespace edge::fs {
-    auto get_system_cwd() -> Path {
+    auto get_system_cwd() -> mi::U8String {
         wchar_t buffer[MAX_PATH];
         DWORD length = GetCurrentDirectoryW(MAX_PATH, buffer);
-        return Path{ buffer, length };
+        return unicode::make_utf8_string({buffer, length});
     }
 
-    auto get_system_temp_dir() -> Path {
+    auto get_system_temp_dir() -> mi::U8String {
         wchar_t buffer[MAX_PATH];
         DWORD length = GetTempPathW(MAX_PATH, buffer);
-        return Path{ buffer, length };
+        return unicode::make_utf8_string({ buffer, length });
     }
 
-    auto get_system_cache_dir() -> Path {
+    auto get_system_cache_dir() -> mi::U8String {
         wchar_t buffer[MAX_PATH];
         HRESULT result = SHGetFolderPathW(NULL, CSIDL_LOCAL_APPDATA, NULL, 0, buffer);
-        return Path{ buffer };
+        return unicode::make_utf8_string({ buffer });
     }
 
     class NativeDirectoryIterator final : public IDirectoryIterator {
     public:
-        explicit NativeDirectoryIterator(const Path& path, bool recursive)
-            : is_end_(false)
-            , recursive_(recursive) {
-            stack_.push_back(path);
+        explicit NativeDirectoryIterator(std::u8string_view path, bool recursive)
+            : base_path_{ path }
+            , is_end_(false)
+            , recursive_(recursive)
+            , current_handle_(INVALID_HANDLE_VALUE) {
+            stack_.push_back(mi::U8String{ path });
             advance();
         }
 
@@ -46,49 +48,88 @@ namespace edge::fs {
             return current_;
         }
     private:
+        auto close_current_handle() -> void {
+            if (current_handle_ != INVALID_HANDLE_VALUE) {
+                FindClose(current_handle_);
+                current_handle_ = INVALID_HANDLE_VALUE;
+            }
+        }
+
         auto advance() -> void {
-            while (!stack_.empty()) {
-                auto const& path = stack_.back();
-                stack_.pop_back();
+            while (true) {
+                // Try to get next entry from current directory
+                if (current_handle_ != INVALID_HANDLE_VALUE) {
+                    WIN32_FIND_DATAW find_data;
 
-                Path search_path = path + L"\\*";
-                WIN32_FIND_DATAW find_data;
-                HANDLE hFind = FindFirstFileW(search_path.c_str(), &find_data);
-
-                if (hFind == INVALID_HANDLE_VALUE) continue;
-
-                do {
-                    Path name = find_data.cFileName;
-                    if (name != L"." && name != L"..") {
-                        Path full_path = path;
-                        if (full_path.back() != L'\\' && full_path.back() != L'/') {
-                            full_path += L'\\';
+                    while (FindNextFileW(current_handle_, &find_data)) {
+                        auto name = unicode::make_utf8_string(find_data.cFileName);
+                        if (name == u8"." || name == u8"..") {
+                            continue;
                         }
-                        full_path += name;
 
+                        auto full_path = path::append(current_directory_, name, u8'\\');
                         bool is_dir = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 
                         if (is_dir && recursive_) {
                             stack_.push_back(full_path);
                         }
 
-                        current_.path = full_path;
+                        current_.path = path::to_posix(full_path.substr(base_path_.size()));
                         current_.is_directory = is_dir;
                         current_.size = (static_cast<uint64_t>(find_data.nFileSizeHigh) << 32) | find_data.nFileSizeLow;
 
-                        FindClose(hFind);
                         return;
                     }
-                } while (FindNextFileW(hFind, &find_data));
 
-                FindClose(hFind);
+                    // No more entries in current directory, close handle
+                    close_current_handle();
+                }
+
+                // Need to open a new directory
+                if (stack_.empty()) {
+                    is_end_ = true;
+                    return;
+                }
+
+                current_directory_ = stack_.back();
+                stack_.pop_back();
+
+                auto search_path = path::append(current_directory_, u8"*", u8'\\');
+                auto search_path_utf16 = unicode::make_wide_string(search_path);
+
+                WIN32_FIND_DATAW find_data;
+                current_handle_ = FindFirstFileW(search_path_utf16.c_str(), &find_data);
+
+                if (current_handle_ == INVALID_HANDLE_VALUE) {
+                    continue; // Try next directory in stack
+                }
+
+                // Process first entry
+                auto name = unicode::make_utf8_string(find_data.cFileName);
+                if (name == u8"." || name == u8"..") {
+                    continue; // Will loop back and call FindNextFileW
+                }
+
+                auto full_path = path::append(current_directory_, name, u8'\\');
+                bool is_dir = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+
+                if (is_dir && recursive_) {
+                    stack_.push_back(full_path);
+                }
+
+                current_.path = path::to_posix(full_path.substr(base_path_.size()));
+                current_.is_directory = is_dir;
+                current_.size = (static_cast<uint64_t>(find_data.nFileSizeHigh) << 32) | find_data.nFileSizeLow;
+
+                return;
             }
-
-            is_end_ = true;
         }
 
-        mi::Vector<Path> stack_;
+        mi::U8String base_path_;
+        mi::U8String current_directory_;
+        mi::Vector<mi::U8String> stack_;
         DirEntry current_;
+        HANDLE current_handle_;
         bool is_end_;
         bool recursive_;
     };
@@ -189,11 +230,11 @@ namespace edge::fs {
 
     class NativeFilesystem final : public IFilesystem {
     public:
-        NativeFilesystem(PathView root)
+        NativeFilesystem(std::u8string_view root)
             : root_path_{ root } {
         }
 
-        [[nodiscard]] auto open_file(PathView path, std::ios_base::openmode mode) -> Shared<IFile> override {
+        [[nodiscard]] auto open_file(std::u8string_view path, std::ios_base::openmode mode) -> Shared<IFile> override {
             auto native_path = to_native_path(path);
 
             DWORD access = 0;
@@ -222,7 +263,7 @@ namespace edge::fs {
             }
 
             HANDLE handle = CreateFileW(
-                to_native_path(std::wstring(path)).c_str(),
+                native_path.c_str(),
                 access,
                 share,
                 nullptr,
@@ -240,7 +281,7 @@ namespace edge::fs {
             return file;
         }
 
-        auto create_directory(PathView path) -> bool override {
+        auto create_directory(std::u8string_view path) -> bool override {
             auto native_path = to_native_path(path);
             if (!CreateDirectoryW(native_path.c_str(), nullptr)) {
                 DWORD error = GetLastError();
@@ -251,7 +292,7 @@ namespace edge::fs {
             return true;
         }
 
-        auto remove(PathView path) -> bool override {
+        auto remove(std::u8string_view path) -> bool override {
             auto native_path = to_native_path(path);
 
             DWORD attrs = GetFileAttributesW(native_path.c_str());
@@ -272,12 +313,12 @@ namespace edge::fs {
             return true;
         }
 
-        auto exists(PathView path) -> bool override {
+        auto exists(std::u8string_view path) -> bool override {
             auto native_path = to_native_path(path);
             return GetFileAttributesW(native_path.c_str()) != INVALID_FILE_ATTRIBUTES;
         }
 
-        auto is_directory(PathView path) -> bool override {
+        auto is_directory(std::u8string_view path) -> bool override {
             auto native_path = to_native_path(path);
             DWORD attrs = GetFileAttributesW(native_path.c_str());
             if (attrs == INVALID_FILE_ATTRIBUTES) {
@@ -286,7 +327,7 @@ namespace edge::fs {
             return (attrs & FILE_ATTRIBUTE_DIRECTORY);
         }
 
-        auto is_file(PathView path) -> bool override {
+        auto is_file(std::u8string_view path) -> bool override {
             auto native_path = to_native_path(path);
             DWORD attrs = GetFileAttributesW(native_path.c_str());
             if (attrs == INVALID_FILE_ATTRIBUTES) {
@@ -295,29 +336,21 @@ namespace edge::fs {
             return !(attrs & FILE_ATTRIBUTE_DIRECTORY);
         }
 
-        [[nodiscard]] auto walk(PathView path, bool recursive = false) -> Shared<IDirectoryIterator> override {
+        [[nodiscard]] auto walk(std::u8string_view path, bool recursive = false) -> Shared<IDirectoryIterator> override {
             auto native_path = to_native_path(path);
-            return std::make_shared<NativeDirectoryIterator>(native_path, recursive);
+            auto utf8_path = unicode::make_utf8_string(native_path);
+            return std::make_shared<NativeDirectoryIterator>(utf8_path, recursive);
         }
     private:
-        auto to_native_path(PathView path) -> Path {
-            auto native = root_path_;
-            if (!native.empty() && native.back() != '\\' && native.back() != '/') {
-                native += '\\';
-            }
-            Path normalized = Path(path);
-            std::replace(normalized.begin(), normalized.end(), L'/', L'\\');
-            if (!normalized.empty() && normalized[0] == '\\') {
-                normalized = normalized.substr(1);
-            }
-            native += normalized;
-            return native;
+        auto to_native_path(std::u8string_view path) -> mi::WString {
+            auto new_path = path::to_windows(path::append(root_path_, path));
+            return unicode::make_wide_string(new_path);
         }
 
-        Path root_path_;
+        mi::U8String root_path_;
     };
 
-    auto create_native_filesystem(PathView root_path) -> Shared<IFilesystem> {
+    auto create_native_filesystem(std::u8string_view root_path) -> Shared<IFilesystem> {
         return std::make_shared<NativeFilesystem>(root_path);
     }
 }

@@ -26,13 +26,13 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto construct(Context const& ctx, PipelineLayout const& pipeline_layout, mi::WString const& pipeline_cache_path, mi::WString const& shaders_path) -> Result<ShaderLibrary>;
+		static auto construct(Context const& ctx, PipelineLayout const& pipeline_layout, std::u8string_view pipeline_cache_path, std::u8string_view shaders_path) -> Result<ShaderLibrary>;
 	private:
-		auto _construct(PipelineLayout const& pipeline_layout, mi::WString const& shaders_path) -> vk::Result;
+		auto _construct(PipelineLayout const& pipeline_layout, std::u8string_view shaders_path) -> vk::Result;
 
 		Context const* ctx_{ nullptr };
 		PipelineCache pipeline_cache_;
-		mi::WString pipeline_cache_path_;
+		mi::U8String pipeline_cache_path_;
 		mi::HashMap<mi::String, Pipeline> pipelines_;
 	};
 }

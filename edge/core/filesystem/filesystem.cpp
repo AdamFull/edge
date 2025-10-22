@@ -2,56 +2,34 @@
 
 namespace edge::fs {
 	mi::Vector<MountPoint> mounts_;
-	Path current_workdir_;
-	Path temp_directory_;
-	Path cache_directory_;
+	mi::U8String current_workdir_;
+	mi::U8String temp_directory_;
+	mi::U8String cache_directory_;
 
-	extern auto get_system_cwd() -> Path;
-	extern auto get_system_temp_dir() -> Path;
-	extern auto get_system_cache_dir() -> Path;
+	extern auto get_system_cwd() -> mi::U8String;
+	extern auto get_system_temp_dir() -> mi::U8String;
+	extern auto get_system_cache_dir() -> mi::U8String;
 
-	static auto resolve_path(PathView path) -> std::pair<Shared<IFilesystem>, Path> {
-		auto normalized = normalize_path(path);
+	static auto resolve_path(std::u8string_view path) -> std::tuple<Shared<IFilesystem>, std::u8string_view> {
+		size_t best_index{ ~0ull };
+		size_t best_match_length{ 0ull };
 
-		Shared<IFilesystem> best_fs = nullptr;
-		Path best_relative;
-		size_t best_len = 0;
-
-		for (const auto& mount : mounts_) {
-			auto mount_path = normalize_path(mount.path);
-
-			bool matches = false;
-
-			// Special case for root mount
-			if (mount_path == L"/") {
-				matches = (normalized[0] == L'/');
-			}
-			else if (normalized == mount_path) {
-				matches = true;
-			}
-			else if (normalized.length() > mount_path.length() &&
-				normalized.find(mount_path) == 0 &&
-				normalized[mount_path.length()] == L'/') {
-				matches = true;
-			}
-
-			if (matches && mount_path.length() > best_len) {
-				best_fs = mount.filesystem;
-				best_len = mount_path.length();
-
-				if (normalized == mount_path) {
-					best_relative = L"/";
-				}
-				else if (mount_path == L"/") {
-					best_relative = normalized;
-				}
-				else {
-					best_relative = normalized.substr(mount_path.length());
+		for (int32_t i = 0; i < static_cast<int32_t>(mounts_.size()); ++i) {
+			auto const& mount = mounts_[i];
+			if (path.size() >= mount.path.size() && path.substr(0, mount.path.size()) == std::u8string_view(mount.path)) {
+				// Found a match, check if it's longer than current best
+				if (mount.path.size() > best_match_length) {
+					best_index = i;
+					best_match_length = mount.path.size();
 				}
 			}
 		}
 
-		return { best_fs, best_relative };
+		if (best_index != ~0ull) {
+			return { mounts_[best_index].filesystem, path.substr(best_match_length)};
+		}
+
+		return { nullptr, path };
 	}
 
 	auto initialize_filesystem() -> void {
@@ -59,30 +37,28 @@ namespace edge::fs {
 		current_workdir_ = get_system_cwd();
 		temp_directory_ = get_system_temp_dir();
 		cache_directory_ = get_system_cache_dir();
-		mount_filesystem(L"/", create_native_filesystem(current_workdir_));
-		mount_filesystem(L"/assets", create_native_filesystem(L"assets"));
+		mount_filesystem(u8"/", create_native_filesystem(current_workdir_));
 	}
 
 	auto shutdown_filesystem() -> void {
 		mounts_.clear();
 	}
 
-	auto mount_filesystem(PathView mount_point, Shared<IFilesystem>&& filesystem) -> void {
+	auto mount_filesystem(std::u8string_view mount_point, Shared<IFilesystem>&& filesystem) -> void {
 		if (!filesystem) {
 			return;
 		}
 
 		MountPoint mp;
-		mp.path = normalize_path(mount_point);
+		// TODO: normalize path
+		mp.path = mount_point;
 		mp.filesystem = std::move(filesystem);
 		mounts_.push_back(mp);
 	}
 
-	auto unmount_filesystem(PathView mount_point) -> bool {
-		auto normalized = normalize_path(mount_point);
-
+	auto unmount_filesystem(std::u8string_view mount_point) -> bool {
 		for (auto it = mounts_.begin(); it != mounts_.end(); ++it) {
-			if (normalize_path(it->path) == normalized) {
+			if (mount_point.compare(it->path) == 0) {
 				mounts_.erase(it);
 				return true;
 			}
@@ -91,7 +67,7 @@ namespace edge::fs {
 		return false;
 	}
 
-	auto exists(PathView path) -> bool {
+	auto exists(std::u8string_view path) -> bool {
 		auto [fs, rel_path] = resolve_path(path);
 		if (!fs) {
 			return false;
@@ -99,7 +75,7 @@ namespace edge::fs {
 		return fs->exists(rel_path);
 	}
 
-	auto is_directory(PathView path) -> bool {
+	auto is_directory(std::u8string_view path) -> bool {
 		auto [fs, rel_path] = resolve_path(path);
 		if (!fs) {
 			return false;
@@ -107,7 +83,7 @@ namespace edge::fs {
 		return fs->is_directory(rel_path);
 	}
 
-	auto is_file(PathView path) -> bool {
+	auto is_file(std::u8string_view path) -> bool {
 		auto [fs, rel_path] = resolve_path(path);
 		if (!fs) {
 			return false;
@@ -115,7 +91,7 @@ namespace edge::fs {
 		return fs->is_file(rel_path);
 	}
 
-	auto create_directory(PathView path) -> bool {
+	auto create_directory(std::u8string_view path) -> bool {
 		auto [fs, rel_path] = resolve_path(path);
 		if (!fs) {
 			return false;
@@ -123,13 +99,12 @@ namespace edge::fs {
 		return fs->create_directory(rel_path);
 	}
 
-	auto create_directories(PathView path) -> bool {
-		auto normalized = normalize_path(path);
-		mi::Vector<Path> parts = split_path(normalized);
+	auto create_directories(std::u8string_view path) -> bool {
+		auto parts = path::split_components(path);
 
-		Path current = L"/";
+		mi::U8String current = u8"/";
 		for (const auto& part : parts) {
-			current += part;
+			current = path::append(current, part);
 
 			auto exists_result = exists(current);
 			if (exists_result) {
@@ -138,13 +113,13 @@ namespace edge::fs {
 				}
 			}
 
-			current += L"/";
+			current = path::append(current, u8"/");
 		}
 
 		return true;
 	}
 
-	auto remove(PathView path) -> bool {
+	auto remove(std::u8string_view path) -> bool {
 		auto [fs, rel_path] = resolve_path(path);
 		if (!fs) {
 			return false;
@@ -152,37 +127,20 @@ namespace edge::fs {
 		return fs->remove(rel_path);
 	}
 
-	auto get_work_directory_path() -> Path const& {
+	auto get_work_directory_path() -> std::u8string_view {
 		return current_workdir_;
 	}
 
-	auto get_temp_directory_path() -> Path const& {
+	auto get_temp_directory_path() -> std::u8string_view {
 		return temp_directory_;
 	}
 
-	auto get_cache_directory_path() -> Path const& {
+	auto get_cache_directory_path() -> std::u8string_view {
 		return cache_directory_;
 	}
 
-	auto open_input_stream(PathView path, std::ios_base::openmode mode) -> FileInputStream {
-		auto [fs, rel_path] = resolve_path(path);
-		// TODO: return error
-		//if (!fs) {
-		//	return VFSResult<Shared<IFile>>(VFSError::NO_FILESYSTEM);
-		//}
-		return FileInputStream{ fs->open_file(rel_path, std::ios_base::in | mode) };
-	}
-
-	auto open_output_stream(PathView path, std::ios_base::openmode mode) -> FileOutputStream {
-		auto [fs, rel_path] = resolve_path(path);
-		// TODO: return error
-		//if (!fs) {
-		//	return VFSResult<Shared<IFile>>(VFSError::NO_FILESYSTEM);
-		//}
-		return FileOutputStream{ fs->open_file(rel_path, std::ios_base::out | mode) };
-	}
-
-	auto walk_directory(PathView path, bool recursive) -> DirectoryIterator {
+	// TODO: Maybe add filesystem cache for entry to be able to not search for it again?
+	auto walk_directory(std::u8string_view path, bool recursive) -> DirectoryIterator {
 		auto [fs, rel_path] = resolve_path(path);
 		if (!fs) {
 			return DirectoryIterator(nullptr);
@@ -190,63 +148,130 @@ namespace edge::fs {
 		return DirectoryIterator(fs->walk(rel_path, recursive));
 	}
 
-	std::streambuf::int_type FileInputBuf::underflow() {
+	FileStreamBuf::FileStreamBuf(std::u8string_view path, std::ios_base::openmode mode, size_t input_buffer_size, size_t output_buffer_size)
+		: input_buffer_(input_buffer_size)
+		, output_buffer_(output_buffer_size){
+
+		auto* out_begin = output_buffer_.data();
+		setp(out_begin, out_begin + output_buffer_.size());
+
+		open(path, mode);
+	}
+
+	auto FileStreamBuf::open(std::u8string_view path, std::ios_base::openmode mode) -> bool {
+		if (file_ && file_->is_open()) {
+			file_->close();
+		}
+
+		auto [fs, fs_path] = resolve_path(path);
+		if (!fs) {
+			return false;
+		}
+
+		file_ = fs->open_file(fs_path, mode);
+		return file_ != nullptr;
+	}
+
+	auto FileStreamBuf::is_open() const noexcept -> bool {
+		return file_ && file_->is_open();
+	}
+
+	auto FileStreamBuf::close() noexcept -> void {
+		if (file_) {
+			file_->close();
+		}
+	}
+
+	std::streambuf::int_type FileStreamBuf::underflow() {
 		if (gptr() < egptr()) {
 			return traits_type::to_int_type(*gptr());
 		}
 
-		char c;
-		if (file_->read(&c, 1) != 1) {
+		if (!file_ || !file_->is_open()) {
 			return traits_type::eof();
 		}
 
-		buffer_ = c;
-		setg(&buffer_, &buffer_, &buffer_ + 1);
-		return traits_type::to_int_type(c);
+		auto bytes_read = file_->read(input_buffer_.data(), input_buffer_.size());
+		if (bytes_read <= 0) {
+			return traits_type::eof();
+		}
+
+		setg(input_buffer_.data(), input_buffer_.data(), input_buffer_.data() + bytes_read);
+
+		return traits_type::to_int_type(*gptr());
 	}
 
-	std::streambuf::pos_type FileInputBuf::seekoff(off_type off, std::ios_base::seekdir origin, std::ios_base::openmode which) {
-		if (!(which & std::ios_base::in)) {
+	std::streambuf::int_type FileStreamBuf::overflow(int_type ch) {
+		if (!file_ || !file_->is_open()) {
+			return traits_type::eof();
+		}
+
+		if (sync() == -1) {
+			return traits_type::eof();
+		}
+
+		if (!traits_type::eq_int_type(ch, traits_type::eof())) {
+			*pptr() = traits_type::to_char_type(ch);
+			pbump(1);
+		}
+
+		return traits_type::not_eof(ch);
+	}
+
+	int FileStreamBuf::sync() {
+		if (!file_ || !file_->is_open()) {
+			return -1;
+		}
+
+		std::ptrdiff_t num_bytes = pptr() - pbase();
+		if (num_bytes > 0) {
+			auto written = file_->write(pbase(), static_cast<uint64_t>(num_bytes));
+			if (written != num_bytes) {
+				return -1;
+			}
+
+			// Reset output buffer
+			pbump(-static_cast<int>(num_bytes));
+		}
+
+		// Reset input buffer to force re-read after write
+		setg(input_buffer_.data(), input_buffer_.data(), input_buffer_.data());
+
+		return 0;
+	}
+
+	std::streambuf::pos_type FileStreamBuf::seekoff(off_type offset, std::ios_base::seekdir dir, std::ios_base::openmode which) {
+		if (!file_ || !file_->is_open()) {
 			return pos_type(off_type(-1));
 		}
 
-		auto result = file_->seek(static_cast<uint64_t>(off), origin);
-		if (result < 0) {
-			return pos_type(off_type(-1));
-		}
-
-		setg(nullptr, nullptr, nullptr);
-		return pos_type(result);
-	}
-
-	std::streambuf::pos_type FileInputBuf::seekpos(std::streambuf::pos_type pos, std::ios_base::openmode which) {
-		return seekoff(off_type(pos), std::ios_base::beg, which);
-	}
-
-	std::streambuf::int_type FileOutputBuf::overflow(int_type c) {
-		if (c != traits_type::eof()) {
-			char ch = traits_type::to_char_type(c);
-			if (file_->write(&ch, 1) != 1) {
-				return traits_type::eof();
+		// Flush output buffer before seeking
+		if (which & std::ios_base::out) {
+			if (sync() == -1) {
+				return pos_type(off_type(-1));
 			}
 		}
-		return c;
-	}
 
-	std::streamsize FileOutputBuf::xsputn(const char* s, std::streamsize n) {
-		return file_->write(s, static_cast<uint64_t>(n));
-	}
+		// Invalidate input buffer
+		setg(input_buffer_.data(), input_buffer_.data(), input_buffer_.data());
 
-	std::streambuf::pos_type FileOutputBuf::seekoff(off_type off, std::ios_base::seekdir origin, std::ios_base::openmode which) {
-		if (!(which & std::ios_base::out)) {
+		auto new_pos = file_->seek(static_cast<uint64_t>(offset), dir);
+		if (new_pos < 0) {
 			return pos_type(off_type(-1));
 		}
 
-		int64_t result = file_->seek(static_cast<uint64_t>(off), origin);
-		return result < 0 ? pos_type(off_type(-1)) : pos_type(result);
+		return pos_type(new_pos);
 	}
 
-	std::streambuf::pos_type FileOutputBuf::seekpos(pos_type pos, std::ios_base::openmode which) {
-		return seekoff(off_type(pos), std::ios_base::beg, which);
+	std::streambuf::pos_type FileStreamBuf::seekpos(pos_type pos, std::ios_base::openmode which) {
+		return seekoff(pos, std::ios_base::beg, which);
+	}
+
+	std::streamsize FileStreamBuf::showmanyc() {
+		if (!file_ || !file_->is_open()) {
+			return -1;
+		}
+
+		return egptr() - gptr();
 	}
 }

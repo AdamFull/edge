@@ -3,8 +3,7 @@ target_sources(${PROJECT_NAME} PRIVATE
     )
 
 if(WIN32)
-# Windows-specific sources
-target_sources(${PROJECT_NAME} PRIVATE 
-    "filesystem_win32.cpp"
-)
+target_sources(${PROJECT_NAME} PRIVATE "filesystem_win32.cpp")
+elseif(ANDROID)
+target_sources(${PROJECT_NAME} PRIVATE "filesystem_unix.cpp")
 endif()

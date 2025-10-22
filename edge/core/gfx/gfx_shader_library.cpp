@@ -1,6 +1,6 @@
 #include "gfx_shader_library.h"
 
-#include<filesystem>
+#include "../filesystem/filesystem.h"
 
 #define EDGE_LOGGER_SCOPE "gfx::ShaderLibrary"
 
@@ -22,7 +22,7 @@ namespace edge::gfx {
 				return;
 			}
 
-			std::ofstream outfile(pipeline_cache_path_.c_str(), std::ios_base::binary);
+			fs::OutputFileStream outfile(pipeline_cache_path_, std::ios_base::binary);
 			if (!outfile.is_open()) {
 				EDGE_SLOGE("Failed to open output file.");
 				return;
@@ -32,7 +32,7 @@ namespace edge::gfx {
 		}
 	}
 
-	auto ShaderLibrary::construct(Context const& ctx, PipelineLayout const& pipeline_layout, mi::WString const& pipeline_cache_path, mi::WString const& shaders_path) -> Result<ShaderLibrary> {
+	auto ShaderLibrary::construct(Context const& ctx, PipelineLayout const& pipeline_layout, std::u8string_view pipeline_cache_path, std::u8string_view shaders_path) -> Result<ShaderLibrary> {
 		ShaderLibrary self{ ctx };
 		self.pipeline_cache_path_ = pipeline_cache_path;
 		if (auto result = self._construct(pipeline_layout, shaders_path); result != vk::Result::eSuccess) {
@@ -41,10 +41,11 @@ namespace edge::gfx {
 		return self;
 	}
 
-	auto ShaderLibrary::_construct(PipelineLayout const& pipeline_layout, mi::WString const& shaders_path) -> vk::Result {
+	auto ShaderLibrary::_construct(PipelineLayout const& pipeline_layout, std::u8string_view shaders_path) -> vk::Result {
 		// Load pipeline cache if exists
 		mi::Vector<uint8_t> pipeline_cache_data{};
-		std::ifstream infile(pipeline_cache_path_.c_str(), std::ios_base::binary);
+
+		fs::InputFileStream infile(pipeline_cache_path_, std::ios_base::binary);
 		if (infile.is_open()) {
 			pipeline_cache_data = { std::istreambuf_iterator<char>(infile), std::istreambuf_iterator<char>() };
 		}
@@ -60,12 +61,16 @@ namespace edge::gfx {
 		static const char* entry_point_name = "main";
 
 		// Load pipelines
-		auto shader_folder_path = std::filesystem::path(shaders_path.c_str());
-		for (const auto& entry : std::filesystem::recursive_directory_iterator(shader_folder_path)) {
-			auto const& entry_path = entry.path();
-			if (entry_path.extension().compare(".shfx") == 0) {
+		for (const auto& entry : fs::walk_directory(shaders_path, true)) {
+			if (entry.is_directory) {
+				continue;
+			}
+
+			auto ext = fs::path::extension(entry.path);
+			if (ext.compare(u8".shfx") == 0) {
+				auto shader_path = fs::path::append(shaders_path, entry.path);
 				// Load shader file and parse
-				std::ifstream shader_file(entry_path, std::ios_base::binary);
+				fs::InputFileStream shader_file(shader_path, std::ios_base::binary);
 
 				BinaryReader reader{ shader_file };
 
