@@ -289,6 +289,25 @@ set(MI_BUILD_SHARED OFF CACHE BOOL "Build shared library" FORCE)
 set(MI_BUILD_TESTS OFF CACHE BOOL "Build test executables" FORCE)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/mimalloc")
 
+# imgui
+set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
+set(IMGUI_FILES
+    "${IMGUI_DIR}/imgui.cpp"
+    "${IMGUI_DIR}/imgui_demo.cpp"
+    "${IMGUI_DIR}/imgui_draw.cpp"
+    "${IMGUI_DIR}/imgui_tables.cpp"
+    "${IMGUI_DIR}/imgui_widgets.cpp"
+    "${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp"
+    #"${IMGUI_DIR}/misc/freetype/imgui_freetype.cpp"
+)
+
+add_library(imgui STATIC ${IMGUI_FILES})
+target_compile_definitions(imgui PUBLIC
+    IMGUI_DEFINE_MATH_OPERATORS
+    IMGUI_USE_WCHAR32
+)
+target_include_directories(imgui SYSTEM PUBLIC ${IMGUI_DIR})
+
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
     INTERFACE
@@ -307,6 +326,8 @@ target_link_libraries(${PROJECT_NAME}
     Vulkan::Headers
     volk::volk
     GPUOpen::VulkanMemoryAllocator
+
+    imgui
 
     ryml::ryml
 )
