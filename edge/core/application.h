@@ -9,7 +9,7 @@ namespace edge {
 	public:
 		virtual ~IApplication() = default;
 
-		virtual auto initialize(platform::IPlatformContext const& context) -> bool = 0;
+		virtual auto initialize(platform::IPlatformContext& context) -> bool = 0;
 		virtual auto finish() -> void = 0;
 
 		virtual auto update(float delta_time) -> void = 0;
