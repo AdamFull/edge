@@ -145,7 +145,7 @@ namespace edge::platform {
 
 		auto terminate(int32_t code) -> void;
 
-		auto setup_application(void(*app_setup_func)(std::unique_ptr<ApplicationInterface>&)) -> bool;
+		auto setup_application(void(*app_setup_func)(std::unique_ptr<IApplication>&)) -> bool;
 
 		auto main_loop() -> int32_t;
 		auto main_loop_tick(float delta_time) -> int32_t;
@@ -181,7 +181,7 @@ namespace edge::platform {
 	protected:
 		FrameHandler frame_handler_;
 
-		std::unique_ptr<ApplicationInterface> application_;
+		std::unique_ptr<IApplication> application_;
 
 		std::unique_ptr<IPlatformWindow> window_;
         std::unique_ptr<IPlatformInput> input_;

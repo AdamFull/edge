@@ -1,11 +1,15 @@
 #pragma once
 
 namespace edge {
-	class ApplicationInterface {
-	public:
-		virtual ~ApplicationInterface() = default;
+	namespace platform {
+		class IPlatformContext;
+	}
 
-		virtual auto initialize() -> bool = 0;
+	class IApplication {
+	public:
+		virtual ~IApplication() = default;
+
+		virtual auto initialize(platform::IPlatformContext const& context) -> bool = 0;
 		virtual auto finish() -> void = 0;
 
 		virtual auto update(float delta_time) -> void = 0;

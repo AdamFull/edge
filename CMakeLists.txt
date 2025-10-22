@@ -12,7 +12,10 @@ set(CMAKE_C_EXTENSIONS OFF)
 # Add cmake modules path
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
-set(APP_SOURCES main.cpp)
+set(APP_SOURCES
+    "edge/engine.cpp"
+    "main.cpp"
+)
 
 if(ANDROID)
     find_package(game-activity REQUIRED CONFIG)

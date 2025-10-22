@@ -1,32 +1,16 @@
 #include "edge/core/platform/entry_point.h"
+#include "edge/engine.h"
 
 #include "edge/core/event_system.h"
 #include "edge/core/foundation/enum_flags.h"
 
+#include "edge/core/filesystem/filesystem.h"
+
 #include <spdlog/spdlog.h>
 
-class MyApplication : public edge::ApplicationInterface {
-public:
-	~MyApplication() override = default;
-
-	auto initialize() -> bool override {
-		return true;
-	}
-
-	auto finish() -> void override {
-
-	}
-
-	auto update(float delta_time) -> void override {
-
-	}
-
-	auto fixed_update(float delta_time) -> void override {
-
-	}
-};
-
 auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
+	edge::fs::initialize_filesystem();
+
 	edge::platform::window::Properties window_properties{
 		.title = "Edge Engine - Windows Demo"
 	};
@@ -43,15 +27,16 @@ auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
     spdlog::info("Window created: {}x{}", window.get_width(), window.get_height());
     spdlog::info("Window title: {}", window.get_title());
 
-	if (!platform_context.setup_application([](std::unique_ptr<edge::ApplicationInterface>& out_app) {
-		out_app = std::make_unique<MyApplication>();
+	if (!platform_context.setup_application([](std::unique_ptr<edge::IApplication>& out_app) {
+		out_app = std::make_unique<edge::Engine>();
 		})) {
 		return -2;
 	}
 
 	platform_context.main_loop();
-
 	platform_context.shutdown();
+
+	edge::fs::shutdown_filesystem();
 
 	return 0;
 }

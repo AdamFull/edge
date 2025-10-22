@@ -3,17 +3,12 @@
 #include <spdlog/spdlog.h>
 #include <thread>
 
-#include "../filesystem/filesystem.h"
-
 namespace edge::platform {
 	IPlatformContext::~IPlatformContext() {
 		event_dispatcher_->clear_events();
-		fs::shutdown_filesystem();
 	}
 
 	auto IPlatformContext::initialize(const PlatformCreateInfo& create_info) -> bool {
-		fs::initialize_filesystem();
-
         event_dispatcher_ = std::make_unique<events::Dispatcher>();
 
         any_window_event_listener_ = event_dispatcher_->add_listener<events::EventTag::eWindow>(
@@ -22,7 +17,7 @@ namespace edge::platform {
                     self->on_any_window_event(e);
                 }, this);
 
-        //frame_handler_.set_limit(60);
+        //frame_handler_.set_limit(180);
         frame_handler_.setup_callback([](float delta_time, void* user_data) -> int32_t {
             auto* self = static_cast<IPlatformContext*>(user_data);
             return self->main_loop_tick(delta_time);
@@ -69,14 +64,14 @@ namespace edge::platform {
 		return true;
 	}
 
-	auto IPlatformContext::setup_application(void(*app_setup_func)(std::unique_ptr<ApplicationInterface>&)) -> bool {
+	auto IPlatformContext::setup_application(void(*app_setup_func)(std::unique_ptr<IApplication>&)) -> bool {
 		app_setup_func(application_);
 
 		if (!application_) {
 			return false;
 		}
 
-		return application_->initialize();
+		return application_->initialize(*this);
 	}
 
 	auto IPlatformContext::terminate(int32_t code) -> void {
@@ -99,7 +94,6 @@ namespace edge::platform {
 	}
 
 	auto IPlatformContext::main_loop_tick(float delta_time) -> int32_t {
-		//spdlog::trace("[Android Platform] Frame time: {:.2f}", delta_time * 1000.f);
 		auto new_windows_name = std::format("{} [cpu {} fps; {:.2f} ms] [gpu {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time(), renderer_->get_gpu_delta_time());
 		window_->set_title(new_windows_name);
 
@@ -113,9 +107,7 @@ namespace edge::platform {
 			//}
 
 			renderer_->begin_frame(delta_time);
-		
 			application_->update(delta_time);
-
 			renderer_->end_frame();
 		}
 		else {
