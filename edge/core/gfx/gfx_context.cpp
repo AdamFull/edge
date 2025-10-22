@@ -1305,7 +1305,7 @@ namespace edge::gfx {
 		create_info.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
 
 		//create_info.preTransform = ((requested_state_.transform & surface_capabilities.supportedTransforms) == requested_state_.transform) ? requested_state_.transform : surface_capabilities.currentTransform;
-        create_info.preTransform = vk::SurfaceTransformFlagBitsKHR::eInherit;
+        create_info.preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;
 		create_info.compositeAlpha = choose_suitable_composite_alpha(vk::CompositeAlphaFlagBitsKHR::eInherit, surface_capabilities.supportedCompositeAlpha);
 		create_info.presentMode = choose_suitable_present_mode(present_mode, present_modes, present_mode_priority_list);
 
