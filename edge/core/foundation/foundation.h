@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <memory>
 #include <format>
@@ -7,6 +8,8 @@
 #include <concepts>
 #include <vector>
 #include <unordered_map>
+
+#include <ranges>
 
 #include <string>
 #include <fstream>
@@ -315,6 +318,7 @@ namespace edge {
         }
 
         inline auto make_utf8_string(int32_t c) -> mi::U8String {
+            // TODO: this is not working correct now
             const auto* p = reinterpret_cast<const char8_t*>(&c);
             auto byte_count = char_byte_count(p[0]);
             if (byte_count == 0) {
@@ -331,6 +335,21 @@ namespace edge {
             return result;
         }
 
+        inline auto make_utf8_string(std::wstring_view sv) -> mi::U8String {
+            if constexpr (sizeof(wchar_t) == 2) {
+                // Windows (UTF-16)
+                std::u16string_view u16sv(reinterpret_cast<const char16_t*>(sv.data()), sv.size());
+                return make_utf8_string(u16sv);
+            }
+            else if constexpr (sizeof(wchar_t) == 4) {
+                // Unix/Linux (UTF-32)
+                std::u32string_view u32sv(reinterpret_cast<const char32_t*>(sv.data()), sv.size());
+                return make_utf8_string(u32sv);
+            }
+
+            return {};
+        }
+
         inline auto make_utf16_string(std::u8string_view sv) -> mi::U16String {
             mi::U16String result;
             if (!decode_utf8(sv, result)) {
@@ -344,6 +363,277 @@ namespace edge {
             if (!decode_utf8(sv, result)) {
                 return {};
             }
+            return result;
+        }
+
+        inline auto make_wide_string(std::u8string_view sv) -> mi::WString {
+            if constexpr (sizeof(wchar_t) == 2) {
+                // Windows (UTF-16)
+                auto u16 = make_utf16_string(sv);
+                return mi::WString(reinterpret_cast<const wchar_t*>(u16.data()), u16.size());
+            }
+            else if constexpr (sizeof(wchar_t) == 4) {
+                // Unix/Linux (UTF-32)
+                auto u32 = make_utf32_string(sv);
+                return mi::WString(reinterpret_cast<const wchar_t*>(u32.data()), u32.size());
+            }
+            else {
+                throw std::runtime_error("Unsupported wchar_t size");
+            }
+        }
+    }
+
+    namespace fs::path {
+        inline constexpr auto is_alpha(char8_t c) noexcept -> bool {
+            return (c >= u8'A' && c <= u8'Z') || (c >= u8'a' && c <= u8'z');
+        }
+
+        inline constexpr auto is_separator(char8_t c) noexcept -> bool {
+            return c == u8'/' || c == u8'\\';
+        }
+
+        inline constexpr auto find_last_separator(std::u8string_view path) noexcept -> size_t {
+            for (int32_t i = static_cast<int32_t>(path.size()); i > 0; --i) {
+                if (is_separator(path[i - 1])) {
+                    return static_cast<size_t>(i - 1);
+                }
+            }
+
+            return std::u8string_view::npos;
+        }
+
+        inline constexpr auto find_first_separator(std::u8string_view path) noexcept -> size_t {
+            for (int32_t i = 0; i < static_cast<int32_t>(path.size()); ++i) {
+                if (is_separator(path[i])) {
+                    return static_cast<size_t>(i);
+                }
+            }
+
+            return std::u8string_view::npos;
+        }
+
+        inline constexpr auto is_absolute(std::u8string_view path) noexcept -> bool {
+            if (path.empty()) {
+                return false;
+            }
+
+            if (is_separator(path[0])) {
+                return true;
+            }
+
+            if (path.size() >= 3 && is_alpha(path[0]) && path[1] == u8':' && is_separator(path[2])) {
+                return true;
+            }
+
+            return false;
+        }
+
+        inline constexpr auto filename(std::u8string_view path) noexcept -> std::u8string_view {
+            if (path.empty()) {
+                return path;
+            }
+
+            while (!path.empty() && is_separator(path.back())) {
+                path.remove_suffix(1);
+            }
+
+            if (path.empty()) {
+                return u8"/";
+            }
+
+            auto pos = find_last_separator(path);
+            if (pos == std::u8string_view::npos) {
+                return path;
+            }
+
+            return path.substr(pos + 1);
+        }
+
+        inline constexpr auto extension(std::u8string_view path) noexcept -> std::u8string_view {
+            auto fname = filename(path);
+            if (fname.empty() || fname == u8"." || fname == u8"..") {
+                return std::u8string_view{};
+            }
+
+            auto pos = fname.rfind(u8'.');
+            if (pos == std::u8string_view::npos || pos == 0) {
+                return std::u8string_view{};
+            }
+
+            return fname.substr(pos);
+        }
+
+        inline constexpr auto stem(std::u8string_view path) noexcept -> std::u8string_view {
+            auto fname = filename(path);
+            if (fname.empty() || fname == u8"." || fname == u8"..") {
+                return fname;
+            }
+
+            auto pos = fname.rfind(u8'.');
+            if (pos == std::u8string_view::npos || pos == 0) {
+                return fname;
+            }
+
+            return fname.substr(0, pos);
+        }
+
+        inline constexpr auto parent_path(std::u8string_view path) noexcept -> std::u8string_view {
+            if (path.empty()) {
+                return path;
+            }
+
+            while (!path.empty() && is_separator(path.back())) {
+                path.remove_suffix(1);
+            }
+
+            if (path.empty()) {
+                return std::u8string_view{};
+            }
+
+            auto pos = find_last_separator(path);
+            if (pos == std::u8string_view::npos) {
+                return std::u8string_view{};
+            }
+
+            if (pos == 0) {
+                return path.substr(0, 1);
+            }
+
+            if (pos == 2 && path.size() >= 3 && path[1] == u8':') {
+                return path.substr(0, 3);
+            }
+
+            return path.substr(0, pos);
+        }
+
+        inline auto to_posix(std::u8string_view path) -> mi::U8String {
+            mi::U8String result(path);
+            std::ranges::replace(result, u8'\\', u8'/');
+            return result;
+        }
+
+        inline auto to_windows(std::u8string_view path) -> mi::U8String {
+            mi::U8String result(path);
+            std::ranges::replace(result, u8'/', u8'\\');
+            return result;
+        }
+
+        inline auto normalize(std::u8string_view path, char8_t preferred_separator = u8'/') -> mi::U8String {
+            if (path.empty()) {
+                return mi::U8String{};
+            }
+
+            auto absolute = is_absolute(path);
+            mi::U8String prefix;
+            std::u8string_view work_path = path;
+
+            // Case for windows prefix
+            if (work_path.size() >= 2 && work_path[1] == u8':' && is_alpha(work_path[0])) {
+                prefix = std::u8string(work_path.substr(0, 2));
+                work_path = work_path.substr(2);
+                if (!work_path.empty() && is_separator(work_path[0])) {
+                    prefix += preferred_separator;
+                    work_path = work_path.substr(1);
+                }
+            }
+            else if (absolute) {
+                prefix = preferred_separator;
+                work_path = work_path.substr(1);
+            }
+
+            mi::Vector<std::u8string_view> components;
+            size_t start = 0;
+
+            for (std::size_t i = 0; i <= work_path.size(); ++i) {
+                if (i == work_path.size() || is_separator(work_path[i])) {
+                    if (i > start) {
+                        auto component = work_path.substr(start, i - start);
+                        if (component == u8"..") {
+                            if (!components.empty() && components.back() != u8"..") {
+                                components.pop_back();
+                            }
+                            else if (!absolute) {
+                                components.push_back(component);
+                            }
+                        }
+                        else if (component != u8".") {
+                            components.push_back(component);
+                        }
+                    }
+                    start = i + 1;
+                }
+            }
+
+            mi::U8String result = prefix;
+            for (size_t i = 0; i < components.size(); ++i) {
+                if (i > 0 || !prefix.empty()) {
+                    result += preferred_separator;
+                }
+                result += components[i];
+            }
+
+            if (result.empty() && !absolute) {
+                result = u8".";
+            }
+
+            return result;
+        }
+
+        inline auto append(std::u8string_view base, std::u8string_view component, char8_t separator = u8'/') -> mi::U8String {
+            if (base.empty()) {
+                return mi::U8String(component);
+            }
+
+            if (component.empty()) {
+                return mi::U8String(base);
+            }
+
+            mi::U8String result(base);
+            if (!is_separator(result.back()) && !is_separator(component.front())) {
+                result += separator;
+            }
+            result += component;
+
+            return result;
+        }
+
+        inline auto split_components(std::u8string_view path) -> mi::Vector<std::u8string_view> {
+            mi::Vector<std::u8string_view> result;
+            size_t pos = 0;
+
+            // Skip leading separators
+            while (pos < path.size() && is_separator(path[pos])) {
+                ++pos;
+            }
+
+            auto comp_start = pos;
+            for (; pos <= path.size(); ++pos) {
+                if (pos == path.size() || is_separator(path[pos])) {
+                    if (pos > comp_start) {
+                        result.push_back(path.substr(comp_start, pos - comp_start));
+                    }
+                    comp_start = pos + 1;
+                }
+            }
+
+            return result;
+        }
+
+        template<typename... Args>
+        inline auto join(char8_t separator, std::u8string_view first, Args&&... args) -> mi::U8String {
+            mi::U8String result(first);
+
+            auto append_one = [&](std::u8string_view component) {
+                if (!component.empty()) {
+                    if (!result.empty() && !is_separator(result.back()) &&
+                        !is_separator(component.front())) {
+                        result += separator;
+                    }
+                    result += component;
+                }
+                };
+
+            (append_one(std::forward<Args>(args)), ...);
             return result;
         }
     }
