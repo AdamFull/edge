@@ -26,112 +26,144 @@ namespace edge::fs {
     class NativeDirectoryIterator final : public IDirectoryIterator {
     public:
         explicit NativeDirectoryIterator(std::u8string_view path, bool recursive)
-            : base_path_{ path }
-            , is_end_(false)
+            : base_path_(path)
             , recursive_(recursive)
-            , current_handle_(INVALID_HANDLE_VALUE) {
-            stack_.push_back(mi::U8String{ path });
-            advance();
+        {
+            if (!open_directory(base_path_)) {
+                at_end_ = true;
+                return;
+            }
+
+            if (!advance_to_valid_entry()) {
+                at_end_ = true;
+            }
+        }
+
+        ~NativeDirectoryIterator() {
+            while (!dir_stack_.empty()) {
+                if (dir_stack_.back().handle != INVALID_HANDLE_VALUE) {
+                    FindClose(dir_stack_.back().handle);
+                }
+                dir_stack_.pop_back();
+            }
         }
 
         [[nodiscard]] auto end() const noexcept -> bool override {
-            return is_end_;
+            return at_end_;
         }
 
         auto next() -> void override {
-            if (!is_end_) {
-                advance();
-            }
-        }
-
-        [[nodiscard]] auto value() const noexcept -> const DirEntry& override {
-            return current_;
-        }
-    private:
-        auto close_current_handle() -> void {
-            if (current_handle_ != INVALID_HANDLE_VALUE) {
-                FindClose(current_handle_);
-                current_handle_ = INVALID_HANDLE_VALUE;
-            }
-        }
-
-        auto advance() -> void {
-            while (true) {
-                // Try to get next entry from current directory
-                if (current_handle_ != INVALID_HANDLE_VALUE) {
-                    WIN32_FIND_DATAW find_data;
-
-                    while (FindNextFileW(current_handle_, &find_data)) {
-                        auto name = unicode::make_utf8_string(find_data.cFileName);
-                        if (name == u8"." || name == u8"..") {
-                            continue;
-                        }
-
-                        auto full_path = path::append(current_directory_, name, u8'\\');
-                        bool is_dir = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-
-                        if (is_dir && recursive_) {
-                            stack_.push_back(full_path);
-                        }
-
-                        current_.path = path::to_posix(full_path.substr(base_path_.size()));
-                        current_.is_directory = is_dir;
-                        current_.size = (static_cast<uint64_t>(find_data.nFileSizeHigh) << 32) | find_data.nFileSizeLow;
-
-                        return;
-                    }
-
-                    // No more entries in current directory, close handle
-                    close_current_handle();
-                }
-
-                // Need to open a new directory
-                if (stack_.empty()) {
-                    is_end_ = true;
-                    return;
-                }
-
-                current_directory_ = stack_.back();
-                stack_.pop_back();
-
-                auto search_path = path::append(current_directory_, u8"*", u8'\\');
-                auto search_path_utf16 = unicode::make_wide_string(search_path);
-
-                WIN32_FIND_DATAW find_data;
-                current_handle_ = FindFirstFileW(search_path_utf16.c_str(), &find_data);
-
-                if (current_handle_ == INVALID_HANDLE_VALUE) {
-                    continue; // Try next directory in stack
-                }
-
-                // Process first entry
-                auto name = unicode::make_utf8_string(find_data.cFileName);
-                if (name == u8"." || name == u8"..") {
-                    continue; // Will loop back and call FindNextFileW
-                }
-
-                auto full_path = path::append(current_directory_, name, u8'\\');
-                bool is_dir = (find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-
-                if (is_dir && recursive_) {
-                    stack_.push_back(full_path);
-                }
-
-                current_.path = path::to_posix(full_path.substr(base_path_.size()));
-                current_.is_directory = is_dir;
-                current_.size = (static_cast<uint64_t>(find_data.nFileSizeHigh) << 32) | find_data.nFileSizeLow;
-
+            if (at_end_) {
                 return;
             }
+
+            if (!advance_to_valid_entry()) {
+                at_end_ = true;
+            }
+        }
+
+        auto value() const noexcept -> const DirEntry & override {
+            return current_entry_;
+        }
+    private:
+        struct DirectoryState {
+            mi::WString current_dir;
+            mi::U8String relative_path;
+            HANDLE handle = INVALID_HANDLE_VALUE;
+            WIN32_FIND_DATAW find_data{};
+            bool first = true;
+        };
+
+        auto open_directory(std::u8string_view dir_path) -> bool {
+            auto search_path = path::append(dir_path, u8"*", u8'\\');
+            auto wsearch_path = unicode::make_wide_string(search_path);
+
+            WIN32_FIND_DATAW find_data{};
+            HANDLE handle = FindFirstFileW(wsearch_path.c_str(), &find_data);
+
+            if (handle == INVALID_HANDLE_VALUE) {
+                return false;
+            }
+
+            DirectoryState state;
+            state.current_dir = unicode::make_wide_string(dir_path);
+            state.relative_path = u8"";
+            state.handle = handle;
+            state.find_data = find_data;
+            state.first = true;
+
+            dir_stack_.push_back(std::move(state));
+            return true;
+        }
+
+        auto open_subdirectory(std::u8string_view relative_path, std::u8string_view name) -> bool {
+            DirectoryState state;
+            state.relative_path = relative_path.empty() ? name : path::append(relative_path, name, u8'\\');
+            state.first = true;
+
+            auto full_path = path::append(base_path_, state.relative_path, u8'\\');
+            auto search_path = path::append(full_path, u8"*", u8'\\');
+            auto wsearch_path = unicode::make_wide_string(search_path);
+
+            state.handle = FindFirstFileW(wsearch_path.c_str(), &state.find_data);
+
+            if (state.handle == INVALID_HANDLE_VALUE) {
+                return false;
+            }
+
+            state.current_dir = unicode::make_wide_string(full_path);
+            
+            dir_stack_.push_back(std::move(state));
+            return true;
+        }
+
+        auto advance_to_valid_entry() -> bool {
+            while (!dir_stack_.empty()) {
+                auto& state = dir_stack_.back();
+
+                if (state.first) {
+                    state.first = false;
+                }
+                else {
+                    if (!FindNextFileW(state.handle, &state.find_data)) {
+                        FindClose(state.handle);
+                        dir_stack_.pop_back();
+                        continue;
+                    }
+                }
+
+                auto filename = unicode::make_utf8_string(state.find_data.cFileName);
+
+                // Skip . and ..
+                if (filename == u8"." || filename == u8"..") {
+                    continue;
+                }
+
+                // Build current entry
+                bool is_dir = (state.find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+                uint64_t size = (static_cast<uint64_t>(state.find_data.nFileSizeHigh) << 32) |
+                    state.find_data.nFileSizeLow;
+
+                current_entry_.path = state.relative_path.empty() ? filename : path::append(state.relative_path, filename, u8'/');
+                current_entry_.is_directory = is_dir;
+                current_entry_.size = size;
+
+                // If recursive and this is a directory, queue it for later
+                if (recursive_ && is_dir) {
+                    open_subdirectory(state.relative_path, filename);
+                }
+
+                return true;
+            }
+
+            return false;
         }
 
         mi::U8String base_path_;
-        mi::U8String current_directory_;
-        mi::Vector<mi::U8String> stack_;
-        DirEntry current_;
-        HANDLE current_handle_;
-        bool is_end_;
         bool recursive_;
+        mi::Vector<DirectoryState> dir_stack_;
+        DirEntry current_entry_;
+        bool at_end_ = false;
     };
 
     class NativeFile final : public IFile {
