@@ -900,7 +900,7 @@ namespace edge::gfx {
 		static auto choose_suitable_composite_alpha(vk::CompositeAlphaFlagBitsKHR request_composite_alpha, vk::CompositeAlphaFlagsKHR supported_composite_alpha) -> vk::CompositeAlphaFlagBitsKHR;
 		static auto choose_suitable_present_mode(vk::PresentModeKHR request_present_mode, std::span<const vk::PresentModeKHR> available_present_modes, std::span<const vk::PresentModeKHR> present_mode_priority_list) -> vk::PresentModeKHR;
 
-		Swapchain::State requested_state_;
+		Swapchain::State requested_state_{};
 		vk::SwapchainKHR old_swapchain_{ VK_NULL_HANDLE };
 
 		Adapter const* adapter_{ nullptr };

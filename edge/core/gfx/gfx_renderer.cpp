@@ -459,7 +459,7 @@ namespace edge::gfx {
 			present_info.pSwapchains = &(*swapchain_);
 			present_info.pImageIndices = &swapchain_image_index_;
 
-			if (auto result = queue_->presentKHR(&present_info); result != vk::Result::eSuccess) {
+			if (auto result = queue_->presentKHR(&present_info); result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
 				EDGE_SLOGE("Failed to present images. Reason: {}", vk::to_string(result));
 				return;
 			}
@@ -574,7 +574,7 @@ namespace edge::gfx {
 			return result;
 		}
 
-		for (int32_t i = 0; i < static_cast<int32_t>(swapchain_images_.size()); ++i) {
+		for (int32_t i = 0; i < 2; ++i) {
 			auto command_list_result = command_pool_.allocate_command_buffer();
 			if (!command_list_result) {
 				EDGE_SLOGE("Failed to allocate command list for frame at index {}. Reason: {}.", i, vk::to_string(command_list_result.error()));

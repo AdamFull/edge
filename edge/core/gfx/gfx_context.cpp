@@ -1304,7 +1304,8 @@ namespace edge::gfx {
 		adapter.getFormatProperties(create_info.imageFormat, &format_properties);
 		create_info.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
 
-		create_info.preTransform = ((requested_state_.transform & surface_capabilities.supportedTransforms) == requested_state_.transform) ? requested_state_.transform : surface_capabilities.currentTransform;
+		//create_info.preTransform = ((requested_state_.transform & surface_capabilities.supportedTransforms) == requested_state_.transform) ? requested_state_.transform : surface_capabilities.currentTransform;
+        create_info.preTransform = vk::SurfaceTransformFlagBitsKHR::eInherit;
 		create_info.compositeAlpha = choose_suitable_composite_alpha(vk::CompositeAlphaFlagBitsKHR::eInherit, surface_capabilities.supportedCompositeAlpha);
 		create_info.presentMode = choose_suitable_present_mode(present_mode, present_modes, present_mode_priority_list);
 
@@ -2105,6 +2106,7 @@ namespace edge::gfx {
 			.add_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME)
 			.add_extension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)
 			.add_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME)
+			.add_extension(VK_KHR_MAINTENANCE_6_EXTENSION_NAME)
 			.add_extension(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME)
 			.add_extension(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME)
 			.add_extension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)
@@ -2121,7 +2123,6 @@ namespace edge::gfx {
 			.add_extension(VK_KHR_SHADER_NON_SEMANTIC_INFO_EXTENSION_NAME)
 			.add_extension(VK_KHR_VULKAN_MEMORY_MODEL_EXTENSION_NAME)
 			.add_extension(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, false)
-			.add_extension(VK_EXT_DEBUG_MARKER_EXTENSION_NAME, false)
 			.add_extension(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, false)
 			.add_extension(VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, false)
 			.add_extension(VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME)
@@ -2131,6 +2132,7 @@ namespace edge::gfx {
 			.add_extension(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, false)
 			.add_extension(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME, false)
 #if !defined(VK_USE_PLATFORM_ANDROID_KHR)
+            .add_extension(VK_EXT_DEBUG_MARKER_EXTENSION_NAME, false)
 			.add_extension(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME)
 #endif
 #if defined(VKW_ENABLE_PORTABILITY)
