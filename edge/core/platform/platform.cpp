@@ -1,14 +1,19 @@
-#include "platform.h"
+﻿#include "platform.h"
 
 #include <spdlog/spdlog.h>
 #include <thread>
 
+#include "../filesystem/filesystem.h"
+
 namespace edge::platform {
 	IPlatformContext::~IPlatformContext() {
 		event_dispatcher_->clear_events();
+		fs::shutdown_filesystem();
 	}
 
 	auto IPlatformContext::initialize(const PlatformCreateInfo& create_info) -> bool {
+		fs::initialize_filesystem();
+
         event_dispatcher_ = std::make_unique<events::Dispatcher>();
 
         any_window_event_listener_ = event_dispatcher_->add_listener<events::EventTag::eWindow>(
