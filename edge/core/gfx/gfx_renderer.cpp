@@ -10,6 +10,9 @@
 #include "gfx_shader_effect.h"
 
 namespace edge::gfx {
+	extern Surface surface_;
+	extern Adapter adapter_;
+	extern Device device_;
 
 	void TechniqueStage::deserialize(BinaryReader& reader) {
 		stage = reader.read<vk::ShaderStageFlagBits>();
@@ -24,132 +27,83 @@ namespace edge::gfx {
 		code.resize(decompressed_size);
 	}
 
-#define EDGE_LOGGER_SCOPE "gfx::BufferArena"
-
-	auto BufferArena::construct(Context const* ctx, vk::DeviceSize size, BufferFlags flags) -> Result<BufferArena> {
-		BufferArena self{ ctx };
-		if (auto result = self._construct(size, flags); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-		return self;
-	}
-
-	auto BufferArena::allocate(vk::DeviceSize size, vk::DeviceSize alignment) -> Result<BufferRange> {
-		auto aligned = aligned_size(size, alignment);
-
-		if (!is_fits(size, alignment)) {
-			return std::unexpected(vk::Result::eErrorNotEnoughSpaceKHR);
-		}
-
-		auto offset = offset_.fetch_add(aligned, std::memory_order_acq_rel);
-		return BufferRange::construct(&buffer_, offset, aligned);
-	}
-
-	auto BufferArena::reset() -> void {
-		offset_.store(0ull, std::memory_order_relaxed);
-	}
-
-	auto BufferArena::is_fits(vk::DeviceSize size, vk::DeviceSize alignment) -> bool {
-		auto aligned = aligned_size(size, alignment);
-		return buffer_.get_size() < aligned + offset_.load(std::memory_order_relaxed);
-	}
-
-	auto BufferArena::_construct(vk::DeviceSize size, BufferFlags flags) -> vk::Result {
-		BufferCreateInfo create_info{};
-		create_info.size = size;
-		create_info.count = 1ull;
-		create_info.minimal_alignment = 1ull;
-		create_info.flags = flags;
-
-		auto result = context_->create_buffer(create_info);
-		if (!result) {
-			return result.error();
-		}
-
-		buffer_ = std::move(result.value());
-
-		return vk::Result::eSuccess;
-	}
-
-#undef EDGE_LOGGER_SCOPE // BufferArena
-
-#define EDGE_LOGGER_SCOPE "gfx::ResourceLoader"
-
-	auto ResourceLoader::construct(Context const* ctx, vk::DeviceSize arena_size, uint32_t frames_in_flight) -> Result<ResourceLoader> {
-		ResourceLoader self{ ctx };
-		if (auto result = self._construct(arena_size, frames_in_flight); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-		return self;
-	}
-
-	auto ResourceLoader::load_image_from_memory(Span<uint8_t> image_data) -> Result<Image> {
-
-		if(image_data.size() < 4) {
-			return std::unexpected(vk::Result::eErrorUnknown);
-		}
-
-		auto magic = image_data.subspan(0, 4);
-
-		// PNG: 89 50 4E 47
-		if (image_data.size() >= 8 && magic[0] == 0x89 && magic[1] == 0x50 && magic[2] == 0x4E && magic[3] == 0x47) {
-			return _load_image_from_stbi(image_data);
-		}
-		// JPEG: FF D8 FF
-		else if (magic[0] == 0xFF && magic[1] == 0xD8 && magic[2] == 0xFF) {
-			return _load_image_from_stbi(image_data);
-		}
-		// KTX: AB 4B 54 58
-		else if (magic[0] == 0xAB && magic[1] == 0x4B && magic[2] == 0x54 && magic[3] == 0x58) {
-			return _load_image_from_ktx(image_data);
-		}
-
-		return std::unexpected(vk::Result::eErrorUnknown);
-	}
-
-	auto ResourceLoader::_construct(vk::DeviceSize arena_size, uint32_t frames_in_flight) -> vk::Result {
-		for (int32_t i = 0; i < static_cast<int32_t>(frames_in_flight); ++i) {
-			auto result = BufferArena::construct(context_, arena_size, kStagingBuffer);
-			if (!result) {
-				return result.error();
-			}
-
-			staging_arenas_.push_back(std::move(result.value()));
-		}
-
-		return vk::Result::eSuccess;
-	}
-
-	auto ResourceLoader::_load_image_from_stbi(Span<uint8_t> image_data) -> Result<Image> {
-		int32_t width, height, channel_count;
-
-		ImageCreateInfo create_info{};
-		create_info.extent.width = static_cast<uint32_t>(width);
-		create_info.extent.height = static_cast<uint32_t>(height);
-		create_info.extent.depth = 1u;
-		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
-
-		uint8_t* data = stbi_load_from_memory(image_data.data(), static_cast<int32_t>(image_data.size()), &width, &height, &channel_count, 0);
-		if (!data) {
-			return std::unexpected(vk::Result::eErrorUnknown);
-		}
-
-		auto texture_size = create_info.extent.width * create_info.extent.height * static_cast<uint32_t>(channel_count);
-
-		stbi_image_free(data);
-
-		return std::unexpected(vk::Result::eErrorUnknown);
-	}
-
-	auto ResourceLoader::_load_image_from_ktx(Span<uint8_t> image_data) -> Result<Image> {
-		return std::unexpected(vk::Result::eErrorUnknown);
-	}
-
-	auto ResourceLoader::_allocate_staging_memory(vk::DeviceSize image_size) -> Result<BufferRange> {
-		return std::unexpected(vk::Result::eErrorUnknown);
-	}
-
-#undef EDGE_LOGGER_SCOPE // ResourceLoader
+//#define EDGE_LOGGER_SCOPE "gfx::ResourceLoader"
+//
+//	auto ResourceLoader::construct(Context const* ctx, vk::DeviceSize arena_size, uint32_t frames_in_flight) -> Result<ResourceLoader> {
+//		ResourceLoader self{ ctx };
+//		if (auto result = self._construct(arena_size, frames_in_flight); result != vk::Result::eSuccess) {
+//			return std::unexpected(result);
+//		}
+//		return self;
+//	}
+//
+//	auto ResourceLoader::load_image_from_memory(Span<uint8_t> image_data) -> Result<Image> {
+//
+//		if(image_data.size() < 4) {
+//			return std::unexpected(vk::Result::eErrorUnknown);
+//		}
+//
+//		auto magic = image_data.subspan(0, 4);
+//
+//		// PNG: 89 50 4E 47
+//		if (image_data.size() >= 8 && magic[0] == 0x89 && magic[1] == 0x50 && magic[2] == 0x4E && magic[3] == 0x47) {
+//			return _load_image_from_stbi(image_data);
+//		}
+//		// JPEG: FF D8 FF
+//		else if (magic[0] == 0xFF && magic[1] == 0xD8 && magic[2] == 0xFF) {
+//			return _load_image_from_stbi(image_data);
+//		}
+//		// KTX: AB 4B 54 58
+//		else if (magic[0] == 0xAB && magic[1] == 0x4B && magic[2] == 0x54 && magic[3] == 0x58) {
+//			return _load_image_from_ktx(image_data);
+//		}
+//
+//		return std::unexpected(vk::Result::eErrorUnknown);
+//	}
+//
+//	auto ResourceLoader::_construct(vk::DeviceSize arena_size, uint32_t frames_in_flight) -> vk::Result {
+//		for (int32_t i = 0; i < static_cast<int32_t>(frames_in_flight); ++i) {
+//			auto result = BufferArena::construct(context_, arena_size, kStagingBuffer);
+//			if (!result) {
+//				return result.error();
+//			}
+//
+//			staging_arenas_.push_back(std::move(result.value()));
+//		}
+//
+//		return vk::Result::eSuccess;
+//	}
+//
+//	auto ResourceLoader::_load_image_from_stbi(Span<uint8_t> image_data) -> Result<Image> {
+//		int32_t width, height, channel_count;
+//
+//		ImageCreateInfo create_info{};
+//		create_info.extent.width = static_cast<uint32_t>(width);
+//		create_info.extent.height = static_cast<uint32_t>(height);
+//		create_info.extent.depth = 1u;
+//		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
+//
+//		uint8_t* data = stbi_load_from_memory(image_data.data(), static_cast<int32_t>(image_data.size()), &width, &height, &channel_count, 0);
+//		if (!data) {
+//			return std::unexpected(vk::Result::eErrorUnknown);
+//		}
+//
+//		auto texture_size = create_info.extent.width * create_info.extent.height * static_cast<uint32_t>(channel_count);
+//
+//		stbi_image_free(data);
+//
+//		return std::unexpected(vk::Result::eErrorUnknown);
+//	}
+//
+//	auto ResourceLoader::_load_image_from_ktx(Span<uint8_t> image_data) -> Result<Image> {
+//		return std::unexpected(vk::Result::eErrorUnknown);
+//	}
+//
+//	auto ResourceLoader::_allocate_staging_memory(vk::DeviceSize image_size) -> Result<BufferRange> {
+//		return std::unexpected(vk::Result::eErrorUnknown);
+//	}
+//
+//#undef EDGE_LOGGER_SCOPE // ResourceLoader
 
 #define EDGE_LOGGER_SCOPE "gfx::Frame"
 
@@ -157,10 +111,10 @@ namespace edge::gfx {
 		
 	}
 
-	auto Frame::construct(const Context& ctx, CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Result<Frame> {
+	auto Frame::construct(CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Result<Frame> {
 		Frame self{};
 		self.command_buffer_ = std::move(command_buffer);
-		if (auto result = self._construct(ctx, descriptor_layout); result != vk::Result::eSuccess) {
+		if (auto result = self._construct(descriptor_layout); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
 		return self;
@@ -175,8 +129,8 @@ namespace edge::gfx {
 	auto Frame::end() -> void {
 	}
 
-	auto Frame::_construct(const Context& ctx, DescriptorSetLayout const& descriptor_layout) -> vk::Result {
-		if (auto result = ctx.create_semaphore(); !result.has_value()) {
+	auto Frame::_construct(DescriptorSetLayout const& descriptor_layout) -> vk::Result {
+		if (auto result = create_semaphore(); !result.has_value()) {
 			EDGE_SLOGE("Failed to create image available semaphore handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 			
@@ -185,7 +139,7 @@ namespace edge::gfx {
 			image_available_ = std::move(result.value());
 		}
 
-		if (auto result = ctx.create_semaphore(); !result.has_value()) {
+		if (auto result = create_semaphore(); !result.has_value()) {
 			EDGE_SLOGE("Failed to create rendering finished semaphore handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -193,7 +147,7 @@ namespace edge::gfx {
 			rendering_finished_ = std::move(result.value());
 		}
 
-		if (auto result = ctx.create_fence(vk::FenceCreateFlagBits::eSignaled); !result.has_value()) {
+		if (auto result = create_fence(vk::FenceCreateFlagBits::eSignaled); !result.has_value()) {
 			EDGE_SLOGE("Failed to create frame fence handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -208,9 +162,8 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::Renderer"
 
-	Renderer::Renderer(Context&& context)
-		: context_{ std::move(context) }
-		, swapchain_images_{}
+	Renderer::Renderer()
+		: swapchain_images_{}
 		, swapchain_image_views_{}
 		, frames_{}
 		, push_constant_buffer_{} {
@@ -223,10 +176,9 @@ namespace edge::gfx {
 		descriptor_pool_.free_descriptor_set(descriptor_set_);
 	}
 
-	auto Renderer::construct(Context&& context, const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>> {
-		auto self = std::make_unique<Renderer>(std::move(context));
+	auto Renderer::construct(const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>> {
+		auto self = std::make_unique<Renderer>();
 		if (auto result = self->_construct(create_info); result != vk::Result::eSuccess) {
-			context = std::move(self->context_);
 			return std::unexpected(result);
 		}
 		return self;
@@ -249,7 +201,7 @@ namespace edge::gfx {
 		mi::Vector<vk::PipelineShaderStageCreateInfo> shader_stages{};
 
 		for (auto const& stage : shader_effect.stages) {
-			auto result = context_.create_shader_module(stage.code);
+			auto result = create_shader_module(stage.code);
 			if (!result) {
 				continue;
 			}
@@ -322,15 +274,14 @@ namespace edge::gfx {
 		auto const& semaphore = current_frame->get_image_available_semaphore();
 		acquired_senmaphore_ = *semaphore;
 
-		auto const& device = context_.get_device();
 		if (swapchain_) {
-			auto result = device->acquireNextImageKHR(swapchain_, 1000000000ull, acquired_senmaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
+			auto result = device_->acquireNextImageKHR(swapchain_, 1000000000ull, acquired_senmaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
 			if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
 				swapchain_recreated = handle_surface_change(true);
 
 				// Try to acquire next image again after recreation
 				if (swapchain_recreated) {
-					result = device->acquireNextImageKHR(swapchain_, ~0ull, acquired_senmaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
+					result = device_->acquireNextImageKHR(swapchain_, ~0ull, acquired_senmaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
 				}
 
 				if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
@@ -471,7 +422,7 @@ namespace edge::gfx {
 	}
 
 	auto Renderer::_construct(const RendererCreateInfo& create_info) -> vk::Result {
-		if (auto result = context_.get_queue(QueueType::eDirect); !result.has_value()) {
+		if (auto result = get_queue(QueueType::eDirect); !result.has_value()) {
 			EDGE_SLOGE("Failed to request queue. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -491,7 +442,7 @@ namespace edge::gfx {
 		query_pool_create_info.queryCount = 1u;
 		query_pool_create_info.queryType = vk::QueryType::eTimestamp;
 
-		if (auto result = context_.create_query_pool(vk::QueryType::eTimestamp, 1u); !result.has_value()) {
+		if (auto result = create_query_pool(vk::QueryType::eTimestamp, 1u); !result.has_value()) {
 			EDGE_SLOGE("Failed to create timestamp query. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -500,15 +451,13 @@ namespace edge::gfx {
 			timestamp_query_.reset(0u);
 		}
 
-		auto const& adapter = context_.get_adapter();
-
 		vk::PhysicalDeviceProperties adapter_properties;
-		adapter->getProperties(&adapter_properties);
+		adapter_->getProperties(&adapter_properties);
 
 		timestamp_frequency_ = adapter_properties.limits.timestampPeriod;
 
 		// Create descriptor layout
-		DescriptorSetLayoutBuilder set_layout_builder{ context_ };
+		DescriptorSetLayoutBuilder set_layout_builder{};
 		set_layout_builder.add_binding(0, vk::DescriptorType::eSampler, UINT16_MAX,
 			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
 			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
@@ -527,7 +476,7 @@ namespace edge::gfx {
 		}
 
 		auto const& requested_sizes = descriptor_layout_.get_pool_sizes();
-		if (auto result = context_.create_descriptor_pool(requested_sizes, 1u, vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBindEXT); !result) {
+		if (auto result = create_descriptor_pool(requested_sizes, 1u, vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBindEXT); !result) {
 			EDGE_SLOGE("Failed to create frame descriptor pool handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -543,7 +492,7 @@ namespace edge::gfx {
 			descriptor_set_ = std::move(result.value());
 		}
 
-		PipelineLayoutBuilder pipeline_layout_builder{ context_ };
+		PipelineLayoutBuilder pipeline_layout_builder{};
 		// TODO: add ability to set specific set point
 		pipeline_layout_builder.add_set_layout(descriptor_layout_);
 		pipeline_layout_builder.add_constant_range(vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, 0u, adapter_properties.limits.maxPushConstantsSize);
@@ -557,7 +506,7 @@ namespace edge::gfx {
 
 		push_constant_buffer_.resize(adapter_properties.limits.maxPushConstantsSize);
 
-		if (auto result = ShaderLibrary::construct(context_, pipeline_layout_, u8"/shader_cache.cache", u8"/assets/shaders"); !result) {
+		if (auto result = ShaderLibrary::construct(pipeline_layout_, u8"/shader_cache.cache", u8"/assets/shaders"); !result) {
 			EDGE_SLOGE("Failed to create shader library. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -581,7 +530,7 @@ namespace edge::gfx {
 				return command_list_result.error();
 			}
 
-			if (auto frame_result = Frame::construct(context_, std::move(command_list_result.value()), descriptor_layout_); !frame_result.has_value()) {
+			if (auto frame_result = Frame::construct(std::move(command_list_result.value()), descriptor_layout_); !frame_result.has_value()) {
 				EDGE_SLOGE("Failed to create frame at index {}. Reason: {}.", i, vk::to_string(frame_result.error()));
 				return frame_result.error();
 			}
@@ -601,10 +550,8 @@ namespace edge::gfx {
 			return false;
 		}
 
-		auto const& adapter = context_.get_adapter();
-
 		vk::SurfaceCapabilitiesKHR surface_capabilities;
-		if (auto result = adapter->getSurfaceCapabilitiesKHR(context_.get_surface(), &surface_capabilities); result != vk::Result::eSuccess) {
+		if (auto result = adapter_->getSurfaceCapabilitiesKHR(surface_, &surface_capabilities); result != vk::Result::eSuccess) {
 			return false;
 		}
 
@@ -634,7 +581,7 @@ namespace edge::gfx {
 	}
 
 	auto Renderer::create_swapchain(const Swapchain::State& state) -> vk::Result {
-		if (auto result = SwapchainBuilder{ context_.get_adapter(), context_.get_device(), context_.get_surface() }
+		if (auto result = SwapchainBuilder{}
 			.set_old_swapchain(*swapchain_)
 			.set_image_extent(state.extent)
 			.set_image_format(state.format.format)
@@ -668,7 +615,7 @@ namespace edge::gfx {
 				subresource_range.baseMipLevel = 0u;
 				subresource_range.levelCount = 1u;
 
-				if (auto result = context_.create_image_view(swapchain_images_[i], subresource_range, vk::ImageViewType::e2D); !result.has_value()) {
+				if (auto result = create_image_view(swapchain_images_[i], subresource_range, vk::ImageViewType::e2D); !result.has_value()) {
 					return result.error();
 				}
 				else {

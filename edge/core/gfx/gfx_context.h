@@ -8,7 +8,6 @@ namespace edge::platform {
 }
 
 namespace edge::gfx {
-	class Context;
 	class Instance;
 	class Surface;
 	class Adapter;
@@ -847,10 +846,7 @@ namespace edge::gfx {
 
 	class SwapchainBuilder {
 	public:
-		SwapchainBuilder(Adapter const& adapter, Device const& device, Surface const& surface)
-			: adapter_{ &adapter }
-			, device_{ &device }
-			, surface_{ &surface } {
+		SwapchainBuilder() {
 		}
 
 		auto set_image_count(uint32_t count) -> SwapchainBuilder& {
@@ -902,10 +898,6 @@ namespace edge::gfx {
 
 		Swapchain::State requested_state_{};
 		vk::SwapchainKHR old_swapchain_{ VK_NULL_HANDLE };
-
-		Adapter const* adapter_{ nullptr };
-		Device const* device_{ nullptr };
-		Surface const* surface_{ nullptr };
 	};
 
 	struct ImageBarrier {
@@ -1139,7 +1131,7 @@ namespace edge::gfx {
 
 	class DescriptorSetLayoutBuilder : public NonCopyable {
 	public:
-		DescriptorSetLayoutBuilder(Context const& ctx);
+		DescriptorSetLayoutBuilder();
 
 		auto add_binding(uint32_t binding, vk::DescriptorType descriptor_type, uint32_t descriptor_count, vk::ShaderStageFlags stage_flags, vk::DescriptorBindingFlagsEXT binding_flags = {}) -> DescriptorSetLayoutBuilder& {
 			pool_sizes_[static_cast<uint32_t>(descriptor_type)] += descriptor_count;
@@ -1150,8 +1142,6 @@ namespace edge::gfx {
 
 		auto build(vk::DescriptorSetLayoutCreateFlags flags = {}) -> Result<DescriptorSetLayout>;
 	private:
-		Context const* ctx_{ nullptr };
-
 		mi::Vector<vk::DescriptorSetLayoutBinding> layout_bindings_;
 		mi::Vector<vk::DescriptorBindingFlagsEXT> binding_flags_;
 		PoolSizes pool_sizes_;
@@ -1159,7 +1149,7 @@ namespace edge::gfx {
 
 	class PipelineLayoutBuilder : public NonCopyable {
 	public:
-		PipelineLayoutBuilder(Context const& ctx);
+		PipelineLayoutBuilder();
 
 		auto add_set_layout(DescriptorSetLayout const& set_layout) -> PipelineLayoutBuilder&;
 
@@ -1175,8 +1165,6 @@ namespace edge::gfx {
 
 		auto build() -> Result<PipelineLayout>;
 	private:
-		Context const* ctx_{ nullptr };
-
 		mi::Vector<vk::DescriptorSetLayout> descriptor_set_layouts_;
 		mi::Vector<vk::PushConstantRange> push_constant_ranges_;
 	};
@@ -1221,75 +1209,27 @@ namespace edge::gfx {
 		PoolSizes pool_sizes_{};
 	};
 
-	class Context : public NonCopyable {
-	public:
-		Context();
-		Context(std::nullptr_t) noexcept
-			: instance_{ nullptr }
-			, surface_{ nullptr }
-			, adapter_{ nullptr }
-			, device_{ nullptr }
-			, memory_allocator_{ nullptr } {
-		}
-		~Context();
+	auto initialize_graphics(const ContextInfo& info) -> vk::Result;
+	auto shutdown_graphics() -> void;
 
-		Context(Context&& other)
-			: allocator_{ std::exchange(other.allocator_, VK_NULL_HANDLE) }
-			, instance_{ std::exchange(other.instance_, VK_NULL_HANDLE) }
-			, surface_{ std::exchange(other.surface_, VK_NULL_HANDLE) }
-			, adapter_{ std::exchange(other.adapter_, VK_NULL_HANDLE) }
-			, device_{ std::exchange(other.device_, VK_NULL_HANDLE) }
-			, memory_allocator_{ std::exchange(other.memory_allocator_, VK_NULL_HANDLE) } {
-		}
+	auto create_fence(vk::FenceCreateFlags flags = {}) -> Result<Fence>;
+	auto create_semaphore(vk::SemaphoreType type = vk::SemaphoreType::eBinary, uint64_t initial_value = 0ull) -> Result<Semaphore>;
+	// TODO: Queue selection not finished
+	auto get_queue(QueueType type) -> Result<Queue>;
 
-		auto operator=(Context&& other) -> Context& {
-			allocator_ = std::exchange(other.allocator_, VK_NULL_HANDLE);
-			instance_ = std::exchange(other.instance_, VK_NULL_HANDLE);
-			surface_ = std::exchange(other.surface_, VK_NULL_HANDLE);
-			adapter_ = std::exchange(other.adapter_, VK_NULL_HANDLE);
-			device_ = std::exchange(other.device_, VK_NULL_HANDLE);
-			memory_allocator_ = std::exchange(other.memory_allocator_, VK_NULL_HANDLE);
-			return *this;
-		}
+	auto create_image(const ImageCreateInfo& create_info) -> Result<Image>;
+	auto create_image_view(const Image& image, const vk::ImageSubresourceRange& range, vk::ImageViewType type) -> Result<ImageView>;
+	auto create_buffer(const BufferCreateInfo& create_info) -> Result<Buffer>;
+	auto create_buffer_view(const Buffer& buffer, vk::DeviceSize size, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined) -> Result<BufferView>;
 
-		static auto construct(const ContextInfo& info) -> Result<Context>;
+	// TODO: Shader
+	auto create_sampler(const vk::SamplerCreateInfo& create_info) -> Result<Sampler>;
+	// TODO: RootSignature
+	// TODO: Pipeline
 
-		auto create_fence(vk::FenceCreateFlags flags = {}) const -> Result<Fence>;
-		auto create_semaphore(vk::SemaphoreType type = vk::SemaphoreType::eBinary, uint64_t initial_value = 0ull) const -> Result<Semaphore>;
-		// TODO: Queue selection not finished
-		auto get_queue(QueueType type) const -> Result<Queue>;
+	auto create_shader_module(Span<const uint8_t> code) -> Result<ShaderModule>;
 
-		auto create_image(const ImageCreateInfo& create_info) const -> Result<Image>;
-		auto create_image_view(const Image& image, const vk::ImageSubresourceRange& range, vk::ImageViewType type) const -> Result<ImageView>;
-		auto create_buffer(const BufferCreateInfo& create_info) const -> Result<Buffer>;
-		auto create_buffer_view(const Buffer& buffer, vk::DeviceSize size, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined) const -> Result<BufferView>;
-
-		// TODO: Shader
-		auto create_sampler(const vk::SamplerCreateInfo& create_info) const -> Result<Sampler>;
-		// TODO: RootSignature
-		// TODO: Pipeline
-
-		auto create_shader_module(Span<const uint8_t> code) const -> Result<ShaderModule>;
-
-		auto create_pipeline_cache(Span<const uint8_t> data) const -> Result<PipelineCache>;
-		auto create_query_pool(vk::QueryType type, uint32_t query_count) const -> Result<QueryPool>;
-		auto create_descriptor_pool(PoolSizes const& pool_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags = {}) const -> Result<DescriptorPool>;
-
-		auto get_allocator() const -> vk::AllocationCallbacks const* { return allocator_; }
-		auto get_instance() const -> Instance const& { return instance_; }
-		auto get_surface() const -> Surface const& { return surface_; }
-		auto get_adapter() const -> Adapter const& { return adapter_; }
-		auto get_device() const -> Device const& { return device_; }
-		auto get_memory_allocator() const -> MemoryAllocator const& { return memory_allocator_; }
-	private:
-		auto _construct(const ContextInfo& info) -> vk::Result;
-
-		vk::AllocationCallbacks const* allocator_{ nullptr };
-		vk::detail::DynamicLoader loader_;
-		Instance instance_;
-		Surface surface_;
-		Adapter adapter_;
-		Device device_;
-		MemoryAllocator memory_allocator_;
-	};
+	auto create_pipeline_cache(Span<const uint8_t> data) -> Result<PipelineCache>;
+	auto create_query_pool(vk::QueryType type, uint32_t query_count) -> Result<QueryPool>;
+	auto create_descriptor_pool(PoolSizes const& pool_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags = {}) -> Result<DescriptorPool>;
 }

@@ -19,6 +19,13 @@ auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
 		return -1;
 	}
 
+	// Initialize graphics interface
+	edge::gfx::initialize_graphics(
+		edge::gfx::ContextInfo{
+			.preferred_device_type = vk::PhysicalDeviceType::eDiscreteGpu,
+			.window = &platform_context.get_window()
+		});
+
 	spdlog::info("{}", platform_context.get_platform_name());
 
 	auto& window = platform_context.get_window();
@@ -36,6 +43,7 @@ auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
 	platform_context.main_loop();
 	platform_context.shutdown();
 
+	edge::gfx::shutdown_graphics();
 	edge::fs::shutdown_filesystem();
 
 	return 0;

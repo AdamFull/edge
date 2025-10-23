@@ -185,7 +185,6 @@ namespace edge::platform {
 
 		std::unique_ptr<IPlatformWindow> window_;
         std::unique_ptr<IPlatformInput> input_;
-		std::unique_ptr<gfx::Renderer> renderer_;
 		std::unique_ptr<events::Dispatcher> event_dispatcher_;
 
 		bool window_focused_{ true };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/application.h"
+#include "core/gfx/gfx_renderer.h"
 
 namespace edge {
 	namespace platform {
@@ -16,5 +17,6 @@ namespace edge {
 		auto fixed_update(float delta_time) -> void override;
 	private:
 		platform::IPlatformWindow* window_{ nullptr };
+		std::unique_ptr<gfx::Renderer> renderer_;
 	};
 }

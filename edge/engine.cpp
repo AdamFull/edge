@@ -140,6 +140,18 @@ namespace edge {
 	}
 
 	auto Engine::initialize(platform::IPlatformContext& context) -> bool {
+		gfx::RendererCreateInfo renderer_create_info{};
+		renderer_create_info.enable_hdr = true;
+		renderer_create_info.enable_vsync = false;
+
+		auto gfx_renderer_result = gfx::Renderer::construct(renderer_create_info);
+		if (!gfx_renderer_result) {
+			EDGE_LOGE("Failed to create renderer. Reason: {}.", vk::to_string(gfx_renderer_result.error()));
+			return false;
+		}
+
+		renderer_ = std::move(gfx_renderer_result.value());
+
 		ImGui::CreateContext();
 
 		ImGuiIO& io = ImGui::GetIO();
@@ -202,6 +214,10 @@ namespace edge {
 		ImGui::NewFrame();
 
 		ImGui::Render();
+
+		renderer_->begin_frame(delta_time);
+
+		renderer_->end_frame();
 	}
 
 	auto Engine::fixed_update(float delta_time) -> void {

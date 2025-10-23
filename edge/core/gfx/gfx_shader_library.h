@@ -7,30 +7,25 @@ namespace edge::gfx {
 	class ShaderLibrary : public NonCopyable {
 	public:
 		ShaderLibrary() = default;
-
-		ShaderLibrary(Context const& ctx);
 		~ShaderLibrary();
 
 		ShaderLibrary(ShaderLibrary&& other)
-			: ctx_{ std::exchange(other.ctx_, nullptr) }
-			, pipeline_cache_{ std::exchange(other.pipeline_cache_, VK_NULL_HANDLE) }
+			: pipeline_cache_{ std::exchange(other.pipeline_cache_, VK_NULL_HANDLE) }
 			, pipeline_cache_path_{ std::exchange(other.pipeline_cache_path_, {}) }
 			, pipelines_{ std::exchange(other.pipelines_, {}) } {
 		}
 
 		auto operator=(ShaderLibrary&& other) -> ShaderLibrary& {
-			ctx_ = std::exchange(other.ctx_, nullptr);
 			pipeline_cache_ = std::exchange(other.pipeline_cache_, VK_NULL_HANDLE);
 			pipeline_cache_path_ = std::exchange(other.pipeline_cache_path_, {});
 			pipelines_ = std::exchange(other.pipelines_, {});
 			return *this;
 		}
 
-		static auto construct(Context const& ctx, PipelineLayout const& pipeline_layout, std::u8string_view pipeline_cache_path, std::u8string_view shaders_path) -> Result<ShaderLibrary>;
+		static auto construct(PipelineLayout const& pipeline_layout, std::u8string_view pipeline_cache_path, std::u8string_view shaders_path) -> Result<ShaderLibrary>;
 	private:
 		auto _construct(PipelineLayout const& pipeline_layout, std::u8string_view shaders_path) -> vk::Result;
 
-		Context const* ctx_{ nullptr };
 		PipelineCache pipeline_cache_;
 		mi::U8String pipeline_cache_path_;
 		mi::HashMap<mi::String, Pipeline> pipelines_;

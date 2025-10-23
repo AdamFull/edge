@@ -39,28 +39,6 @@ namespace edge::platform {
             return false;
         }
 
-		auto gfx_creation_result = gfx::Context::construct(gfx::ContextInfo{
-			.preferred_device_type = vk::PhysicalDeviceType::eDiscreteGpu,
-			.window = window_.get()
-			});
-
-		if (!gfx_creation_result) {
-			EDGE_LOGE("Failed to create graphics context. Reason: {}.", vk::to_string(gfx_creation_result.error()));
-			return false;
-		}
-
-		gfx::RendererCreateInfo renderer_create_info{};
-		renderer_create_info.enable_hdr = true;
-		renderer_create_info.enable_vsync = false;
-
-		auto gfx_renderer_result = gfx::Renderer::construct(std::move(gfx_creation_result.value()), renderer_create_info);
-		if (!gfx_renderer_result) {
-			EDGE_LOGE("Failed to create renderer. Reason: {}.", vk::to_string(gfx_renderer_result.error()));
-			return false;
-		}
-
-		renderer_ = std::move(gfx_renderer_result.value());
-
 		return true;
 	}
 
@@ -94,8 +72,8 @@ namespace edge::platform {
 	}
 
 	auto IPlatformContext::main_loop_tick(float delta_time) -> int32_t {
-		auto new_windows_name = std::format("{} [cpu {} fps; {:.2f} ms] [gpu {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time(), renderer_->get_gpu_delta_time());
-		window_->set_title(new_windows_name);
+		//auto new_windows_name = std::format("{} [cpu {} fps; {:.2f} ms] [gpu {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time(), renderer_->get_gpu_delta_time());
+		//window_->set_title(new_windows_name);
 
 		window_->poll_events();
 
@@ -106,9 +84,7 @@ namespace edge::platform {
 			//	accumulated_delta_time_ -= fixed_delta_time_;
 			//}
 
-			renderer_->begin_frame(delta_time);
 			application_->update(delta_time);
-			renderer_->end_frame();
 		}
 		else {
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));

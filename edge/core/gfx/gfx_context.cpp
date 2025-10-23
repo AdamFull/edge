@@ -91,6 +91,14 @@ namespace edge::gfx {
 
 #undef EDGE_LOGGER_SCOPE // VulkanLifetime
 
+	vk::detail::DynamicLoader loader_;
+	vk::AllocationCallbacks const* allocator_{ nullptr };
+	Instance instance_{ nullptr };
+	Surface surface_{ nullptr };
+	Adapter adapter_{ nullptr };
+	Device device_{ nullptr };
+	MemoryAllocator memory_allocator_{ nullptr };
+
 #define EDGE_LOGGER_SCOPE "Validation"
 
 	VKAPI_ATTR vk::Bool32 VKAPI_CALL debug_utils_messenger_callback(vk::DebugUtilsMessageSeverityFlagBitsEXT message_severity,
@@ -1256,22 +1264,19 @@ namespace edge::gfx {
 #endif
 			vk::PresentModeKHR::eImmediate };
 
-		vk::PhysicalDevice adapter = *adapter_;
-		auto const* allocator = adapter_->get_allocator();
-
 		mi::Vector<vk::SurfaceFormatKHR> surface_formats{};
-		if (auto result = util::get_surface_formats(adapter, *surface_); result.has_value()) {
+		if (auto result = util::get_surface_formats(adapter_, *surface_); result.has_value()) {
 			surface_formats = std::move(result.value());
 		}
 
 		mi::Vector<vk::PresentModeKHR> present_modes;
-		if (auto result = util::get_surface_present_modes(adapter, *surface_); result.has_value()) {
+		if (auto result = util::get_surface_present_modes(adapter_, *surface_); result.has_value()) {
 			present_modes = std::move(result.value());
 		}
 
 		// Choose best properties based on surface capabilities
 		vk::SurfaceCapabilitiesKHR surface_capabilities;
-		if (auto result = adapter.getSurfaceCapabilitiesKHR(*surface_, &surface_capabilities); result != vk::Result::eSuccess) {
+		if (auto result = adapter_->getSurfaceCapabilitiesKHR(*surface_, &surface_capabilities); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
 
@@ -1301,7 +1306,7 @@ namespace edge::gfx {
 
 		// TODO: Add usage valudation
 		vk::FormatProperties format_properties;
-		adapter.getFormatProperties(create_info.imageFormat, &format_properties);
+		adapter_->getFormatProperties(create_info.imageFormat, &format_properties);
 		create_info.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
 
 		//create_info.preTransform = ((requested_state_.transform & surface_capabilities.supportedTransforms) == requested_state_.transform) ? requested_state_.transform : surface_capabilities.currentTransform;
@@ -1309,11 +1314,11 @@ namespace edge::gfx {
 		create_info.compositeAlpha = choose_suitable_composite_alpha(vk::CompositeAlphaFlagBitsKHR::eInherit, surface_capabilities.supportedCompositeAlpha);
 		create_info.presentMode = choose_suitable_present_mode(present_mode, present_modes, present_mode_priority_list);
 
-		create_info.surface = surface_->get_handle();
+		create_info.surface = surface_.get_handle();
 		create_info.clipped = VK_TRUE;
 		create_info.imageSharingMode = vk::SharingMode::eExclusive;
 
-		auto queue_family_properties = util::get_queue_family_properties(adapter);
+		auto queue_family_properties = util::get_queue_family_properties(adapter_);
 		mi::Vector<uint32_t> queue_family_indices(queue_family_properties.size());
 		std::iota(queue_family_indices.begin(), queue_family_indices.end(), 0);
 
@@ -1326,7 +1331,7 @@ namespace edge::gfx {
 		vk::Device device = *device_;
 
 		vk::SwapchainKHR swapchain{ VK_NULL_HANDLE };
-		if (auto result = device.createSwapchainKHR(&create_info, allocator, &swapchain); result != vk::Result::eSuccess) {
+		if (auto result = device.createSwapchainKHR(&create_info, allocator_, &swapchain); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
 
@@ -1338,7 +1343,7 @@ namespace edge::gfx {
 			.vsync = requested_state_.vsync,
 			.hdr = requested_state_.hdr && util::is_hdr_format(create_info.imageFormat) && util::is_hdr_color_space(create_info.imageColorSpace)
 		};
-		return Swapchain(device_, swapchain, new_state);
+		return Swapchain(&device_, swapchain, new_state);
 	}
 
 	auto SwapchainBuilder::choose_suitable_extent(vk::Extent2D request_extent, const vk::SurfaceCapabilitiesKHR& surface_caps) -> vk::Extent2D {
@@ -1665,16 +1670,13 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::DescriptorSetLayoutBuilder"
 
-	DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder(Context const& ctx)
-		: ctx_{ &ctx }
-		, layout_bindings_{}
+	DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder()
+		: layout_bindings_{}
 		, binding_flags_{} {
 
 	}
 
 	auto DescriptorSetLayoutBuilder::build(vk::DescriptorSetLayoutCreateFlags flags) -> Result<DescriptorSetLayout> {
-		auto const& device = ctx_->get_device();
-
 		vk::DescriptorSetLayoutBindingFlagsCreateInfoEXT ext_create_info{};
 		ext_create_info.bindingCount = static_cast<uint32_t>(binding_flags_.size());
 		ext_create_info.pBindingFlags = binding_flags_.data();
@@ -1686,20 +1688,19 @@ namespace edge::gfx {
 		create_info.pNext = &ext_create_info;
 
 		vk::DescriptorSetLayout descriptor_set_layout;
-		if (auto result = device->createDescriptorSetLayout(&create_info, ctx_->get_allocator(), &descriptor_set_layout); result != vk::Result::eSuccess) {
+		if (auto result = device_->createDescriptorSetLayout(&create_info, VulkanLifetime::get_instance().get_allocator(), &descriptor_set_layout); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
 
-		return DescriptorSetLayout{ &device, descriptor_set_layout, pool_sizes_ };
+		return DescriptorSetLayout{ &device_, descriptor_set_layout, pool_sizes_ };
 	}
 
 #undef EDGE_LOGGER_SCOPE // DescriptorSetLayoutBuilder
 
 #define EDGE_LOGGER_SCOPE "gfx::PipelineLayoutBuilder"
 
-	PipelineLayoutBuilder::PipelineLayoutBuilder(Context const& ctx)
-		: ctx_{ &ctx }
-		, descriptor_set_layouts_{}
+	PipelineLayoutBuilder::PipelineLayoutBuilder()
+		: descriptor_set_layouts_{}
 		, push_constant_ranges_{} {
 
 	}
@@ -1710,8 +1711,6 @@ namespace edge::gfx {
 	}
 
 	auto PipelineLayoutBuilder::build() -> Result<PipelineLayout> {
-		auto const& device = ctx_->get_device();
-
 		vk::PipelineLayoutCreateInfo create_info{};
 		create_info.setLayoutCount = static_cast<uint32_t>(descriptor_set_layouts_.size());
 		create_info.pSetLayouts = descriptor_set_layouts_.data();
@@ -1719,11 +1718,11 @@ namespace edge::gfx {
 		create_info.pPushConstantRanges = push_constant_ranges_.data();
 
 		vk::PipelineLayout pipeline_layout;
-		if (auto result = device->createPipelineLayout(&create_info, ctx_->get_allocator(), &pipeline_layout); result != vk::Result::eSuccess) {
+		if (auto result = device_->createPipelineLayout(&create_info, VulkanLifetime::get_instance().get_allocator(), &pipeline_layout); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
 
-		return PipelineLayout{ &device, pipeline_layout };
+		return PipelineLayout{ &device_, pipeline_layout };
 	}
 
 #undef EDGE_LOGGER_SCOPE // PipelineLayoutBuilder
@@ -1757,278 +1756,9 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::Context"
 
-	Context::Context()
-		: instance_{ nullptr }
-		, surface_{ nullptr }
-		, adapter_{ nullptr }
-		, device_{ nullptr }
-		, memory_allocator_{ nullptr } {
-		
+	auto initialize_graphics(const ContextInfo& info) -> vk::Result {
 		allocator_ = VulkanLifetime::get_instance().get_allocator();
-	}
 
-	Context::~Context() {
-	}
-
-	auto Context::construct(const ContextInfo& info) -> Result<Context> {
-		Context self{};
-		if (auto result = self._construct(info); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-		return self;
-	}
-
-	auto Context::create_fence(vk::FenceCreateFlags flags) const -> Result<Fence> {
-		vk::Device device = device_;
-
-		vk::Fence handle;
-		vk::FenceCreateInfo create_info{};
-		create_info.flags = flags;
-		if (auto result = device.createFence(&create_info, allocator_, &handle); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		return Fence{ &device_, handle };
-	}
-
-	auto Context::create_semaphore(vk::SemaphoreType type, uint64_t initial_value) const -> Result<Semaphore> {
-		vk::Device device = device_;
-
-		vk::Semaphore handle;
-		vk::SemaphoreTypeCreateInfo semaphore_type_create_info{};
-		semaphore_type_create_info.semaphoreType = type;
-		vk::SemaphoreCreateInfo create_info{};
-		create_info.pNext = &semaphore_type_create_info;
-		if (auto result = device.createSemaphore(&create_info, allocator_, &handle); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		return Semaphore{ &device_, handle };
-	}
-
-	auto Context::get_queue(QueueType type) const -> Result<Queue> {
-		return device_.get_queue(type);
-	}
-
-	auto Context::create_image(const ImageCreateInfo& create_info) const -> Result<Image> {
-		VmaAllocationCreateInfo allocation_create_info{};
-		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-
-		vk::ImageCreateInfo image_create_info{};
-		image_create_info.extent = create_info.extent;
-		image_create_info.arrayLayers = create_info.layer_count;
-		image_create_info.mipLevels = create_info.level_count;
-		image_create_info.format = create_info.format;
-		image_create_info.flags = (create_info.layer_count == 6u) ? vk::ImageCreateFlagBits::eCubeCompatible : vk::ImageCreateFlagBits::eExtendedUsage;
-		image_create_info.imageType = (create_info.extent.depth > 1u) ? vk::ImageType::e3D : (create_info.extent.height > 1u) ? vk::ImageType::e2D : vk::ImageType::e1D;
-		image_create_info.sharingMode = vk::SharingMode::eExclusive;
-
-		if (create_info.flags & ImageFlag::eSample) {
-			image_create_info.usage |= vk::ImageUsageFlagBits::eSampled;
-		}
-
-		if (create_info.flags & ImageFlag::eStorage) {
-			image_create_info.usage |= vk::ImageUsageFlagBits::eStorage;
-		}
-
-		if (create_info.flags & ImageFlag::eCopySource) {
-			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferSrc;
-		}
-
-		if (create_info.flags & ImageFlag::eCopyTarget) {
-			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferDst;
-		}
-
-		if (create_info.flags & ImageFlag::eWriteColor) {
-			image_create_info.usage |= ((util::is_depth_stencil_format(create_info.format) || util::is_depth_format(create_info.format)) ? vk::ImageUsageFlagBits::eDepthStencilAttachment : vk::ImageUsageFlagBits::eColorAttachment);
-			allocation_create_info.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
-			allocation_create_info.priority = 1.0f;
-		}
-
-		vk::PhysicalDevice adapter = adapter_;
-		auto queue_family_properties = util::get_queue_family_properties(adapter);
-		mi::Vector<uint32_t> queue_family_indices(queue_family_properties.size());
-		std::iota(queue_family_indices.begin(), queue_family_indices.end(), 0);
-
-		if (queue_family_indices.size() > 1) {
-			image_create_info.queueFamilyIndexCount = static_cast<uint32_t>(queue_family_indices.size());
-			image_create_info.pQueueFamilyIndices = queue_family_indices.data();
-			image_create_info.sharingMode = vk::SharingMode::eConcurrent;
-		}
-
-		return memory_allocator_.allocate_image(image_create_info, allocation_create_info);
-	}
-
-	auto Context::create_image_view(const Image& image, const vk::ImageSubresourceRange& range, vk::ImageViewType type) const -> Result<ImageView> {
-		vk::ImageViewCreateInfo create_info{};
-		create_info.image = image.get_handle();
-		create_info.format = image.get_format();
-		create_info.components.r = vk::ComponentSwizzle::eR;
-		create_info.components.g = vk::ComponentSwizzle::eG;
-		create_info.components.b = vk::ComponentSwizzle::eB;
-		create_info.components.a = vk::ComponentSwizzle::eA;
-		create_info.subresourceRange = range;
-		create_info.viewType = type;
-
-		vk::Device device = device_;
-
-		vk::ImageView image_view;
-		if (auto result = device.createImageView(&create_info, allocator_, &image_view); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		return ImageView{ &device_, image_view, range };
-	}
-
-	auto Context::create_buffer(const BufferCreateInfo& create_info) const -> Result<Buffer> {
-		vk::PhysicalDevice adapter = adapter_;
-
-		vk::PhysicalDeviceProperties properties;
-		adapter.getProperties(&properties);
-
-		uint64_t minimal_alignment{ create_info.minimal_alignment };
-		vk::BufferCreateInfo buffer_create_info{};
-		buffer_create_info.usage |= vk::BufferUsageFlagBits::eShaderDeviceAddressKHR;
-
-		VmaAllocationCreateInfo allocation_create_info{};
-		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
-
-		if (create_info.flags & BufferFlag::eDynamic) {
-			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
-				VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
-				VMA_ALLOCATION_CREATE_MAPPED_BIT;
-		}
-		else if (create_info.flags & BufferFlag::eReadback) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eTransferDst;
-			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-		}
-		else if (create_info.flags & BufferFlag::eStaging) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eTransferSrc;
-			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
-			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
-		}
-
-		if (create_info.flags & BufferFlag::eUniform) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst;
-			minimal_alignment = std::lcm(properties.limits.minUniformBufferOffsetAlignment, properties.limits.nonCoherentAtomSize);
-		}
-		else if (create_info.flags & BufferFlag::eStorage) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
-			minimal_alignment = std::max(minimal_alignment, properties.limits.minStorageBufferOffsetAlignment);
-		}
-		else if (create_info.flags ^ BufferFlag::eVertex) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-			minimal_alignment = std::max<uint64_t>(minimal_alignment, 4ull);
-		}
-		else if (create_info.flags & BufferFlag::eIndex) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
-			minimal_alignment = std::max<uint64_t>(minimal_alignment, 1ull);
-		}
-		else if (create_info.flags & BufferFlag::eIndirect) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eTransferDst;
-		}
-		else if (create_info.flags & BufferFlag::eAccelerationBuild) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst;
-		}
-		else if (create_info.flags & BufferFlag::eAccelerationStore) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits::eTransferDst;
-		}
-		else if (create_info.flags & BufferFlag::eShaderBindingTable) {
-			buffer_create_info.usage |= vk::BufferUsageFlagBits::eShaderBindingTableKHR | vk::BufferUsageFlagBits::eTransferDst;
-		}
-
-		buffer_create_info.size = aligned_size(create_info.size, minimal_alignment) * create_info.count;
-
-		return memory_allocator_.allocate_buffer(buffer_create_info, allocation_create_info);
-	}
-
-	auto Context::create_buffer_view(const Buffer& buffer, vk::DeviceSize size, vk::DeviceSize offset, vk::Format format) const -> Result<BufferView> {
-		vk::BufferViewCreateInfo create_info{};
-		create_info.buffer = buffer.get_handle();
-		create_info.format = format;
-		create_info.offset = offset;
-		create_info.range = size;
-
-		vk::BufferView buffer_view;
-		if (auto result = device_->createBufferView(&create_info, allocator_, &buffer_view); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		return BufferView{ &device_, buffer_view, offset, size, format };
-	}
-
-	auto Context::create_sampler(const vk::SamplerCreateInfo& create_info) const -> Result<Sampler> {
-		vk::Sampler sampler;
-		if (auto result = device_->createSampler(&create_info, allocator_, &sampler); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		return Sampler{ &device_, sampler, create_info };
-	}
-
-	auto Context::create_shader_module(Span<const uint8_t> code) const -> Result<ShaderModule> {
-		vk::ShaderModuleCreateInfo create_info{};
-		create_info.codeSize = static_cast<uint32_t>(code.size());
-		create_info.pCode = reinterpret_cast<const uint32_t*>(code.data());
-
-		vk::ShaderModule shader_module;
-		if (auto result = device_->createShaderModule(&create_info, allocator_, &shader_module); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		return ShaderModule{ &device_, shader_module };
-	}
-
-	auto Context::create_pipeline_cache(Span<const uint8_t> data) const -> Result<PipelineCache> {
-		vk::PipelineCacheCreateInfo create_info{};
-
-		vk::PipelineCache pipeline_cache;
-		if (auto result = device_->createPipelineCache(&create_info, allocator_, &pipeline_cache); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-		return PipelineCache{ &device_, pipeline_cache };
-	}
-
-	auto Context::create_query_pool(vk::QueryType type, uint32_t query_count) const -> Result<QueryPool> {
-		vk::QueryPoolCreateInfo create_info{};
-		create_info.queryType = type;
-		create_info.queryCount = query_count;
-
-		if (type == vk::QueryType::eTimestamp) {
-			create_info.queryCount *= 2;
-		}
-
-		vk::QueryPool query_pool;
-		if (auto result = device_->createQueryPool(&create_info, allocator_, &query_pool); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-		return QueryPool(&device_, query_pool, type, create_info.queryCount);
-	}
-
-	auto Context::create_descriptor_pool(PoolSizes const& requested_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags) const -> Result<DescriptorPool> {
-		Array<vk::DescriptorPoolSize, PoolSizes::k_max_sizes> pool_sizes{};
-		for (int32_t i = 0; i < pool_sizes.size(); ++i) {
-			auto& size = pool_sizes[i];
-			size.type = static_cast<vk::DescriptorType>(i);
-			size.descriptorCount = std::max(1u, static_cast<uint32_t>(requested_sizes[i]));
-		}
-
-		vk::DescriptorPoolCreateInfo create_info{};
-		create_info.poolSizeCount = static_cast<uint32_t>(PoolSizes::k_max_sizes);
-		create_info.pPoolSizes = pool_sizes.data();
-		create_info.maxSets = max_descriptor_sets;
-		create_info.flags = flags;
-
-		vk::DescriptorPool descriptor_pool;
-		if (auto result = device_->createDescriptorPool(&create_info, allocator_, &descriptor_pool); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-
-		return DescriptorPool{ &device_, descriptor_pool };
-	}
-
-	auto Context::_construct(const ContextInfo& info) -> vk::Result {
 		auto instance_result = InstanceBuilder{ allocator_ }
 			.set_app_name(info.application_name)
 			.set_app_version(1, 0, 0)
@@ -2132,7 +1862,7 @@ namespace edge::gfx {
 			.add_extension(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME, false)
 			.add_extension(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME, false)
 #if !defined(VK_USE_PLATFORM_ANDROID_KHR)
-            .add_extension(VK_EXT_DEBUG_MARKER_EXTENSION_NAME, false)
+			.add_extension(VK_EXT_DEBUG_MARKER_EXTENSION_NAME, false)
 			.add_extension(VK_EXT_SHADER_VIEWPORT_INDEX_LAYER_EXTENSION_NAME)
 #endif
 #if defined(VKW_ENABLE_PORTABILITY)
@@ -2221,6 +1951,255 @@ namespace edge::gfx {
 		memory_allocator_ = MemoryAllocator(&device_, vma_allocator);
 
 		return vk::Result::eSuccess;
+	}
+
+	auto shutdown_graphics() -> void {
+		memory_allocator_ = nullptr;
+		device_ = nullptr;
+		adapter_ = nullptr;
+		surface_ = nullptr;
+		instance_ = nullptr;
+	}
+
+	auto create_fence(vk::FenceCreateFlags flags) -> Result<Fence> {
+		vk::Fence handle;
+		vk::FenceCreateInfo create_info{};
+		create_info.flags = flags;
+		if (auto result = device_->createFence(&create_info, allocator_, &handle); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return Fence{ &device_, handle };
+	}
+
+	auto create_semaphore(vk::SemaphoreType type, uint64_t initial_value) -> Result<Semaphore> {
+		vk::Semaphore handle;
+		vk::SemaphoreTypeCreateInfo semaphore_type_create_info{};
+		semaphore_type_create_info.semaphoreType = type;
+		vk::SemaphoreCreateInfo create_info{};
+		create_info.pNext = &semaphore_type_create_info;
+		if (auto result = device_->createSemaphore(&create_info, allocator_, &handle); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return Semaphore{ &device_, handle };
+	}
+
+	auto get_queue(QueueType type) -> Result<Queue> {
+		return device_.get_queue(type);
+	}
+
+	auto create_image(const ImageCreateInfo& create_info) -> Result<Image> {
+		VmaAllocationCreateInfo allocation_create_info{};
+		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+
+		vk::ImageCreateInfo image_create_info{};
+		image_create_info.extent = create_info.extent;
+		image_create_info.arrayLayers = create_info.layer_count;
+		image_create_info.mipLevels = create_info.level_count;
+		image_create_info.format = create_info.format;
+		image_create_info.flags = (create_info.layer_count == 6u) ? vk::ImageCreateFlagBits::eCubeCompatible : vk::ImageCreateFlagBits::eExtendedUsage;
+		image_create_info.imageType = (create_info.extent.depth > 1u) ? vk::ImageType::e3D : (create_info.extent.height > 1u) ? vk::ImageType::e2D : vk::ImageType::e1D;
+		image_create_info.sharingMode = vk::SharingMode::eExclusive;
+
+		if (create_info.flags & ImageFlag::eSample) {
+			image_create_info.usage |= vk::ImageUsageFlagBits::eSampled;
+		}
+
+		if (create_info.flags & ImageFlag::eStorage) {
+			image_create_info.usage |= vk::ImageUsageFlagBits::eStorage;
+		}
+
+		if (create_info.flags & ImageFlag::eCopySource) {
+			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferSrc;
+		}
+
+		if (create_info.flags & ImageFlag::eCopyTarget) {
+			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferDst;
+		}
+
+		if (create_info.flags & ImageFlag::eWriteColor) {
+			image_create_info.usage |= ((util::is_depth_stencil_format(create_info.format) || util::is_depth_format(create_info.format)) ? vk::ImageUsageFlagBits::eDepthStencilAttachment : vk::ImageUsageFlagBits::eColorAttachment);
+			allocation_create_info.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+			allocation_create_info.priority = 1.0f;
+		}
+
+		auto queue_family_properties = util::get_queue_family_properties(*adapter_);
+		mi::Vector<uint32_t> queue_family_indices(queue_family_properties.size());
+		std::iota(queue_family_indices.begin(), queue_family_indices.end(), 0);
+
+		if (queue_family_indices.size() > 1) {
+			image_create_info.queueFamilyIndexCount = static_cast<uint32_t>(queue_family_indices.size());
+			image_create_info.pQueueFamilyIndices = queue_family_indices.data();
+			image_create_info.sharingMode = vk::SharingMode::eConcurrent;
+		}
+
+		return memory_allocator_.allocate_image(image_create_info, allocation_create_info);
+	}
+
+	auto create_image_view(const Image& image, const vk::ImageSubresourceRange& range, vk::ImageViewType type) -> Result<ImageView> {
+		vk::ImageViewCreateInfo create_info{};
+		create_info.image = image.get_handle();
+		create_info.format = image.get_format();
+		create_info.components.r = vk::ComponentSwizzle::eR;
+		create_info.components.g = vk::ComponentSwizzle::eG;
+		create_info.components.b = vk::ComponentSwizzle::eB;
+		create_info.components.a = vk::ComponentSwizzle::eA;
+		create_info.subresourceRange = range;
+		create_info.viewType = type;
+
+		vk::ImageView image_view;
+		if (auto result = device_->createImageView(&create_info, allocator_, &image_view); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return ImageView{ &device_, image_view, range };
+	}
+
+	auto create_buffer(const BufferCreateInfo& create_info) -> Result<Buffer> {
+		vk::PhysicalDeviceProperties properties;
+		adapter_->getProperties(&properties);
+
+		uint64_t minimal_alignment{ create_info.minimal_alignment };
+		vk::BufferCreateInfo buffer_create_info{};
+		buffer_create_info.usage |= vk::BufferUsageFlagBits::eShaderDeviceAddressKHR;
+
+		VmaAllocationCreateInfo allocation_create_info{};
+		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+
+		if (create_info.flags & BufferFlag::eDynamic) {
+			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+				VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
+				VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		}
+		else if (create_info.flags & BufferFlag::eReadback) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eTransferDst;
+			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		}
+		else if (create_info.flags & BufferFlag::eStaging) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eTransferSrc;
+			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+		}
+
+		if (create_info.flags & BufferFlag::eUniform) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst;
+			minimal_alignment = std::lcm(properties.limits.minUniformBufferOffsetAlignment, properties.limits.nonCoherentAtomSize);
+		}
+		else if (create_info.flags & BufferFlag::eStorage) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
+			minimal_alignment = std::max(minimal_alignment, properties.limits.minStorageBufferOffsetAlignment);
+		}
+		else if (create_info.flags ^ BufferFlag::eVertex) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+			minimal_alignment = std::max<uint64_t>(minimal_alignment, 4ull);
+		}
+		else if (create_info.flags & BufferFlag::eIndex) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
+			minimal_alignment = std::max<uint64_t>(minimal_alignment, 1ull);
+		}
+		else if (create_info.flags & BufferFlag::eIndirect) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eTransferDst;
+		}
+		else if (create_info.flags & BufferFlag::eAccelerationBuild) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst;
+		}
+		else if (create_info.flags & BufferFlag::eAccelerationStore) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits::eTransferDst;
+		}
+		else if (create_info.flags & BufferFlag::eShaderBindingTable) {
+			buffer_create_info.usage |= vk::BufferUsageFlagBits::eShaderBindingTableKHR | vk::BufferUsageFlagBits::eTransferDst;
+		}
+
+		buffer_create_info.size = aligned_size(create_info.size, minimal_alignment) * create_info.count;
+
+		return memory_allocator_.allocate_buffer(buffer_create_info, allocation_create_info);
+	}
+
+	auto create_buffer_view(const Buffer& buffer, vk::DeviceSize size, vk::DeviceSize offset, vk::Format format) -> Result<BufferView> {
+		vk::BufferViewCreateInfo create_info{};
+		create_info.buffer = buffer.get_handle();
+		create_info.format = format;
+		create_info.offset = offset;
+		create_info.range = size;
+
+		vk::BufferView buffer_view;
+		if (auto result = device_->createBufferView(&create_info, allocator_, &buffer_view); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return BufferView{ &device_, buffer_view, offset, size, format };
+	}
+
+	auto create_sampler(const vk::SamplerCreateInfo& create_info) -> Result<Sampler> {
+		vk::Sampler sampler;
+		if (auto result = device_->createSampler(&create_info, allocator_, &sampler); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return Sampler{ &device_, sampler, create_info };
+	}
+
+	auto create_shader_module(Span<const uint8_t> code) -> Result<ShaderModule> {
+		vk::ShaderModuleCreateInfo create_info{};
+		create_info.codeSize = static_cast<uint32_t>(code.size());
+		create_info.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+		vk::ShaderModule shader_module;
+		if (auto result = device_->createShaderModule(&create_info, allocator_, &shader_module); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return ShaderModule{ &device_, shader_module };
+	}
+
+	auto create_pipeline_cache(Span<const uint8_t> data) -> Result<PipelineCache> {
+		vk::PipelineCacheCreateInfo create_info{};
+
+		vk::PipelineCache pipeline_cache;
+		if (auto result = device_->createPipelineCache(&create_info, allocator_, &pipeline_cache); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return PipelineCache{ &device_, pipeline_cache };
+	}
+
+	auto create_query_pool(vk::QueryType type, uint32_t query_count) -> Result<QueryPool> {
+		vk::QueryPoolCreateInfo create_info{};
+		create_info.queryType = type;
+		create_info.queryCount = query_count;
+
+		if (type == vk::QueryType::eTimestamp) {
+			create_info.queryCount *= 2;
+		}
+
+		vk::QueryPool query_pool;
+		if (auto result = device_->createQueryPool(&create_info, allocator_, &query_pool); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return QueryPool(&device_, query_pool, type, create_info.queryCount);
+	}
+
+	auto create_descriptor_pool(PoolSizes const& requested_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags) -> Result<DescriptorPool> {
+		Array<vk::DescriptorPoolSize, PoolSizes::k_max_sizes> pool_sizes{};
+		for (int32_t i = 0; i < pool_sizes.size(); ++i) {
+			auto& size = pool_sizes[i];
+			size.type = static_cast<vk::DescriptorType>(i);
+			size.descriptorCount = std::max(1u, static_cast<uint32_t>(requested_sizes[i]));
+		}
+
+		vk::DescriptorPoolCreateInfo create_info{};
+		create_info.poolSizeCount = static_cast<uint32_t>(PoolSizes::k_max_sizes);
+		create_info.pPoolSizes = pool_sizes.data();
+		create_info.maxSets = max_descriptor_sets;
+		create_info.flags = flags;
+
+		vk::DescriptorPool descriptor_pool;
+		if (auto result = device_->createDescriptorPool(&create_info, allocator_, &descriptor_pool); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+
+		return DescriptorPool{ &device_, descriptor_pool };
 	}
 
 #undef EDGE_LOGGER_SCOPE // Context

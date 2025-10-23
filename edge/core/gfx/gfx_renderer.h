@@ -6,85 +6,6 @@
 #include <future>
 
 namespace edge::gfx {
-	constexpr vk::DeviceSize k_uniform_pool_default_block_size{ 4ull * 1024ull * 1024ull };
-	constexpr vk::DeviceSize k_staging_allocator_default_block_size{ 64ull * 1024ull * 1024ull };
-
-	class BufferArena : public NonCopyable {
-	public:
-		BufferArena(Context const* ctx = nullptr)
-			: context_{ ctx } {
-
-		}
-
-		BufferArena(BufferArena&& other)
-			: context_{ std::exchange(other.context_, nullptr) }
-			, buffer_{ std::exchange(other.buffer_, nullptr) }
-			, offset_{ other.offset_.load(std::memory_order_relaxed) } {
-			other.offset_.store(0ull, std::memory_order_relaxed);
-		}
-
-		auto operator=(BufferArena&& other) -> BufferArena& {
-			context_ = std::exchange(other.context_, nullptr);
-			buffer_ = std::exchange(other.buffer_, nullptr);
-			offset_.store(other.offset_.load(std::memory_order_relaxed), std::memory_order_relaxed);
-			other.offset_.store(0ull, std::memory_order_relaxed);
-			return *this;
-		}
-
-		static auto construct(Context const* ctx, vk::DeviceSize size, BufferFlags flags) -> Result<BufferArena>;
-
-		auto allocate(vk::DeviceSize size, vk::DeviceSize alignment = 1ull) -> Result<BufferRange>;
-		auto reset() -> void;
-		auto is_fits(vk::DeviceSize size, vk::DeviceSize alignment = 1ull) -> bool;
-
-		auto get_buffer() -> Buffer const& { return buffer_; }
-	private:
-		auto _construct(vk::DeviceSize size, BufferFlags flags) -> vk::Result;
-		Context const* context_{ nullptr };
-
-		Buffer buffer_;
-		std::atomic<vk::DeviceSize> offset_;
-	};
-
-	class ResourceLoader : public NonCopyable {
-	public:
-		using ImagePromise = std::promise<Result<Image>>;
-		using ImageFuture = std::future<Result<Image>>;
-
-		ResourceLoader(Context const* ctx = nullptr)
-			: context_{ ctx }
-			, staging_arenas_{} {
-
-		}
-		~ResourceLoader() {}
-
-		ResourceLoader(ResourceLoader&& other)
-			: context_{ std::exchange(other.context_, nullptr) }
-			, staging_arenas_{ std::exchange(other.staging_arenas_, {}) } {
-		}
-
-		auto operator=(ResourceLoader&& other) -> ResourceLoader& {
-			context_ = std::exchange(other.context_, nullptr);
-			staging_arenas_ = std::exchange(other.staging_arenas_, {});
-			return *this;
-		}
-
-		static auto construct(Context const* ctx, vk::DeviceSize arena_size,uint32_t frames_in_flight) -> Result<ResourceLoader>;
-
-		auto load_image_from_memory(Span<uint8_t> image_data) -> Result<Image>;
-	private:
-		auto _construct(vk::DeviceSize arena_size, uint32_t frames_in_flight) -> vk::Result;
-
-		auto _load_image_from_stbi(Span<uint8_t> image_data) -> Result<Image>;
-		auto _load_image_from_ktx(Span<uint8_t> image_data) -> Result<Image>;
-
-		auto _allocate_staging_memory(vk::DeviceSize image_size) -> Result<BufferRange>;
-
-		Context const* context_{ nullptr };
-		mi::Vector<BufferArena> staging_arenas_;
-
-	};
-
 	class Frame : public NonCopyable {
 	public:
 		Frame() = default;
@@ -105,7 +26,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto construct(const Context& ctx, CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Result<Frame>;
+		static auto construct(CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Result<Frame>;
 
 		auto begin() -> void;
 		auto end() -> void;
@@ -115,7 +36,7 @@ namespace edge::gfx {
 		auto get_fence() const -> Fence const& { return fence_; }
 		auto get_command_buffer() const -> CommandBuffer const& { return command_buffer_; }
 	private:
-		auto _construct(const Context& ctx, DescriptorSetLayout const& descriptor_layout) -> vk::Result;
+		auto _construct(DescriptorSetLayout const& descriptor_layout) -> vk::Result;
 
 		Semaphore image_available_;
 		Semaphore rendering_finished_;
@@ -135,15 +56,14 @@ namespace edge::gfx {
 
 	class Renderer {
 	public:
-		Renderer(Context&& context);
+		Renderer();
 		~Renderer();
 
 		Renderer(const Renderer&) = delete;
 		auto operator=(const Renderer&) -> Renderer& = delete;
 
 		Renderer(Renderer&& other)
-			: context_{ std::exchange(other.context_, nullptr) }
-			, queue_{ std::exchange(other.queue_, nullptr) }
+			: queue_{ std::exchange(other.queue_, nullptr) }
 			, command_pool_{ std::exchange(other.command_pool_, nullptr) }
 			, swapchain_{ std::exchange(other.swapchain_, nullptr) }
 			, swapchain_images_{ std::exchange(other.swapchain_images_, {}) }
@@ -161,7 +81,6 @@ namespace edge::gfx {
 		}
 
 		auto operator=(Renderer&& other) -> Renderer& {
-			context_ = std::exchange(other.context_, VK_NULL_HANDLE);
 			queue_ = std::exchange(other.queue_, nullptr);
 			command_pool_ = std::exchange(other.command_pool_, nullptr);
 			swapchain_ = std::exchange(other.swapchain_, nullptr);
@@ -181,7 +100,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto construct(Context&& context, const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>>;
+		static auto construct(const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>>;
 
 		auto create_shader(const std::string& shader_path) -> void;
 
@@ -199,7 +118,6 @@ namespace edge::gfx {
 		auto handle_surface_change(bool force = false) -> bool;
 		auto create_swapchain(const Swapchain::State& state) -> vk::Result;
 
-		Context context_;
 		Queue queue_;
 		CommandPool command_pool_;
 		QueryPool timestamp_query_;
