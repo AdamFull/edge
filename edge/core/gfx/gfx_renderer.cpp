@@ -158,14 +158,6 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::Renderer"
 
-	Renderer::Renderer()
-		: swapchain_images_{}
-		, swapchain_image_views_{}
-		, frames_{}
-		, push_constant_buffer_{} {
-
-	}
-
 	Renderer::~Renderer() {
 		queue_->waitIdle();
 
@@ -268,16 +260,16 @@ namespace edge::gfx {
 		current_frame->begin();
 
 		auto const& semaphore = current_frame->get_image_available_semaphore();
-		acquired_senmaphore_ = *semaphore;
+		acquired_semaphore_ = *semaphore;
 
 		if (swapchain_) {
-			auto result = device_->acquireNextImageKHR(swapchain_, 1000000000ull, acquired_senmaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
+			auto result = device_->acquireNextImageKHR(swapchain_, 1000000000ull, acquired_semaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
 			if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
 				swapchain_recreated = handle_surface_change(true);
 
 				// Try to acquire next image again after recreation
 				if (swapchain_recreated) {
-					result = device_->acquireNextImageKHR(swapchain_, ~0ull, acquired_senmaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
+					result = device_->acquireNextImageKHR(swapchain_, ~0ull, acquired_semaphore_, VK_NULL_HANDLE, &swapchain_image_index_);
 				}
 
 				if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
@@ -375,7 +367,7 @@ namespace edge::gfx {
 		cmdbuf.end();
 
 		mi::Vector<vk::SemaphoreSubmitInfo> wait_semaphores{};
-		wait_semaphores.push_back(vk::SemaphoreSubmitInfo{ acquired_senmaphore_, 0ull, vk::PipelineStageFlagBits2::eColorAttachmentOutput });
+		wait_semaphores.push_back(vk::SemaphoreSubmitInfo{ acquired_semaphore_, 0ull, vk::PipelineStageFlagBits2::eColorAttachmentOutput });
 
 		mi::Vector<vk::SemaphoreSubmitInfo> signal_semaphores{};
 
@@ -519,7 +511,7 @@ namespace edge::gfx {
 			return result;
 		}
 
-		for (int32_t i = 0; i < 2; ++i) {
+		for (int32_t i = 0; i < k_frame_overlap_; ++i) {
 			auto command_list_result = command_pool_.allocate_command_buffer();
 			if (!command_list_result) {
 				EDGE_SLOGE("Failed to allocate command list for frame at index {}. Reason: {}.", i, vk::to_string(command_list_result.error()));

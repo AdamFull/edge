@@ -239,6 +239,8 @@ namespace edge::gfx {
 			return *this;
 		}
 
+		auto is_valid() const -> bool;
+
 		// Build the instance
 		auto build() -> Result<Instance>;
 

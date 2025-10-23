@@ -562,7 +562,18 @@ namespace edge::gfx {
 		create_info_.pApplicationInfo = &app_info_;
 	}
 
+	auto InstanceBuilder::is_valid() const -> bool {
+		return 
+			app_info_.pApplicationName != nullptr &&
+			app_info_.pEngineName != nullptr &&
+			app_info_.apiVersion != 0;
+	}
+
 	auto InstanceBuilder::build() -> Result<Instance> {
+		if (!is_valid()) {
+			return std::unexpected(vk::Result::eErrorInitializationFailed);
+		}
+
 		// Surface
 		if (enable_surface_) {
 			add_extension(VK_KHR_SURFACE_EXTENSION_NAME, true);
@@ -1846,6 +1857,10 @@ namespace edge::gfx {
 	}
 
 	auto QueryPool::reset(uint32_t start_query, uint32_t query_count) const -> void {
+		assert(start_query < max_query_ && "start_query out of bounds");
+		uint32_t actual_count = (query_count == 0u) ? (max_query_ - start_query) : query_count;
+		assert(start_query + actual_count <= max_query_ && "query range exceeds pool size");
+
 		device_->resetQueryPool(handle_, start_query, query_count ? query_count : max_query_);
 	}
 

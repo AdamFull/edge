@@ -56,7 +56,7 @@ namespace edge::gfx {
 
 	class Renderer {
 	public:
-		Renderer();
+		Renderer() = default;
 		~Renderer();
 
 		Renderer(const Renderer&) = delete;
@@ -132,7 +132,7 @@ namespace edge::gfx {
 		uint32_t frame_number_{ 0u };
 		static constexpr uint32_t k_frame_overlap_{ 2u };
 
-		vk::Semaphore acquired_senmaphore_{ VK_NULL_HANDLE };
+		vk::Semaphore acquired_semaphore_{ VK_NULL_HANDLE };
 		Frame* active_frame_{ nullptr };
 		float delta_time_{ 0.0f };
 		float gpu_delta_time_{ 0.0f };

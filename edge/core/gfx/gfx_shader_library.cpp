@@ -35,6 +35,11 @@ namespace edge::gfx {
 	}
 
 	auto ShaderLibrary::_construct(PipelineLayout const& pipeline_layout, std::u8string_view shaders_path) -> vk::Result {
+		if (shaders_path.empty()) {
+			EDGE_SLOGE("Shaders path cannot be empty");
+			return vk::Result::eErrorInitializationFailed;
+		}
+
 		// Load pipeline cache if exists
 		mi::Vector<uint8_t> pipeline_cache_data{};
 

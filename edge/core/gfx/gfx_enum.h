@@ -41,9 +41,9 @@ namespace edge::gfx {
 	enum class ImageFlag : uint16_t {
 		eSample = 1 << 0,
 		eCopySource = 1 << 1,
-		eCopyTarget = 1 << 1,
-		eStorage = 1 << 2,
-		eWriteColor = 1 << 3
+		eCopyTarget = 1 << 2,
+		eStorage = 1 << 3,
+		eWriteColor = 1 << 4
 	};
 
 	EDGE_MAKE_ENUM_FLAGS(ImageFlags, ImageFlag);
