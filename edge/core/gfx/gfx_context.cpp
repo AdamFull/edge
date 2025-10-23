@@ -116,7 +116,7 @@ namespace edge::gfx {
 			EDGE_SLOGW("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
 		}
 		else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
-			EDGE_SLOGE("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+			GFX_ASSERT_MSG(false, "{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
 		}
 		return VK_FALSE;
 	}
@@ -909,7 +909,7 @@ namespace edge::gfx {
 
 			// No extensions found. Bug?
 			if (available_extensions.empty()) {
-				EDGE_SLOGE("Device \"{}\" have no supported extensions. Check driver.", std::string_view(properties.deviceName));
+				GFX_ASSERT_MSG(false, "Device \"{}\" have no supported extensions. Check driver.", std::string_view(properties.deviceName));
 				continue;
 			}
 
@@ -1660,7 +1660,7 @@ namespace edge::gfx {
 			[&supported_composite_alpha](vk::CompositeAlphaFlagBitsKHR composite_alpha) { return composite_alpha & supported_composite_alpha; });
 
 		if (chosen_composite_alpha_it == composite_alpha_priority_list.end()) {
-			EDGE_SLOGE("No compatible composite alpha found.");
+			GFX_ASSERT_MSG(false, "No compatible composite alpha found.");
 		}
 		else {
 			EDGE_SLOGW("Composite alpha '{}' not supported. Selecting '{}.", vk::to_string(request_composite_alpha), vk::to_string(*chosen_composite_alpha_it));
@@ -1830,6 +1830,9 @@ namespace edge::gfx {
 	}
 
 	auto QueryPool::get_data(uint32_t first_query, uint32_t query_count, void* data) const -> vk::Result {
+		assert(handle_ && "QueryPool handle is null.");
+		assert(data && "Output data buffer is null.");
+
 		auto result = vk::Result::eSuccess;
 		switch (type_) {
 		case vk::QueryType::eOcclusion:
@@ -1849,11 +1852,8 @@ namespace edge::gfx {
 	}
 
 	auto QueryPool::reset(uint32_t start_query, uint32_t query_count) const -> void {
-		assert(start_query < max_query_ && "start_query out of bounds");
-		uint32_t actual_count = (query_count == 0u) ? (max_query_ - start_query) : query_count;
-		assert(start_query + actual_count <= max_query_ && "query range exceeds pool size");
-
-		device_->resetQueryPool(handle_, start_query, query_count ? query_count : max_query_);
+		assert(handle_ && "QueryPool handle is null.");
+		device_->resetQueryPoolEXT(handle_, start_query, query_count ? query_count : max_query_);
 	}
 
 #undef EDGE_LOGGER_SCOPE // QueryPool
@@ -1993,7 +1993,7 @@ namespace edge::gfx {
 	auto DescriptorPool::free_descriptor_set(DescriptorSet const& set) const -> void {
 		auto const& descriptor_set = set.get_handle();
 		if (auto result = device_->freeDescriptorSets(handle_, 1u, &descriptor_set); result != vk::Result::eSuccess) {
-			EDGE_SLOGE("Failed to free descriptor set.");
+			GFX_ASSERT_MSG(false, "Failed to free descriptor set.");
 		}
 	}
 
@@ -2047,7 +2047,7 @@ namespace edge::gfx {
 			.build();
 
 		if (!instance_result) {
-			EDGE_SLOGE("Failed to create instance.");
+			GFX_ASSERT_MSG(false, "Failed to create instance.");
 			return instance_result.error();
 		}
 
@@ -2067,7 +2067,7 @@ namespace edge::gfx {
 
 		auto surface_result = instance_.create_surface(surface_create_info);
 		if (!surface_result) {
-			EDGE_SLOGE("Failed to create surface.");
+			GFX_ASSERT_MSG(false, "Failed to create surface.");
 			return surface_result.error();
 		}
 
@@ -2131,7 +2131,7 @@ namespace edge::gfx {
 			.select();
 
 		if (!device_selector_result) {
-			EDGE_SLOGE("Failed to find suitable device.");
+			GFX_ASSERT_MSG(false, "Failed to find suitable device.");
 			return device_selector_result.error();
 		}
 

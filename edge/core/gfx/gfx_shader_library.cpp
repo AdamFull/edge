@@ -11,13 +11,13 @@ namespace edge::gfx {
 			mi::Vector<uint8_t> pipeline_cache_data{};
 			auto result = pipeline_cache_.get_data(pipeline_cache_data);
 			if (result != vk::Result::eSuccess) {
-				EDGE_SLOGE("Failed to read pipeline cache data.");
+				GFX_ASSERT_MSG(false, "Failed to read pipeline cache data.");
 				return;
 			}
 
 			fs::OutputFileStream outfile(pipeline_cache_path_, std::ios_base::binary);
 			if (!outfile.is_open()) {
-				EDGE_SLOGE("Failed to open output file.");
+				GFX_ASSERT_MSG(false, "Failed to open output file.");
 				return;
 			}
 
@@ -35,10 +35,8 @@ namespace edge::gfx {
 	}
 
 	auto ShaderLibrary::_construct(PipelineLayout const& pipeline_layout, std::u8string_view shaders_path) -> vk::Result {
-		if (shaders_path.empty()) {
-			EDGE_SLOGE("Shaders path cannot be empty");
-			return vk::Result::eErrorInitializationFailed;
-		}
+		GFX_ASSERT_MSG(pipeline_layout, "PipelineLayout is null, but required.");
+		GFX_ASSERT_MSG(!shaders_path.empty(), "Shaders path cannot be empty");
 
 		// Load pipeline cache if exists
 		mi::Vector<uint8_t> pipeline_cache_data{};
@@ -48,13 +46,12 @@ namespace edge::gfx {
 			pipeline_cache_data = { std::istreambuf_iterator<char>(infile), std::istreambuf_iterator<char>() };
 		}
 
-		if (auto result = PipelineCache::create(pipeline_cache_data); !result) {
-			EDGE_SLOGE("Failed to create pipeline cache.");
-			return result.error();
+		auto pipeline_cache_result = PipelineCache::create(pipeline_cache_data);
+		if (!pipeline_cache_result) {
+			GFX_ASSERT_MSG(false, "Failed to create pipeline cache.");
+			return pipeline_cache_result.error();
 		}
-		else {
-			pipeline_cache_ = std::move(result.value());
-		}
+		pipeline_cache_ = std::move(pipeline_cache_result.value());
 
 		static const char* entry_point_name = "main";
 
@@ -85,7 +82,7 @@ namespace edge::gfx {
 
 					auto result = ShaderModule::create(stage.code);
 					if (!result) {
-						EDGE_SLOGE("Failed to create shader module at index {}, for effect \"{}\". Reason: {}.", i, shader_effect.name, vk::to_string(result.error()));
+						GFX_ASSERT_MSG(false, "Failed to create shader module at index {}, for effect \"{}\". Reason: {}.", i, shader_effect.name, vk::to_string(result.error()));
 						continue;
 					}
 
@@ -168,7 +165,7 @@ namespace edge::gfx {
 
 					vk::Pipeline pipeline;
 					if (auto result = device_->createGraphicsPipelines(pipeline_cache_.get_handle(), 1u, &create_info, allocator_, &pipeline); result != vk::Result::eSuccess) {
-						EDGE_SLOGE("Failed to create graphics pipeline. Reason: {}", vk::to_string(result));
+						GFX_ASSERT_MSG(false, "Failed to create graphics pipeline. Reason: {}", vk::to_string(result));
 						return result;
 					}
 
@@ -180,7 +177,7 @@ namespace edge::gfx {
 
 					vk::Pipeline pipeline;
 					if (auto result = device_->createComputePipelines(pipeline_cache_.get_handle(), 1u, &create_info, allocator_, &pipeline); result != vk::Result::eSuccess) {
-						EDGE_SLOGE("Failed to create compute pipeline. Reason: {}", vk::to_string(result));
+						GFX_ASSERT_MSG(false, "Failed to create compute pipeline. Reason: {}", vk::to_string(result));
 						return result;
 					}
 

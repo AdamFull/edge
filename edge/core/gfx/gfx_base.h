@@ -12,9 +12,38 @@
 #include <volk.h>
 #include <vk_mem_alloc.h>
 
+namespace edge::gfx::detail {
+	template<typename... Args>
+	inline void assert_failed(const char* scope, const char* condition, const char* file, int line, std::format_string<Args...> fmt, Args&&... args) {
+		EDGE_LOGE("[{}]: Assertion failed: {} - {}", scope, condition, std::format(fmt, std::forward<Args>(args)...));
+	}
+}
+
+#if _DEBUG
+#define GFX_ASSERT_MSG(condition, ...) \
+    do { \
+        if (!(condition)) { \
+            ::edge::gfx::detail::assert_failed(EDGE_LOGGER_SCOPE, #condition, __FILE__, __LINE__, __VA_ARGS__); \
+            assert(false); \
+        } \
+    } while(0)
+#else
+#define GFX_ASSERT_MSG(condition, ...) ((void)0)
+#endif
+
 namespace edge::gfx {
 	template<typename T>
 	using Result = std::expected<T, vk::Result>;
+
+	template<typename T>
+	constexpr auto is_success(const Result<T>& result) noexcept -> bool {
+		return result.has_value();
+	}
+
+	template<typename T>
+	constexpr auto error_or(const Result<T>& result, vk::Result default_error = vk::Result::eErrorUnknown) noexcept -> vk::Result {
+		return result.has_value() ? vk::Result::eSuccess : result.error();
+	}
 
 	template<typename T>
 	struct FeatureTraits {
