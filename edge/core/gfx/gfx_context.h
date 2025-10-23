@@ -15,7 +15,9 @@ namespace edge::gfx {
 	class Queue;
 	class MemoryAllocator;
 	class Image;
+	class ImageView;
 	class Buffer;
+	class BufferView;
 	class CommandPool;
 	class CommandBuffer;
 	class QueryPool;
@@ -26,24 +28,29 @@ namespace edge::gfx {
 	class DescriptorPool;
 	class DescriptorSet;
 
+	extern vk::detail::DynamicLoader loader_;
+	extern vk::AllocationCallbacks const* allocator_;
+	extern Instance instance_;
+	extern Surface surface_;
+	extern Adapter adapter_;
+	extern Device device_;
+	extern MemoryAllocator memory_allocator_;
+
 	template<typename T>
 	class Handle : public NonCopyable {
 	public:
 		Handle(std::nullptr_t) noexcept {};
 
-		Handle(T handle = VK_NULL_HANDLE, vk::AllocationCallbacks const* allocator = nullptr)
-			: handle_{ handle }
-			, allocator_{ allocator } {
+		Handle(T handle = VK_NULL_HANDLE)
+			: handle_{ handle } {
 		}
 
 		Handle(Handle&& other)
-			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) }
-			, allocator_{ std::exchange(other.allocator_, nullptr) } {
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) } {
 		}
 
 		auto operator=(Handle&& other) -> Handle& {
 			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
-			allocator_ = std::exchange(other.allocator_, nullptr);
 			return *this;
 		}
 
@@ -57,17 +64,14 @@ namespace edge::gfx {
 		operator T() const noexcept { return handle_; }
 		operator typename T::CType() const noexcept { return handle_; }
 		auto get_handle() const noexcept -> T { return handle_; }
-
-		auto get_allocator() const -> vk::AllocationCallbacks const* { return allocator_; }
 	protected:
 		T handle_{ VK_NULL_HANDLE };
-		vk::AllocationCallbacks const* allocator_{ nullptr };
 	};
 
 	class Instance : public Handle<vk::Instance> {
 	public:
-		Instance(std::nullptr_t) noexcept {};
-		Instance(vk::Instance handle, vk::DebugUtilsMessengerEXT debug_messenger, vk::AllocationCallbacks const* allocator, mi::Vector<const char*>&& enabled_extensions, mi::Vector<const char*> enabled_layers);
+		Instance() = default;
+		Instance(vk::Instance handle, vk::DebugUtilsMessengerEXT debug_messenger, mi::Vector<const char*>&& enabled_extensions, mi::Vector<const char*> enabled_layers);
 		~Instance();
 
 		Instance(Instance&& other)
@@ -104,46 +108,40 @@ namespace edge::gfx {
 	template<typename T>
 	class InstanceHandle : public Handle<T> {
 	public:
-		InstanceHandle(Instance const* instance = nullptr, T handle = VK_NULL_HANDLE)
-			: Handle<T>{ handle, instance ? instance->get_allocator() : nullptr }
-			, instance_{ instance ? instance->get_handle() : VK_NULL_HANDLE } {
+		InstanceHandle(T handle = VK_NULL_HANDLE)
+			: Handle<T>{ handle } {
 		}
 
 		~InstanceHandle() {
 			if (handle_ && instance_) {
-				instance_.destroy(handle_, allocator_);
+				instance_->destroy(handle_, allocator_);
 				handle_ = VK_NULL_HANDLE;
 			}
 		}
 
 		InstanceHandle(InstanceHandle&& other)
-			: Handle<T>{ std::move(other) }
-			, instance_{ std::exchange(other.instance_, VK_NULL_HANDLE) } {
+			: Handle<T>{ std::move(other) } {
 		}
 
 		auto operator=(InstanceHandle&& other) -> InstanceHandle& {
 			Handle<T>::operator=(std::move(other));
-			instance_ = std::exchange(other.instance_, VK_NULL_HANDLE);
 			return *this;
 		}
 	protected:
 		using Handle<T>::handle_;
-		using Handle<T>::allocator_;
-
-		vk::Instance instance_{ VK_NULL_HANDLE };
 	};
 
 	class Surface : public InstanceHandle<vk::SurfaceKHR> {
 	public:
-		Surface(Instance const* instance = nullptr, vk::SurfaceKHR handle = VK_NULL_HANDLE)
-			: InstanceHandle{ instance, handle } {
+		Surface(vk::SurfaceKHR handle = VK_NULL_HANDLE)
+			: InstanceHandle{ handle } {
 
 		}
 	};
 
 	class InstanceBuilder {
 	public:
-		InstanceBuilder(vk::AllocationCallbacks const* allocator);
+		InstanceBuilder();
 
 		// Application info setters
 		auto set_app_name(const char* name) -> InstanceBuilder& {
@@ -254,7 +252,6 @@ namespace edge::gfx {
 		mi::Vector<std::pair<const char*, bool>> requested_layers_;
 		mi::Vector<vk::ValidationFeatureEnableEXT> validation_feature_enables_;
 		mi::Vector<vk::ValidationFeatureDisableEXT> validation_feature_disables_;
-		const vk::AllocationCallbacks* allocator_{ nullptr };
 
 		bool enable_debug_utils_{ false };
 		bool enable_surface_{ false };
@@ -263,8 +260,8 @@ namespace edge::gfx {
 
 	class Adapter : public Handle<vk::PhysicalDevice> {
 	public:
-		Adapter(std::nullptr_t) noexcept {};
-		Adapter(vk::PhysicalDevice handle, mi::Vector<vk::ExtensionProperties>&& device_extensions, vk::AllocationCallbacks const* allocator);
+		Adapter() = default;
+		Adapter(vk::PhysicalDevice handle, mi::Vector<vk::ExtensionProperties>&& device_extensions);
 		~Adapter() = default;
 
 		Adapter(Adapter&& other)
@@ -291,8 +288,8 @@ namespace edge::gfx {
 			mi::Vector<uint32_t> queue_indices;
 		};
 
-		Device(std::nullptr_t) noexcept {};
-		Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, vk::AllocationCallbacks const* allocator, Array<mi::Vector<QueueFamilyInfo>, 3ull>&& queue_family_map);
+		Device() = default;
+		Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, Array<mi::Vector<QueueFamilyInfo>, 3ull>&& queue_family_map);
 		~Device();
 
 		Device(Device&& other)
@@ -318,9 +315,8 @@ namespace edge::gfx {
 
 	class DeviceSelector {
 	public:
-		DeviceSelector(const Instance& instance) 
-			: instance_{ &instance }
-			, requested_extensions_{}
+		DeviceSelector() 
+			: requested_extensions_{}
 			, requested_features_{} {
 		}
 
@@ -384,8 +380,6 @@ namespace edge::gfx {
 		auto select() -> Result<std::tuple<Adapter, Device>>;
 
 	private:
-		Instance const* instance_{ nullptr };
-
 		vk::SurfaceKHR surface_{ VK_NULL_HANDLE };
 		uint32_t minimal_api_ver{ VK_VERSION_1_0 };
 		vk::PhysicalDeviceType preferred_type_{ vk::PhysicalDeviceType::eDiscreteGpu };
@@ -399,56 +393,42 @@ namespace edge::gfx {
 	template<typename T>
 	class DeviceHandle : public Handle<T> {
 	public:
-		DeviceHandle(Device const* device = nullptr, T handle = VK_NULL_HANDLE)
-			: Handle<T>{handle, device ? device->get_allocator() : nullptr }
-			, device_{ device } {
+		DeviceHandle(T handle = VK_NULL_HANDLE)
+			: Handle<T>{handle } {
 		}
 
 		~DeviceHandle() {
 			if (handle_ && device_) {
-				auto device_handle = device_->get_handle();
-				device_handle.destroy(handle_, allocator_);
+				device_->destroy(handle_, allocator_);
 			}
 		}
 
 		DeviceHandle(DeviceHandle&& other)
-			: Handle<T>{ std::move(other) }
-			, device_{ std::exchange(other.device_, nullptr) } {
+			: Handle<T>{ std::move(other) } {
 		}
 
 		auto operator=(DeviceHandle&& other) -> DeviceHandle& {
 			Handle<T>::operator=(std::move(other));
-			device_ = std::exchange(other.device_, nullptr);
 			return *this;
 		}
 
 		auto set_name(std::string_view name) const -> vk::Result {
-			auto device_handle = device_->get_handle();
-
 			vk::DebugUtilsObjectNameInfoEXT name_info{ T::objectType, reinterpret_cast<uint64_t>(static_cast<T::CType>(handle_)), name.data() };
-			return device_handle.setDebugUtilsObjectNameEXT(&name_info);
+			return device_->setDebugUtilsObjectNameEXT(&name_info);
 		}
 
 		auto set_tag(uint64_t tag_name, const void* tag_data, size_t tag_size) const -> vk::Result {
-			auto device_handle = device_->get_handle();
-
 			vk::DebugUtilsObjectTagInfoEXT tag_info{ T::objectType, reinterpret_cast<uint64_t>(static_cast<T::CType>(handle_)), tag_name, tag_size, tag_data };
-			return device_handle.setDebugUtilsObjectTagEXT(&tag_info);
+			return device_->setDebugUtilsObjectTagEXT(&tag_info);
 		}
-
-		auto get_device() const -> Device const* { return device_; }
 	protected:
 		using Handle<T>::handle_;
-		using Handle<T>::allocator_;
-
-		Device const* device_{ nullptr };
 	};
 
 	class Queue : public Handle<vk::Queue> {
 	public:
-		Queue(Device const* device = nullptr, vk::Queue handle = VK_NULL_HANDLE, uint32_t family_index = ~0u, uint32_t queue_index = ~0u) 
-			: Handle{ handle, device ? device->get_allocator() : nullptr }
-			, device_{ device }
+		Queue(vk::Queue handle = VK_NULL_HANDLE, uint32_t family_index = ~0u, uint32_t queue_index = ~0u) 
+			: Handle{ handle }
 			, family_index_{ family_index_ }
 			, queue_index_{ queue_index } {
 		}
@@ -458,18 +438,18 @@ namespace edge::gfx {
 		// create command pool
 		auto get_family_index() const -> uint32_t { return family_index_; }
 		auto get_queue_index() const -> uint32_t { return queue_index_; }
-		auto get_device() const -> Device const* { return device_; }
 	private:
-		Device const* device_{ nullptr };
 		uint32_t family_index_{ ~0u };
 		uint32_t queue_index_{ ~0u };
 	};
 
 	class Fence : public DeviceHandle<vk::Fence> {
 	public:
-		Fence(Device const* device = nullptr, vk::Fence handle = VK_NULL_HANDLE)
-			: DeviceHandle{ device, handle } {
+		Fence(vk::Fence handle = VK_NULL_HANDLE)
+			: DeviceHandle{ handle } {
 		}
+
+		static auto create(vk::FenceCreateFlags flags) -> Result<Fence>;
 
 		auto wait(uint64_t timeout = std::numeric_limits<uint64_t>::max()) const -> vk::Result;
 		auto reset() const -> vk::Result;
@@ -477,9 +457,11 @@ namespace edge::gfx {
 
 	class Semaphore : public DeviceHandle<vk::Semaphore> {
 	public:
-		Semaphore(Device const* device = nullptr, vk::Semaphore handle = VK_NULL_HANDLE) 
-			: DeviceHandle{ device, handle } {
+		Semaphore(vk::Semaphore handle = VK_NULL_HANDLE) 
+			: DeviceHandle{ handle } {
 		}
+
+		static auto create(vk::SemaphoreType type = vk::SemaphoreType::eBinary, uint64_t initial_value = 0ull) -> Result<Semaphore>;
 
 		auto signal(uint64_t value) const -> vk::Result;
 	};
@@ -487,21 +469,18 @@ namespace edge::gfx {
 	class MemoryAllocator : public NonCopyable {
 	public:
 		MemoryAllocator(std::nullptr_t) noexcept {};
-		MemoryAllocator(Device const* device = nullptr, VmaAllocator handle = VK_NULL_HANDLE)
-			: allocator_{ device ? device->get_allocator() : nullptr }
-			, handle_{ handle } {
+		MemoryAllocator(VmaAllocator handle = VK_NULL_HANDLE)
+			: handle_{ handle } {
 
 		}
 
 		~MemoryAllocator();
 
 		MemoryAllocator(MemoryAllocator&& other)
-			: allocator_{ std::exchange(other.allocator_, nullptr) }
-			, handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) } {
+			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) } {
 		}
 
 		auto operator=(MemoryAllocator&& other) -> MemoryAllocator& {
-			allocator_ = std::exchange(other.allocator_, nullptr);
 			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
 			return *this;
 		}
@@ -509,28 +488,26 @@ namespace edge::gfx {
 		auto allocate_image(const vk::ImageCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Result<Image>;
 		auto allocate_buffer(const vk::BufferCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Result<Buffer>;
 
+		auto operator*() const noexcept -> VmaAllocator const& { return handle_; }
+		auto operator*() noexcept -> VmaAllocator& { return handle_; }
+
 		operator VmaAllocator() const noexcept { return handle_; }
 		auto get_handle() const noexcept -> VmaAllocator { return handle_; }
-		auto get_allocator() const -> vk::AllocationCallbacks const* { return allocator_; }
 	private:
-		vk::AllocationCallbacks const* allocator_{ nullptr };
 		VmaAllocator handle_{ VK_NULL_HANDLE };
 	};
 
 	template<typename T>
 	class MemoryAllocation : public Handle<T> {
 	public:
-		MemoryAllocation(MemoryAllocator const* memory_allocator = nullptr, T handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {})
-			: Handle<T>{ handle, memory_allocator ? memory_allocator->get_allocator() : nullptr }
+		MemoryAllocation(T handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {})
+			: Handle<T>{ handle }
 			, allocation_{ allocation }
-			, allocation_info_{ allocation_info }
-			, memory_allocator_{ memory_allocator } {
+			, allocation_info_{ allocation_info } {
 
-			if (memory_allocator_) {
-				auto vma_handle = memory_allocator_->get_handle();
-
+			if (memory_allocator_ && allocation_) {
 				VkMemoryPropertyFlags memory_properties;
-				vmaGetAllocationMemoryProperties(vma_handle, allocation_, &memory_properties);
+				vmaGetAllocationMemoryProperties(*memory_allocator_, allocation_, &memory_properties);
 
 				coherent_ = (memory_properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 				persistent_ = allocation_info_.pMappedData != nullptr;
@@ -542,12 +519,11 @@ namespace edge::gfx {
 			if (handle_ && allocation_ && memory_allocator_) {
 				unmap();
 
-				auto vma_handle = memory_allocator_->get_handle();
 				if constexpr (std::is_same_v<T, vk::Image>) {
-					vmaDestroyImage(vma_handle, static_cast<VkImage>(handle_), allocation_);
+					vmaDestroyImage(*memory_allocator_, static_cast<VkImage>(handle_), allocation_);
 				}
 				else if constexpr (std::is_same_v<T, vk::Buffer>) {
-					vmaDestroyBuffer(vma_handle, static_cast<VkBuffer>(handle_), allocation_);
+					vmaDestroyBuffer(*memory_allocator_, static_cast<VkBuffer>(handle_), allocation_);
 				}
 
 				handle_ = VK_NULL_HANDLE;
@@ -561,8 +537,7 @@ namespace edge::gfx {
 			, allocation_info_{ std::exchange(other.allocation_info_, {}) }
 			, coherent_{ std::exchange(other.coherent_, {}) }
 			, persistent_{ std::exchange(other.persistent_, {}) }
-			, mapped_memory_{ std::exchange(other.mapped_memory_, nullptr) }
-			, memory_allocator_{ std::exchange(other.memory_allocator_, nullptr) } {
+			, mapped_memory_{ std::exchange(other.mapped_memory_, nullptr) } {
 		}
 
 		auto operator=(MemoryAllocation&& other) -> MemoryAllocation& {
@@ -572,14 +547,16 @@ namespace edge::gfx {
 			coherent_ = std::exchange(other.coherent_, {});
 			persistent_ = std::exchange(other.persistent_, {});
 			mapped_memory_ = std::exchange(other.mapped_memory_, nullptr);
-			memory_allocator_ = std::exchange(other.memory_allocator_, nullptr);
 			return *this;
 		}
 
 		auto map() const -> Result<Span<uint8_t>> {
+			if (!allocation_) {
+				return std::unexpected(vk::Result::eErrorInitializationFailed);
+			}
+
 			if (!persistent_ && !is_mapped()) {
-				auto vma_handle = memory_allocator_->get_handle();
-				if (auto result = vmaMapMemory(vma_handle, allocation_, reinterpret_cast<void**>(&mapped_memory_)); result != VK_SUCCESS) {
+				if (auto result = vmaMapMemory(*memory_allocator_, allocation_, reinterpret_cast<void**>(&mapped_memory_)); result != VK_SUCCESS) {
 					return std::unexpected(static_cast<vk::Result>(result));
 				}
 			}
@@ -587,17 +564,23 @@ namespace edge::gfx {
 		}
 
 		auto unmap() const -> void {
+			if (!allocation_) {
+				return;
+			}
+
 			if (!persistent_ && is_mapped()) {
-				auto vma_handle = memory_allocator_->get_handle();
-				vmaUnmapMemory(vma_handle, allocation_);
+				vmaUnmapMemory(*memory_allocator_, allocation_);
 				mapped_memory_ = nullptr;
 			}
 		}
 
 		auto flush(vk::DeviceSize offset = 0, vk::DeviceSize size = VK_WHOLE_SIZE) const -> vk::Result {
+			if (!allocation_) {
+				return std::unexpected(vk::Result::eErrorInitializationFailed);
+			}
+
 			if (!coherent_) {
-				auto vma_handle = memory_allocator_->get_handle();
-				return static_cast<vk::Result>(vmaFlushAllocation(vma_handle, allocation_, offset, size));
+				return static_cast<vk::Result>(vmaFlushAllocation(*memory_allocator_, allocation_, offset, size));
 			}
 			return vk::Result::eSuccess;
 		}
@@ -607,6 +590,10 @@ namespace edge::gfx {
 		}
 
 		auto update(const void* data, uint64_t size, uint64_t offset) const -> vk::Result {
+			if (!allocation_) {
+				return vk::Result::eErrorInitializationFailed;
+			}
+
 			if (persistent_) {
 				std::memcpy(mapped_memory_ + offset, data, size);
 				return flush(offset, size);
@@ -633,18 +620,22 @@ namespace edge::gfx {
 
 		auto get_memory() const -> vk::DeviceMemory { return (vk::DeviceMemory)allocation_info_.deviceMemory; }
 		auto get_allocation() const -> VmaAllocation { return allocation_; }
-		auto get_memory_allocator() const -> MemoryAllocator const* { return memory_allocator_; }
 	protected:
 		using Handle<T>::handle_;
-		using Handle<T>::allocator_;
 
 		VmaAllocation allocation_{ VK_NULL_HANDLE };
 		VmaAllocationInfo allocation_info_{};
 		bool coherent_{ false };
 		bool persistent_{ false };
 		mutable uint8_t* mapped_memory_{ nullptr };
+	};
 
-		MemoryAllocator const* memory_allocator_{ nullptr };
+	struct ImageCreateInfo {
+		vk::Extent3D extent{ 1u, 1u, 1u };
+		uint32_t layer_count{ 1u };
+		uint32_t level_count{ 1u };
+		ImageFlags flags{};
+		vk::Format format{ vk::Format::eUndefined };
 	};
 
 	class Image : public MemoryAllocation<vk::Image> {
@@ -653,13 +644,13 @@ namespace edge::gfx {
 		Image(std::nullptr_t) noexcept {};
 
 		Image(vk::Image handle, const vk::ImageCreateInfo& create_info)
-			: MemoryAllocation{ nullptr, handle, VK_NULL_HANDLE, {} }
+			: MemoryAllocation{ handle, VK_NULL_HANDLE, {} }
 			, create_info_{ create_info } {
 
 		}
 
-		Image(MemoryAllocator const* allocator, vk::Image handle, VmaAllocation allocation, VmaAllocationInfo allocation_info, const vk::ImageCreateInfo& create_info)
-			: MemoryAllocation{ allocator, handle, allocation, allocation_info }
+		Image(vk::Image handle, VmaAllocation allocation, VmaAllocationInfo allocation_info, const vk::ImageCreateInfo& create_info)
+			: MemoryAllocation{ handle, allocation, allocation_info }
 			, create_info_{ create_info } {
 		}
 
@@ -674,6 +665,9 @@ namespace edge::gfx {
 			return *this;
 		}
 
+		static auto create(const ImageCreateInfo& create_info) -> Result<Image>;
+		auto create_view(const vk::ImageSubresourceRange& range, vk::ImageViewType type) -> Result<ImageView>;
+
 		auto get_extent() const -> vk::Extent3D { return create_info_.extent; }
 		auto get_layer_count() const -> uint32_t { return create_info_.arrayLayers; }
 		auto get_level_count() const -> uint32_t { return create_info_.mipLevels; }
@@ -684,8 +678,8 @@ namespace edge::gfx {
 
 	class ImageView : public DeviceHandle<vk::ImageView> {
 	public:
-		ImageView(Device const* device = nullptr, vk::ImageView handle = VK_NULL_HANDLE, const vk::ImageSubresourceRange& subresource_range = {})
-			: DeviceHandle{ device, handle }
+		ImageView(vk::ImageView handle = VK_NULL_HANDLE, const vk::ImageSubresourceRange& subresource_range = {})
+			: DeviceHandle{ handle }
 			, subresource_range_{ subresource_range } {
 		}
 
@@ -698,10 +692,17 @@ namespace edge::gfx {
 		vk::ImageSubresourceRange subresource_range_;
 	};
 
+	struct BufferCreateInfo {
+		vk::DeviceSize size{ 1u };;
+		vk::DeviceSize count{ 1u };
+		vk::DeviceSize minimal_alignment{ 1u };
+		BufferFlags flags{};
+	};
+
 	class Buffer : public MemoryAllocation<vk::Buffer> {
 	public:
-		Buffer(MemoryAllocator const* allocator = nullptr, vk::Buffer handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {}, const vk::BufferCreateInfo& create_info = {})
-			: MemoryAllocation{ allocator, handle, allocation, allocation_info }
+		Buffer(vk::Buffer handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {}, const vk::BufferCreateInfo& create_info = {})
+			: MemoryAllocation{ handle, allocation, allocation_info }
 			, create_info_{ create_info } {
 		}
 
@@ -715,6 +716,9 @@ namespace edge::gfx {
 			create_info_ = std::exchange(other.create_info_, {});
 			return *this;
 		}
+
+		static auto create(const BufferCreateInfo& create_info) -> Result<Buffer>;
+		auto create_view(vk::DeviceSize size, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined) -> Result<BufferView>;
 	private:
 		vk::BufferCreateInfo create_info_;
 	};
@@ -758,8 +762,8 @@ namespace edge::gfx {
 
 	class BufferView : public DeviceHandle<vk::BufferView> {
 	public:
-		BufferView(Device const* device = nullptr, vk::BufferView handle = VK_NULL_HANDLE, vk::DeviceSize size = 0ull, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined)
-			: DeviceHandle{ device, handle }
+		BufferView(vk::BufferView handle = VK_NULL_HANDLE, vk::DeviceSize size = 0ull, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined)
+			: DeviceHandle{ handle }
 			, size_{ size }
 			, offset_{ offset }
 			, format_{ format } {
@@ -783,21 +787,6 @@ namespace edge::gfx {
 		uint32_t minimal_api_version{ VK_API_VERSION_1_2 };
 	};
 
-	struct ImageCreateInfo {
-		vk::Extent3D extent{ 1u, 1u, 1u };
-		uint32_t layer_count{ 1u };
-		uint32_t level_count{ 1u };
-		ImageFlags flags{};
-		vk::Format format{ vk::Format::eUndefined };
-	};
-
-	struct BufferCreateInfo {
-		vk::DeviceSize size{ 1u };;
-		vk::DeviceSize count{ 1u };
-		vk::DeviceSize minimal_alignment{ 1u };
-		BufferFlags flags{};
-	};
-
 	class Swapchain : public DeviceHandle<vk::SwapchainKHR> {
 	public:
 		struct State {
@@ -809,8 +798,8 @@ namespace edge::gfx {
 			bool hdr;
 		};
 
-		Swapchain(Device const* device = nullptr, vk::SwapchainKHR handle = VK_NULL_HANDLE, const State& new_state = {})
-			: DeviceHandle{ device, handle }
+		Swapchain(vk::SwapchainKHR handle = VK_NULL_HANDLE, const State& new_state = {})
+			: DeviceHandle{ handle }
 			, state_{ new_state } {
 
 		}
@@ -913,17 +902,15 @@ namespace edge::gfx {
 
 	class CommandBuffer : public Handle<vk::CommandBuffer> {
 	public:
-		CommandBuffer(Device const* device = nullptr, vk::CommandPool command_pool = VK_NULL_HANDLE, vk::CommandBuffer handle = VK_NULL_HANDLE)
-			: Handle{ handle, device ? device->get_allocator() : nullptr }
-			, device_{ device }
+		CommandBuffer(vk::CommandPool command_pool = VK_NULL_HANDLE, vk::CommandBuffer handle = VK_NULL_HANDLE)
+			: Handle{ handle }
 			, command_pool_{ command_pool } {
 
 		}
 
 		~CommandBuffer() {
 			if (handle_ && command_pool_) {
-				auto device_handle = device_->get_handle();
-				device_handle.freeCommandBuffers(command_pool_, 1u, &handle_);
+				device_->freeCommandBuffers(command_pool_, 1u, &handle_);
 				handle_ = VK_NULL_HANDLE;
 				command_pool_ = VK_NULL_HANDLE;
 			}
@@ -931,13 +918,11 @@ namespace edge::gfx {
 
 		CommandBuffer(CommandBuffer&& other)
 			: Handle(std::move(other))
-			, device_{ std::exchange(other.device_, nullptr) }
 			, command_pool_{ std::exchange(other.command_pool_, VK_NULL_HANDLE) } {
 		}
 
 		auto operator=(CommandBuffer&& other) -> CommandBuffer& {
 			Handle::operator=(std::move(other));
-			device_ = std::exchange(other.device_, nullptr);
 			command_pool_ = std::exchange(other.command_pool_, VK_NULL_HANDLE);
 			return *this;
 		}
@@ -948,14 +933,13 @@ namespace edge::gfx {
 		auto push_barrier(const Barrier& barrier) const -> void;
 		auto push_barrier(const ImageBarrier& barrier) const -> void;
 	private:
-		Device const* device_{ nullptr };
 		vk::CommandPool command_pool_{ VK_NULL_HANDLE };
 	};
 
 	class CommandPool : public DeviceHandle<vk::CommandPool> {
 	public:
-		CommandPool(Device const* device = nullptr, vk::CommandPool handle = VK_NULL_HANDLE)
-			: DeviceHandle{ device, handle } {
+		CommandPool(vk::CommandPool handle = VK_NULL_HANDLE)
+			: DeviceHandle{ handle } {
 
 		}
 
@@ -964,10 +948,12 @@ namespace edge::gfx {
 
 	class Sampler : public DeviceHandle<vk::Sampler> {
 	public:
-		Sampler(Device const* device = nullptr, vk::Sampler handle = VK_NULL_HANDLE, const vk::SamplerCreateInfo& create_info = {})
-			: DeviceHandle{ device, handle }
+		Sampler(vk::Sampler handle = VK_NULL_HANDLE, const vk::SamplerCreateInfo& create_info = {})
+			: DeviceHandle{ handle }
 			, create_info_{ create_info } {
 		}
+
+		static auto create(const vk::SamplerCreateInfo& create_info) -> Result<Sampler>;
 
 		// TODO: implement move 
 
@@ -991,8 +977,8 @@ namespace edge::gfx {
 
 	class QueryPool : public DeviceHandle<vk::QueryPool> {
 	public:
-		QueryPool(Device const* device = nullptr, vk::QueryPool handle = VK_NULL_HANDLE, vk::QueryType type = {}, uint32_t max_query = 0u)
-			: DeviceHandle{ device, handle }
+		QueryPool(vk::QueryPool handle = VK_NULL_HANDLE, vk::QueryType type = {}, uint32_t max_query = 0u)
+			: DeviceHandle{ handle }
 			, type_{ type }
 			, max_query_{ max_query } {
 		}
@@ -1010,6 +996,8 @@ namespace edge::gfx {
 			return *this;
 		}
 
+		static auto create(vk::QueryType type, uint32_t query_count) -> Result<QueryPool>;
+
 		auto get_data(uint32_t query_index, void* data) const -> vk::Result;
 		auto get_data(uint32_t first_query, uint32_t query_count, void* data) const -> vk::Result;
 
@@ -1021,9 +1009,11 @@ namespace edge::gfx {
 
 	class PipelineCache : public DeviceHandle<vk::PipelineCache> {
 	public:
-		PipelineCache(Device const* device = nullptr, vk::PipelineCache handle = VK_NULL_HANDLE) 
-			: DeviceHandle{ device, handle } {
+		PipelineCache(vk::PipelineCache handle = VK_NULL_HANDLE) 
+			: DeviceHandle{ handle } {
 		}
+
+		static auto create(Span<const uint8_t> data) -> Result<PipelineCache>;
 
 		auto get_data(mi::Vector<uint8_t>& data) const -> vk::Result;
 		auto get_data(void*& data, size_t& size) const -> vk::Result;
@@ -1031,24 +1021,26 @@ namespace edge::gfx {
 
 	class Pipeline : public DeviceHandle<vk::Pipeline> {
 	public:
-		Pipeline(Device const* device = nullptr, vk::Pipeline handle = VK_NULL_HANDLE)
-			: DeviceHandle{ device, handle } {
+		Pipeline(vk::Pipeline handle = VK_NULL_HANDLE)
+			: DeviceHandle{ handle } {
 		}
 	};
 
 	class ShaderModule : public DeviceHandle<vk::ShaderModule> {
 	public:
-		ShaderModule(Device const* device = nullptr, vk::ShaderModule handle = VK_NULL_HANDLE)
-			: DeviceHandle{ device, handle } {
+		ShaderModule(vk::ShaderModule handle = VK_NULL_HANDLE)
+			: DeviceHandle{ handle } {
 		}
+
+		static auto create(Span<const uint8_t> code) -> Result<ShaderModule>;
 	private:
 		vk::PipelineShaderStageCreateInfo shader_stage_create_info_;
 	};
 
 	class PipelineLayout : public DeviceHandle<vk::PipelineLayout> {
 	public:
-		PipelineLayout(Device const* device = nullptr, vk::PipelineLayout handle = VK_NULL_HANDLE)
-			: DeviceHandle{ device, handle } {
+		PipelineLayout(vk::PipelineLayout handle = VK_NULL_HANDLE)
+			: DeviceHandle{ handle } {
 		}
 	};
 
@@ -1171,8 +1163,8 @@ namespace edge::gfx {
 
 	class DescriptorSetLayout : public DeviceHandle<vk::DescriptorSetLayout> {
 	public:
-		DescriptorSetLayout(Device const* device = nullptr, vk::DescriptorSetLayout handle = VK_NULL_HANDLE, PoolSizes pool_sizes = {})
-			: DeviceHandle{ device, handle }
+		DescriptorSetLayout(vk::DescriptorSetLayout handle = VK_NULL_HANDLE, PoolSizes pool_sizes = {})
+			: DeviceHandle{ handle }
 			, pool_sizes_{ pool_sizes } {
 		}
 
@@ -1186,9 +1178,11 @@ namespace edge::gfx {
 
 	class DescriptorPool : public DeviceHandle<vk::DescriptorPool> {
 	public:
-		DescriptorPool(Device const* device = nullptr, vk::DescriptorPool handle = VK_NULL_HANDLE)
-			: DeviceHandle{ device, handle } {
+		DescriptorPool(vk::DescriptorPool handle = VK_NULL_HANDLE)
+			: DeviceHandle{ handle } {
 		}
+
+		static auto create(PoolSizes const& requested_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags = {}) -> Result<DescriptorPool>;
 
 		auto allocate_descriptor_set(DescriptorSetLayout const& layout) const -> Result<DescriptorSet>;
 		auto free_descriptor_set(DescriptorSet const& set) const -> void;
@@ -1196,8 +1190,8 @@ namespace edge::gfx {
 
 	class DescriptorSet : public Handle<vk::DescriptorSet> {
 	public:
-		DescriptorSet(Device const* device = nullptr, vk::DescriptorSet handle = VK_NULL_HANDLE, PoolSizes const& pool_sizes = {})
-			: Handle{ handle, device ? device->get_allocator() : nullptr }
+		DescriptorSet(vk::DescriptorSet handle = VK_NULL_HANDLE, PoolSizes const& pool_sizes = {})
+			: Handle{ handle }
 			, pool_sizes_{ pool_sizes } {
 		}
 
@@ -1212,24 +1206,6 @@ namespace edge::gfx {
 	auto initialize_graphics(const ContextInfo& info) -> vk::Result;
 	auto shutdown_graphics() -> void;
 
-	auto create_fence(vk::FenceCreateFlags flags = {}) -> Result<Fence>;
-	auto create_semaphore(vk::SemaphoreType type = vk::SemaphoreType::eBinary, uint64_t initial_value = 0ull) -> Result<Semaphore>;
 	// TODO: Queue selection not finished
 	auto get_queue(QueueType type) -> Result<Queue>;
-
-	auto create_image(const ImageCreateInfo& create_info) -> Result<Image>;
-	auto create_image_view(const Image& image, const vk::ImageSubresourceRange& range, vk::ImageViewType type) -> Result<ImageView>;
-	auto create_buffer(const BufferCreateInfo& create_info) -> Result<Buffer>;
-	auto create_buffer_view(const Buffer& buffer, vk::DeviceSize size, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined) -> Result<BufferView>;
-
-	// TODO: Shader
-	auto create_sampler(const vk::SamplerCreateInfo& create_info) -> Result<Sampler>;
-	// TODO: RootSignature
-	// TODO: Pipeline
-
-	auto create_shader_module(Span<const uint8_t> code) -> Result<ShaderModule>;
-
-	auto create_pipeline_cache(Span<const uint8_t> data) -> Result<PipelineCache>;
-	auto create_query_pool(vk::QueryType type, uint32_t query_count) -> Result<QueryPool>;
-	auto create_descriptor_pool(PoolSizes const& pool_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags = {}) -> Result<DescriptorPool>;
 }

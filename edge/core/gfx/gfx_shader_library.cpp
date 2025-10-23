@@ -5,9 +5,6 @@
 #define EDGE_LOGGER_SCOPE "gfx::ShaderLibrary"
 
 namespace edge::gfx {
-	extern vk::AllocationCallbacks const* allocator_;
-	extern Device device_;
-
 	ShaderLibrary::~ShaderLibrary() {
 		if (pipeline_cache_) {
 
@@ -46,7 +43,7 @@ namespace edge::gfx {
 			pipeline_cache_data = { std::istreambuf_iterator<char>(infile), std::istreambuf_iterator<char>() };
 		}
 
-		if (auto result = create_pipeline_cache(pipeline_cache_data); !result) {
+		if (auto result = PipelineCache::create(pipeline_cache_data); !result) {
 			EDGE_SLOGE("Failed to create pipeline cache.");
 			return result.error();
 		}
@@ -81,7 +78,7 @@ namespace edge::gfx {
 				for (int32_t i = 0; i < static_cast<int32_t>(shader_effect.stages.size()); ++i) {
 					const auto& stage = shader_effect.stages[i];
 
-					auto result = create_shader_module(stage.code);
+					auto result = ShaderModule::create(stage.code);
 					if (!result) {
 						EDGE_SLOGE("Failed to create shader module at index {}, for effect \"{}\". Reason: {}.", i, shader_effect.name, vk::to_string(result.error()));
 						continue;
@@ -170,7 +167,7 @@ namespace edge::gfx {
 						return result;
 					}
 
-					pipelines_[mi::String(shader_effect.name)] = Pipeline{ &device_, pipeline };
+					pipelines_[mi::String(shader_effect.name)] = Pipeline{ pipeline };
 				}
 				else if (shader_effect.bind_point == vk::PipelineBindPoint::eCompute) {
 					vk::ComputePipelineCreateInfo create_info{};
@@ -182,7 +179,7 @@ namespace edge::gfx {
 						return result;
 					}
 
-					pipelines_[mi::String(shader_effect.name)] = Pipeline{ &device_, pipeline };
+					pipelines_[mi::String(shader_effect.name)] = Pipeline{ pipeline };
 				}
 			}
 		}

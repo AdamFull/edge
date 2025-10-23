@@ -10,13 +10,13 @@ namespace edge::gfx {
 		~ShaderLibrary();
 
 		ShaderLibrary(ShaderLibrary&& other)
-			: pipeline_cache_{ std::exchange(other.pipeline_cache_, VK_NULL_HANDLE) }
+			: pipeline_cache_{ std::exchange(other.pipeline_cache_, {}) }
 			, pipeline_cache_path_{ std::exchange(other.pipeline_cache_path_, {}) }
 			, pipelines_{ std::exchange(other.pipelines_, {}) } {
 		}
 
 		auto operator=(ShaderLibrary&& other) -> ShaderLibrary& {
-			pipeline_cache_ = std::exchange(other.pipeline_cache_, VK_NULL_HANDLE);
+			pipeline_cache_ = std::exchange(other.pipeline_cache_, {});
 			pipeline_cache_path_ = std::exchange(other.pipeline_cache_path_, {});
 			pipelines_ = std::exchange(other.pipelines_, {});
 			return *this;

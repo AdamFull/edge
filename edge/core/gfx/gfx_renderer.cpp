@@ -10,10 +10,6 @@
 #include "gfx_shader_effect.h"
 
 namespace edge::gfx {
-	extern Surface surface_;
-	extern Adapter adapter_;
-	extern Device device_;
-
 	void TechniqueStage::deserialize(BinaryReader& reader) {
 		stage = reader.read<vk::ShaderStageFlagBits>();
 		entry_point_name = reader.read_string();
@@ -130,7 +126,7 @@ namespace edge::gfx {
 	}
 
 	auto Frame::_construct(DescriptorSetLayout const& descriptor_layout) -> vk::Result {
-		if (auto result = create_semaphore(); !result.has_value()) {
+		if (auto result = Semaphore::create(); !result.has_value()) {
 			EDGE_SLOGE("Failed to create image available semaphore handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 			
@@ -139,7 +135,7 @@ namespace edge::gfx {
 			image_available_ = std::move(result.value());
 		}
 
-		if (auto result = create_semaphore(); !result.has_value()) {
+		if (auto result = Semaphore::create(); !result.has_value()) {
 			EDGE_SLOGE("Failed to create rendering finished semaphore handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -147,7 +143,7 @@ namespace edge::gfx {
 			rendering_finished_ = std::move(result.value());
 		}
 
-		if (auto result = create_fence(vk::FenceCreateFlagBits::eSignaled); !result.has_value()) {
+		if (auto result = Fence::create(vk::FenceCreateFlagBits::eSignaled); !result.has_value()) {
 			EDGE_SLOGE("Failed to create frame fence handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -201,7 +197,7 @@ namespace edge::gfx {
 		mi::Vector<vk::PipelineShaderStageCreateInfo> shader_stages{};
 
 		for (auto const& stage : shader_effect.stages) {
-			auto result = create_shader_module(stage.code);
+			auto result = ShaderModule::create(stage.code);
 			if (!result) {
 				continue;
 			}
@@ -442,7 +438,7 @@ namespace edge::gfx {
 		query_pool_create_info.queryCount = 1u;
 		query_pool_create_info.queryType = vk::QueryType::eTimestamp;
 
-		if (auto result = create_query_pool(vk::QueryType::eTimestamp, 1u); !result.has_value()) {
+		if (auto result = QueryPool::create(vk::QueryType::eTimestamp, 1u); !result.has_value()) {
 			EDGE_SLOGE("Failed to create timestamp query. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -476,7 +472,7 @@ namespace edge::gfx {
 		}
 
 		auto const& requested_sizes = descriptor_layout_.get_pool_sizes();
-		if (auto result = create_descriptor_pool(requested_sizes, 1u, vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBindEXT); !result) {
+		if (auto result = DescriptorPool::create(requested_sizes, 1u, vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBindEXT); !result) {
 			EDGE_SLOGE("Failed to create frame descriptor pool handle. Reason: {}.", vk::to_string(result.error()));
 			return result.error();
 		}
@@ -615,7 +611,7 @@ namespace edge::gfx {
 				subresource_range.baseMipLevel = 0u;
 				subresource_range.levelCount = 1u;
 
-				if (auto result = create_image_view(swapchain_images_[i], subresource_range, vk::ImageViewType::e2D); !result.has_value()) {
+				if (auto result = swapchain_images_[i].create_view(subresource_range, vk::ImageViewType::e2D); !result.has_value()) {
 					return result.error();
 				}
 				else {

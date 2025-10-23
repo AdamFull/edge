@@ -12,17 +12,17 @@ namespace edge::gfx {
 		~Frame();
 
 		Frame(Frame&& other)
-			: image_available_{ std::exchange(other.image_available_, nullptr) }
-			, rendering_finished_{ std::exchange(other.rendering_finished_, nullptr) }
-			, fence_{ std::exchange(other.fence_, nullptr) }
-			, command_buffer_{ std::exchange(other.command_buffer_, nullptr) } {
+			: image_available_{ std::exchange(other.image_available_, {}) }
+			, rendering_finished_{ std::exchange(other.rendering_finished_, {}) }
+			, fence_{ std::exchange(other.fence_, {}) }
+			, command_buffer_{ std::exchange(other.command_buffer_, {}) } {
 		}
 
 		auto operator=(Frame&& other) -> Frame& {
-			image_available_ = std::exchange(other.image_available_, nullptr);
-			rendering_finished_ = std::exchange(other.rendering_finished_, nullptr);
-			fence_ = std::exchange(other.fence_, nullptr);
-			command_buffer_ = std::exchange(other.command_buffer_, nullptr);
+			image_available_ = std::exchange(other.image_available_, {});
+			rendering_finished_ = std::exchange(other.rendering_finished_, {});
+			fence_ = std::exchange(other.fence_, {});
+			command_buffer_ = std::exchange(other.command_buffer_, {});
 			return *this;
 		}
 
@@ -63,37 +63,37 @@ namespace edge::gfx {
 		auto operator=(const Renderer&) -> Renderer& = delete;
 
 		Renderer(Renderer&& other)
-			: queue_{ std::exchange(other.queue_, nullptr) }
-			, command_pool_{ std::exchange(other.command_pool_, nullptr) }
-			, swapchain_{ std::exchange(other.swapchain_, nullptr) }
+			: queue_{ std::exchange(other.queue_, {}) }
+			, command_pool_{ std::exchange(other.command_pool_, {}) }
+			, swapchain_{ std::exchange(other.swapchain_, {}) }
 			, swapchain_images_{ std::exchange(other.swapchain_images_, {}) }
 			, swapchain_image_views_{ std::exchange(other.swapchain_image_views_, {}) }
 			, swapchain_image_index_{ std::exchange(other.swapchain_image_index_, {}) }
 			, frames_{ std::exchange(other.frames_, {}) }
 			, frame_number_{ std::exchange(other.frame_number_, {}) }
 			
-			, descriptor_layout_{ std::exchange(other.descriptor_layout_, nullptr) }
-			, descriptor_pool_{ std::exchange(other.descriptor_pool_, nullptr) }
-			, descriptor_set_{ std::exchange(other.descriptor_set_, nullptr) }
-			, pipeline_layout_{ std::exchange(other.pipeline_layout_, nullptr) }
+			, descriptor_layout_{ std::exchange(other.descriptor_layout_, {}) }
+			, descriptor_pool_{ std::exchange(other.descriptor_pool_, {}) }
+			, descriptor_set_{ std::exchange(other.descriptor_set_, {}) }
+			, pipeline_layout_{ std::exchange(other.pipeline_layout_, {}) }
 			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, {}) } 
 			, shader_library_{ std::exchange(other.shader_library_, {}) } {
 		}
 
 		auto operator=(Renderer&& other) -> Renderer& {
-			queue_ = std::exchange(other.queue_, nullptr);
-			command_pool_ = std::exchange(other.command_pool_, nullptr);
-			swapchain_ = std::exchange(other.swapchain_, nullptr);
+			queue_ = std::exchange(other.queue_, {});
+			command_pool_ = std::exchange(other.command_pool_, {});
+			swapchain_ = std::exchange(other.swapchain_, {});
 			swapchain_images_ = std::exchange(other.swapchain_images_, {});
 			swapchain_image_views_ = std::exchange(other.swapchain_image_views_, {});
 			swapchain_image_index_ = std::exchange(other.swapchain_image_index_, {});
 			frames_ = std::exchange(other.frames_, {});
 			frame_number_ = std::exchange(other.frame_number_, {});
 
-			descriptor_layout_ = std::exchange(other.descriptor_layout_, nullptr);
-			descriptor_pool_ = std::exchange(other.descriptor_pool_, nullptr);
-			descriptor_set_ = std::exchange(other.descriptor_set_, nullptr);
-			pipeline_layout_ = std::exchange(other.pipeline_layout_, nullptr);
+			descriptor_layout_ = std::exchange(other.descriptor_layout_, {});
+			descriptor_pool_ = std::exchange(other.descriptor_pool_, {});
+			descriptor_set_ = std::exchange(other.descriptor_set_, {});
+			pipeline_layout_ = std::exchange(other.pipeline_layout_, {});
 			push_constant_buffer_ = std::exchange(other.push_constant_buffer_, {});
 
 			shader_library_ = std::exchange(other.shader_library_, {});
