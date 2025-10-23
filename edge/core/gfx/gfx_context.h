@@ -41,15 +41,15 @@ namespace edge::gfx {
 	public:
 		Handle(std::nullptr_t) noexcept {};
 
-		Handle(T handle = VK_NULL_HANDLE)
+		Handle(T handle = VK_NULL_HANDLE) noexcept
 			: handle_{ handle } {
 		}
 
-		Handle(Handle&& other)
+		Handle(Handle&& other) noexcept
 			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) } {
 		}
 
-		auto operator=(Handle&& other) -> Handle& {
+		auto operator=(Handle&& other) noexcept -> Handle& {
 			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
 			return *this;
 		}
@@ -63,7 +63,7 @@ namespace edge::gfx {
 		operator bool() const noexcept { return handle_; }
 		operator T() const noexcept { return handle_; }
 		operator typename T::CType() const noexcept { return handle_; }
-		auto get_handle() const noexcept -> T { return handle_; }
+		[[nodiscard]] auto get_handle() const noexcept -> T { return handle_; }
 	protected:
 		T handle_{ VK_NULL_HANDLE };
 	};
@@ -74,14 +74,14 @@ namespace edge::gfx {
 		Instance(vk::Instance handle, vk::DebugUtilsMessengerEXT debug_messenger, mi::Vector<const char*>&& enabled_extensions, mi::Vector<const char*> enabled_layers);
 		~Instance();
 
-		Instance(Instance&& other)
+		Instance(Instance&& other) noexcept
 			: Handle(std::move(other))
 			, debug_messenger_{ std::exchange(other.debug_messenger_, VK_NULL_HANDLE) }
 			, enabled_extensions_{ std::exchange(other.enabled_extensions_, {}) }
 			, enabled_layers_{ std::exchange(other.enabled_layers_, {}) } {
 		}
 
-		auto operator=(Instance&& other) -> Instance& {
+		auto operator=(Instance&& other) noexcept -> Instance& {
 			Handle::operator=(std::move(other));
 			debug_messenger_ = std::exchange(other.debug_messenger_, VK_NULL_HANDLE);
 			enabled_extensions_ = std::exchange(other.enabled_extensions_, {});
@@ -108,7 +108,7 @@ namespace edge::gfx {
 	template<typename T>
 	class InstanceHandle : public Handle<T> {
 	public:
-		InstanceHandle(T handle = VK_NULL_HANDLE)
+		InstanceHandle(T handle = VK_NULL_HANDLE) noexcept
 			: Handle<T>{ handle } {
 		}
 
@@ -119,11 +119,11 @@ namespace edge::gfx {
 			}
 		}
 
-		InstanceHandle(InstanceHandle&& other)
+		InstanceHandle(InstanceHandle&& other) noexcept
 			: Handle<T>{ std::move(other) } {
 		}
 
-		auto operator=(InstanceHandle&& other) -> InstanceHandle& {
+		auto operator=(InstanceHandle&& other) noexcept -> InstanceHandle& {
 			Handle<T>::operator=(std::move(other));
 			return *this;
 		}
@@ -133,7 +133,7 @@ namespace edge::gfx {
 
 	class Surface : public InstanceHandle<vk::SurfaceKHR> {
 	public:
-		Surface(vk::SurfaceKHR handle = VK_NULL_HANDLE)
+		Surface(vk::SurfaceKHR handle = VK_NULL_HANDLE) noexcept
 			: InstanceHandle{ handle } {
 
 		}
@@ -141,7 +141,7 @@ namespace edge::gfx {
 
 	class InstanceBuilder {
 	public:
-		InstanceBuilder();
+		InstanceBuilder() = default;
 
 		// Application info setters
 		auto set_app_name(const char* name) -> InstanceBuilder& {
@@ -250,10 +250,10 @@ namespace edge::gfx {
 	private:
 		vk::ApplicationInfo app_info_{};
 		vk::InstanceCreateInfo create_info_{};
-		mi::Vector<std::pair<const char*, bool>> requested_extensions_;
-		mi::Vector<std::pair<const char*, bool>> requested_layers_;
-		mi::Vector<vk::ValidationFeatureEnableEXT> validation_feature_enables_;
-		mi::Vector<vk::ValidationFeatureDisableEXT> validation_feature_disables_;
+		mi::Vector<std::pair<const char*, bool>> requested_extensions_{};
+		mi::Vector<std::pair<const char*, bool>> requested_layers_{};
+		mi::Vector<vk::ValidationFeatureEnableEXT> validation_feature_enables_{};
+		mi::Vector<vk::ValidationFeatureDisableEXT> validation_feature_disables_{};
 
 		bool enable_debug_utils_{ false };
 		bool enable_surface_{ false };
@@ -266,12 +266,12 @@ namespace edge::gfx {
 		Adapter(vk::PhysicalDevice handle, mi::Vector<vk::ExtensionProperties>&& device_extensions);
 		~Adapter() = default;
 
-		Adapter(Adapter&& other)
+		Adapter(Adapter&& other) noexcept
 			: Handle(std::move(other))
 			, supported_extensions_{ std::exchange(other.supported_extensions_, {}) } {
 		}
 
-		auto operator=(Adapter&& other) -> Adapter& {
+		auto operator=(Adapter&& other) noexcept -> Adapter& {
 			Handle::operator=(std::move(other));
 			supported_extensions_ = std::exchange(other.supported_extensions_, {});
 			return *this;
@@ -294,13 +294,13 @@ namespace edge::gfx {
 		Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, Array<mi::Vector<QueueFamilyInfo>, 3ull>&& queue_family_map);
 		~Device();
 
-		Device(Device&& other)
+		Device(Device&& other) noexcept
 			: Handle(std::move(other))
 			, enabled_extensions_{ std::exchange(other.enabled_extensions_, {}) }
 			, queue_family_map_{ std::exchange(other.queue_family_map_, {}) } {
 		}
 
-		auto operator=(Device&& other) -> Device& {
+		auto operator=(Device&& other) noexcept -> Device& {
 			Handle::operator=(std::move(other));
 			enabled_extensions_ = std::exchange(other.enabled_extensions_, {});
 			queue_family_map_ = std::exchange(other.queue_family_map_, {});
@@ -317,10 +317,7 @@ namespace edge::gfx {
 
 	class DeviceSelector {
 	public:
-		DeviceSelector() 
-			: requested_extensions_{}
-			, requested_features_{} {
-		}
+		DeviceSelector() = default;
 
 		auto set_surface(vk::SurfaceKHR surface) -> DeviceSelector& {
 			surface_ = surface;
@@ -386,16 +383,16 @@ namespace edge::gfx {
 		uint32_t minimal_api_ver{ VK_VERSION_1_0 };
 		vk::PhysicalDeviceType preferred_type_{ vk::PhysicalDeviceType::eDiscreteGpu };
 
-		mi::Vector<std::pair<const char*, bool>> requested_extensions_;
+		mi::Vector<std::pair<const char*, bool>> requested_extensions_{};
 
-		mi::Vector<Shared<void>> requested_features_;
+		mi::Vector<Shared<void>> requested_features_{};
 		void* last_feature_ptr_{ nullptr };
 	};
 
 	template<typename T>
 	class DeviceHandle : public Handle<T> {
 	public:
-		DeviceHandle(T handle = VK_NULL_HANDLE)
+		DeviceHandle(T handle = VK_NULL_HANDLE) noexcept
 			: Handle<T>{handle } {
 		}
 
@@ -405,11 +402,11 @@ namespace edge::gfx {
 			}
 		}
 
-		DeviceHandle(DeviceHandle&& other)
+		DeviceHandle(DeviceHandle&& other) noexcept
 			: Handle<T>{ std::move(other) } {
 		}
 
-		auto operator=(DeviceHandle&& other) -> DeviceHandle& {
+		auto operator=(DeviceHandle&& other) noexcept -> DeviceHandle& {
 			Handle<T>::operator=(std::move(other));
 			return *this;
 		}
@@ -429,7 +426,7 @@ namespace edge::gfx {
 
 	class Queue : public Handle<vk::Queue> {
 	public:
-		Queue(vk::Queue handle = VK_NULL_HANDLE, uint32_t family_index = ~0u, uint32_t queue_index = ~0u) 
+		Queue(vk::Queue handle = VK_NULL_HANDLE, uint32_t family_index = ~0u, uint32_t queue_index = ~0u) noexcept
 			: Handle{ handle }
 			, family_index_{ family_index_ }
 			, queue_index_{ queue_index } {
@@ -447,7 +444,7 @@ namespace edge::gfx {
 
 	class Fence : public DeviceHandle<vk::Fence> {
 	public:
-		Fence(vk::Fence handle = VK_NULL_HANDLE)
+		Fence(vk::Fence handle = VK_NULL_HANDLE) noexcept
 			: DeviceHandle{ handle } {
 		}
 
@@ -459,7 +456,7 @@ namespace edge::gfx {
 
 	class Semaphore : public DeviceHandle<vk::Semaphore> {
 	public:
-		Semaphore(vk::Semaphore handle = VK_NULL_HANDLE) 
+		Semaphore(vk::Semaphore handle = VK_NULL_HANDLE) noexcept
 			: DeviceHandle{ handle } {
 		}
 
@@ -470,19 +467,18 @@ namespace edge::gfx {
 
 	class MemoryAllocator : public NonCopyable {
 	public:
-		MemoryAllocator(std::nullptr_t) noexcept {};
-		MemoryAllocator(VmaAllocator handle = VK_NULL_HANDLE)
+		MemoryAllocator(VmaAllocator handle = VK_NULL_HANDLE) noexcept
 			: handle_{ handle } {
 
 		}
 
 		~MemoryAllocator();
 
-		MemoryAllocator(MemoryAllocator&& other)
+		MemoryAllocator(MemoryAllocator&& other) noexcept
 			: handle_{ std::exchange(other.handle_, VK_NULL_HANDLE) } {
 		}
 
-		auto operator=(MemoryAllocator&& other) -> MemoryAllocator& {
+		auto operator=(MemoryAllocator&& other) noexcept -> MemoryAllocator& {
 			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
 			return *this;
 		}
@@ -502,7 +498,7 @@ namespace edge::gfx {
 	template<typename T>
 	class MemoryAllocation : public Handle<T> {
 	public:
-		MemoryAllocation(T handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {})
+		MemoryAllocation(T handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {}) noexcept
 			: Handle<T>{ handle }
 			, allocation_{ allocation }
 			, allocation_info_{ allocation_info } {
@@ -533,7 +529,7 @@ namespace edge::gfx {
 			}
 		}
 
-		MemoryAllocation(MemoryAllocation&& other)
+		MemoryAllocation(MemoryAllocation&& other) noexcept
 			: Handle<T>{ std::move(other) }
 			, allocation_{ std::exchange(other.allocation_, VK_NULL_HANDLE) }
 			, allocation_info_{ std::exchange(other.allocation_info_, {}) }
@@ -542,7 +538,7 @@ namespace edge::gfx {
 			, mapped_memory_{ std::exchange(other.mapped_memory_, nullptr) } {
 		}
 
-		auto operator=(MemoryAllocation&& other) -> MemoryAllocation& {
+		auto operator=(MemoryAllocation&& other) noexcept -> MemoryAllocation& {
 			Handle<T>::operator=(std::move(other));
 			allocation_ = std::exchange(other.allocation_, VK_NULL_HANDLE);
 			allocation_info_ = std::exchange(other.allocation_info_, {});
@@ -643,25 +639,24 @@ namespace edge::gfx {
 	class Image : public MemoryAllocation<vk::Image> {
 	public:
 		Image() = default;
-		Image(std::nullptr_t) noexcept {};
 
-		Image(vk::Image handle, const vk::ImageCreateInfo& create_info)
+		Image(vk::Image handle, const vk::ImageCreateInfo& create_info) noexcept
 			: MemoryAllocation{ handle, VK_NULL_HANDLE, {} }
 			, create_info_{ create_info } {
 
 		}
 
-		Image(vk::Image handle, VmaAllocation allocation, VmaAllocationInfo allocation_info, const vk::ImageCreateInfo& create_info)
+		Image(vk::Image handle, VmaAllocation allocation, VmaAllocationInfo allocation_info, const vk::ImageCreateInfo& create_info) noexcept
 			: MemoryAllocation{ handle, allocation, allocation_info }
 			, create_info_{ create_info } {
 		}
 
-		Image(Image&& other)
+		Image(Image&& other) noexcept
 			: MemoryAllocation{ std::move(other) }
 			, create_info_{ std::exchange(other.create_info_, {}) } {
 		}
 
-		auto operator=(Image&& other) -> Image& {
+		auto operator=(Image&& other) noexcept -> Image& {
 			MemoryAllocation::operator=(std::move(other));
 			create_info_ = std::exchange(other.create_info_, {});
 			return *this;
@@ -680,7 +675,7 @@ namespace edge::gfx {
 
 	class ImageView : public DeviceHandle<vk::ImageView> {
 	public:
-		ImageView(vk::ImageView handle = VK_NULL_HANDLE, const vk::ImageSubresourceRange& subresource_range = {})
+		ImageView(vk::ImageView handle = VK_NULL_HANDLE, const vk::ImageSubresourceRange& subresource_range = {}) noexcept
 			: DeviceHandle{ handle }
 			, subresource_range_{ subresource_range } {
 		}
@@ -703,17 +698,17 @@ namespace edge::gfx {
 
 	class Buffer : public MemoryAllocation<vk::Buffer> {
 	public:
-		Buffer(vk::Buffer handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {}, const vk::BufferCreateInfo& create_info = {})
+		Buffer(vk::Buffer handle = VK_NULL_HANDLE, VmaAllocation allocation = VK_NULL_HANDLE, VmaAllocationInfo allocation_info = {}, const vk::BufferCreateInfo& create_info = {}) noexcept
 			: MemoryAllocation{ handle, allocation, allocation_info }
 			, create_info_{ create_info } {
 		}
 
-		Buffer(Buffer&& other)
+		Buffer(Buffer&& other) noexcept
 			: MemoryAllocation{ std::move(other) }
 			, create_info_{ std::exchange(other.create_info_, {}) } {
 		}
 
-		auto operator=(Buffer&& other) -> Buffer& {
+		auto operator=(Buffer&& other) noexcept -> Buffer& {
 			MemoryAllocation::operator=(std::move(other));
 			create_info_ = std::exchange(other.create_info_, {});
 			return *this;
@@ -725,24 +720,21 @@ namespace edge::gfx {
 		vk::BufferCreateInfo create_info_;
 	};
 
-	class BufferRange {
+	class BufferRange : public NonCopyable {
 	public:
-		BufferRange(vk::Buffer buffer = VK_NULL_HANDLE, vk::DeviceSize offset = 0ull)
+		BufferRange(vk::Buffer buffer = VK_NULL_HANDLE, vk::DeviceSize offset = 0ull) noexcept
 			: buffer_{ buffer }
 			, offset_{ offset } {
 
 		}
 
-		BufferRange(const BufferRange&) = delete;
-		auto operator=(const BufferRange&) -> BufferRange & = delete;
-
-		BufferRange(BufferRange&& other)
+		BufferRange(BufferRange&& other) noexcept
 			: buffer_{ std::exchange(other.buffer_, VK_NULL_HANDLE) }
 			, range_{ std::exchange(other.range_, {}) }
 			, offset_{ std::exchange(other.offset_, {}) } {
 		}
 
-		auto operator=(BufferRange&& other) -> BufferRange& {
+		auto operator=(BufferRange&& other) noexcept -> BufferRange& {
 			buffer_ = std::exchange(other.buffer_, VK_NULL_HANDLE);
 			range_ = std::exchange(other.range_, {});
 			offset_ = std::exchange(other.offset_, {});
@@ -764,7 +756,7 @@ namespace edge::gfx {
 
 	class BufferView : public DeviceHandle<vk::BufferView> {
 	public:
-		BufferView(vk::BufferView handle = VK_NULL_HANDLE, vk::DeviceSize size = 0ull, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined)
+		BufferView(vk::BufferView handle = VK_NULL_HANDLE, vk::DeviceSize size = 0ull, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined) noexcept
 			: DeviceHandle{ handle }
 			, size_{ size }
 			, offset_{ offset }
@@ -800,18 +792,18 @@ namespace edge::gfx {
 			bool hdr;
 		};
 
-		Swapchain(vk::SwapchainKHR handle = VK_NULL_HANDLE, const State& new_state = {})
+		Swapchain(vk::SwapchainKHR handle = VK_NULL_HANDLE, const State& new_state = {}) noexcept
 			: DeviceHandle{ handle }
 			, state_{ new_state } {
 
 		}
 
-		Swapchain(Swapchain&& other)
+		Swapchain(Swapchain&& other) noexcept
 			: DeviceHandle{ std::move(other) }
 			, state_{ std::exchange(other.state_, {}) } {
 		}
 
-		auto operator=(Swapchain&& other) -> Swapchain& {
+		auto operator=(Swapchain&& other) noexcept -> Swapchain& {
 			DeviceHandle::operator=(std::move(other));
 			state_ = std::exchange(other.state_, {});
 			return *this;
@@ -837,8 +829,7 @@ namespace edge::gfx {
 
 	class SwapchainBuilder {
 	public:
-		SwapchainBuilder() {
-		}
+		SwapchainBuilder() = default;
 
 		auto set_image_count(uint32_t count) -> SwapchainBuilder& {
 			requested_state_.image_count = count;
@@ -904,7 +895,7 @@ namespace edge::gfx {
 
 	class CommandBuffer : public Handle<vk::CommandBuffer> {
 	public:
-		CommandBuffer(vk::CommandPool command_pool = VK_NULL_HANDLE, vk::CommandBuffer handle = VK_NULL_HANDLE)
+		CommandBuffer(vk::CommandPool command_pool = VK_NULL_HANDLE, vk::CommandBuffer handle = VK_NULL_HANDLE) noexcept
 			: Handle{ handle }
 			, command_pool_{ command_pool } {
 
@@ -918,12 +909,12 @@ namespace edge::gfx {
 			}
 		}
 
-		CommandBuffer(CommandBuffer&& other)
+		CommandBuffer(CommandBuffer&& other) noexcept
 			: Handle(std::move(other))
 			, command_pool_{ std::exchange(other.command_pool_, VK_NULL_HANDLE) } {
 		}
 
-		auto operator=(CommandBuffer&& other) -> CommandBuffer& {
+		auto operator=(CommandBuffer&& other) noexcept -> CommandBuffer& {
 			Handle::operator=(std::move(other));
 			command_pool_ = std::exchange(other.command_pool_, VK_NULL_HANDLE);
 			return *this;
@@ -940,7 +931,7 @@ namespace edge::gfx {
 
 	class CommandPool : public DeviceHandle<vk::CommandPool> {
 	public:
-		CommandPool(vk::CommandPool handle = VK_NULL_HANDLE)
+		CommandPool(vk::CommandPool handle = VK_NULL_HANDLE) noexcept
 			: DeviceHandle{ handle } {
 
 		}
@@ -950,7 +941,7 @@ namespace edge::gfx {
 
 	class Sampler : public DeviceHandle<vk::Sampler> {
 	public:
-		Sampler(vk::Sampler handle = VK_NULL_HANDLE, const vk::SamplerCreateInfo& create_info = {})
+		Sampler(vk::Sampler handle = VK_NULL_HANDLE, const vk::SamplerCreateInfo& create_info = {}) noexcept
 			: DeviceHandle{ handle }
 			, create_info_{ create_info } {
 		}
@@ -979,19 +970,19 @@ namespace edge::gfx {
 
 	class QueryPool : public DeviceHandle<vk::QueryPool> {
 	public:
-		QueryPool(vk::QueryPool handle = VK_NULL_HANDLE, vk::QueryType type = {}, uint32_t max_query = 0u)
+		QueryPool(vk::QueryPool handle = VK_NULL_HANDLE, vk::QueryType type = {}, uint32_t max_query = 0u) noexcept
 			: DeviceHandle{ handle }
 			, type_{ type }
 			, max_query_{ max_query } {
 		}
 
-		QueryPool(QueryPool&& other)
+		QueryPool(QueryPool&& other) noexcept
 			: DeviceHandle(std::move(other))
 			, type_{ std::exchange(other.type_, {}) }
 			, max_query_{ std::exchange(other.max_query_, {}) } {
 		}
 
-		auto operator=(QueryPool&& other) -> QueryPool& {
+		auto operator=(QueryPool&& other) noexcept -> QueryPool& {
 			DeviceHandle::operator=(std::move(other));
 			type_ = std::exchange(other.type_, {});
 			max_query_ = std::exchange(other.max_query_, {});
@@ -1011,7 +1002,7 @@ namespace edge::gfx {
 
 	class PipelineCache : public DeviceHandle<vk::PipelineCache> {
 	public:
-		PipelineCache(vk::PipelineCache handle = VK_NULL_HANDLE) 
+		PipelineCache(vk::PipelineCache handle = VK_NULL_HANDLE) noexcept
 			: DeviceHandle{ handle } {
 		}
 
@@ -1023,14 +1014,16 @@ namespace edge::gfx {
 
 	class Pipeline : public DeviceHandle<vk::Pipeline> {
 	public:
-		Pipeline(vk::Pipeline handle = VK_NULL_HANDLE)
+		Pipeline(vk::Pipeline handle = VK_NULL_HANDLE) noexcept
 			: DeviceHandle{ handle } {
 		}
+
+		// TODO: add static create functions
 	};
 
 	class ShaderModule : public DeviceHandle<vk::ShaderModule> {
 	public:
-		ShaderModule(vk::ShaderModule handle = VK_NULL_HANDLE)
+		ShaderModule(vk::ShaderModule handle = VK_NULL_HANDLE) noexcept
 			: DeviceHandle{ handle } {
 		}
 
@@ -1041,7 +1034,7 @@ namespace edge::gfx {
 
 	class PipelineLayout : public DeviceHandle<vk::PipelineLayout> {
 	public:
-		PipelineLayout(vk::PipelineLayout handle = VK_NULL_HANDLE)
+		PipelineLayout(vk::PipelineLayout handle = VK_NULL_HANDLE) noexcept
 			: DeviceHandle{ handle } {
 		}
 	};
@@ -1125,7 +1118,7 @@ namespace edge::gfx {
 
 	class DescriptorSetLayoutBuilder : public NonCopyable {
 	public:
-		DescriptorSetLayoutBuilder();
+		DescriptorSetLayoutBuilder() = default;
 
 		auto add_binding(uint32_t binding, vk::DescriptorType descriptor_type, uint32_t descriptor_count, vk::ShaderStageFlags stage_flags, vk::DescriptorBindingFlagsEXT binding_flags = {}) -> DescriptorSetLayoutBuilder& {
 			pool_sizes_[static_cast<uint32_t>(descriptor_type)] += descriptor_count;
@@ -1136,14 +1129,14 @@ namespace edge::gfx {
 
 		auto build(vk::DescriptorSetLayoutCreateFlags flags = {}) -> Result<DescriptorSetLayout>;
 	private:
-		mi::Vector<vk::DescriptorSetLayoutBinding> layout_bindings_;
-		mi::Vector<vk::DescriptorBindingFlagsEXT> binding_flags_;
-		PoolSizes pool_sizes_;
+		mi::Vector<vk::DescriptorSetLayoutBinding> layout_bindings_{};
+		mi::Vector<vk::DescriptorBindingFlagsEXT> binding_flags_{};
+		PoolSizes pool_sizes_{};
 	};
 
 	class PipelineLayoutBuilder : public NonCopyable {
 	public:
-		PipelineLayoutBuilder();
+		PipelineLayoutBuilder() = default;
 
 		auto add_set_layout(DescriptorSetLayout const& set_layout) -> PipelineLayoutBuilder&;
 
@@ -1159,13 +1152,13 @@ namespace edge::gfx {
 
 		auto build() -> Result<PipelineLayout>;
 	private:
-		mi::Vector<vk::DescriptorSetLayout> descriptor_set_layouts_;
-		mi::Vector<vk::PushConstantRange> push_constant_ranges_;
+		mi::Vector<vk::DescriptorSetLayout> descriptor_set_layouts_{};
+		mi::Vector<vk::PushConstantRange> push_constant_ranges_{};
 	};
 
 	class DescriptorSetLayout : public DeviceHandle<vk::DescriptorSetLayout> {
 	public:
-		DescriptorSetLayout(vk::DescriptorSetLayout handle = VK_NULL_HANDLE, PoolSizes pool_sizes = {})
+		DescriptorSetLayout(vk::DescriptorSetLayout handle = VK_NULL_HANDLE, PoolSizes pool_sizes = {}) noexcept
 			: DeviceHandle{ handle }
 			, pool_sizes_{ pool_sizes } {
 		}
@@ -1180,7 +1173,7 @@ namespace edge::gfx {
 
 	class DescriptorPool : public DeviceHandle<vk::DescriptorPool> {
 	public:
-		DescriptorPool(vk::DescriptorPool handle = VK_NULL_HANDLE)
+		DescriptorPool(vk::DescriptorPool handle = VK_NULL_HANDLE) noexcept
 			: DeviceHandle{ handle } {
 		}
 
@@ -1192,7 +1185,7 @@ namespace edge::gfx {
 
 	class DescriptorSet : public Handle<vk::DescriptorSet> {
 	public:
-		DescriptorSet(vk::DescriptorSet handle = VK_NULL_HANDLE, PoolSizes const& pool_sizes = {})
+		DescriptorSet(vk::DescriptorSet handle = VK_NULL_HANDLE, PoolSizes const& pool_sizes = {}) noexcept
 			: Handle{ handle }
 			, pool_sizes_{ pool_sizes } {
 		}

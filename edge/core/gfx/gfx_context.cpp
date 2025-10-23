@@ -554,14 +554,6 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::InstanceBuilder"
 
-	InstanceBuilder::InstanceBuilder() :
-		requested_extensions_{},
-		requested_layers_{},
-		validation_feature_enables_{},
-		validation_feature_disables_{} {
-		create_info_.pApplicationInfo = &app_info_;
-	}
-
 	auto InstanceBuilder::is_valid() const -> bool {
 		return 
 			app_info_.pApplicationName != nullptr &&
@@ -1913,12 +1905,6 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::DescriptorSetLayoutBuilder"
 
-	DescriptorSetLayoutBuilder::DescriptorSetLayoutBuilder()
-		: layout_bindings_{}
-		, binding_flags_{} {
-
-	}
-
 	auto DescriptorSetLayoutBuilder::build(vk::DescriptorSetLayoutCreateFlags flags) -> Result<DescriptorSetLayout> {
 		vk::DescriptorSetLayoutBindingFlagsCreateInfoEXT ext_create_info{};
 		ext_create_info.bindingCount = static_cast<uint32_t>(binding_flags_.size());
@@ -1941,12 +1927,6 @@ namespace edge::gfx {
 #undef EDGE_LOGGER_SCOPE // DescriptorSetLayoutBuilder
 
 #define EDGE_LOGGER_SCOPE "gfx::PipelineLayoutBuilder"
-
-	PipelineLayoutBuilder::PipelineLayoutBuilder()
-		: descriptor_set_layouts_{}
-		, push_constant_ranges_{} {
-
-	}
 
 	auto PipelineLayoutBuilder::add_set_layout(DescriptorSetLayout const& set_layout) -> PipelineLayoutBuilder& {
 		descriptor_set_layouts_.push_back(set_layout.get_handle());
