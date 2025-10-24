@@ -76,21 +76,20 @@ namespace edge::platform {
 		//window_->set_title(new_windows_name);
 
 		window_->poll_events();
+		event_dispatcher_->process_events();
 
 		if (window_focused_) {
-			//accumulated_delta_time_ += delta_time;
-			//while (accumulated_delta_time_ > fixed_delta_time_) {
-			//	application_->fixed_update(fixed_delta_time_);
-			//	accumulated_delta_time_ -= fixed_delta_time_;
-			//}
+			accumulated_delta_time_ += delta_time;
+			while (accumulated_delta_time_ >= fixed_delta_time_) {
+				application_->fixed_update(fixed_delta_time_);
+				accumulated_delta_time_ -= fixed_delta_time_;
+			}
 
 			application_->update(delta_time);
 		}
 		else {
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
 		}
-
-		event_dispatcher_->process_events();
 
 		return 0;
 	}
