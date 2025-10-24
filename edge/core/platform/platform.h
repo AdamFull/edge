@@ -7,8 +7,6 @@
 #include "../application.h"
 #include "../events.h"
 
-#include "../gfx/gfx_renderer.h"
-
 namespace edge::platform {
 	class IPlatformWindow;
 	class IPlatformContext;
