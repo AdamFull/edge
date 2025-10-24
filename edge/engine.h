@@ -2,6 +2,7 @@
 
 #include "core/application.h"
 #include "core/gfx/gfx_renderer.h"
+#include "core/gfx/gfx_resource_uploader.h"
 
 namespace edge {
 	namespace platform {
@@ -17,6 +18,10 @@ namespace edge {
 		auto fixed_update(float delta_time) -> void override;
 	private:
 		platform::IPlatformWindow* window_{ nullptr };
-		std::unique_ptr<gfx::Renderer> renderer_;
+		std::unique_ptr<gfx::Renderer> renderer_{};
+		gfx::ResourceUploader uploader_{};
+
+		mi::Vector<uint64_t> panding_tokens_{};
+		mi::Vector<gfx::Image> images_;
 	};
 }

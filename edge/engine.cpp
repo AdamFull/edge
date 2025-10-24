@@ -152,6 +152,14 @@ namespace edge {
 
 		renderer_ = std::move(gfx_renderer_result.value());
 
+		auto gfx_uploader_result = gfx::ResourceUploader::create(128ull * 1024ull * 1024ull, 2u);
+		if (!gfx_uploader_result) {
+			EDGE_LOGE("Failed to create resource uploader. Reason: {}.", vk::to_string(gfx_uploader_result.error()));
+			return false;
+		}
+		uploader_ = std::move(gfx_uploader_result.value());
+		uploader_.start_streamer();
+
 		ImGui::CreateContext();
 
 		ImGuiIO& io = ImGui::GetIO();
@@ -197,6 +205,12 @@ namespace edge {
 
 			}, this);
 
+		// Resource uploader test
+		panding_tokens_.push_back(uploader_.load_image(u8"/assets/images/CasualDay4K.ktx2"));
+		panding_tokens_.push_back(uploader_.load_image(u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg"));
+		panding_tokens_.emplace_back(uploader_.load_image(u8"/assets/images/Poliigon_BrickWallReclaimed_8320_Normal.png"));
+		uploader_.wait_all_work_complete();
+
 		return true;
 	}
 
@@ -214,6 +228,21 @@ namespace edge {
 		ImGui::NewFrame();
 
 		ImGui::Render();
+
+		// Process pending resources
+		for (auto it = panding_tokens_.begin(); it != panding_tokens_.end();) {
+			if (uploader_.is_task_done(*it)) {
+				auto task_result = uploader_.get_task_result(*it);
+				if (task_result) {
+					images_.push_back(std::move(std::get<gfx::Image>(task_result->data)));
+				}
+
+				it = panding_tokens_.erase(it);
+			}
+			else {
+				++it;
+			}
+		}
 
 		renderer_->begin_frame(delta_time);
 
