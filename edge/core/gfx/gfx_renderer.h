@@ -105,7 +105,7 @@ namespace edge::gfx {
 		auto create_shader(const std::string& shader_path) -> void;
 
 		auto begin_frame(float delta_time) -> void;
-		auto end_frame() -> void;
+		auto end_frame(Span<vk::SemaphoreSubmitInfoKHR> wait_external_semaphores = {}) -> void;
 
 		auto get_current_frame_index() const -> uint32_t { return frame_number_ % k_frame_overlap_; }
 		auto get_current_frame() const -> Frame const* { return frames_.data() + get_current_frame_index(); }

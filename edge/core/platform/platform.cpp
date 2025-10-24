@@ -73,7 +73,8 @@ namespace edge::platform {
 
 	auto IPlatformContext::main_loop_tick(float delta_time) -> int32_t {
 		//auto new_windows_name = std::format("{} [cpu {} fps; {:.2f} ms] [gpu {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time(), renderer_->get_gpu_delta_time());
-		//window_->set_title(new_windows_name);
+		auto new_windows_name = std::format("{} [cpu {} fps; {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time());
+		window_->set_title(new_windows_name);
 
 		window_->poll_events();
 		event_dispatcher_->process_events();

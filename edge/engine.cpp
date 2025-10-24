@@ -230,6 +230,7 @@ namespace edge {
 		ImGui::Render();
 
 		// Process pending resources
+		// TODO: Add new resource to renderer
 		for (auto it = panding_tokens_.begin(); it != panding_tokens_.end();) {
 			if (uploader_.is_task_done(*it)) {
 				auto task_result = uploader_.get_task_result(*it);
@@ -246,7 +247,9 @@ namespace edge {
 
 		renderer_->begin_frame(delta_time);
 
-		renderer_->end_frame();
+
+		auto last_submitted_semaphore = uploader_.get_last_submitted_semaphore();
+		renderer_->end_frame({ &last_submitted_semaphore, 1ull });
 	}
 
 	auto Engine::fixed_update(float delta_time) -> void {

@@ -91,6 +91,8 @@ namespace edge::gfx {
 		auto get_task_result(uint64_t task_id) -> std::optional<UploadResult>;
 		auto is_all_work_complete() const -> bool;
 		auto wait_all_work_complete() -> void;
+
+		auto get_last_submitted_semaphore() const -> vk::SemaphoreSubmitInfoKHR;
 	private:
 		auto _construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result;
 
@@ -115,11 +117,10 @@ namespace edge::gfx {
 		std::atomic_uint64_t task_counter_{ 1ull };
 		std::atomic_uint64_t last_completed_task_{ 0ull };
 
-		Semaphore* last_signalled_semaphore_{ nullptr };
-		uint64_t last_signalled_value_{ 0ull };
+		vk::SemaphoreSubmitInfoKHR last_submitted_semaphore_{};
 
 		std::mutex pending_tasks_mutex_{};
-		std::mutex semaphore_mutex_{};
+		mutable std::mutex semaphore_mutex_{};
 		std::mutex finished_tasks_mutex_{};
 		std::mutex token_wait_mutex_{};
 

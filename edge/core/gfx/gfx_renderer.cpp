@@ -235,7 +235,7 @@ namespace edge::gfx {
 		delta_time_ = delta_time;
 	}
 
-	auto Renderer::end_frame() -> void {
+	auto Renderer::end_frame(Span<vk::SemaphoreSubmitInfoKHR> wait_external_semaphores) -> void {
 		if (!active_frame_) {
 			EDGE_SLOGW("Attempting to end a frame when the new one is not started yet.");
 			return;
@@ -286,6 +286,12 @@ namespace edge::gfx {
 
 		mi::Vector<vk::SemaphoreSubmitInfo> wait_semaphores{};
 		wait_semaphores.push_back(vk::SemaphoreSubmitInfo{ acquired_semaphore_, 0ull, vk::PipelineStageFlagBits2::eColorAttachmentOutput });
+
+		for (auto& external_semaphore : wait_external_semaphores) {
+			if (external_semaphore.semaphore) {
+				wait_semaphores.push_back(external_semaphore);
+			}
+		}
 
 		mi::Vector<vk::SemaphoreSubmitInfo> signal_semaphores{};
 

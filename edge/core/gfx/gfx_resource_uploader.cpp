@@ -146,6 +146,11 @@ namespace edge::gfx {
 		wait_for_task(token);
 	}
 
+	auto ResourceUploader::get_last_submitted_semaphore() const -> vk::SemaphoreSubmitInfoKHR {
+		std::lock_guard lock(semaphore_mutex_);
+		return last_submitted_semaphore_;
+	}
+
 	auto ResourceUploader::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result {
 		auto queue_result = device_.get_queue(QueueType::eDirect);
 		if (!queue_result) {
@@ -271,8 +276,7 @@ namespace edge::gfx {
 						resource_set.first_submission = false;
 					}
 
-					last_signalled_semaphore_ = &resource_set.semaphore;
-					last_signalled_value_ = signal_value;
+					last_submitted_semaphore_ = signal_info;
 
 					uint32_t current = current_resource_set_.load(std::memory_order_relaxed);
 					uint32_t next = (current + 1u) % static_cast<uint32_t>(resource_sets_.size());
@@ -313,15 +317,20 @@ namespace edge::gfx {
 			return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
 		}
 
+		resource_set.command_buffer.begin_marker(reinterpret_cast<const char*>(task.path.c_str()));
+
+		UploadResult result{ task.sync_token, UploadType::eImage, UploadingStatus::eNotSupported, {} };
 		if (matches_magic(file_data, PNG_MAGIC) || matches_magic(file_data, JPEG_MAGIC)) {
-			return _load_image_stb(resource_set, task, file_data);
+			result = _load_image_stb(resource_set, task, file_data);
 		}
 		else if (matches_magic(file_data, KTX_MAGIC)) {
-			return _load_image_ktx(resource_set, task, file_data);
+			result = _load_image_ktx(resource_set, task, file_data);
 		}
 
+		resource_set.command_buffer.end_marker();
+
 		// Unsupported format
-		return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotSupported, {} };
+		return result;
 	}
 
 	auto ResourceUploader::_load_image_stb(ResourceSet& resource_set, UploadTask const& task, Span<uint8_t> image_raw_data) -> UploadResult {
