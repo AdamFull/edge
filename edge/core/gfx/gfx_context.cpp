@@ -110,13 +110,13 @@ namespace edge::gfx {
 			EDGE_SLOGT("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
 		}
 		else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo) {
-			EDGE_SLOGI("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+			//EDGE_SLOGI("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
 		}
 		else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning) {
 			EDGE_SLOGW("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
 		}
 		else if (message_severity & vk::DebugUtilsMessageSeverityFlagBitsEXT::eError) {
-			GFX_ASSERT_MSG(false, "{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
+			EDGE_SLOGE("{} - {}: {}", callback_data->messageIdNumber, callback_data->pMessageIdName, callback_data->pMessage);
 		}
 		return VK_FALSE;
 	}
@@ -494,24 +494,6 @@ namespace edge::gfx {
 		}
 	}
 
-#if defined(VK_USE_PLATFORM_ANDROID_KHR)
-	auto Instance::create_surface(const vk::AndroidSurfaceCreateInfoKHR& create_info) const -> Result<Surface> {
-		vk::SurfaceKHR surface;
-		if (auto result = handle_.createAndroidSurfaceKHR(&create_info, allocator_, &surface); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-		return Surface{ this, surface };
-	}
-#elif defined(VK_USE_PLATFORM_WIN32_KHR)
-	auto Instance::create_surface(const vk::Win32SurfaceCreateInfoKHR& create_info) const -> Result<Surface> {
-		vk::SurfaceKHR surface;
-		if (auto result = handle_.createWin32SurfaceKHR(&create_info, allocator_, &surface); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
-		return Surface{ surface };
-	}
-#endif
-
 	auto Instance::is_extension_enabled(const char* extension_name) const -> bool {
 		return std::find_if(enabled_extensions_.begin(), enabled_extensions_.end(),
 			[&extension_name](const char* name) -> bool {
@@ -707,6 +689,28 @@ namespace edge::gfx {
 
 #undef EDGE_LOGGER_SCOPE // InstanceBuilder
 
+#define EDGE_LOGGER_SCOPE "gfx::Surface"
+
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+	auto Surface::create(const vk::AndroidSurfaceCreateInfoKHR& create_info) -> Result<Surface> {
+		vk::SurfaceKHR surface;
+		if (auto result = instance_->createAndroidSurfaceKHR(&create_info, allocator_, &surface); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return Surface{ surface };
+	}
+#elif defined(VK_USE_PLATFORM_WIN32_KHR)
+	auto Surface::create(const vk::Win32SurfaceCreateInfoKHR& create_info) -> Result<Surface> {
+		vk::SurfaceKHR surface;
+		if (auto result = instance_->createWin32SurfaceKHR(&create_info, allocator_, &surface); result != vk::Result::eSuccess) {
+			return std::unexpected(result);
+		}
+		return Surface{ surface };
+	}
+#endif
+
+#undef EDGE_LOGGER_SCOPE // Surface
+
 #define EDGE_LOGGER_SCOPE "gfx::Adapter"
 
 	Adapter::Adapter(vk::PhysicalDevice handle, mi::Vector<vk::ExtensionProperties>&& device_extensions)
@@ -854,12 +858,8 @@ namespace edge::gfx {
 				auto queue_index = family.queue_indices.back();
 				family.queue_indices.pop_back();
 
-				vk::DeviceQueueInfo2 queue_info{};
-				queue_info.queueFamilyIndex = family.index;
-				queue_info.queueIndex = queue_index;
-
 				vk::Queue queue;
-				handle_.getQueue2(&queue_info, &queue);
+				handle_.getQueue(family.index, queue_index, &queue);
 
 				return Queue(queue, family.index, queue_index);
 			}
@@ -1079,26 +1079,28 @@ namespace edge::gfx {
 		vk::PhysicalDeviceVulkan14Features features14{};
 		features14.pNext = nullptr;
 
+		auto api_version = false ? properties.apiVersion : minimal_api_ver;
+
 		void* feature_chain{ nullptr };
-		if (properties.apiVersion >= VK_API_VERSION_1_4) {
+		if (api_version >= VK_API_VERSION_1_4) {
 			feature_chain = &features14;
 			features14.pNext = &features13;
 			features13.pNext = &features12;
 			features12.pNext = &features11;
 			features11.pNext = last_feature_ptr_;
 		}
-		else if (properties.apiVersion >= VK_API_VERSION_1_3) {
+		else if (api_version >= VK_API_VERSION_1_3) {
 			feature_chain = &features13;
 			features13.pNext = &features12;
 			features12.pNext = &features11;
 			features11.pNext = last_feature_ptr_;
 		}
-		else if (properties.apiVersion >= VK_API_VERSION_1_2) {
+		else if (api_version >= VK_API_VERSION_1_2) {
 			feature_chain = &features12;
 			features12.pNext = &features11;
 			features11.pNext = last_feature_ptr_;
 		}
-		else if (properties.apiVersion >= VK_API_VERSION_1_1) {
+		else if (api_version >= VK_API_VERSION_1_1) {
 			feature_chain = &features11;
 			features11.pNext = last_feature_ptr_;
 		}
@@ -1128,7 +1130,7 @@ namespace edge::gfx {
 	auto Queue::create_command_pool() const -> Result<CommandPool> {
 		vk::CommandPoolCreateInfo create_info{};
 		create_info.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-		create_info.queueFamilyIndex = queue_index_;
+		create_info.queueFamilyIndex = family_index_;
 
 		vk::CommandPool command_pool;
 		if (auto result = device_->createCommandPool(&create_info, allocator_, &command_pool); result != vk::Result::eSuccess) {
@@ -1374,7 +1376,7 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::BufferRange"
 
-	auto BufferRange::construct(Buffer const* buffer, vk::DeviceSize offset, vk::DeviceSize size) -> Result<BufferRange> {
+	auto BufferRange::create(Buffer const* buffer, vk::DeviceSize offset, vk::DeviceSize size) -> Result<BufferRange> {
 		BufferRange self{ buffer->get_handle(), offset};
 		if (auto result = self._construct(buffer, size); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
@@ -1754,6 +1756,28 @@ namespace edge::gfx {
 		push_barrier(barrier);
 	}
 
+	inline auto make_color(uint32_t color) -> std::array<float, 4> {
+		std::array<float, 4> out_color{};
+		out_color[0] = ((color >> 24) & 0xFF) / 255.0f;
+		out_color[1] = ((color >> 16) & 0xFF) / 255.0f;
+		out_color[2] = ((color >> 8) & 0xFF) / 255.0f;
+		out_color[3] = (color & 0xFF) / 255.0f;
+
+		return out_color;
+	}
+
+	auto CommandBuffer::begin_marker(std::string_view name, uint32_t color) const -> void {
+		vk::DebugUtilsLabelEXT label{};
+		label.pLabelName = name.data();
+		label.color = make_color(color);
+		handle_.beginDebugUtilsLabelEXT(&label);
+	}
+
+	auto CommandBuffer::end_marker() const -> void {
+		handle_.endDebugUtilsLabelEXT();
+	}
+	
+
 #undef EDGE_LOGGER_SCOPE // CommandBuffer
 
 #define EDGE_LOGGER_SCOPE "gfx::CommandPool"
@@ -2065,7 +2089,7 @@ namespace edge::gfx {
 		surface_create_info.hinstance = hInstance;
 #endif
 
-		auto surface_result = instance_.create_surface(surface_create_info);
+		auto surface_result = Surface::create(surface_create_info);
 		if (!surface_result) {
 			GFX_ASSERT_MSG(false, "Failed to create surface.");
 			return surface_result.error();
@@ -2081,7 +2105,7 @@ namespace edge::gfx {
 			.add_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME)
 			.add_extension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)
 			.add_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME)
-			.add_extension(VK_KHR_MAINTENANCE_6_EXTENSION_NAME)
+			//.add_extension(VK_KHR_MAINTENANCE_6_EXTENSION_NAME)
 			.add_extension(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME)
 			.add_extension(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME)
 			.add_extension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)
@@ -2117,8 +2141,8 @@ namespace edge::gfx {
 #if USE_NSIGHT_AFTERMATH
 			.add_extension(VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME)
 #endif
-			//.add_feature<vk::PhysicalDeviceSynchronization2FeaturesKHR>()
-			//.add_feature<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>()
+			.add_feature<vk::PhysicalDeviceSynchronization2FeaturesKHR>()
+			.add_feature<vk::PhysicalDeviceDynamicRenderingFeaturesKHR>()
 			//.add_feature<vk::PhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>()
 			//.add_feature<vk::PhysicalDevice16BitStorageFeaturesKHR>()
 			.add_feature<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>()

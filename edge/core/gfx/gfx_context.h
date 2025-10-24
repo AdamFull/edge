@@ -89,12 +89,6 @@ namespace edge::gfx {
 			return *this;
 		}
 
-#if defined(VK_USE_PLATFORM_ANDROID_KHR)
-		auto create_surface(const vk::AndroidSurfaceCreateInfoKHR& create_info) const -> Result<Surface>;
-#elif defined(VK_USE_PLATFORM_WIN32_KHR)
-		auto create_surface(const vk::Win32SurfaceCreateInfoKHR& create_info) const -> Result<Surface>;
-#endif
-
 		auto is_extension_enabled(const char* extension_name) const -> bool;
 		auto is_layer_enabled(const char* layer_name) const -> bool;
 
@@ -137,6 +131,12 @@ namespace edge::gfx {
 			: InstanceHandle{ handle } {
 
 		}
+
+#if defined(VK_USE_PLATFORM_ANDROID_KHR)
+		static auto create(const vk::AndroidSurfaceCreateInfoKHR& create_info) -> Result<Surface>;
+#elif defined(VK_USE_PLATFORM_WIN32_KHR)
+		static auto create(const vk::Win32SurfaceCreateInfoKHR& create_info) -> Result<Surface>;
+#endif
 	};
 
 	class InstanceBuilder {
@@ -428,7 +428,7 @@ namespace edge::gfx {
 	public:
 		Queue(vk::Queue handle = VK_NULL_HANDLE, uint32_t family_index = ~0u, uint32_t queue_index = ~0u) noexcept
 			: Handle{ handle }
-			, family_index_{ family_index_ }
+			, family_index_{ family_index }
 			, queue_index_{ queue_index } {
 		}
 
@@ -574,7 +574,7 @@ namespace edge::gfx {
 
 		auto flush(vk::DeviceSize offset = 0, vk::DeviceSize size = VK_WHOLE_SIZE) const -> vk::Result {
 			if (!allocation_) {
-				return std::unexpected(vk::Result::eErrorInitializationFailed);
+				return vk::Result::eErrorInitializationFailed;
 			}
 
 			if (!coherent_) {
@@ -729,19 +729,19 @@ namespace edge::gfx {
 		}
 
 		BufferRange(BufferRange&& other) noexcept
-			: buffer_{ std::exchange(other.buffer_, VK_NULL_HANDLE) }
+			: buffer_{ std::move(other.buffer_) }
 			, range_{ std::exchange(other.range_, {}) }
 			, offset_{ std::exchange(other.offset_, {}) } {
 		}
 
 		auto operator=(BufferRange&& other) noexcept -> BufferRange& {
-			buffer_ = std::exchange(other.buffer_, VK_NULL_HANDLE);
+			buffer_ = std::move(other.buffer_);
 			range_ = std::exchange(other.range_, {});
 			offset_ = std::exchange(other.offset_, {});
 			return *this;
 		}
 
-		static auto construct(Buffer const* buffer = nullptr, vk::DeviceSize offset = 0ull, vk::DeviceSize size = 0ull) -> Result<BufferRange>;
+		static auto create(Buffer const* buffer = nullptr, vk::DeviceSize offset = 0ull, vk::DeviceSize size = 0ull) -> Result<BufferRange>;
 
 		auto get_offset() const -> vk::DeviceSize { return offset_; }
 		auto get_range() const -> Span<uint8_t> { return range_; }
@@ -925,6 +925,9 @@ namespace edge::gfx {
 
 		auto push_barrier(const Barrier& barrier) const -> void;
 		auto push_barrier(const ImageBarrier& barrier) const -> void;
+
+		auto begin_marker(std::string_view name, uint32_t color = 0xFFFFFFFF) const -> void;
+		auto end_marker() const -> void;
 	private:
 		vk::CommandPool command_pool_{ VK_NULL_HANDLE };
 	};
