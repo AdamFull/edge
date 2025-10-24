@@ -2,9 +2,6 @@
 
 #include <numeric>
 
-#include <stb_image.h>
-
-#include <ktx.h>
 #include <zstd.h>
 
 #include "gfx_shader_effect.h"
@@ -22,84 +19,6 @@ namespace edge::gfx {
 		size_t const decompressed_size = ZSTD_decompress(code.data(), code.size(), compressed_code.data(), compressed_code.size());
 		code.resize(decompressed_size);
 	}
-
-//#define EDGE_LOGGER_SCOPE "gfx::ResourceLoader"
-//
-//	auto ResourceLoader::construct(Context const* ctx, vk::DeviceSize arena_size, uint32_t frames_in_flight) -> Result<ResourceLoader> {
-//		ResourceLoader self{ ctx };
-//		if (auto result = self._construct(arena_size, frames_in_flight); result != vk::Result::eSuccess) {
-//			return std::unexpected(result);
-//		}
-//		return self;
-//	}
-//
-//	auto ResourceLoader::load_image_from_memory(Span<uint8_t> image_data) -> Result<Image> {
-//
-//		if(image_data.size() < 4) {
-//			return std::unexpected(vk::Result::eErrorUnknown);
-//		}
-//
-//		auto magic = image_data.subspan(0, 4);
-//
-//		// PNG: 89 50 4E 47
-//		if (image_data.size() >= 8 && magic[0] == 0x89 && magic[1] == 0x50 && magic[2] == 0x4E && magic[3] == 0x47) {
-//			return _load_image_from_stbi(image_data);
-//		}
-//		// JPEG: FF D8 FF
-//		else if (magic[0] == 0xFF && magic[1] == 0xD8 && magic[2] == 0xFF) {
-//			return _load_image_from_stbi(image_data);
-//		}
-//		// KTX: AB 4B 54 58
-//		else if (magic[0] == 0xAB && magic[1] == 0x4B && magic[2] == 0x54 && magic[3] == 0x58) {
-//			return _load_image_from_ktx(image_data);
-//		}
-//
-//		return std::unexpected(vk::Result::eErrorUnknown);
-//	}
-//
-//	auto ResourceLoader::_construct(vk::DeviceSize arena_size, uint32_t frames_in_flight) -> vk::Result {
-//		for (int32_t i = 0; i < static_cast<int32_t>(frames_in_flight); ++i) {
-//			auto result = BufferArena::construct(context_, arena_size, kStagingBuffer);
-//			if (!result) {
-//				return result.error();
-//			}
-//
-//			staging_arenas_.push_back(std::move(result.value()));
-//		}
-//
-//		return vk::Result::eSuccess;
-//	}
-//
-//	auto ResourceLoader::_load_image_from_stbi(Span<uint8_t> image_data) -> Result<Image> {
-//		int32_t width, height, channel_count;
-//
-//		ImageCreateInfo create_info{};
-//		create_info.extent.width = static_cast<uint32_t>(width);
-//		create_info.extent.height = static_cast<uint32_t>(height);
-//		create_info.extent.depth = 1u;
-//		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
-//
-//		uint8_t* data = stbi_load_from_memory(image_data.data(), static_cast<int32_t>(image_data.size()), &width, &height, &channel_count, 0);
-//		if (!data) {
-//			return std::unexpected(vk::Result::eErrorUnknown);
-//		}
-//
-//		auto texture_size = create_info.extent.width * create_info.extent.height * static_cast<uint32_t>(channel_count);
-//
-//		stbi_image_free(data);
-//
-//		return std::unexpected(vk::Result::eErrorUnknown);
-//	}
-//
-//	auto ResourceLoader::_load_image_from_ktx(Span<uint8_t> image_data) -> Result<Image> {
-//		return std::unexpected(vk::Result::eErrorUnknown);
-//	}
-//
-//	auto ResourceLoader::_allocate_staging_memory(vk::DeviceSize image_size) -> Result<BufferRange> {
-//		return std::unexpected(vk::Result::eErrorUnknown);
-//	}
-//
-//#undef EDGE_LOGGER_SCOPE // ResourceLoader
 
 #define EDGE_LOGGER_SCOPE "gfx::Frame"
 
@@ -157,7 +76,8 @@ namespace edge::gfx {
 #define EDGE_LOGGER_SCOPE "gfx::Renderer"
 
 	Renderer::~Renderer() {
-		queue_->waitIdle();
+		auto wait_result = queue_->waitIdle();
+		GFX_ASSERT_MSG(wait_result == vk::Result::eSuccess, "Failed waiting for queue finish all work before destruction.");
 
 		descriptor_pool_.free_descriptor_set(descriptor_set_);
 	}
