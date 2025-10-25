@@ -4,6 +4,8 @@
 #include "core/gfx/gfx_renderer.h"
 #include "core/gfx/gfx_resource_uploader.h"
 
+#include "layer.h"
+
 namespace edge {
 	namespace platform {
 		class IPlatformWindow;
@@ -20,6 +22,8 @@ namespace edge {
 		platform::IPlatformWindow* window_{ nullptr };
 		std::unique_ptr<gfx::Renderer> renderer_{};
 		gfx::ResourceUploader uploader_{};
+
+		mi::Vector<ILayer> layers_;
 
 		mi::Vector<uint64_t> panding_tokens_{};
 		mi::Vector<gfx::Image> images_;

@@ -113,7 +113,7 @@ namespace edge::gfx {
 		auto is_all_work_complete() const -> bool;
 		auto wait_all_work_complete() -> void;
 
-		auto get_last_submitted_semaphore() const -> vk::SemaphoreSubmitInfoKHR;
+		auto get_last_submitted_semaphore() -> vk::SemaphoreSubmitInfoKHR;
 	private:
 		auto _construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result;
 

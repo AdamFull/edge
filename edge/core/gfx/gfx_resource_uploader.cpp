@@ -8,6 +8,11 @@
 
 #define EDGE_LOGGER_SCOPE "gfx::ResourceUploader"
 
+// TODO: Add more format support
+// TODO: Add mip generation
+// TODO: Manage queue transfer ownership when copy queue is available
+// TODO: Improve queue selection logic (now it's very poor and i'm not able to select some specific families
+
 namespace {
 	constexpr uint8_t PNG_MAGIC[] = { 0x89, 0x50, 0x4E, 0x47 };
 	constexpr uint8_t JPEG_MAGIC[] = { 0xFF, 0xD8, 0xFF };
@@ -146,9 +151,11 @@ namespace edge::gfx {
 		wait_for_task(token);
 	}
 
-	auto ResourceUploader::get_last_submitted_semaphore() const -> vk::SemaphoreSubmitInfoKHR {
+	auto ResourceUploader::get_last_submitted_semaphore() -> vk::SemaphoreSubmitInfoKHR {
 		std::lock_guard lock(semaphore_mutex_);
-		return last_submitted_semaphore_;
+		vk::SemaphoreSubmitInfoKHR semaphore_submit_info{ last_submitted_semaphore_ };
+		last_submitted_semaphore_ = vk::SemaphoreSubmitInfoKHR{};
+		return semaphore_submit_info;
 	}
 
 	auto ResourceUploader::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result {
