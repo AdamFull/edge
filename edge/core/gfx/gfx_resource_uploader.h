@@ -17,10 +17,31 @@ namespace edge::gfx {
 		eBuffer
 	};
 
+	enum class ImageImportType {
+		eDefault,
+		eNormalMap,
+		eSingleChannel
+	};
+
+	struct BufferImportInfo {
+		bool boba;
+	};
+
+	struct ImageImportInfo {
+		mi::U8String path{};
+		ImageImportType import_type{ ImageImportType::eDefault };
+		bool generate_mipmaps{ false };
+		struct {
+			mi::Vector<uint8_t> data{};
+			uint32_t width{ 1u };
+			uint32_t height{ 1u };
+		} raw{};
+	};
+
 	struct UploadTask {
 		UploadType type;
 		uint64_t sync_token;
-		mi::U8String path;
+		std::variant<BufferImportInfo, ImageImportInfo> import_info;
 	};
 
 	struct UploadResult {
@@ -83,7 +104,7 @@ namespace edge::gfx {
 
 		auto start_streamer() -> void;
 		auto stop_streamer() -> void;
-		[[nodiscard]] auto load_image(std::u8string_view path) -> uint64_t;
+		[[nodiscard]] auto load_image(ImageImportInfo&& import_info) -> uint64_t;
 
 		auto is_task_done(uint64_t task_id) const -> bool;
 		auto wait_for_task(uint64_t task_id) -> void;
@@ -96,12 +117,30 @@ namespace edge::gfx {
 	private:
 		auto _construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result;
 
+		enum class ImageLoadStatus {
+			eDone,
+			eInvalidHeader,
+			eOutOfMemory
+		};
+
+		struct ImageUploadInfo {
+			uint32_t width{ 1u }, height{ 1u }, depth{ 1u };
+			uint32_t layer_count{ 1u }, level_count{ 1u }, face_count{ 1u };
+			bool generate_mipmap{ false };
+			vk::Format format;
+			mi::Vector<uint64_t> src_copy_offsets;
+			BufferRange memory_range;
+		};
+
+		using ImageLoadResult = std::expected<ImageUploadInfo, ImageLoadStatus>;
+
 		auto worker_loop() -> void;
 		auto process_task(ResourceSet& resource_set, UploadTask const& task) -> UploadResult;
 		auto process_image(ResourceSet& resource_set, UploadTask const& task) -> UploadResult;
-		auto _load_image_stb(ResourceSet& resource_set, UploadTask const& task, Span<uint8_t> image_raw_data) -> UploadResult;
-		auto _load_image_ktx(ResourceSet& resource_set, UploadTask const& task, Span<uint8_t> image_raw_data) -> UploadResult;
 		auto get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> Result<BufferRange>;
+		auto _load_image_raw(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, uint32_t width, uint32_t height, vk::Format format, bool generate_mipmap) -> ImageLoadResult;
+		auto _load_image_stb(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, vk::Format format) -> ImageLoadResult;
+		auto _load_image_ktx(ResourceSet& resource_set, Span<const uint8_t> image_raw_data) -> ImageLoadResult;
 		auto begin_commands(ResourceSet& resource_set) -> void;
 		auto end_commands(ResourceSet& resource_set) -> void;
 

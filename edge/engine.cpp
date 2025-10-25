@@ -206,9 +206,12 @@ namespace edge {
 			}, this);
 
 		// Resource uploader test
-		panding_tokens_.push_back(uploader_.load_image(u8"/assets/images/CasualDay4K.ktx2"));
-		panding_tokens_.push_back(uploader_.load_image(u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg"));
-		panding_tokens_.emplace_back(uploader_.load_image(u8"/assets/images/Poliigon_BrickWallReclaimed_8320_Normal.png"));
+		panding_tokens_.push_back(uploader_.load_image({ .path = u8"/assets/images/CasualDay4K.ktx2" }));
+		panding_tokens_.push_back(uploader_.load_image({ .path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg" }));
+		panding_tokens_.push_back(uploader_.load_image({
+			.path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_Normal.png",
+			.import_type = gfx::ImageImportType::eNormalMap
+			}));
 		uploader_.wait_all_work_complete();
 
 		return true;

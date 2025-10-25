@@ -90,7 +90,7 @@ namespace edge::gfx {
 		}
 	}
 
-	auto ResourceUploader::load_image(std::u8string_view path) -> uint64_t {
+	auto ResourceUploader::load_image(ImageImportInfo&& import_info) -> uint64_t {
 		auto next_token = task_counter_.fetch_add(1ull, std::memory_order_relaxed); 
 
 		{
@@ -98,7 +98,7 @@ namespace edge::gfx {
 			pending_tasks_.emplace_back(UploadTask{
 				.type = UploadType::eImage,
 				.sync_token = next_token,
-				.path = mi::U8String(path)
+				.import_info = std::move(import_info)
 				});
 		}
 		pending_tasks_cv_.notify_one();
@@ -298,167 +298,93 @@ namespace edge::gfx {
 	}
 
 	auto ResourceUploader::process_image(ResourceSet& resource_set, UploadTask const& task) -> UploadResult {
-		fs::InputFileStream file(task.path, std::ios_base::binary);
-		if (!file.is_open()) {
-			EDGE_SLOGW("Failed to open file: {}", reinterpret_cast<const char*>(task.path.c_str()));
-			return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotFound, {} };
-		}
+		auto& import_info = std::get<ImageImportInfo>(task.import_info);
 
-		file.seekg(0, std::ios::end);
-		auto file_size = file.tellg();
-		file.seekg(0, std::ios::beg);
+		ImageUploadInfo upload_info{};
 
-		mi::Vector<uint8_t> file_data;
-		file_data.resize(file_size);
+		if (!import_info.path.empty()) {
+			fs::InputFileStream file(import_info.path, std::ios_base::binary);
+			if (!file.is_open()) {
+				EDGE_SLOGW("Failed to open file: {}", reinterpret_cast<const char*>(import_info.path.c_str()));
+				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotFound, {} };
+			}
 
-		file.read(reinterpret_cast<char*>(file_data.data()), file_size);
+			file.seekg(0, std::ios::end);
+			auto file_size = file.tellg();
+			file.seekg(0, std::ios::beg);
 
-		if (file_data.empty()) {
-			return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
-		}
+			mi::Vector<uint8_t> file_data;
+			file_data.resize(file_size);
 
-		resource_set.command_buffer.begin_marker(reinterpret_cast<const char*>(task.path.c_str()));
+			file.read(reinterpret_cast<char*>(file_data.data()), file_size);
 
-		UploadResult result{ task.sync_token, UploadType::eImage, UploadingStatus::eNotSupported, {} };
-		if (matches_magic(file_data, PNG_MAGIC) || matches_magic(file_data, JPEG_MAGIC)) {
-			result = _load_image_stb(resource_set, task, file_data);
-		}
-		else if (matches_magic(file_data, KTX_MAGIC)) {
-			result = _load_image_ktx(resource_set, task, file_data);
-		}
-
-		resource_set.command_buffer.end_marker();
-
-		// Unsupported format
-		return result;
-	}
-
-	auto ResourceUploader::_load_image_stb(ResourceSet& resource_set, UploadTask const& task, Span<uint8_t> image_raw_data) -> UploadResult {
-		int32_t width{ 1 }, height{ 1 }, channel_count{ 1 };
-
-		auto* data = stbi_load_from_memory(image_raw_data.data(), static_cast<int32_t>(image_raw_data.size()), &width, &height, &channel_count, STBI_rgb_alpha);
-		if (!data) {
-			return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotSupported, {} };
-		}
-
-		ImageCreateInfo create_info{};
-		create_info.extent.width = static_cast<uint32_t>(width);
-		create_info.extent.height = static_cast<uint32_t>(height);
-		create_info.extent.depth = 1u;
-		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
-		// TODO: get this from import metadata
-		create_info.format = vk::Format::eR8G8B8A8Srgb;
-
-		auto texture_result = Image::create(create_info);
-		if (!texture_result) {
-			GFX_ASSERT_MSG(false, "Failed to load texture. Can't create image handle. Reason: {}", vk::to_string(texture_result.error()));
-		}
-
-		auto image = std::move(texture_result.value());
-		auto image_size = create_info.extent.width * create_info.extent.height * 4;
-
-		ImageBarrier image_barrier{};
-		image_barrier.image = &image;
-		image_barrier.src_state = ResourceStateFlag::eUndefined;
-		image_barrier.dst_state = ResourceStateFlag::eCopyDst;
-		image_barrier.subresource_range.aspectMask = vk::ImageAspectFlagBits::eColor;
-		image_barrier.subresource_range.baseArrayLayer = 0u;
-		image_barrier.subresource_range.baseMipLevel = 0u;
-		image_barrier.subresource_range.layerCount = 1u;
-		image_barrier.subresource_range.levelCount = 1u;
-		resource_set.command_buffer.push_barrier(image_barrier);
-
-		if (image.is_persistent()) {
-			image.update(image_raw_data, 0ull);
-		}
-		else {
-			auto staging_result = get_or_allocate_staging_memory(resource_set, image_size, 4ull);
-			if (!staging_result) {
-				GFX_ASSERT_MSG(false, "Failed to request staging memory. Reason: {}", vk::to_string(staging_result.error()));
-				stbi_image_free(data);
+			if (file_data.empty()) {
 				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
 			}
-			auto staging_range = std::move(staging_result.value());
 
-			auto byte_range = staging_range.get_range();
-			std::memcpy(byte_range.data(), data, image_size);
+			if (matches_magic(file_data, PNG_MAGIC) || matches_magic(file_data, JPEG_MAGIC)) {
+				vk::Format format{};
+				switch (import_info.import_type)
+				{
+				case ImageImportType::eDefault: format = vk::Format::eR8G8B8A8Srgb; break;
+				case ImageImportType::eNormalMap: format = vk::Format::eR8G8B8A8Unorm; break;
+				case ImageImportType::eSingleChannel: format = vk::Format::eR8Unorm; break;
+				}
 
-			vk::BufferImageCopy2KHR image_copy_region{};
-			image_copy_region.bufferOffset = staging_range.get_offset();
-			image_copy_region.bufferRowLength = 0; 
-			image_copy_region.bufferImageHeight = 0; 
-			image_copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-			image_copy_region.imageSubresource.mipLevel = 0u;
-			image_copy_region.imageSubresource.baseArrayLayer = 0u;
-			image_copy_region.imageSubresource.layerCount = 1u;
-			image_copy_region.imageOffset = vk::Offset3D{ 0, 0, 0 };
-			image_copy_region.imageExtent = vk::Extent3D{ static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1u };
-
-			vk::CopyBufferToImageInfo2KHR copy_info{};
-			copy_info.srcBuffer = staging_range.get_buffer();
-			copy_info.dstImage = image.get_handle();
-			copy_info.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-			copy_info.regionCount = 1u;
-			copy_info.pRegions = &image_copy_region;
-
-			resource_set.command_buffer->copyBufferToImage2KHR(&copy_info);
+				auto result = _load_image_stb(resource_set, file_data, format);
+				if (!result) {
+					// TODO: Handle error
+				}
+				upload_info = std::move(result.value());
+			}
+			else if (matches_magic(file_data, KTX_MAGIC)) {
+				auto result = _load_image_ktx(resource_set, file_data);
+				if (!result) {
+					// TODO: Handle error
+				}
+				upload_info = std::move(result.value());
+			}
+			else {
+				// Unsupported format
+				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotSupported, {} };
+			}
 		}
-
-		image_barrier.src_state = image_barrier.dst_state;
-		image_barrier.dst_state = ResourceStateFlag::eShaderResource;
-		resource_set.command_buffer.push_barrier(image_barrier);
-
-		// TODO: Add debug markers
-		// TODO: Generate mip maps
-
-		stbi_image_free(data);
-
-		return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eDone, std::move(image) };
-	}
-
-	auto ResourceUploader::_load_image_ktx(ResourceSet& resource_set, UploadTask const& task, Span<uint8_t> image_raw_data) -> UploadResult {
-		ktxTexture* ktxtexture{ nullptr };
-		auto ktxresult = ktxTexture_CreateFromMemory(image_raw_data.data(), image_raw_data.size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxtexture);
-		GFX_ASSERT_MSG(ktxresult == KTX_SUCCESS, "Failed to parse ktx data.");
-		if (ktxresult != KTX_SUCCESS) {
-			return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotSupported, {} };
-		}
-
-		ImageCreateInfo create_info{};
-		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
-		create_info.extent.width = ktxtexture->baseWidth;
-		create_info.extent.height = ktxtexture->baseHeight;
-		create_info.extent.depth = ktxtexture->baseDepth;
-
-		create_info.layer_count = ktxtexture->isCubemap ? ktxtexture->numFaces : ktxtexture->numLayers;
-		create_info.level_count = ktxtexture->numLevels;
-
-		if (ktxtexture->generateMipmaps) {
-			create_info.level_count = static_cast<uint32_t>(std::floor(std::log2((std::max)(create_info.extent.width, create_info.extent.height)))) + 1u;
-		}
-
-		switch (ktxtexture->classId) {
-		case ktxTexture1_c: {
-			ktxTexture1* ktxtexture1 = (ktxTexture1*)ktxtexture;
-			create_info.format = static_cast<vk::Format>(ktxTexture1_GetVkFormat(ktxtexture1));
-		} break;
-		case ktxTexture2_c: {
-			ktxTexture2* ktxtexture2 = (ktxTexture2*)ktxtexture;
-
-			if (ktxTexture2_NeedsTranscoding(ktxtexture2)) {
-				ktxresult = ktxTexture2_TranscodeBasis(ktxtexture2, KTX_TTF_BC7_RGBA, 0);
+		else {
+			vk::Format format{};
+			switch (import_info.import_type)
+			{
+			case ImageImportType::eDefault: format = vk::Format::eR8G8B8A8Srgb; break;
+			case ImageImportType::eNormalMap: format = vk::Format::eR8G8B8A8Unorm; break;
+			case ImageImportType::eSingleChannel: format = vk::Format::eR8Unorm; break;
 			}
 
-			create_info.format = static_cast<vk::Format>(ktxtexture2->vkFormat);
-		} break;
+			auto result = _load_image_raw(resource_set, import_info.raw.data, import_info.raw.width, import_info.raw.height, format, false);
+			if (!result) {
+				// TODO: Handle error
+			}
+			upload_info = std::move(result.value());
 		}
 
-		auto texture_result = Image::create(create_info);
-		if (!texture_result) {
-			GFX_ASSERT_MSG(false, "Failed to load texture. Can't create image handle. Reason: {}", vk::to_string(texture_result.error()));
-		}
+		mi::U8String zone_name = !import_info.path.empty() ? import_info.path : u8"image";
 
-		auto image = std::move(texture_result.value());
+		resource_set.command_buffer.begin_marker(reinterpret_cast<const char*>(zone_name.c_str()));
+
+		ImageCreateInfo create_info{};
+		create_info.extent.width = upload_info.width;
+		create_info.extent.height = upload_info.height;
+		create_info.extent.depth = upload_info.depth;
+		create_info.layer_count = upload_info.face_count * upload_info.layer_count;
+		create_info.level_count = upload_info.level_count;
+		create_info.format = upload_info.format;
+		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
+
+		auto image_result = Image::create(create_info);
+		if (!image_result) {
+			GFX_ASSERT_MSG(false, "Failed to load texture. Can't create image handle. Reason: {}", vk::to_string(image_result.error()));
+			resource_set.command_buffer.end_marker();
+			return UploadResult{ task.sync_token, task.type, UploadingStatus::eFailed, {} };
+		}
+		auto image = std::move(image_result.value());
 
 		ImageBarrier image_barrier{};
 		image_barrier.image = &image;
@@ -471,64 +397,140 @@ namespace edge::gfx {
 		image_barrier.subresource_range.levelCount = create_info.level_count;
 		resource_set.command_buffer.push_barrier(image_barrier);
 
-		if (image.is_persistent()) {
+		mi::Vector<vk::BufferImageCopy2KHR> copy_regions{};
+		copy_regions.reserve(create_info.layer_count * create_info.level_count);
 
-		}
-		else {
-			auto staging_result = get_or_allocate_staging_memory(resource_set, ktxtexture->dataSize, 16ull);
-			if (!staging_result) {
-				GFX_ASSERT_MSG(false, "Failed to request staging memory. Reason: {}", vk::to_string(staging_result.error()));
-				ktxTexture_Destroy(ktxtexture);
-				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
+		for (int32_t layer = 0; layer < static_cast<int32_t>(create_info.layer_count); layer++) {
+			for (int32_t level = 0; level < static_cast<int32_t>(create_info.level_count); level++) {
+				vk::BufferImageCopy2KHR image_copy_region{};
+				image_copy_region.bufferOffset = upload_info.memory_range.get_offset();
+				image_copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+				image_copy_region.imageSubresource.mipLevel = level;
+				image_copy_region.imageSubresource.baseArrayLayer = layer;
+				image_copy_region.imageSubresource.layerCount = 1u;
+				image_copy_region.imageOffset = vk::Offset3D{ 0, 0, 0 };
+				image_copy_region.imageExtent = vk::Extent3D{ upload_info.width >> level, upload_info.height >> level, 1u };
+
+				ktx_size_t source_offset = upload_info.src_copy_offsets[layer * create_info.level_count + level];
+				image_copy_region.bufferOffset += source_offset;
+				copy_regions.push_back(image_copy_region);
 			}
-			auto staging_range = std::move(staging_result.value());
-
-			auto byte_range = staging_range.get_range();
-			std::memcpy(byte_range.data(), ktxtexture->pData, ktxtexture->dataSize);
-
-			mi::Vector<vk::BufferImageCopy2KHR> copy_regions{};
-			copy_regions.reserve(create_info.layer_count * ktxtexture->numLevels);
-
-			for (int32_t layer = 0; layer < static_cast<int32_t>(create_info.layer_count); layer++) {
-				for (int32_t level = 0; level < static_cast<int32_t>(ktxtexture->numLevels); level++) {
-					vk::BufferImageCopy2KHR image_copy_region{};
-					image_copy_region.bufferOffset = staging_range.get_offset();
-					image_copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-					image_copy_region.imageSubresource.mipLevel = level;
-					image_copy_region.imageSubresource.baseArrayLayer = layer;
-					image_copy_region.imageSubresource.layerCount = ktxtexture->numLayers;
-					image_copy_region.imageOffset = vk::Offset3D{ 0, 0, 0 };
-					image_copy_region.imageExtent = vk::Extent3D{ static_cast<uint32_t>(ktxtexture->baseWidth >> level), static_cast<uint32_t>(ktxtexture->baseHeight >> level), 1u };
-
-					ktx_size_t source_offset;
-					auto ktxresult = ktxTexture_GetImageOffset(ktxtexture, level, 0, layer, &source_offset);
-					if (ktxresult != KTX_SUCCESS) {
-						EDGE_SLOGE("Failed to get KTX image offset for layer {}, level {}", layer, level);
-						ktxTexture_Destroy(ktxtexture);
-						return UploadResult(task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {});
-					}
-					image_copy_region.bufferOffset += source_offset;
-					copy_regions.push_back(image_copy_region);
-				}
-			}
-
-			vk::CopyBufferToImageInfo2KHR copy_info{};
-			copy_info.srcBuffer = staging_range.get_buffer();
-			copy_info.dstImage = image.get_handle();
-			copy_info.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-			copy_info.regionCount = static_cast<uint32_t>(copy_regions.size());
-			copy_info.pRegions = copy_regions.data();
-
-			resource_set.command_buffer->copyBufferToImage2KHR(&copy_info);
 		}
+
+		vk::CopyBufferToImageInfo2KHR copy_info{};
+		copy_info.srcBuffer = upload_info.memory_range.get_buffer();
+		copy_info.dstImage = image.get_handle();
+		copy_info.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+		copy_info.regionCount = static_cast<uint32_t>(copy_regions.size());
+		copy_info.pRegions = copy_regions.data();
+
+		resource_set.command_buffer->copyBufferToImage2KHR(&copy_info);
 
 		image_barrier.src_state = image_barrier.dst_state;
 		image_barrier.dst_state = ResourceStateFlag::eShaderResource;
 		resource_set.command_buffer.push_barrier(image_barrier);
 
-		ktxTexture_Destroy(ktxtexture);
+		resource_set.command_buffer.end_marker();
 
 		return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eDone, std::move(image) };
+	}
+
+	auto ResourceUploader::_load_image_raw(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, uint32_t width, uint32_t height, vk::Format format, bool generate_mipmap) -> ImageLoadResult {
+		ImageUploadInfo upload_info{};
+		upload_info.width = width;
+		upload_info.height = height;
+		upload_info.depth = 1u;
+		upload_info.layer_count = 1u;
+		upload_info.level_count = 1u;
+		upload_info.face_count = 1u;
+		upload_info.format = format;
+		upload_info.src_copy_offsets.push_back(0ull);
+
+		// TODO: generate mips
+
+		auto staging_result = get_or_allocate_staging_memory(resource_set, image_raw_data.size(), 4ull);
+		if (!staging_result) {
+			GFX_ASSERT_MSG(false, "Failed to request staging memory. Reason: {}", vk::to_string(staging_result.error()));
+			return std::unexpected(ImageLoadStatus::eOutOfMemory);
+		}
+		upload_info.memory_range = std::move(staging_result.value());
+
+		auto byte_range = upload_info.memory_range.get_range();
+		std::memcpy(byte_range.data(), image_raw_data.data(), image_raw_data.size());
+
+		return upload_info;
+	}
+
+	auto ResourceUploader::_load_image_stb(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, vk::Format format) -> ImageLoadResult {
+		int32_t width{ 1 }, height{ 1 }, channel_count{ 1 };
+
+		auto* data = stbi_load_from_memory(image_raw_data.data(), static_cast<int32_t>(image_raw_data.size()), &width, &height, &channel_count, STBI_rgb_alpha);
+		if (!data) {
+			return std::unexpected(ImageLoadStatus::eInvalidHeader);
+		}
+
+		auto result = _load_image_raw(resource_set, { data, static_cast<size_t>(width * height * 4) }, width, height, format, false);
+		stbi_image_free(data);
+		return result;
+	}
+
+	auto ResourceUploader::_load_image_ktx(ResourceSet& resource_set, Span<const uint8_t> image_raw_data) -> ImageLoadResult {
+		ktxTexture* ktxtexture{ nullptr };
+		auto ktxresult = ktxTexture_CreateFromMemory(image_raw_data.data(), image_raw_data.size(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxtexture);
+		GFX_ASSERT_MSG(ktxresult == KTX_SUCCESS, "Failed to parse ktx data.");
+		if (ktxresult != KTX_SUCCESS) {
+			return std::unexpected(ImageLoadStatus::eInvalidHeader);
+		}
+
+		ImageUploadInfo upload_info{};
+		upload_info.width = ktxtexture->baseWidth;
+		upload_info.height = ktxtexture->baseHeight;
+		upload_info.depth = ktxtexture->baseDepth;
+		upload_info.layer_count = ktxtexture->numLayers;
+		upload_info.level_count = ktxtexture->numLevels;
+		upload_info.face_count = ktxtexture->numFaces;
+
+		switch (ktxtexture->classId) {
+		case ktxTexture1_c: {
+			ktxTexture1* ktxtexture1 = (ktxTexture1*)ktxtexture;
+			upload_info.format = static_cast<vk::Format>(ktxTexture1_GetVkFormat(ktxtexture1));
+		} break;
+		case ktxTexture2_c: {
+			ktxTexture2* ktxtexture2 = (ktxTexture2*)ktxtexture;
+
+			if (ktxTexture2_NeedsTranscoding(ktxtexture2)) {
+				ktxresult = ktxTexture2_TranscodeBasis(ktxtexture2, KTX_TTF_BC7_RGBA, 0);
+			}
+			upload_info.format = static_cast<vk::Format>(ktxtexture2->vkFormat);
+		} break;
+		}
+
+		// Collect per layer and per mip offsets
+		auto layer_count = upload_info.face_count * upload_info.level_count;
+		for (int32_t layer = 0; layer < static_cast<int32_t>(layer_count); layer++) {
+			for (int32_t level = 0; level < static_cast<int32_t>(ktxtexture->numLevels); level++) {
+				ktx_size_t source_offset;
+				ktxTexture_GetImageOffset(ktxtexture, level, 0, layer, &source_offset);
+				upload_info.src_copy_offsets.push_back(source_offset);
+			}
+		}
+
+		// TODO: add mip generation for basic formats
+
+		auto staging_result = get_or_allocate_staging_memory(resource_set, ktxtexture->dataSize, 16ull);
+		if (!staging_result) {
+			GFX_ASSERT_MSG(false, "Failed to request staging memory. Reason: {}", vk::to_string(staging_result.error()));
+			ktxTexture_Destroy(ktxtexture);
+			return std::unexpected(ImageLoadStatus::eOutOfMemory);
+		}
+		upload_info.memory_range = std::move(staging_result.value());
+
+		auto byte_range = upload_info.memory_range.get_range();
+		std::memcpy(byte_range.data(), ktxtexture->pData, ktxtexture->dataSize);
+
+		ktxTexture_Destroy(ktxtexture);
+
+		return upload_info;
 	}
 
 	auto ResourceUploader::get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> Result<BufferRange> {
