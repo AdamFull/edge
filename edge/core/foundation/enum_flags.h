@@ -52,6 +52,10 @@ namespace edge::foundation {
         constexpr Flags& operator=(const Flags&) = default;
         constexpr Flags& operator=(Flags&&) = default;
 
+        constexpr operator underlying_type() const noexcept {
+            return value_;
+        }
+
         // Assignment from enum
         constexpr auto operator=(E flag) noexcept -> Flags& {
             value_ = static_cast<underlying_type>(flag);
@@ -242,7 +246,7 @@ namespace edge::foundation {
                     result += std::format("0x{:x}", value_ & ~represented_bits);
                 }
 
-                return result.empty() ? std::format("0x{:x}", value_) : result;
+                return result.empty() ? mi::String{ std::format("0x{:x}", value_) } : result;
             }
             else {
                 // No traits defined, just show numeric value

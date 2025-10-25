@@ -8,6 +8,7 @@
 #include <concepts>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <ranges>
 
@@ -63,6 +64,9 @@ namespace edge {
 
         template<typename K, typename T, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = mi_stl_allocator<std::pair<const K, T>>>
         using HashMap = std::unordered_map<K, T, Hasher, KeyEq, Alloc>;
+
+        template<typename K, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = mi_stl_allocator<K>>
+        using HashSet = std::unordered_set<K, Hasher, KeyEq, Alloc>;
     }
 
     namespace unicode {

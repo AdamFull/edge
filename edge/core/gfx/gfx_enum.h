@@ -3,10 +3,56 @@
 #include "../foundation/enum_flags.h"
 
 namespace edge::gfx {
-	enum class QueueType {
-		eDirect,
-		eCompute,
-		eCopy
+	enum class QueueCapability : uint32_t {
+		eNone = 0,
+		eGraphics = 1 << 0,  // Graphics operations
+		eCompute = 1 << 1,  // Compute shader dispatch
+		eTransfer = 1 << 2,  // Transfer/copy operations (implicit in Graphics/Compute)
+		ePresent = 1 << 3,  // Surface presentation support
+		eSparseBinding = 1 << 4,  // Sparse memory binding
+		eProtected = 1 << 5,  // Protected memory operations
+		eVideoDecodeKHR = 1 << 6,  // Video decode operations
+		eVideoEncodeKHR = 1 << 7,  // Video encode operations
+		eOpticalFlowNV = 1 << 8,  // NVIDIA optical flow
+	};
+
+	EDGE_MAKE_ENUM_FLAGS(QueueCapabilities, QueueCapability);
+
+	namespace QueuePresets {
+		// Universal graphics queue (Graphics + Compute + Transfer)
+		static constexpr QueueCapabilities kGraphics =
+			QueueCapability::eGraphics |
+			QueueCapability::eCompute |
+			QueueCapability::eTransfer;
+
+		// Async compute queue (Compute + Transfer, no Graphics)
+		static constexpr QueueCapabilities kAsyncCompute =
+			QueueCapability::eCompute |
+			QueueCapability::eTransfer;
+
+		// Dedicated transfer queue (Transfer only, optimal for DMA)
+		static constexpr QueueCapabilities kDedicatedTransfer =
+			QueueCapability::eTransfer;
+
+		// Graphics with present support
+		static constexpr QueueCapabilities kPresentGraphics =
+			QueueCapability::eGraphics |
+			QueueCapability::eCompute |
+			QueueCapability::eTransfer |
+			QueueCapability::ePresent;
+
+		// Compute async with present support
+		static constexpr QueueCapabilities kPresentCompute =
+			QueueCapability::eCompute |
+			QueueCapability::eTransfer |
+			QueueCapability::ePresent;
+	}
+
+	enum class QueueSelectionStrategy {
+		eExact,           // Must match exactly the requested capabilities
+		eMinimal,         // Must have at least these capabilities
+		ePreferDedicated, // Prefer queues with only requested capabilities
+		ePreferShared     // Prefer queues with additional capabilities
 	};
 
 	enum class BufferFlag {
@@ -75,10 +121,17 @@ namespace edge::gfx {
 	EDGE_MAKE_ENUM_FLAGS(ResourceStateFlags, ResourceStateFlag);
 }
 
-EDGE_DEFINE_FLAG_NAMES(edge::gfx::QueueType,
-	EDGE_FLAG_ENTRY(edge::gfx::QueueType::eDirect, "Direct"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueType::eCompute, "Compute"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueType::eCopy, "Copy")
+EDGE_DEFINE_FLAG_NAMES(edge::gfx::QueueCapability,
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eNone, "None"),
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eGraphics, "Graphics"),
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eCompute, "Compute"),
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eTransfer, "Transfer"),
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::ePresent, "Present"),
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eSparseBinding, "SparseBinding"),
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eProtected, "Protected"),
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eVideoDecodeKHR, "VideoDecodeKHR"),
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eVideoEncodeKHR, "VideoEncodeKHR"),
+	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eOpticalFlowNV, "OpticalFlowNV")
 );
 
 EDGE_DEFINE_FLAG_NAMES(edge::gfx::ImageFlag,

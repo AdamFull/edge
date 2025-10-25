@@ -283,36 +283,58 @@ namespace edge::gfx {
 		mi::Vector<vk::ExtensionProperties> supported_extensions_;
 	};
 
+	struct QueueRequest {
+		QueueCapabilities required_caps;
+		QueueCapabilities preferred_caps = QueueCapability::eNone;
+		QueueSelectionStrategy strategy = QueueSelectionStrategy::eMinimal;
+		float priority = 0.5f;
+		bool prefer_separate_family = false;
+	};
+
 	class Device : public Handle<vk::Device> {
 	public:
 		struct QueueFamilyInfo {
-			uint32_t index;
-			mi::Vector<uint32_t> queue_indices;
+			uint32_t family_index;
+			vk::QueueFlags queue_flags;
+			QueueCapabilities capabilities;
+			uint32_t queue_count;
+			uint32_t timestamp_valid_bits;
+			vk::Extent3D min_image_transfer_granularity;
+			bool supports_present;
+
+			mutable mi::Vector<uint32_t> available_queue_indices;
+
+			auto calculate_score(const QueueRequest& request) const -> int32_t;
 		};
 
 		Device() = default;
-		Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, Array<mi::Vector<QueueFamilyInfo>, 3ull>&& queue_family_map);
+		Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, mi::Vector<QueueFamilyInfo>&& queue_families);
 		~Device();
 
 		Device(Device&& other) noexcept
 			: Handle(std::move(other))
 			, enabled_extensions_{ std::exchange(other.enabled_extensions_, {}) }
-			, queue_family_map_{ std::exchange(other.queue_family_map_, {}) } {
+			, queue_families_{ std::exchange(other.queue_families_, {}) }
+			, used_queue_families_{ std::exchange(other.used_queue_families_, {}) } {
 		}
 
 		auto operator=(Device&& other) noexcept -> Device& {
 			Handle::operator=(std::move(other));
 			enabled_extensions_ = std::exchange(other.enabled_extensions_, {});
-			queue_family_map_ = std::exchange(other.queue_family_map_, {});
+			queue_families_ = std::exchange(other.queue_families_, {});
+			used_queue_families_ = std::exchange(other.used_queue_families_, {});
 			return *this;
 		}
 
-		auto get_queue(QueueType type) const -> Result<Queue>;
+		auto get_queue(const QueueRequest& request) -> Result<Queue>;
+		auto get_queue_family(const QueueRequest& request) -> Result<uint32_t>;
+		auto get_queue_families() const -> Span<const QueueFamilyInfo>;
 
 		auto is_enabled(const char* extension_name) const -> bool;
 	private:
 		mi::Vector<const char*> enabled_extensions_;
-		mutable Array<mi::Vector<QueueFamilyInfo>, 3ull> queue_family_map_;
+		mutable mi::Vector<QueueFamilyInfo> queue_families_;
+		mutable mi::HashSet<uint32_t> used_queue_families_;
 	};
 
 	class DeviceSelector {
@@ -379,6 +401,8 @@ namespace edge::gfx {
 		auto select() -> Result<std::tuple<Adapter, Device>>;
 
 	private:
+		auto build_queue_families(vk::PhysicalDevice adapter, vk::SurfaceKHR surface) const -> mi::Vector<Device::QueueFamilyInfo>;
+
 		vk::SurfaceKHR surface_{ VK_NULL_HANDLE };
 		uint32_t minimal_api_ver{ VK_VERSION_1_0 };
 		vk::PhysicalDeviceType preferred_type_{ vk::PhysicalDeviceType::eDiscreteGpu };
@@ -431,6 +455,8 @@ namespace edge::gfx {
 			, family_index_{ family_index }
 			, queue_index_{ queue_index } {
 		}
+
+		static auto create(const QueueRequest& request) -> Result<Queue>;
 
 		auto create_command_pool() const -> Result<CommandPool>;
 
@@ -1203,7 +1229,4 @@ namespace edge::gfx {
 
 	auto initialize_graphics(const ContextInfo& info) -> vk::Result;
 	auto shutdown_graphics() -> void;
-
-	// TODO: Queue selection not finished
-	auto get_queue(QueueType type) -> Result<Queue>;
 }

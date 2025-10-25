@@ -336,7 +336,10 @@ namespace edge::gfx {
 	auto Renderer::_construct(const RendererCreateInfo& create_info) -> vk::Result {
 		GFX_ASSERT_MSG(device_, "Device handle is null.");
 
-		auto queue_result = device_.get_queue(QueueType::eDirect);
+		auto queue_result = device_.get_queue({
+				.required_caps = QueuePresets::kPresentGraphics,
+				.strategy = QueueSelectionStrategy::ePreferDedicated
+			});
 		if (!queue_result) {
 			GFX_ASSERT_MSG(false, "Failed to request queue. Reason: {}.", vk::to_string(queue_result.error()));
 			return queue_result.error();

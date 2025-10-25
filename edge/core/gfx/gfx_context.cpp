@@ -839,10 +839,10 @@ namespace edge::gfx {
 
 #define EDGE_LOGGER_SCOPE "gfx::Device"
 
-	Device::Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, Array<mi::Vector<QueueFamilyInfo>, 3ull>&& queue_family_map)
+	Device::Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, mi::Vector<QueueFamilyInfo>&& queue_families)
 		: Handle{ handle }
 		, enabled_extensions_{ std::move(enabled_extensions) }
-		, queue_family_map_{ std::move(queue_family_map) } {
+		, queue_families_{ std::move(queue_families) } {
 	}
 
 	Device::~Device() {
@@ -851,21 +851,129 @@ namespace edge::gfx {
 		}
 	}
 
-	auto Device::get_queue(QueueType type) const -> Result<Queue> {
-		auto& family_group = queue_family_map_[static_cast<size_t>(type)];
-		for (auto& family : family_group) {
-			if (!family.queue_indices.empty()) {
-				auto queue_index = family.queue_indices.back();
-				family.queue_indices.pop_back();
+	auto Device::QueueFamilyInfo::calculate_score(const QueueRequest& request) const -> int32_t {
+		if (request.strategy == QueueSelectionStrategy::eExact) {
+			return (capabilities == request.required_caps) ? 1000 : -1;
+		}
 
-				vk::Queue queue;
-				handle_.getQueue(family.index, queue_index, &queue);
+		if ((capabilities & request.required_caps) != request.required_caps) {
+			return -1;
+		}
 
-				return Queue(queue, family.index, queue_index);
+		int32_t score = 100;
+
+		switch (request.strategy) {
+		case QueueSelectionStrategy::ePreferDedicated: {
+			// Prefer queues with fewer extra capabilities
+			// Count bits in (capabilities - required_caps)
+			auto extra_caps = static_cast<uint32_t>(capabilities & ~request.required_caps);
+			int32_t extra_count = std::popcount(extra_caps);
+			score -= extra_count * 10; // Penalty for each extra capability
+			break;
+		}
+
+		case QueueSelectionStrategy::ePreferShared: {
+			// Prefer queues with more capabilities
+			auto all_caps = static_cast<uint32_t>(capabilities);
+			int32_t cap_count = std::popcount(all_caps);
+			score += cap_count * 5; // Bonus for each capability
+			break;
+		}
+
+		case QueueSelectionStrategy::eMinimal:
+		default:
+			// No special preference, just meets requirements
+			break;
+		}
+
+		if (request.preferred_caps != QueueCapability::eNone) {
+			if ((capabilities & request.preferred_caps) == request.preferred_caps) {
+				score += 30;
+			}
+			else {
+				auto matched_preferred = static_cast<uint32_t>(capabilities & request.preferred_caps);
+				score += std::popcount(matched_preferred) * 5;
 			}
 		}
 
-		return std::unexpected(vk::Result::eErrorUnknown);
+		score += std::min<int32_t>(static_cast<int32_t>(available_queue_indices.size()), 10);
+
+		if (capabilities & QueueCapability::ePresent) {
+			score += 2;
+		}
+
+		return score;
+	}
+
+	auto Device::get_queue(const QueueRequest& request) -> Result<Queue> {
+		int32_t best_score = -1;
+		QueueFamilyInfo* best_family = nullptr;
+
+		for (auto& family : queue_families_) {
+			if (family.available_queue_indices.empty()) {
+				continue;
+			}
+
+			if (request.prefer_separate_family && used_queue_families_.contains(family.family_index)) {
+				continue;
+			}
+
+			int32_t score = family.calculate_score(request);
+			if (score > best_score) {
+				best_score = score;
+				best_family = &family;
+			}
+		}
+
+		if (!best_family || best_score < 0) {
+			EDGE_LOGW("No suitable queue family found for request (required caps: {})", request.required_caps.to_string());
+
+			EDGE_LOGD("Available queue families:");
+			for (const auto& family : queue_families_) {
+				EDGE_LOGD("  Family {}: caps={}, available={}", family.family_index, family.capabilities.to_string(), family.available_queue_indices.size());
+			}
+
+			return std::unexpected(vk::Result::eErrorFeatureNotPresent);
+		}
+
+		uint32_t queue_index = best_family->available_queue_indices.back();
+		best_family->available_queue_indices.pop_back();
+
+		used_queue_families_.insert(best_family->family_index);
+
+		vk::Queue queue;
+		handle_.getQueue(best_family->family_index, queue_index, &queue);
+
+#ifndef NDEBUG
+		EDGE_SLOGD("Allocated queue: family={}, index={}, caps={}, score={}",
+			best_family->family_index, queue_index, best_family->capabilities.to_string(), best_score);
+#endif
+
+		return Queue(queue, best_family->family_index, queue_index);
+	}
+
+	auto Device::get_queue_family(const QueueRequest& request) -> Result<uint32_t> {
+		int32_t best_score = -1;
+		uint32_t best_family_index = ~0u;
+
+		for (const auto& family : queue_families_) {
+			if (family.available_queue_indices.empty()) {
+				continue; // No queues available
+			}
+
+			int32_t score = family.calculate_score(request);
+			if (score > best_score) {
+				best_score = score;
+				best_family_index = family.family_index;
+			}
+		}
+
+		if (best_score < 0) {
+			EDGE_LOGW("No suitable queue family found for request");
+			return std::unexpected(vk::Result::eErrorFeatureNotPresent);
+		}
+
+		return best_family_index;
 	}
 
 	auto Device::is_enabled(const char* extension_name) const -> bool {
@@ -1016,50 +1124,6 @@ namespace edge::gfx {
 			queue_create_info.pQueuePriorities = queue_priorities.data();
 		}
 
-		// Make queue family map. TODO: merge with prev for
-		Array<mi::Vector<Device::QueueFamilyInfo>, 3ull> queue_family_map{};
-		for (uint32_t index = 0; index < static_cast<uint32_t>(queue_family_properties.size()); ++index) {
-			auto const& queue_family_property = queue_family_properties[index];
-
-			bool is_graphics_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eGraphics) == vk::QueueFlagBits::eGraphics;
-			bool is_compute_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eCompute) == vk::QueueFlagBits::eCompute;
-			bool is_copy_commands_supported = (queue_family_property.queueFlags & vk::QueueFlagBits::eTransfer) == vk::QueueFlagBits::eTransfer;
-
-			QueueType queue_type{};
-			if (is_graphics_commands_supported &&
-				is_compute_commands_supported && is_copy_commands_supported) {
-				queue_type = QueueType::eDirect;
-			}
-			else if (is_compute_commands_supported && is_copy_commands_supported) {
-				queue_type = QueueType::eCompute;
-			}
-			else if (is_copy_commands_supported) {
-				queue_type = QueueType::eCopy;
-			}
-
-			auto& group = queue_family_map[static_cast<size_t>(queue_type)];
-			auto& family_info = group.emplace_back();
-			family_info.index = index;
-			family_info.queue_indices = mi::Vector<uint32_t>(queue_family_property.queueCount);
-			std::iota(family_info.queue_indices.rbegin(), family_info.queue_indices.rend(), 0u);
-
-#ifndef NDEBUG
-			mi::String supported_commands{};
-
-			if (is_graphics_commands_supported) {
-				supported_commands += "graphics,";
-			}
-			if (is_compute_commands_supported) {
-				supported_commands += "compute,";
-			}
-			if (is_copy_commands_supported) {
-				supported_commands += "transfer";
-			}
-
-			//EDGE_SLOGD("Found \"{}\" queue that support: {} commands.", vk::to_string(queue_type), supported_commands);
-#endif
-		}
-
 		vk::DeviceCreateInfo create_info{};
 		create_info.queueCreateInfoCount = static_cast<uint32_t>(queue_create_infos.size());
 		create_info.pQueueCreateInfos = queue_create_infos.data();
@@ -1120,12 +1184,89 @@ namespace edge::gfx {
 			return std::unexpected(result);
 		}
 
-		return std::tuple(std::move(adapters[selected_device_index]), Device{ device, std::move(enabled_extensions), std::move(queue_family_map) });
+		auto queue_families = build_queue_families(selected_adapter, surface_);
+
+		return std::tuple(std::move(adapters[selected_device_index]), Device{ device, std::move(enabled_extensions), std::move(queue_families) });
+	}
+
+	auto DeviceSelector::build_queue_families(vk::PhysicalDevice adapter, vk::SurfaceKHR surface) const -> mi::Vector<Device::QueueFamilyInfo> {
+		auto queue_family_properties = util::get_queue_family_properties(adapter);
+
+		mi::Vector<Device::QueueFamilyInfo> queue_families;
+		queue_families.reserve(queue_family_properties.size());
+
+		for (uint32_t index = 0; index < queue_family_properties.size(); ++index) {
+			auto const& props = queue_family_properties[index];
+
+			Device::QueueFamilyInfo family_info{};
+			family_info.family_index = index;
+			family_info.queue_flags = props.queueFlags;
+			family_info.queue_count = props.queueCount;
+			family_info.timestamp_valid_bits = props.timestampValidBits;
+			family_info.min_image_transfer_granularity = props.minImageTransferGranularity;
+			family_info.supports_present = false;
+
+			QueueCapabilities caps = QueueCapability::eNone;
+
+			if (props.queueFlags & vk::QueueFlagBits::eGraphics) {
+				caps |= QueueCapability::eGraphics;
+			}
+			if (props.queueFlags & vk::QueueFlagBits::eCompute) {
+				caps |= QueueCapability::eCompute;
+			}
+			if (props.queueFlags & vk::QueueFlagBits::eTransfer) {
+				caps |= QueueCapability::eTransfer;
+			}
+			if (props.queueFlags & vk::QueueFlagBits::eSparseBinding) {
+				caps |= QueueCapability::eSparseBinding;
+			}
+			if (props.queueFlags & vk::QueueFlagBits::eProtected) {
+				caps |= QueueCapability::eProtected;
+			}
+
+			if (props.queueFlags & vk::QueueFlagBits::eVideoDecodeKHR) {
+				caps |= QueueCapability::eVideoDecodeKHR;
+			}
+			if (props.queueFlags & vk::QueueFlagBits::eVideoEncodeKHR) {
+				caps |= QueueCapability::eVideoEncodeKHR;
+			}
+
+			if (props.queueFlags & vk::QueueFlagBits::eOpticalFlowNV) {
+				caps |= QueueCapability::eOpticalFlowNV;
+			}
+
+			if (surface) {
+				vk::Bool32 supported;
+				if (auto result = adapter.getSurfaceSupportKHR(index, surface, &supported);
+					result == vk::Result::eSuccess && supported == VK_TRUE) {
+					caps |= QueueCapability::ePresent;
+					family_info.supports_present = true;
+				}
+			}
+
+			family_info.capabilities = caps;
+
+			family_info.available_queue_indices.resize(props.queueCount);
+			std::iota(family_info.available_queue_indices.rbegin(), family_info.available_queue_indices.rend(), 0u);
+
+			queue_families.push_back(std::move(family_info));
+
+#ifndef NDEBUG
+			EDGE_SLOGD("Discovered Queue Family {}: count={}, caps={}", index, props.queueCount, caps.to_string());
+#endif
+		}
+
+		return queue_families;
 	}
 
 #undef EDGE_LOGGER_SCOPE // DeviceSelector
 
 #define EDGE_LOGGER_SCOPE "gfx::Queue"
+
+	auto Queue::create(const QueueRequest& request) -> Result<Queue> {
+		int32_t best_score = -1;
+		return {};
+	}
 
 	auto Queue::create_command_pool() const -> Result<CommandPool> {
 		vk::CommandPoolCreateInfo create_info{};
@@ -1292,7 +1433,7 @@ namespace edge::gfx {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
 			minimal_alignment = std::max(minimal_alignment, properties.limits.minStorageBufferOffsetAlignment);
 		}
-		else if (create_info.flags ^ BufferFlag::eVertex) {
+		else if (create_info.flags & BufferFlag::eVertex) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
 			minimal_alignment = std::max<uint64_t>(minimal_alignment, 4ull);
 		}
@@ -2228,10 +2369,6 @@ namespace edge::gfx {
 		adapter_ = {};
 		surface_ = {};
 		instance_ = {};
-	}
-
-	auto get_queue(QueueType type) -> Result<Queue> {
-		return device_.get_queue(type);
 	}
 
 #undef EDGE_LOGGER_SCOPE // Context

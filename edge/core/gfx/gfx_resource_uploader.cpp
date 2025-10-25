@@ -159,7 +159,10 @@ namespace edge::gfx {
 	}
 
 	auto ResourceUploader::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result {
-		auto queue_result = device_.get_queue(QueueType::eDirect);
+		auto queue_result = device_.get_queue({
+				.required_caps = QueuePresets::kGraphics,
+				.strategy = QueueSelectionStrategy::ePreferDedicated
+			});
 		if (!queue_result) {
 			return queue_result.error();
 		}
