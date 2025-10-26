@@ -13,12 +13,16 @@ namespace edge::gfx {
 	ResourceUpdater::ResourceUpdater(ResourceUpdater&& other) noexcept {
 		queue_ = std::move(other.queue_);
 		command_pool_ = std::move(other.command_pool_);
+		resource_sets_ = std::exchange(other.resource_sets_, {});
+		current_resource_set_ = std::move(other.current_resource_set_);
 	}
-
+	
 	auto ResourceUpdater::operator=(ResourceUpdater&& other) noexcept -> ResourceUpdater& {
 		if (this != &other) {
 			queue_ = std::move(other.queue_);
 			command_pool_ = std::move(other.command_pool_);
+			resource_sets_ = std::exchange(other.resource_sets_, {});
+			current_resource_set_ = std::move(other.current_resource_set_);
 		}
 		return *this;
 	}
