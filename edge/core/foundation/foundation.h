@@ -9,6 +9,7 @@
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
+#include <limits>
 
 #include <ranges>
 
@@ -44,6 +45,9 @@
 #define EDGE_SLOGT(...) spdlog::trace("[{}]: {}", EDGE_LOGGER_SCOPE, std::format(__VA_ARGS__))
 #endif
 
+#undef min
+#undef max
+
 namespace edge {
     inline constexpr uint64_t aligned_size(uint64_t size, uint64_t alignment) {
         return (size + alignment - 1ull) & ~(alignment - 1ull);
@@ -67,6 +71,54 @@ namespace edge {
 
         template<typename K, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = mi_stl_allocator<K>>
         using HashSet = std::unordered_set<K, Hasher, KeyEq, Alloc>;
+
+        template<std::integral T = uint32_t>
+        class FreeList {
+        public:
+            using value_type = T;
+
+            explicit FreeList(T max_id = std::numeric_limits<T>::max())
+                : max_id_(max_id) {
+            }
+
+            [[nodiscard]] auto allocate() -> T {
+                if (!free_ids_.empty()) {
+                    T id = free_ids_.back();
+                    free_ids_.pop_back();
+                    return id;
+                }
+
+                if (next_id_ >= max_id_) {
+                    throw std::overflow_error("FreeList exhausted: no more IDs available");
+                }
+
+                return next_id_++;
+            }
+
+            auto deallocate(T id) -> void {
+                if (id >= next_id_) {
+                    throw std::invalid_argument(std::format("Cannot deallocate ID {}: never allocated", id));
+                }
+                free_ids_.push_back(id);
+            }
+
+            [[nodiscard]] auto allocated_count() const noexcept -> size_t { return static_cast<std::size_t>(next_id_) - free_ids_.size(); }
+            [[nodiscard]] auto free_count() const noexcept -> size_t { return free_ids_.size(); }
+            [[nodiscard]] auto total_issued() const noexcept -> T { return next_id_; }
+            [[nodiscard]] auto empty() const noexcept -> bool { return allocated_count() == 0; }
+
+            auto clear() noexcept -> void {
+                free_ids_.clear();
+                next_id_ = 0;
+            }
+
+            auto reserve(std::size_t capacity) -> void { free_ids_.reserve(capacity); }
+
+        private:
+            T next_id_{ 0 };
+            T max_id_{ std::numeric_limits<T>::max() };
+            Vector<T> free_ids_{};
+        };
     }
 
     namespace unicode {
