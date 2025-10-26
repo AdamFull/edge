@@ -20,6 +20,118 @@ namespace edge::gfx {
 		code.resize(decompressed_size);
 	}
 
+#define EDGE_LOGGER_SCOPE "gfx::RenderResource"
+
+	mi::FreeList<uint32_t> RenderResource::srv_free_list_{};
+	mi::FreeList<uint32_t> RenderResource::uav_free_list_{};
+
+	RenderResource::~RenderResource() {
+		if (has_handle()) {
+			srv_free_list_.deallocate(srv_resource_index_);
+
+			uint32_t uav_count{ 1u };
+			if (std::holds_alternative<Image>(resource_handle_)) {
+				auto& image = std::get<Image>(resource_handle_);
+				uav_count = image.get_level_count();
+			}
+
+			for(auto& index : uav_resource_indices_) {
+				uav_free_list_.deallocate(index);
+			}
+		}
+	}
+
+	RenderResource::RenderResource(RenderResource&& other) noexcept {
+		resource_handle_ = std::move(other.resource_handle_);
+		srv_view_ = std::move(other.srv_view_);
+		srv_resource_index_ = std::move(other.srv_resource_index_);
+		uav_views_ = std::exchange(other.uav_views_, {});
+		uav_resource_indices_ = std::exchange(other.uav_resource_indices_, {});
+
+		ResourceStateFlags resource_state_{};
+	}
+
+	auto RenderResource::operator=(RenderResource&& other) noexcept -> RenderResource& {
+		if (this != &other) {
+			resource_handle_ = std::move(other.resource_handle_);
+			srv_view_ = std::move(other.srv_view_);
+			srv_resource_index_ = std::move(other.srv_resource_index_);
+			uav_views_ = std::exchange(other.uav_views_, {});
+			uav_resource_indices_ = std::exchange(other.uav_resource_indices_, {});
+		}
+
+		return *this;
+	}
+
+	auto RenderResource::setup(Image&& image, ResourceStateFlags initial_flags) -> void {
+		resource_handle_ = std::move(image);
+
+		auto& handle = std::get<Image>(resource_handle_);
+		auto extent = handle.get_extent(); 
+
+		vk::ImageViewType view_type{};
+		if (extent.depth > 1u) {
+			view_type = vk::ImageViewType::e3D;
+		}
+		else if (extent.height > 1u) {
+			if (handle.get_face_count() == 6u) {
+				view_type = handle.get_layer_count() > 1u ? vk::ImageViewType::eCubeArray : vk::ImageViewType::eCube;
+			}
+			else {
+				view_type = handle.get_layer_count() > 1u ? vk::ImageViewType::e2DArray : vk::ImageViewType::e2D;
+			}
+		}
+		else {
+			view_type = handle.get_layer_count() > 1u ? vk::ImageViewType::e1DArray : vk::ImageViewType::e1D;
+		}
+
+		vk::ImageSubresourceRange srv_subresource_range{};
+		srv_subresource_range.aspectMask = vk::ImageAspectFlagBits::eColor;
+		srv_subresource_range.baseMipLevel = 0u;
+		srv_subresource_range.levelCount = handle.get_level_count();
+		srv_subresource_range.baseArrayLayer = 0u;
+		srv_subresource_range.layerCount = handle.get_layer_count() * handle.get_face_count();
+
+		auto srv_view_result = handle.create_view(srv_subresource_range, view_type);
+		GFX_ASSERT_MSG(srv_view_result.has_value(), "Failed to create srv image view.");
+		srv_view_ = std::move(srv_view_result.value());
+
+		srv_resource_index_ = srv_free_list_.allocate();
+
+		// Slang is not support cube arrays
+		if (view_type == vk::ImageViewType::eCubeArray) {
+			view_type = vk::ImageViewType::e2DArray;
+		}
+
+		for (int32_t mip = 0; mip < static_cast<int32_t>(handle.get_level_count()); ++mip) {
+			vk::ImageSubresourceRange uav_subresource_range{};
+			uav_subresource_range.aspectMask = vk::ImageAspectFlagBits::eColor;
+			uav_subresource_range.baseMipLevel = mip;
+			uav_subresource_range.levelCount = 1u;
+			uav_subresource_range.baseArrayLayer = 0u;
+			uav_subresource_range.layerCount = handle.get_layer_count() * handle.get_face_count();
+
+			auto uav_view_result = handle.create_view(uav_subresource_range, view_type);
+			GFX_ASSERT_MSG(uav_view_result.has_value(), "Failed to create uav image view for mip {}.", mip);
+			uav_views_.push_back(std::move(uav_view_result.value()));
+
+			uav_resource_indices_.push_back(uav_free_list_.allocate());
+		}
+	}
+
+	auto RenderResource::setup(Buffer&& buffer, ResourceStateFlags initial_flags) -> void {
+		resource_handle_ = std::move(buffer);
+
+		auto& handle = std::get<Buffer>(resource_handle_);
+	}
+
+	auto RenderResource::has_handle() const -> bool {
+		return !std::holds_alternative<std::monostate>(resource_handle_);
+	}
+
+#undef EDGE_LOGGER_SCOPE // RenderResource
+
+
 #define EDGE_LOGGER_SCOPE "gfx::Frame"
 
 	Frame::~Frame() {
@@ -90,80 +202,13 @@ namespace edge::gfx {
 		return self;
 	}
 
-	auto Renderer::create_shader(const std::string& shader_path) -> void {
-		std::ifstream shader_file(shader_path, std::ios_base::binary);
-		if (!shader_file.is_open()) {
-			return;
-		}
+	auto Renderer::create_render_resource() -> uint32_t {
+		render_resources_.push_back({});
+		return render_resource_free_list_.allocate();
+	}
 
-		BinaryReader reader{ shader_file };
-
-		ShaderEffect shader_effect;
-		reader.read(shader_effect);
-
-		// TODO: validate shader effect
-
-		mi::Vector<ShaderModule> shader_modules{};
-		mi::Vector<vk::PipelineShaderStageCreateInfo> shader_stages{};
-
-		for (auto const& stage : shader_effect.stages) {
-			auto result = ShaderModule::create(stage.code);
-			if (!result) {
-				continue;
-			}
-
-			shader_modules.push_back(std::move(result.value()));
-
-			vk::PipelineShaderStageCreateInfo shader_stage_create_info{};
-			shader_stage_create_info.stage = stage.stage;
-			shader_stage_create_info.pName = stage.entry_point_name.c_str();
-			shader_stage_create_info.module = shader_modules.back().get_handle();
-			shader_stages.push_back(shader_stage_create_info);
-		}
-		
-		if (shader_effect.bind_point == vk::PipelineBindPoint::eGraphics) {
-			mi::Vector<vk::VertexInputBindingDescription> vertex_input_binding_descriptions{};
-			for (auto const& binding_desc : shader_effect.vertex_input_bindings) {
-				vertex_input_binding_descriptions.push_back(binding_desc.to_vulkan());
-			}
-
-			mi::Vector<vk::VertexInputAttributeDescription> vertex_input_attribute_descriptions{};
-			for (auto const& attribute_desc : shader_effect.vertex_input_attributes) {
-				vertex_input_attribute_descriptions.push_back(attribute_desc.to_vulkan());
-			}
-
-			vk::PipelineVertexInputStateCreateInfo input_state_create_info{};
-			input_state_create_info.vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_input_binding_descriptions.size());
-			input_state_create_info.pVertexBindingDescriptions = vertex_input_binding_descriptions.data();
-			input_state_create_info.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_input_attribute_descriptions.size());
-			input_state_create_info.pVertexAttributeDescriptions = vertex_input_attribute_descriptions.data();
-
-			vk::PipelineInputAssemblyStateCreateInfo input_assembly_state_create_info{};
-			input_assembly_state_create_info.topology = static_cast<vk::PrimitiveTopology>(shader_effect.pipeline_state.input_assembly_state_primitive_topology);
-			input_assembly_state_create_info.primitiveRestartEnable = static_cast<vk::Bool32>(shader_effect.pipeline_state.input_assembly_state_primitive_restart_enable);
-
-			vk::PipelineTessellationStateCreateInfo tessellation_state_create_info{};
-			tessellation_state_create_info.patchControlPoints = static_cast<uint32_t>(shader_effect.pipeline_state.tessellation_state_control_points);
-
-			auto& image = swapchain_images_[swapchain_image_index_];
-			auto extent = image.get_extent();
-
-			vk::PipelineViewportStateCreateInfo viewport_state_create_info{};
-			vk::Viewport base_viewport{};
-			vk::Rect2D base_scissor{};
-
-			vk::GraphicsPipelineCreateInfo create_info{};
-			create_info.stageCount = static_cast<uint32_t>(shader_stages.size());
-			create_info.pStages = shader_stages.data();
-			create_info.pVertexInputState = &input_state_create_info;
-			create_info.pInputAssemblyState = &input_assembly_state_create_info;
-			create_info.pTessellationState = &tessellation_state_create_info;
-
-		}
-		else if (shader_effect.bind_point == vk::PipelineBindPoint::eCompute) {
-			vk::ComputePipelineCreateInfo create_info{};
-			create_info.stage = shader_stages.front();
-		}
+	auto Renderer::get_render_resource(uint32_t resource_id) -> RenderResource& {
+		return render_resources_[resource_id];
 	}
 
 	auto Renderer::begin_frame(float delta_time) -> void {

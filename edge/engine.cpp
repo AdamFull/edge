@@ -44,13 +44,14 @@ namespace edge {
 		window_ = &context.get_window();
 
 		// Resource uploader test
-		panding_tokens_.push_back(uploader_.load_image({ .path = u8"/assets/images/CasualDay4K.ktx2" }));
+		auto resource_id = renderer_->create_render_resource();
+		auto streamer_id = uploader_.load_image({ .path = u8"/assets/images/CasualDay4K.ktx2" });
+		pending_uploads_.push_back(std::make_pair(resource_id, streamer_id));
 		//panding_tokens_.push_back(uploader_.load_image({ .path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg" }));
 		//panding_tokens_.push_back(uploader_.load_image({
 		//	.path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_Normal.png",
 		//	.import_type = gfx::ImageImportType::eNormalMap
 		//	}));
-		uploader_.wait_all_work_complete();
 
 		return true;
 	}
@@ -63,14 +64,15 @@ namespace edge {
 	auto Engine::update(float delta_time) -> void {
 		// Process pending resources
 		// TODO: Add new resource to renderer
-		for (auto it = panding_tokens_.begin(); it != panding_tokens_.end();) {
-			if (uploader_.is_task_done(*it)) {
-				auto task_result = uploader_.get_task_result(*it);
+		for (auto it = pending_uploads_.begin(); it != pending_uploads_.end();) {
+			if (uploader_.is_task_done(it->second)) {
+				auto task_result = uploader_.get_task_result(it->second);
 				if (task_result) {
-					images_.push_back(std::move(std::get<gfx::Image>(task_result->data)));
+					auto& render_resource = renderer_->get_render_resource(it->first);
+					render_resource.setup(std::move(std::get<gfx::Image>(task_result->data)), gfx::ResourceStateFlag::eShaderResource);
 				}
 
-				it = panding_tokens_.erase(it);
+				it = pending_uploads_.erase(it);
 			}
 			else {
 				++it;

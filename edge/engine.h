@@ -27,7 +27,6 @@ namespace edge {
 
 		mi::Vector<ILayer> layers_;
 
-		mi::Vector<uint64_t> panding_tokens_{};
-		mi::Vector<gfx::Image> images_;
+		mi::Vector<std::pair<uint32_t, uint64_t>> pending_uploads_{};
 	};
 }
