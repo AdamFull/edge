@@ -385,7 +385,8 @@ namespace edge::gfx {
 		create_info.extent.width = upload_info.width;
 		create_info.extent.height = upload_info.height;
 		create_info.extent.depth = upload_info.depth;
-		create_info.layer_count = upload_info.face_count * upload_info.layer_count;
+		create_info.face_count = upload_info.face_count;
+		create_info.layer_count = upload_info.layer_count;
 		create_info.level_count = upload_info.level_count;
 		create_info.format = upload_info.format;
 		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
