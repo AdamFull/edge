@@ -12,6 +12,8 @@
 // TODO: Add mip generation
 // TODO: Manage queue transfer ownership when copy queue is available
 // TODO: Improve queue selection logic (now it's very poor and i'm not able to select some specific families
+// TODO: Add async texture copy
+// TODO: Add async readback
 
 namespace {
 	constexpr uint8_t PNG_MAGIC[] = { 0x89, 0x50, 0x4E, 0x47 };
