@@ -1,0 +1,15 @@
+name: fullscreen
+type: graphics
+source: fullscreen.slang
+profile: spirv_1_1
+rasterization:
+    cull_mode: back
+    front_face: ccw
+color_blending:
+    logic_op_enable: false
+    logic_op: clear
+    attachments:
+    - format: undefined # for backbuffer
+      blending: false
+input_assembly:
+    primitive_topology: triangle_list
