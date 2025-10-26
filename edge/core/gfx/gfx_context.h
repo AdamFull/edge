@@ -50,7 +50,9 @@ namespace edge::gfx {
 		}
 
 		auto operator=(Handle&& other) noexcept -> Handle& {
-			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			if (this != &other) {
+				handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			}
 			return *this;
 		}
 
@@ -82,10 +84,12 @@ namespace edge::gfx {
 		}
 
 		auto operator=(Instance&& other) noexcept -> Instance& {
-			Handle::operator=(std::move(other));
-			debug_messenger_ = std::exchange(other.debug_messenger_, VK_NULL_HANDLE);
-			enabled_extensions_ = std::exchange(other.enabled_extensions_, {});
-			enabled_layers_ = std::exchange(other.enabled_layers_, {});
+			if (this != &other) {
+				Handle::operator=(std::move(other));
+				debug_messenger_ = std::exchange(other.debug_messenger_, VK_NULL_HANDLE);
+				enabled_extensions_ = std::exchange(other.enabled_extensions_, {});
+				enabled_layers_ = std::exchange(other.enabled_layers_, {});
+			}
 			return *this;
 		}
 
@@ -113,14 +117,8 @@ namespace edge::gfx {
 			}
 		}
 
-		InstanceHandle(InstanceHandle&& other) noexcept
-			: Handle<T>{ std::move(other) } {
-		}
-
-		auto operator=(InstanceHandle&& other) noexcept -> InstanceHandle& {
-			Handle<T>::operator=(std::move(other));
-			return *this;
-		}
+		InstanceHandle(InstanceHandle&& other) noexcept = default;
+		auto operator=(InstanceHandle&& other) noexcept -> InstanceHandle & = default;
 	protected:
 		using Handle<T>::handle_;
 	};
@@ -139,7 +137,7 @@ namespace edge::gfx {
 #endif
 	};
 
-	class InstanceBuilder {
+	class InstanceBuilder : public NonCopyMovable {
 	public:
 		InstanceBuilder() = default;
 
@@ -272,8 +270,10 @@ namespace edge::gfx {
 		}
 
 		auto operator=(Adapter&& other) noexcept -> Adapter& {
-			Handle::operator=(std::move(other));
-			supported_extensions_ = std::exchange(other.supported_extensions_, {});
+			if (this != &other) {
+				Handle::operator=(std::move(other));
+				supported_extensions_ = std::exchange(other.supported_extensions_, {});
+			}
 			return *this;
 		}
 
@@ -319,10 +319,12 @@ namespace edge::gfx {
 		}
 
 		auto operator=(Device&& other) noexcept -> Device& {
-			Handle::operator=(std::move(other));
-			enabled_extensions_ = std::exchange(other.enabled_extensions_, {});
-			queue_families_ = std::exchange(other.queue_families_, {});
-			used_queue_families_ = std::exchange(other.used_queue_families_, {});
+			if (this != &other) {
+				Handle::operator=(std::move(other));
+				enabled_extensions_ = std::exchange(other.enabled_extensions_, {});
+				queue_families_ = std::exchange(other.queue_families_, {});
+				used_queue_families_ = std::exchange(other.used_queue_families_, {});
+			}
 			return *this;
 		}
 
@@ -337,7 +339,7 @@ namespace edge::gfx {
 		mutable mi::HashSet<uint32_t> used_queue_families_;
 	};
 
-	class DeviceSelector {
+	class DeviceSelector : public NonCopyMovable {
 	public:
 		DeviceSelector() = default;
 
@@ -426,14 +428,8 @@ namespace edge::gfx {
 			}
 		}
 
-		DeviceHandle(DeviceHandle&& other) noexcept
-			: Handle<T>{ std::move(other) } {
-		}
-
-		auto operator=(DeviceHandle&& other) noexcept -> DeviceHandle& {
-			Handle<T>::operator=(std::move(other));
-			return *this;
-		}
+		DeviceHandle(DeviceHandle&& other) noexcept = default;
+		auto operator=(DeviceHandle&& other) noexcept -> DeviceHandle& = default;
 
 		auto set_name(std::string_view name) const -> vk::Result {
 			vk::DebugUtilsObjectNameInfoEXT name_info{ T::objectType, reinterpret_cast<uint64_t>(static_cast<T::CType>(handle_)), name.data() };
@@ -505,7 +501,9 @@ namespace edge::gfx {
 		}
 
 		auto operator=(MemoryAllocator&& other) noexcept -> MemoryAllocator& {
-			handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			if (this != &other) {
+				handle_ = std::exchange(other.handle_, VK_NULL_HANDLE);
+			}
 			return *this;
 		}
 
@@ -565,12 +563,14 @@ namespace edge::gfx {
 		}
 
 		auto operator=(MemoryAllocation&& other) noexcept -> MemoryAllocation& {
-			Handle<T>::operator=(std::move(other));
-			allocation_ = std::exchange(other.allocation_, VK_NULL_HANDLE);
-			allocation_info_ = std::exchange(other.allocation_info_, {});
-			coherent_ = std::exchange(other.coherent_, {});
-			persistent_ = std::exchange(other.persistent_, {});
-			mapped_memory_ = std::exchange(other.mapped_memory_, nullptr);
+			if (this != &other) {
+				Handle<T>::operator=(std::move(other));
+				allocation_ = std::exchange(other.allocation_, VK_NULL_HANDLE);
+				allocation_info_ = std::exchange(other.allocation_info_, {});
+				coherent_ = std::exchange(other.coherent_, {});
+				persistent_ = std::exchange(other.persistent_, {});
+				mapped_memory_ = std::exchange(other.mapped_memory_, nullptr);
+			}
 			return *this;
 		}
 
@@ -683,8 +683,10 @@ namespace edge::gfx {
 		}
 
 		auto operator=(Image&& other) noexcept -> Image& {
-			MemoryAllocation::operator=(std::move(other));
-			create_info_ = std::exchange(other.create_info_, {});
+			if (this != &other) {
+				MemoryAllocation::operator=(std::move(other));
+				create_info_ = std::exchange(other.create_info_, {});
+			}
 			return *this;
 		}
 
@@ -735,8 +737,10 @@ namespace edge::gfx {
 		}
 
 		auto operator=(Buffer&& other) noexcept -> Buffer& {
-			MemoryAllocation::operator=(std::move(other));
-			create_info_ = std::exchange(other.create_info_, {});
+			if (this != &other) {
+				MemoryAllocation::operator=(std::move(other));
+				create_info_ = std::exchange(other.create_info_, {});
+			}
 			return *this;
 		}
 
@@ -761,9 +765,11 @@ namespace edge::gfx {
 		}
 
 		auto operator=(BufferRange&& other) noexcept -> BufferRange& {
-			buffer_ = std::move(other.buffer_);
-			range_ = std::exchange(other.range_, {});
-			offset_ = std::exchange(other.offset_, {});
+			if (this != &other) {
+				buffer_ = std::move(other.buffer_);
+				range_ = std::exchange(other.range_, {});
+				offset_ = std::exchange(other.offset_, {});
+			}
 			return *this;
 		}
 
@@ -830,8 +836,10 @@ namespace edge::gfx {
 		}
 
 		auto operator=(Swapchain&& other) noexcept -> Swapchain& {
-			DeviceHandle::operator=(std::move(other));
-			state_ = std::exchange(other.state_, {});
+			if (this != &other) {
+				DeviceHandle::operator=(std::move(other));
+				state_ = std::exchange(other.state_, {});
+			}
 			return *this;
 		}
 
@@ -853,7 +861,7 @@ namespace edge::gfx {
 		State state_;
 	};
 
-	class SwapchainBuilder {
+	class SwapchainBuilder : public NonCopyMovable {
 	public:
 		SwapchainBuilder() = default;
 
@@ -941,8 +949,10 @@ namespace edge::gfx {
 		}
 
 		auto operator=(CommandBuffer&& other) noexcept -> CommandBuffer& {
-			Handle::operator=(std::move(other));
-			command_pool_ = std::exchange(other.command_pool_, VK_NULL_HANDLE);
+			if (this != &other) {
+				Handle::operator=(std::move(other));
+				command_pool_ = std::exchange(other.command_pool_, VK_NULL_HANDLE);
+			}
 			return *this;
 		}
 
@@ -1012,9 +1022,11 @@ namespace edge::gfx {
 		}
 
 		auto operator=(QueryPool&& other) noexcept -> QueryPool& {
-			DeviceHandle::operator=(std::move(other));
-			type_ = std::exchange(other.type_, {});
-			max_query_ = std::exchange(other.max_query_, {});
+			if (this != &other) {
+				DeviceHandle::operator=(std::move(other));
+				type_ = std::exchange(other.type_, {});
+				max_query_ = std::exchange(other.max_query_, {});
+			}
 			return *this;
 		}
 
