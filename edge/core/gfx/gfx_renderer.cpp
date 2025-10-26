@@ -495,8 +495,6 @@ namespace edge::gfx {
 			}
 		}
 
-		//create_shader("assets/shaders/imgui.shfx");
-
 		return vk::Result::eSuccess;
 	}
 
