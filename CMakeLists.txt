@@ -186,6 +186,7 @@ set(SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/assets/shaders")
 file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
 
 add_shader_compilation(edge "assets/shaders/imgui.technique.yaml" "${SHADER_OUTPUT_DIR}/imgui.shfx")
+add_shader_compilation(edge "assets/shaders/fullscreen.technique.yaml" "${SHADER_OUTPUT_DIR}/fullscreen.shfx")
 endif(WIN32)
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/images DESTINATION ${CMAKE_BINARY_DIR}/assets)
