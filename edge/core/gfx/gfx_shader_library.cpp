@@ -25,18 +25,21 @@ namespace edge::gfx {
 		}
 	}
 
-	auto ShaderLibrary::construct(PipelineLayout const& pipeline_layout, std::u8string_view pipeline_cache_path, std::u8string_view shaders_path) -> Result<ShaderLibrary> {
+	auto ShaderLibrary::construct(const ShaderLibraryInfo& info) -> Result<ShaderLibrary> {
 		ShaderLibrary self{};
-		self.pipeline_cache_path_ = pipeline_cache_path;
-		if (auto result = self._construct(pipeline_layout, shaders_path); result != vk::Result::eSuccess) {
+		self.pipeline_cache_path_ = info.pipeline_cache_path;
+		self.pipeline_layout_ = info.pipeline_layout;
+		self.backbuffer_format_ = info.backbuffer_format;
+		if (auto result = self._construct(info); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
 		return self;
 	}
 
-	auto ShaderLibrary::_construct(PipelineLayout const& pipeline_layout, std::u8string_view shaders_path) -> vk::Result {
-		GFX_ASSERT_MSG(pipeline_layout, "PipelineLayout is null, but required.");
-		GFX_ASSERT_MSG(!shaders_path.empty(), "Shaders path cannot be empty");
+	// TODO: build shader library in another function, for support in future hot reload
+	auto ShaderLibrary::_construct(const ShaderLibraryInfo& info) -> vk::Result {
+		GFX_ASSERT_MSG(pipeline_layout_, "PipelineLayout is null, but required.");
+		GFX_ASSERT_MSG(!info.library_path.empty(), "Shaders path cannot be empty");
 
 		// Load pipeline cache if exists
 		mi::Vector<uint8_t> pipeline_cache_data{};
@@ -56,14 +59,14 @@ namespace edge::gfx {
 		static const char* entry_point_name = "main";
 
 		// Load pipelines
-		for (const auto& entry : fs::walk_directory(shaders_path)) {
+		for (const auto& entry : fs::walk_directory(info.library_path)) {
 			if (entry.is_directory) {
 				continue;
 			}
 
 			auto ext = fs::path::extension(entry.path);
 			if (ext.compare(u8".shfx") == 0) {
-				auto shader_path = fs::path::append(shaders_path, entry.path);
+				auto shader_path = fs::path::append(info.library_path, entry.path);
 				// Load shader file and parse
 				fs::InputFileStream shader_file(shader_path, std::ios_base::binary);
 
@@ -141,9 +144,19 @@ namespace edge::gfx {
 					dynamic_state_create_info.dynamicStateCount = 2u;
 					dynamic_state_create_info.pDynamicStates = dynamic_states;
 
+					mi::Vector<vk::Format> attachment_formats{};
+					for (auto& format : shader_effect.attachment_formats) {
+						// When format is undefined, it mean that expected backbuffer format
+						if (format == vk::Format::eUndefined) {
+							attachment_formats.push_back(backbuffer_format_);
+							continue;
+						}
+						attachment_formats.push_back(format);
+					}
+
 					vk::PipelineRenderingCreateInfoKHR rendering_create_info{};
-					rendering_create_info.colorAttachmentCount = static_cast<uint32_t>(shader_effect.attachment_formats.size());
-					rendering_create_info.pColorAttachmentFormats = shader_effect.attachment_formats.data();
+					rendering_create_info.colorAttachmentCount = static_cast<uint32_t>(attachment_formats.size());
+					rendering_create_info.pColorAttachmentFormats = attachment_formats.data();
 					rendering_create_info.depthAttachmentFormat = shader_effect.depth_format;
 					rendering_create_info.stencilAttachmentFormat = shader_effect.stencil_format;
 
@@ -160,7 +173,7 @@ namespace edge::gfx {
 					create_info.pDepthStencilState = &depth_stencil_state_create_info;
 					create_info.pColorBlendState = &color_blend_state_create_info;
 					create_info.pDynamicState = &dynamic_state_create_info;
-					create_info.layout = pipeline_layout.get_handle();
+					create_info.layout = pipeline_layout_->get_handle();
 					create_info.pNext = &rendering_create_info;
 
 					vk::Pipeline pipeline;
@@ -174,6 +187,7 @@ namespace edge::gfx {
 				else if (shader_effect.bind_point == vk::PipelineBindPoint::eCompute) {
 					vk::ComputePipelineCreateInfo create_info{};
 					create_info.stage = shader_stages.front();
+					create_info.layout = pipeline_layout_->get_handle();
 
 					vk::Pipeline pipeline;
 					if (auto result = device_->createComputePipelines(pipeline_cache_.get_handle(), 1u, &create_info, allocator_, &pipeline); result != vk::Result::eSuccess) {

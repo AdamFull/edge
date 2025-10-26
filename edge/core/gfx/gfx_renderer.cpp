@@ -463,13 +463,6 @@ namespace edge::gfx {
 
 		push_constant_buffer_.resize(adapter_properties.limits.maxPushConstantsSize);
 
-		auto shader_library_result = ShaderLibrary::construct(pipeline_layout_, u8"/shader_cache.cache", u8"/assets/shaders");
-		if (!shader_library_result) {
-			GFX_ASSERT_MSG(false, "Failed to create shader library. Reason: {}.", vk::to_string(shader_library_result.error()));
-			return shader_library_result.error();
-		}
-		shader_library_ = std::move(shader_library_result.value());
-
 		if (auto result = create_swapchain({
 			.format = {create_info.preferred_format, create_info.preferred_color_space},
 			.extent = create_info.extent,
@@ -478,6 +471,19 @@ namespace edge::gfx {
 			}); result != vk::Result::eSuccess) {
 			return result;
 		}
+
+		ShaderLibraryInfo shader_library_info{};
+		shader_library_info.pipeline_layout = &pipeline_layout_;
+		shader_library_info.pipeline_cache_path = u8"/shader_cache.cache";
+		shader_library_info.library_path = u8"/assets/shaders";
+		shader_library_info.backbuffer_format = swapchain_.get_format();
+
+		auto shader_library_result = ShaderLibrary::construct(shader_library_info);
+		if (!shader_library_result) {
+			GFX_ASSERT_MSG(false, "Failed to create shader library. Reason: {}.", vk::to_string(shader_library_result.error()));
+			return shader_library_result.error();
+		}
+		shader_library_ = std::move(shader_library_result.value());
 
 		for (int32_t i = 0; i < k_frame_overlap_; ++i) {
 			auto command_list_result = command_pool_.allocate_command_buffer();
