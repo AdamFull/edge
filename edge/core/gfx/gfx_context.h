@@ -656,6 +656,7 @@ namespace edge::gfx {
 
 	struct ImageCreateInfo {
 		vk::Extent3D extent{ 1u, 1u, 1u };
+		uint32_t face_count{ 1u };
 		uint32_t layer_count{ 1u };
 		uint32_t level_count{ 1u };
 		ImageFlags flags{};
@@ -694,7 +695,8 @@ namespace edge::gfx {
 		auto create_view(const vk::ImageSubresourceRange& range, vk::ImageViewType type) -> Result<ImageView>;
 
 		auto get_extent() const -> vk::Extent3D { return create_info_.extent; }
-		auto get_layer_count() const -> uint32_t { return create_info_.arrayLayers; }
+		auto get_face_count() const -> uint32_t;
+		auto get_layer_count() const -> uint32_t;
 		auto get_level_count() const -> uint32_t { return create_info_.mipLevels; }
 		auto get_format() const -> vk::Format { return create_info_.format; }
 	private:

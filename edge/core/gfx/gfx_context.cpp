@@ -1333,10 +1333,10 @@ namespace edge::gfx {
 
 		vk::ImageCreateInfo image_create_info{};
 		image_create_info.extent = create_info.extent;
-		image_create_info.arrayLayers = create_info.layer_count;
+		image_create_info.arrayLayers = create_info.layer_count * create_info.face_count;
 		image_create_info.mipLevels = create_info.level_count;
 		image_create_info.format = create_info.format;
-		image_create_info.flags = (create_info.layer_count == 6u) ? vk::ImageCreateFlagBits::eCubeCompatible : vk::ImageCreateFlagBits::eExtendedUsage;
+		image_create_info.flags = (create_info.face_count == 6u) ? vk::ImageCreateFlagBits::eCubeCompatible : vk::ImageCreateFlagBits::eExtendedUsage;
 		image_create_info.imageType = (create_info.extent.depth > 1u) ? vk::ImageType::e3D : (create_info.extent.height > 1u) ? vk::ImageType::e2D : vk::ImageType::e1D;
 		image_create_info.sharingMode = vk::SharingMode::eExclusive;
 
@@ -1392,6 +1392,20 @@ namespace edge::gfx {
 		}
 
 		return ImageView{ image_view, range };
+	}
+
+	auto Image::get_face_count() const -> uint32_t {
+		if (create_info_.flags & vk::ImageCreateFlagBits::eCubeCompatible) {
+			return 6u;
+		}
+		return 1u;
+	}
+
+	auto Image::get_layer_count() const -> uint32_t {
+		if (create_info_.flags & vk::ImageCreateFlagBits::eCubeCompatible) {
+			return create_info_.arrayLayers / 6u;
+		}
+		return create_info_.arrayLayers;
 	}
 
 #undef EDGE_LOGGER_SCOPE // Image
