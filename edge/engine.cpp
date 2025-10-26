@@ -24,8 +24,14 @@ namespace edge {
 			EDGE_LOGE("Failed to create renderer. Reason: {}.", vk::to_string(gfx_renderer_result.error()));
 			return false;
 		}
-
 		renderer_ = std::move(gfx_renderer_result.value());
+
+		auto gfx_updater_result = gfx::ResourceUpdater::create(32ull * 1024ull * 1024ull, 2u);
+		if (!gfx_updater_result) {
+			EDGE_LOGE("Failed to create resource updater. Reason: {}.", vk::to_string(gfx_updater_result.error()));
+			return false;
+		}
+		updater_ = std::move(gfx_updater_result.value());
 
 		auto gfx_uploader_result = gfx::ResourceUploader::create(128ull * 1024ull * 1024ull, 2u);
 		if (!gfx_uploader_result) {
@@ -39,11 +45,11 @@ namespace edge {
 
 		// Resource uploader test
 		panding_tokens_.push_back(uploader_.load_image({ .path = u8"/assets/images/CasualDay4K.ktx2" }));
-		panding_tokens_.push_back(uploader_.load_image({ .path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg" }));
-		panding_tokens_.push_back(uploader_.load_image({
-			.path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_Normal.png",
-			.import_type = gfx::ImageImportType::eNormalMap
-			}));
+		//panding_tokens_.push_back(uploader_.load_image({ .path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg" }));
+		//panding_tokens_.push_back(uploader_.load_image({
+		//	.path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_Normal.png",
+		//	.import_type = gfx::ImageImportType::eNormalMap
+		//	}));
 		uploader_.wait_all_work_complete();
 
 		return true;
@@ -73,9 +79,18 @@ namespace edge {
 
 		renderer_->begin_frame(delta_time);
 
+		mi::Vector<vk::SemaphoreSubmitInfoKHR> uploader_submitted_semaphores{};
+		auto updater_semaphore = updater_.flush({});
+		if (updater_semaphore.semaphore) {
+			uploader_submitted_semaphores.push_back(updater_semaphore);
+		}
 
-		auto last_submitted_semaphore = uploader_.get_last_submitted_semaphore();
-		renderer_->end_frame({ &last_submitted_semaphore, 1ull });
+		auto uploader_semaphore = uploader_.get_last_submitted_semaphore();
+		if (uploader_semaphore.semaphore) {
+			uploader_submitted_semaphores.push_back(uploader_semaphore);
+		}
+
+		renderer_->end_frame(uploader_submitted_semaphores);
 	}
 
 	auto Engine::fixed_update(float delta_time) -> void {

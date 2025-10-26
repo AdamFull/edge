@@ -2,6 +2,7 @@
 
 #include "core/application.h"
 #include "core/gfx/gfx_renderer.h"
+#include "core/gfx/gfx_resource_updater.h"
 #include "core/gfx/gfx_resource_uploader.h"
 
 #include "layer.h"
@@ -21,6 +22,7 @@ namespace edge {
 	private:
 		platform::IPlatformWindow* window_{ nullptr };
 		std::unique_ptr<gfx::Renderer> renderer_{};
+		gfx::ResourceUpdater updater_{};
 		gfx::ResourceUploader uploader_{};
 
 		mi::Vector<ILayer> layers_;

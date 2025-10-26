@@ -1,33 +1,32 @@
 #pragma once
 
-#include "gfx_context.h"
+#include "gfx_resource_uploader.h"
 
 namespace edge::gfx {
-	struct ResourceUpdaterInfo {
-		vk::DeviceSize update_arena_size{ 4ull * 1024ull * 1024ull };
-		uint32_t swap_buffer_count{ 1u };
-		Queue const* queue_{ nullptr };
-	};
-
-	
-
-	class ResourceUpdater {
+	class ResourceUpdater : public NonCopyable {
 	public:
+		ResourceUpdater() = default;
+		~ResourceUpdater();
+
+		ResourceUpdater(ResourceUpdater&& other) noexcept;
+		auto operator=(ResourceUpdater&& other) noexcept -> ResourceUpdater&;
+
+		static auto create(vk::DeviceSize arena_size, uint32_t uploader_count = 1u) -> Result<ResourceUpdater>;
+
+		auto acquire_resource_set() -> ResourceSet&;
+
+		auto flush(Span<vk::SemaphoreSubmitInfoKHR> wait_semaphores) -> vk::SemaphoreSubmitInfoKHR;
 	private:
-		struct Node {
-			CommandBuffer cmdbuf_;
-			Semaphore semaphore_;
-			uint64_t counter_{ 0ull };
+		auto _construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result;
 
-			Buffer arena_;
-			vk::DeviceSize offset_{ 0ull };
-			mi::Vector<Buffer> temporary_buffers_;
-		};
+		auto get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> Result<BufferRange>;
+		auto begin_commands(ResourceSet& resource_set) -> void;
+		auto end_commands(ResourceSet& resource_set) -> void;
 
-		Queue const* queue_{ nullptr };
-		CommandPool command_pool_;
+		Queue queue_{};
+		CommandPool command_pool_{};
 
-		mi::Vector<Node> updater_nodes_;
-		uint32_t current_node_index_{ 0u };
+		mi::Vector<ResourceSet> resource_sets_{};
+		uint32_t current_resource_set_{ 0u };
 	};
 }
