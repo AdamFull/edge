@@ -6,6 +6,8 @@
 
 #include "gfx_shader_effect.h"
 
+#include "../../assets/shaders/fullscreen.h"
+
 namespace edge::gfx {
 	void TechniqueStage::deserialize(BinaryReader& reader) {
 		stage = reader.read<vk::ShaderStageFlagBits>();
@@ -47,8 +49,7 @@ namespace edge::gfx {
 		srv_resource_index_ = std::move(other.srv_resource_index_);
 		uav_views_ = std::exchange(other.uav_views_, {});
 		uav_resource_indices_ = std::exchange(other.uav_resource_indices_, {});
-
-		ResourceStateFlags resource_state_{};
+		state_ = std::exchange(other.state_, {});
 	}
 
 	auto RenderResource::operator=(RenderResource&& other) noexcept -> RenderResource& {
@@ -58,6 +59,7 @@ namespace edge::gfx {
 			srv_resource_index_ = std::move(other.srv_resource_index_);
 			uav_views_ = std::exchange(other.uav_views_, {});
 			uav_resource_indices_ = std::exchange(other.uav_resource_indices_, {});
+			state_ = std::exchange(other.state_, {});
 		}
 
 		return *this;
@@ -65,8 +67,10 @@ namespace edge::gfx {
 
 	auto RenderResource::setup(Image&& image, ResourceStateFlags initial_flags) -> void {
 		resource_handle_ = std::move(image);
+		state_ = initial_flags;
 
 		auto& handle = std::get<Image>(resource_handle_);
+		auto usage = handle.get_usage();
 		auto extent = handle.get_extent(); 
 
 		vk::ImageViewType view_type{};
@@ -98,11 +102,17 @@ namespace edge::gfx {
 
 		srv_resource_index_ = srv_free_list_.allocate();
 
+		// UAV descriptors not needed for non storage targets (read only)
+		if (!(usage & vk::ImageUsageFlagBits::eStorage)) {
+			return;
+		}
+
 		// Slang is not support cube arrays
 		if (view_type == vk::ImageViewType::eCubeArray) {
 			view_type = vk::ImageViewType::e2DArray;
 		}
 
+		// TODO: UAV descriptors needed only for render targets
 		for (int32_t mip = 0; mip < static_cast<int32_t>(handle.get_level_count()); ++mip) {
 			vk::ImageSubresourceRange uav_subresource_range{};
 			uav_subresource_range.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -119,14 +129,63 @@ namespace edge::gfx {
 		}
 	}
 
+	// TODO: Select descriptor type
+	auto RenderResource::get_descriptor(uint32_t mip) const -> DescriptorType {
+		if (std::holds_alternative<Buffer>(resource_handle_)) {
+			auto& buffer = std::get<Buffer>(resource_handle_);
+			return vk::DescriptorBufferInfo{ buffer .get_handle(), 0ull, buffer.get_size() };
+		}
+		else if (std::holds_alternative<Image>(resource_handle_)) {
+			if (mip == ~0u) {
+				auto& image_view = std::get<ImageView>(srv_view_);
+				return vk::DescriptorImageInfo{ VK_NULL_HANDLE, image_view.get_handle(), vk::ImageLayout::eShaderReadOnlyOptimal };
+			}
+			
+			auto& image_view = std::get<ImageView>(uav_views_[mip]);
+			return vk::DescriptorImageInfo{ VK_NULL_HANDLE, image_view.get_handle(), vk::ImageLayout::eGeneral };
+		}
+		return std::monostate{};
+	}
+
 	auto RenderResource::setup(Buffer&& buffer, ResourceStateFlags initial_flags) -> void {
 		resource_handle_ = std::move(buffer);
-
+		assert(false && "NOT IMPLEMENTED");
 		auto& handle = std::get<Buffer>(resource_handle_);
 	}
 
 	auto RenderResource::has_handle() const -> bool {
 		return !std::holds_alternative<std::monostate>(resource_handle_);
+	}
+
+	auto RenderResource::transfer_state(CommandBuffer const& cmdbuf, ResourceStateFlags new_state) -> void {
+		if (new_state == state_) {
+			// Already in this state
+			return;
+		}
+
+		if (std::holds_alternative<Buffer>(resource_handle_)) {
+			assert(false && "NOT IMPLEMENTED");
+		}
+		else if (std::holds_alternative<Image>(resource_handle_)) {
+			auto& handle = std::get<Image>(resource_handle_);
+			auto usage = handle.get_usage();
+
+			ImageBarrier barrier{};
+			barrier.src_state = state_;
+			barrier.dst_state = new_state;
+			barrier.image = &handle;
+			barrier.subresource_range.aspectMask = (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) ? vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor;
+			barrier.subresource_range.baseMipLevel = 0u;
+			barrier.subresource_range.levelCount = handle.get_level_count();
+			barrier.subresource_range.baseArrayLayer = 0u;
+			barrier.subresource_range.layerCount = handle.get_layer_count() * handle.get_face_count();
+			cmdbuf.push_barrier(barrier);
+
+			state_ = new_state;
+		}
+		else {
+			GFX_ASSERT_MSG(false, "RenderResource is not initialized yet.");
+		}
 	}
 
 #undef EDGE_LOGGER_SCOPE // RenderResource
@@ -148,12 +207,23 @@ namespace edge::gfx {
 	}
 
 	auto Frame::begin() -> void {
-		// Wait rendering finished
-		fence_.wait(1000000000ull);
-		fence_.reset();
+		GFX_ASSERT_MSG(!is_recording_, "Already recording rendering command buffer.");
+		if (!is_recording_) {
+			// Wait rendering finished
+			fence_.wait(1000000000ull);
+			fence_.reset();
+
+			is_recording_ = command_buffer_.begin() == vk::Result::eSuccess;
+			GFX_ASSERT_MSG(is_recording_, "Failed to begin command buffer.");
+		}
 	}
 
 	auto Frame::end() -> void {
+		GFX_ASSERT_MSG(is_recording_, "Rendering command buffer is not recording.");
+		if (is_recording_) {
+			command_buffer_.end();
+			is_recording_ = false;
+		}
 	}
 
 	auto Frame::_construct(DescriptorSetLayout const& descriptor_layout) -> vk::Result {
@@ -207,8 +277,59 @@ namespace edge::gfx {
 		return render_resource_free_list_.allocate();
 	}
 
-	auto Renderer::get_render_resource(uint32_t resource_id) -> RenderResource& {
-		return render_resources_[resource_id];
+	auto Renderer::setup_render_resource(uint32_t resource_id, Image&& image, ResourceStateFlags initial_state) -> void {
+		GFX_ASSERT_MSG(resource_id < render_resources_.size(), "Invalid render resource index: {}", resource_id);
+		auto& render_resource = render_resources_[resource_id];
+		render_resource.setup(std::move(image), initial_state);
+
+		// Check do we need to update this resource for final state (like for loaded from disk resources)
+		auto& image_resource = render_resource.get_handle<Image>();
+		auto image_usage = image_resource.get_usage();
+
+		auto is_color_attachment = (image_usage & vk::ImageUsageFlagBits::eColorAttachment) == vk::ImageUsageFlagBits::eColorAttachment;
+		auto is_depth_attachment = (image_usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) == vk::ImageUsageFlagBits::eDepthStencilAttachment;
+		auto is_attachment = is_color_attachment || is_depth_attachment;
+		if (!is_attachment && initial_state != ResourceStateFlag::eShaderResource) {
+			GFX_ASSERT_MSG(active_frame_, "This call should be between begin_frame and end_frame.");
+			auto& cmdbuf = active_frame_->get_command_buffer();
+			render_resource.transfer_state(cmdbuf, ResourceStateFlag::eShaderResource);
+		}
+
+		// Write resource descriptors to descriptor table
+		// At first write SRV descriptor
+		image_descriptors_.push_back(std::move(std::get<vk::DescriptorImageInfo>(render_resource.get_descriptor())));
+
+		vk::WriteDescriptorSet descriptor_write{};
+		descriptor_write.dstSet = descriptor_set_.get_handle();
+		descriptor_write.dstBinding = 1u; // TODO: Make constants for magic numbers (binding 1 is for sampled images)
+		descriptor_write.dstArrayElement = render_resource.get_srv_index();
+		descriptor_write.descriptorCount = 1u;
+		descriptor_write.descriptorType = vk::DescriptorType::eSampledImage;
+		descriptor_write.pImageInfo = &image_descriptors_.back();
+		descriptor_write.pBufferInfo = nullptr;
+		descriptor_write.pTexelBufferView = nullptr;
+		write_descriptor_sets_.push_back(descriptor_write);
+
+		// Not needed to write UAV descriptors for non storage images
+		if (!(image_usage & vk::ImageUsageFlagBits::eStorage)) {
+			return;
+		}
+
+		// Write uav descriptors
+		descriptor_write.dstBinding = 2u;
+		descriptor_write.descriptorType = vk::DescriptorType::eStorageImage;
+
+		for (int32_t mip = 0; mip < image.get_level_count(); ++mip) {
+			image_descriptors_.push_back(std::move(std::get<vk::DescriptorImageInfo>(render_resource.get_descriptor(mip))));
+
+			descriptor_write.dstArrayElement = render_resource.get_uav_index(mip);
+			descriptor_write.pImageInfo = &image_descriptors_.back();
+			write_descriptor_sets_.push_back(descriptor_write);
+		}
+	}
+
+	auto Renderer::setup_render_resource(uint32_t resource_id, Buffer&& buffer, ResourceStateFlags initial_state) -> void {
+		assert(false && "NOT IMPLEMENTED");
 	}
 
 	auto Renderer::begin_frame(float delta_time) -> void {
@@ -241,13 +362,8 @@ namespace edge::gfx {
 			}
 		}
 
-		active_frame_ = current_frame;
-
-		auto const& cmdbuf = active_frame_->get_command_buffer();
-		if (auto result = cmdbuf.begin(); result != vk::Result::eSuccess) {
-			GFX_ASSERT_MSG(false, "Failed to begin command buffer. Reason: {}.", vk::to_string(result));
-			active_frame_ = nullptr;
-			return;
+		if (current_frame->is_recording()) {
+			active_frame_ = current_frame;
 		}
 
 		// Get previous frame time 
@@ -261,6 +377,7 @@ namespace edge::gfx {
 
 		gpu_delta_time_ = static_cast<double>(elapsed_time) * timestamp_frequency_ / 1000000.0;
 
+		auto const& cmdbuf = active_frame_->get_command_buffer();
 		cmdbuf->resetQueryPool(*timestamp_query_, 0u, 2u);
 		cmdbuf->writeTimestamp2KHR(vk::PipelineStageFlagBits2::eTopOfPipe, *timestamp_query_, 0u);
 
@@ -288,7 +405,16 @@ namespace edge::gfx {
 
 		auto const& cmdbuf = active_frame_->get_command_buffer();
 		auto& image = swapchain_images_[swapchain_image_index_];
+		auto extent = image.get_extent();
 		auto& image_view = swapchain_image_views_[swapchain_image_index_];
+
+		if (!write_descriptor_sets_.empty()) {
+			device_->updateDescriptorSets(write_descriptor_sets_.size(), write_descriptor_sets_.data(), 0u, nullptr);
+			write_descriptor_sets_.clear();
+			image_descriptors_.clear();
+			buffer_descriptors_.clear();
+		}
+		
 
 		cmdbuf.push_barrier(ImageBarrier{
 			.image = &image,
@@ -297,25 +423,43 @@ namespace edge::gfx {
 			.subresource_range = { vk::ImageAspectFlagBits::eColor, 0u, 1u, 0u, 1u }
 		});
 
+		auto* pipeline = shader_library_.get_pipeline("fullscreen");
+		if (pipeline) {
+			cmdbuf->bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline->get_handle());
+		}
+
 		vk::RenderingAttachmentInfoKHR attachment{};
 		attachment.imageView = *image_view;
 		attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
 		attachment.loadOp = vk::AttachmentLoadOp::eClear;
 		attachment.storeOp = vk::AttachmentStoreOp::eStore;
 
-		float flash_r = std::abs(std::cos(frame_number_ / 120.f));
-		float flash_g = std::abs(std::sin(frame_number_ / 120.f));
-		float flash_b = std::abs(std::sinh(frame_number_ / 120.f));
-		attachment.clearValue.color = vk::ClearColorValue{ flash_r, flash_g, flash_b, 1.0f };
+		//float flash_r = std::abs(std::cos(frame_number_ / 120.f));
+		//float flash_g = std::abs(std::sin(frame_number_ / 120.f));
+		//float flash_b = std::abs(std::sinh(frame_number_ / 120.f));
+		//attachment.clearValue.color = vk::ClearColorValue{ flash_r, flash_g, flash_b, 1.0f };
+		attachment.clearValue.color = vk::ClearColorValue{ 0.f, 0.f, 0.f, 1.0f };
 
 		vk::RenderingInfoKHR rendering_info{};
-		rendering_info.renderArea.extent.width = image.get_extent().width;
-		rendering_info.renderArea.extent.height = image.get_extent().height;
+		rendering_info.renderArea.extent.width = extent.width;
+		rendering_info.renderArea.extent.height = extent.height;
 		rendering_info.layerCount = 1u;
 		rendering_info.colorAttachmentCount = 1u;
 		rendering_info.pColorAttachments = &attachment;
 
 		cmdbuf->beginRenderingKHR(&rendering_info);
+
+		fullscreen::PushConstant push_data{};
+		push_data.image_id = 0u;
+		std::memcpy(push_constant_buffer_.data(), &push_data, sizeof(fullscreen::PushConstant));
+
+		cmdbuf->pushConstants(*pipeline_layout_, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, 0u, sizeof(fullscreen::PushConstant), push_constant_buffer_.data());
+
+		vk::Viewport vp{ 0.f, 0.f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
+		cmdbuf->setViewport(0u, 1u, &vp);
+		vk::Rect2D scissor{ {}, { extent.width, extent.height } };
+		cmdbuf->setScissor(0u, 1u, &scissor);
+		cmdbuf->draw(3u, 1u, 0u, 0u);
 		cmdbuf->endRenderingKHR();
 
 		cmdbuf.push_barrier(ImageBarrier{
@@ -327,7 +471,7 @@ namespace edge::gfx {
 
 		cmdbuf->writeTimestamp2KHR(vk::PipelineStageFlagBits2::eTopOfPipe, *timestamp_query_, 1u);
 
-		cmdbuf.end();
+		active_frame_->end();
 
 		mi::Vector<vk::SemaphoreSubmitInfo> wait_semaphores{};
 		wait_semaphores.push_back(vk::SemaphoreSubmitInfo{ acquired_semaphore_, 0ull, vk::PipelineStageFlagBits2::eColorAttachmentOutput });
@@ -373,13 +517,16 @@ namespace edge::gfx {
 			}
 		}
 
-		active_frame_->end();
 		active_frame_ = nullptr;
 		frame_number_++;
 	}
 
 	auto Renderer::_construct(const RendererCreateInfo& create_info) -> vk::Result {
 		GFX_ASSERT_MSG(device_, "Device handle is null.");
+
+		write_descriptor_sets_.reserve(256);
+		image_descriptors_.reserve(256);
+		buffer_descriptors_.reserve(256);
 
 		auto queue_result = device_.get_queue({
 				.required_caps = QueuePresets::kPresentGraphics,
@@ -500,6 +647,41 @@ namespace edge::gfx {
 				frames_.push_back(std::move(frame_result.value()));
 			}
 		}
+
+		vk::SamplerCreateInfo sampler_create_info{};
+		sampler_create_info.magFilter = vk::Filter::eLinear;
+		sampler_create_info.minFilter = vk::Filter::eLinear;
+		sampler_create_info.mipmapMode = vk::SamplerMipmapMode::eLinear;
+		sampler_create_info.addressModeU = vk::SamplerAddressMode::eClampToEdge;
+		sampler_create_info.addressModeV = vk::SamplerAddressMode::eClampToEdge;
+		sampler_create_info.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+		sampler_create_info.mipLodBias = 1.0f;
+		sampler_create_info.anisotropyEnable = VK_TRUE;
+		sampler_create_info.maxAnisotropy = 4.0f;
+
+		auto sampler_result = Sampler::create(sampler_create_info);
+		if (!sampler_result) {
+			GFX_ASSERT_MSG(false, "Failed to create test sampler. Reason: {}.", vk::to_string(sampler_result.error()));
+		}
+		test_sampler_ = std::move(sampler_result.value());
+
+		// Push test sampler
+		vk::DescriptorImageInfo sampler_descriptor{};
+		sampler_descriptor.sampler = test_sampler_.get_handle();
+		sampler_descriptor.imageView = nullptr;
+		sampler_descriptor.imageLayout = vk::ImageLayout::eUndefined;
+		image_descriptors_.push_back(std::move(sampler_descriptor));
+
+		vk::WriteDescriptorSet sampler_write{};
+		sampler_write.dstSet = descriptor_set_.get_handle();
+		sampler_write.dstBinding = 0u;
+		sampler_write.dstArrayElement = 0u;
+		sampler_write.descriptorCount = 1u;
+		sampler_write.descriptorType = vk::DescriptorType::eSampler;
+		sampler_write.pImageInfo = &image_descriptors_.back();
+		sampler_write.pBufferInfo = nullptr;
+		sampler_write.pTexelBufferView = nullptr;
+		write_descriptor_sets_.push_back(std::move(sampler_write));
 
 		return vk::Result::eSuccess;
 	}

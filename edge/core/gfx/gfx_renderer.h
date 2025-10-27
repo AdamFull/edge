@@ -9,6 +9,10 @@
 namespace edge::gfx {
 	class RenderResource : public NonCopyable {
 	public:
+		using HandleType = std::variant<std::monostate, Buffer, Image>;
+		using ViewType = std::variant<std::monostate, BufferView, ImageView>;
+		using DescriptorType = std::variant<std::monostate, vk::DescriptorBufferInfo, vk::DescriptorImageInfo>;
+
 		RenderResource() = default;
 		~RenderResource();
 
@@ -18,32 +22,26 @@ namespace edge::gfx {
 		auto setup(Image&& image, ResourceStateFlags initial_flags) -> void;
 		auto setup(Buffer&& buffer, ResourceStateFlags initial_flags) -> void;
 
-		template<typename T>
-		auto get_handle() -> T& {
-			return std::get<T>(resource_handle_);
-		}
-
-		template<typename T> 
-		auto get_srv_view() -> T& {
-			return std::get<T>(srv_view_);
-		}
+		auto get_descriptor(uint32_t mip = ~0u) const -> DescriptorType;
 
 		template<typename T>
-		auto get_uav_view(uint32_t mip) -> T& {
-			return std::get<T>(uav_views_[mip]);
-		}
+		auto get_handle() -> T& { return std::get<T>(resource_handle_); }
 
-		auto get_state() const -> const ResourceStateFlags& {
-			return resource_state_;
+		auto get_state() const -> const ResourceStateFlags& { return state_; }
+		auto get_srv_index() const -> uint32_t { return srv_resource_index_; }
+		auto get_uav_index(uint32_t mip) const -> uint32_t { return uav_resource_indices_[mip]; }
+
+		template<typename T>
+		auto is_contain_handle() const -> bool {
+			return std::holds_alternative<T>(resource_handle_);
 		}
 
 		auto has_handle() const -> bool;
+
+		auto transfer_state(CommandBuffer const& cmdbuf, ResourceStateFlags new_state) -> void;
 	private:
 		static mi::FreeList<uint32_t> srv_free_list_;
 		static mi::FreeList<uint32_t> uav_free_list_;
-
-		using HandleType = std::variant<std::monostate, Buffer, Image>;
-		using ViewType = std::variant<std::monostate, BufferView, ImageView>;
 
 		HandleType resource_handle_{};
 
@@ -52,7 +50,7 @@ namespace edge::gfx {
 		mi::Vector<ViewType> uav_views_{};
 		mi::Vector<uint32_t> uav_resource_indices_{};
 
-		ResourceStateFlags resource_state_{};
+		ResourceStateFlags state_{};
 	};
 
 	class Frame : public NonCopyable {
@@ -60,18 +58,22 @@ namespace edge::gfx {
 		Frame() = default;
 		~Frame();
 
-		Frame(Frame&& other)
-			: image_available_{ std::exchange(other.image_available_, {}) }
-			, rendering_finished_{ std::exchange(other.rendering_finished_, {}) }
-			, fence_{ std::exchange(other.fence_, {}) }
-			, command_buffer_{ std::exchange(other.command_buffer_, {}) } {
+		Frame(Frame&& other) noexcept
+			: image_available_{ std::move(other.image_available_) }
+			, rendering_finished_{ std::move(other.rendering_finished_) }
+			, fence_{ std::move(other.fence_) }
+			, command_buffer_{ std::move(other.command_buffer_) }
+			, is_recording_{ std::exchange(other.is_recording_, false) } {
 		}
 
-		auto operator=(Frame&& other) -> Frame& {
-			image_available_ = std::exchange(other.image_available_, {});
-			rendering_finished_ = std::exchange(other.rendering_finished_, {});
-			fence_ = std::exchange(other.fence_, {});
-			command_buffer_ = std::exchange(other.command_buffer_, {});
+		auto operator=(Frame&& other) noexcept -> Frame& {
+			if (this != &other) {
+				image_available_ = std::move(other.image_available_);
+				rendering_finished_ = std::move(other.rendering_finished_);
+				fence_ = std::move(other.fence_);
+				command_buffer_ = std::move(other.command_buffer_);
+				is_recording_ = std::exchange(other.is_recording_, false);
+			}
 			return *this;
 		}
 
@@ -80,18 +82,20 @@ namespace edge::gfx {
 		auto begin() -> void;
 		auto end() -> void;
 
-		auto get_image_available_semaphore() const -> Semaphore const& { return image_available_; }
-		auto get_rendering_finished_semaphore() const -> Semaphore const& { return rendering_finished_; }
-		auto get_fence() const -> Fence const& { return fence_; }
-		auto get_command_buffer() const -> CommandBuffer const& { return command_buffer_; }
+		auto get_image_available_semaphore() const noexcept -> Semaphore const& { return image_available_; }
+		auto get_rendering_finished_semaphore() const noexcept -> Semaphore const& { return rendering_finished_; }
+		auto get_fence() const noexcept -> Fence const& { return fence_; }
+		auto get_command_buffer() const noexcept -> CommandBuffer const& { return command_buffer_; }
+		auto is_recording() const noexcept -> bool { return is_recording_; }
 	private:
 		auto _construct(DescriptorSetLayout const& descriptor_layout) -> vk::Result;
 
-		Semaphore image_available_;
-		Semaphore rendering_finished_;
-		Fence fence_;
+		Semaphore image_available_{};
+		Semaphore rendering_finished_{};
+		Fence fence_{};
 
-		CommandBuffer command_buffer_;
+		CommandBuffer command_buffer_{};
+		bool is_recording_{ false };
 	};
 
 	struct RendererCreateInfo {
@@ -103,15 +107,12 @@ namespace edge::gfx {
 		bool enable_vsync{ false };
 	};
 
-	class Renderer {
+	class Renderer : public NonCopyable{
 	public:
 		Renderer() = default;
 		~Renderer();
 
-		Renderer(const Renderer&) = delete;
-		auto operator=(const Renderer&) -> Renderer& = delete;
-
-		Renderer(Renderer&& other)
+		Renderer(Renderer&& other) noexcept
 			: queue_{ std::exchange(other.queue_, {}) }
 			, command_pool_{ std::exchange(other.command_pool_, {}) }
 			, swapchain_{ std::exchange(other.swapchain_, {}) }
@@ -131,7 +132,7 @@ namespace edge::gfx {
 			, render_resource_free_list_{ std::move(other.render_resource_free_list_) } {
 		}
 
-		auto operator=(Renderer&& other) -> Renderer& {
+		auto operator=(Renderer&& other) noexcept -> Renderer& {
 			if (this != &other) {
 				queue_ = std::exchange(other.queue_, {});
 				command_pool_ = std::exchange(other.command_pool_, {});
@@ -159,7 +160,8 @@ namespace edge::gfx {
 		static auto construct(const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>>;
 
 		auto create_render_resource() -> uint32_t;
-		auto get_render_resource(uint32_t resource_id) -> RenderResource&;
+		auto setup_render_resource(uint32_t resource_id, Image&& image, ResourceStateFlags initial_state) -> void;
+		auto setup_render_resource(uint32_t resource_id, Buffer&& buffer, ResourceStateFlags initial_state) -> void;
 
 		auto begin_frame(float delta_time) -> void;
 		auto end_frame(Span<vk::SemaphoreSubmitInfoKHR> wait_external_semaphores = {}) -> void;
@@ -199,6 +201,10 @@ namespace edge::gfx {
 		DescriptorSet descriptor_set_;
 		PipelineLayout pipeline_layout_;
 		mi::Vector<uint8_t> push_constant_buffer_;
+		mi::Vector<vk::WriteDescriptorSet> write_descriptor_sets_{};
+		mi::Vector<vk::DescriptorImageInfo> image_descriptors_{};
+		mi::Vector<vk::DescriptorBufferInfo> buffer_descriptors_{};
+		Sampler test_sampler_{};
 
 		ShaderLibrary shader_library_;
 
