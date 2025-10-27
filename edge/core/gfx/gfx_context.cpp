@@ -1597,14 +1597,14 @@ namespace edge::gfx {
 #define EDGE_LOGGER_SCOPE "gfx::SwapchainBuilder"
 
 	auto SwapchainBuilder::build() -> Result<Swapchain> {
-		vk::PresentModeKHR present_mode = (requested_state_.vsync) ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eMailbox;
+		vk::PresentModeKHR present_mode = (requested_state_.vsync) ? vk::PresentModeKHR::eFifo : vk::PresentModeKHR::eImmediate;
 		std::array<vk::PresentModeKHR, 3ull> present_mode_priority_list{
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
 			vk::PresentModeKHR::eFifo, vk::PresentModeKHR::eMailbox,
 #else
-			vk::PresentModeKHR::eMailbox, vk::PresentModeKHR::eFifo,
+			vk::PresentModeKHR::eImmediate, vk::PresentModeKHR::eMailbox,
 #endif
-			vk::PresentModeKHR::eImmediate };
+			vk::PresentModeKHR::eFifo };
 
 		mi::Vector<vk::SurfaceFormatKHR> surface_formats{};
 		if (auto result = util::get_surface_formats(adapter_, *surface_); result.has_value()) {
