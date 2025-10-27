@@ -3,7 +3,7 @@ type: graphics
 source: fullscreen.slang
 profile: spirv_1_1
 rasterization:
-    cull_mode: back
+    cull_mode: none
     front_face: ccw
 color_blending:
     logic_op_enable: false
@@ -11,5 +11,6 @@ color_blending:
     attachments:
     - format: undefined # for backbuffer
       blending: false
+      color_write_mask: rgba
 input_assembly:
     primitive_topology: triangle_list
