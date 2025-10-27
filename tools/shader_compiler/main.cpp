@@ -1418,9 +1418,28 @@ int main(int argc, char* argv[]) {
 					}
 
 					if (attachment.has_child("color_write_mask")) {
-						uint32_t color_write_mask = 0u;
-						attachment["color_write_mask"] >> color_write_mask;
-						gfx_attachment.color_write_mask = color_write_mask;
+						std::string color_write_mask_str;
+						attachment["color_write_mask"] >> color_write_mask_str;
+						for (auto const& c : color_write_mask_str) {
+							if (c == 'r' || c == 'R') {
+								gfx_attachment.color_write_mask |= VK_COLOR_COMPONENT_R_BIT;
+							}
+							else if (c == 'g' || c == 'G') {
+								gfx_attachment.color_write_mask |= VK_COLOR_COMPONENT_G_BIT;
+							}
+							else if (c == 'b' || c == 'B') {
+								gfx_attachment.color_write_mask |= VK_COLOR_COMPONENT_B_BIT;
+							}
+							else if (c == 'a' || c == 'A') {
+								gfx_attachment.color_write_mask |= VK_COLOR_COMPONENT_A_BIT;
+							}
+							else {
+								spdlog::warn("Unknown color_write_mask parameter: \'{}\'", c);
+							}
+						}
+					}
+					else {
+						gfx_attachment.color_write_mask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 					}
 				}
 
