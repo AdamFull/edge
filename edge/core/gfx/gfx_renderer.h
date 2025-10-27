@@ -1,12 +1,22 @@
 #pragma once
 
-#include "gfx_context.h"
 #include "gfx_shader_library.h"
 
-#include <future>
 #include <variant>
 
 namespace edge::gfx {
+	class Renderer;
+
+	using PassSetupCb = std::function<void(Renderer&)>;
+	using PassExecuteCb = std::function<void(Renderer&, CommandBuffer const&, float)>;
+
+	struct ShaderPassInfo {
+		mi::U8String name{};
+		mi::String pipeline_name{};
+		PassSetupCb setup_cb{};
+		PassExecuteCb execute_cb{};
+	};
+
 	class RenderResource : public NonCopyable {
 	public:
 		using HandleType = std::variant<std::monostate, Buffer, Image>;
@@ -22,12 +32,22 @@ namespace edge::gfx {
 		auto setup(Image&& image, ResourceStateFlags initial_flags) -> void;
 		auto setup(Buffer&& buffer, ResourceStateFlags initial_flags) -> void;
 
+		auto update(Image&& image, ResourceStateFlags initial_flags) -> void;
+		auto update(Buffer&& buffer, ResourceStateFlags initial_flags) -> void;
+
+		auto reset() -> void;
+
 		auto get_descriptor(uint32_t mip = ~0u) const -> DescriptorType;
 
 		template<typename T>
 		auto get_handle() -> T& { return std::get<T>(resource_handle_); }
 
+		template<typename T>
+		auto get_srv_view() -> T& { return std::get<T>(srv_view_); }
+
 		auto get_state() const -> const ResourceStateFlags& { return state_; }
+		auto set_state(ResourceStateFlags new_state) -> void { state_ = new_state; }
+
 		auto get_srv_index() const -> uint32_t { return srv_resource_index_; }
 		auto get_uav_index(uint32_t mip) const -> uint32_t { return uav_resource_indices_[mip]; }
 
@@ -116,8 +136,6 @@ namespace edge::gfx {
 			: queue_{ std::exchange(other.queue_, {}) }
 			, command_pool_{ std::exchange(other.command_pool_, {}) }
 			, swapchain_{ std::exchange(other.swapchain_, {}) }
-			, swapchain_images_{ std::exchange(other.swapchain_images_, {}) }
-			, swapchain_image_views_{ std::exchange(other.swapchain_image_views_, {}) }
 			, swapchain_image_index_{ std::exchange(other.swapchain_image_index_, {}) }
 			, frames_{ std::exchange(other.frames_, {}) }
 			, frame_number_{ std::exchange(other.frame_number_, {}) }
@@ -129,6 +147,7 @@ namespace edge::gfx {
 			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, {}) } 
 			, shader_library_{ std::exchange(other.shader_library_, {}) }
 			, render_resources_{ std::exchange(other.render_resources_, {}) }
+			, shader_passes_{ std::exchange(other.shader_passes_, {}) }
 			, render_resource_free_list_{ std::move(other.render_resource_free_list_) } {
 		}
 
@@ -137,8 +156,6 @@ namespace edge::gfx {
 				queue_ = std::exchange(other.queue_, {});
 				command_pool_ = std::exchange(other.command_pool_, {});
 				swapchain_ = std::exchange(other.swapchain_, {});
-				swapchain_images_ = std::exchange(other.swapchain_images_, {});
-				swapchain_image_views_ = std::exchange(other.swapchain_image_views_, {});
 				swapchain_image_index_ = std::exchange(other.swapchain_image_index_, {});
 				frames_ = std::exchange(other.frames_, {});
 				frame_number_ = std::exchange(other.frame_number_, {});
@@ -152,6 +169,7 @@ namespace edge::gfx {
 				shader_library_ = std::exchange(other.shader_library_, {});
 
 				render_resources_ = std::exchange(other.render_resources_, {});
+				shader_passes_ = std::exchange(other.shader_passes_, {});
 				render_resource_free_list_ = std::move(other.render_resource_free_list_);
 			}			
 			return *this;
@@ -162,15 +180,28 @@ namespace edge::gfx {
 		auto create_render_resource() -> uint32_t;
 		auto setup_render_resource(uint32_t resource_id, Image&& image, ResourceStateFlags initial_state) -> void;
 		auto setup_render_resource(uint32_t resource_id, Buffer&& buffer, ResourceStateFlags initial_state) -> void;
+		auto get_render_resource(uint32_t resource_id) -> RenderResource&;
+
+		auto set_render_area(vk::Rect2D render_area) -> void;
+		auto set_layer_count(uint32_t layer_count) -> void;
+		auto add_color_attachment(uint32_t resource_id, vk::AttachmentLoadOp load_op = vk::AttachmentLoadOp::eClear, vk::ClearColorValue clear_color = {}) -> void;
+
+		auto add_shader_pass(ShaderPassInfo&& shader_pass_info) -> void;
 
 		auto begin_frame(float delta_time) -> void;
+		auto execute_graph(float delta_time) -> void;
 		auto end_frame(Span<vk::SemaphoreSubmitInfoKHR> wait_external_semaphores = {}) -> void;
 
 		auto get_current_frame_index() const -> uint32_t { return frame_number_ % k_frame_overlap_; }
 		auto get_current_frame() const -> Frame const* { return frames_.data() + get_current_frame_index(); }
 		auto get_current_frame() -> Frame* { return frames_.data() + get_current_frame_index(); }
 
+		auto get_backbuffer_resource_id() -> uint32_t;
+		auto get_backbuffer_resource() -> RenderResource&;
+
 		auto get_gpu_delta_time() const -> float { return gpu_delta_time_; }
+
+		auto push_constant_range(CommandBuffer const& cmd, vk::ShaderStageFlags stage_flags, Span<const uint8_t> range) const -> void;
 	private:
 		auto _construct(const RendererCreateInfo& create_info) -> vk::Result;
 
@@ -183,8 +214,7 @@ namespace edge::gfx {
 		double timestamp_frequency_{ 1.0 };
 
 		Swapchain swapchain_;
-		mi::Vector<Image> swapchain_images_;
-		mi::Vector<ImageView> swapchain_image_views_;
+		mi::Vector<uint32_t> swapchain_targets_;
 		uint32_t swapchain_image_index_{ 0u };
 
 		mi::Vector<Frame> frames_{};
@@ -209,6 +239,15 @@ namespace edge::gfx {
 		ShaderLibrary shader_library_;
 
 		mi::Vector<RenderResource> render_resources_{};
+		mi::Vector<ShaderPassInfo> shader_passes_{};
 		mi::FreeList<uint32_t> render_resource_free_list_{};
+
+		// TODO: This is temporary
+		mi::Vector<ImageBarrier> image_barriers_{};
+		vk::Rect2D render_area_{};
+		uint32_t layer_count_{ 1u };
+		mi::Vector<vk::RenderingAttachmentInfo> color_attachments_{};
+		vk::RenderingAttachmentInfo depth_attachment_{};
+		vk::RenderingAttachmentInfo stencil_attachment_{};
 	};
 }

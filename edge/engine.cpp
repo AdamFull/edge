@@ -3,6 +3,8 @@
 #include "core/filesystem/filesystem.h"
 #include "imgui_layer.h"
 
+#include "../assets/shaders/fullscreen.h"
+
 #include <imgui.h>
 
 namespace edge {
@@ -62,7 +64,43 @@ namespace edge {
 	}
 
 	auto Engine::update(float delta_time) -> void {
+
+		renderer_->add_shader_pass({
+			.name = u8"fit_screen",
+			.pipeline_name = "fullscreen",
+			.setup_cb = [this](gfx::Renderer& pass) -> void {
+				auto backbuffer_id = pass.get_backbuffer_resource_id();
+				auto& backbuffer = pass.get_render_resource(backbuffer_id);
+				auto& backbuffer_image = backbuffer.get_handle<gfx::Image>();
+				auto extent = backbuffer_image.get_extent();
+
+				pass.add_color_attachment(backbuffer_id);
+				pass.set_render_area({ {}, {extent.width, extent.height } });
+			},
+			.execute_cb = [this](gfx::Renderer& pass, gfx::CommandBuffer const& cmd, float delta_time) -> void {
+				auto& backbuffer = pass.get_backbuffer_resource();
+				auto& backbuffer_image = backbuffer.get_handle<gfx::Image>();
+				auto extent = backbuffer_image.get_extent();
+
+				vk::Viewport viewport{ 0.0f, 0.0f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f };
+				cmd->setViewport(0u, 1u, &viewport);
+				vk::Rect2D scissor{ { 0u, 0u }, { extent.width , extent.height } };
+				cmd->setScissor(0u, 1u, &scissor);
+
+				gfx::fullscreen::PushConstant constants{};
+				constants.width = extent.width;
+				constants.height = extent.height;
+				constants.image_id = 0u;
+
+				auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&constants);
+				pass.push_constant_range(cmd, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, { constant_range_ptr, sizeof(gfx::fullscreen::PushConstant) });
+
+				cmd->draw(3u, 1u, 0u, 0u);
+			}
+			});
+
 		renderer_->begin_frame(delta_time);
+
 
 		for (auto it = pending_uploads_.begin(); it != pending_uploads_.end();) {
 			if (uploader_.is_task_done(it->second)) {
@@ -77,6 +115,8 @@ namespace edge {
 				++it;
 			}
 		}
+
+		renderer_->execute_graph(delta_time);
 
 		mi::Vector<vk::SemaphoreSubmitInfoKHR> uploader_submitted_semaphores{};
 		auto updater_semaphore = updater_.flush({});

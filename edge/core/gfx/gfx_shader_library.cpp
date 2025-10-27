@@ -191,7 +191,7 @@ namespace edge::gfx {
 						return result;
 					}
 
-					pipelines_[mi::String(shader_effect.name)] = Pipeline{ pipeline };
+					pipelines_[mi::String(shader_effect.name)] = Pipeline{ pipeline, shader_effect.bind_point };
 				}
 				else if (shader_effect.bind_point == vk::PipelineBindPoint::eCompute) {
 					vk::ComputePipelineCreateInfo create_info{};
@@ -204,7 +204,7 @@ namespace edge::gfx {
 						return result;
 					}
 
-					pipelines_[mi::String(shader_effect.name)] = Pipeline{ pipeline };
+					pipelines_[mi::String(shader_effect.name)] = Pipeline{ pipeline, shader_effect.bind_point };
 				}
 			}
 		}
