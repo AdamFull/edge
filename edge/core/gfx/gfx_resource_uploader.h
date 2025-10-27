@@ -48,6 +48,7 @@ namespace edge::gfx {
 		uint64_t sync_token;
 		UploadType type;
 		UploadingStatus status;
+		ResourceStateFlags state;
 		std::variant<Buffer, Image> data;
 	};
 

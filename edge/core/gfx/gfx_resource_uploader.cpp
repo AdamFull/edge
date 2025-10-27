@@ -162,11 +162,21 @@ namespace edge::gfx {
 
 	auto ResourceUploader::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result {
 		auto queue_result = device_.get_queue({
-				.required_caps = QueuePresets::kGraphics,
+				.required_caps = QueuePresets::kDedicatedTransfer,
 				.strategy = QueueSelectionStrategy::ePreferDedicated
 			});
+
+		// Try to get dedicated transfer queue
 		if (!queue_result) {
-			return queue_result.error();
+			EDGE_SLOGW("No dedicated transfer queue found, trying to get graphics.");
+			// Fallback to universal
+			queue_result = device_.get_queue({
+				.required_caps = QueuePresets::kGraphics,
+				.strategy = QueueSelectionStrategy::ePreferDedicated
+				});
+			if (!queue_result) {
+				return queue_result.error();
+			}
 		}
 		queue_ = std::move(queue_result.value());
 
@@ -293,6 +303,8 @@ namespace edge::gfx {
 					uint32_t current = current_resource_set_.load(std::memory_order_relaxed);
 					uint32_t next = (current + 1u) % static_cast<uint32_t>(resource_sets_.size());
 					current_resource_set_.store(next, std::memory_order_relaxed);
+
+					EDGE_SLOGD("Processed {} resources.", tasks_to_process.size());
 				}
 			}
 		}
@@ -395,7 +407,7 @@ namespace edge::gfx {
 		if (!image_result) {
 			GFX_ASSERT_MSG(false, "Failed to load texture. Can't create image handle. Reason: {}", vk::to_string(image_result.error()));
 			resource_set.command_buffer.end_marker();
-			return UploadResult{ task.sync_token, task.type, UploadingStatus::eFailed, {} };
+			return UploadResult{ task.sync_token, task.type, UploadingStatus::eFailed, ResourceStateFlag::eUndefined, {} };
 		}
 		auto image = std::move(image_result.value());
 
@@ -438,14 +450,9 @@ namespace edge::gfx {
 		copy_info.pRegions = copy_regions.data();
 
 		resource_set.command_buffer->copyBufferToImage2KHR(&copy_info);
-
-		image_barrier.src_state = image_barrier.dst_state;
-		image_barrier.dst_state = ResourceStateFlag::eShaderResource;
-		resource_set.command_buffer.push_barrier(image_barrier);
-
 		resource_set.command_buffer.end_marker();
 
-		return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eDone, std::move(image) };
+		return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eDone, image_barrier.dst_state, std::move(image) };
 	}
 
 	auto ResourceUploader::_load_image_raw(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, uint32_t width, uint32_t height, vk::Format format, bool generate_mipmap) -> ImageLoadResult {
