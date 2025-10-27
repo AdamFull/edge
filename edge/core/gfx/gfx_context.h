@@ -694,11 +694,13 @@ namespace edge::gfx {
 		static auto create(const ImageCreateInfo& create_info) -> Result<Image>;
 		auto create_view(const vk::ImageSubresourceRange& range, vk::ImageViewType type) -> Result<ImageView>;
 
-		auto get_extent() const -> vk::Extent3D { return create_info_.extent; }
-		auto get_face_count() const -> uint32_t;
-		auto get_layer_count() const -> uint32_t;
-		auto get_level_count() const -> uint32_t { return create_info_.mipLevels; }
-		auto get_format() const -> vk::Format { return create_info_.format; }
+		auto get_extent() const noexcept -> vk::Extent3D { return create_info_.extent; }
+		auto get_face_count() const noexcept -> uint32_t;
+		auto get_layer_count() const noexcept -> uint32_t;
+		auto get_level_count() const noexcept -> uint32_t { return create_info_.mipLevels; }
+		auto get_format() const noexcept -> vk::Format { return create_info_.format; }
+		auto get_usage() const noexcept -> vk::ImageUsageFlags { return create_info_.usage; }
+		auto get_flags() const noexcept -> vk::ImageCreateFlags { return create_info_.flags; }
 	private:
 		vk::ImageCreateInfo create_info_;
 	};

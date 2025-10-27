@@ -1394,14 +1394,14 @@ namespace edge::gfx {
 		return ImageView{ image_view, range };
 	}
 
-	auto Image::get_face_count() const -> uint32_t {
+	auto Image::get_face_count() const noexcept -> uint32_t {
 		if (create_info_.flags & vk::ImageCreateFlagBits::eCubeCompatible) {
 			return 6u;
 		}
 		return 1u;
 	}
 
-	auto Image::get_layer_count() const -> uint32_t {
+	auto Image::get_layer_count() const noexcept -> uint32_t {
 		if (create_info_.flags & vk::ImageCreateFlagBits::eCubeCompatible) {
 			return create_info_.arrayLayers / 6u;
 		}
