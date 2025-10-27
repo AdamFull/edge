@@ -450,10 +450,11 @@ namespace edge::gfx {
 		cmdbuf->beginRenderingKHR(&rendering_info);
 
 		fullscreen::PushConstant push_data{};
+		push_data.width = extent.width;
+		push_data.height = extent.height;
 		push_data.image_id = 0u;
-		std::memcpy(push_constant_buffer_.data(), &push_data, sizeof(fullscreen::PushConstant));
 
-		cmdbuf->pushConstants(*pipeline_layout_, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, 0u, sizeof(fullscreen::PushConstant), push_constant_buffer_.data());
+		cmdbuf->pushConstants(*pipeline_layout_, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, 0u, sizeof(fullscreen::PushConstant), &push_data);
 
 		vk::Viewport vp{ 0.f, 0.f, static_cast<float>(extent.width), static_cast<float>(extent.height), 0.0f, 1.0f};
 		cmdbuf->setViewport(0u, 1u, &vp);
