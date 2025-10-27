@@ -36,6 +36,15 @@ namespace edge::gfx {
 		return self;
 	}
 
+	auto ShaderLibrary::get_pipeline(mi::String const& pipeline_name) const -> Pipeline const* {
+		auto found = pipelines_.find(pipeline_name);
+		if (found != pipelines_.end()) {
+			return &(found->second);
+		}
+
+		return nullptr;
+	}
+
 	// TODO: build shader library in another function, for support in future hot reload
 	auto ShaderLibrary::_construct(const ShaderLibraryInfo& info) -> vk::Result {
 		GFX_ASSERT_MSG(pipeline_layout_, "PipelineLayout is null, but required.");
@@ -119,7 +128,7 @@ namespace edge::gfx {
 					auto tessellation_state_create_info = shader_effect.pipeline_state.get_tessellation_state();
 					auto rasterization_state_create_info = shader_effect.pipeline_state.get_rasterization_state();
 					auto multisample_state_create_info = shader_effect.pipeline_state.get_multisample_state();
-					multisample_state_create_info.pSampleMask = shader_effect.multisample_sample_masks.data();
+					multisample_state_create_info.pSampleMask = multisample_state_create_info.rasterizationSamples != vk::SampleCountFlagBits::e1 ? shader_effect.multisample_sample_masks.data() : nullptr;
 					auto depth_stencil_state_create_info = shader_effect.pipeline_state.get_depth_stencil_state();
 					auto color_blend_state_create_info = shader_effect.pipeline_state.get_color_blending_state();
 					color_blend_state_create_info.attachmentCount = static_cast<uint32_t>(shader_effect.color_attachments.size());
