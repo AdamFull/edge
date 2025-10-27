@@ -1573,10 +1573,18 @@ namespace edge::gfx {
 		mi::Vector<Image> images{};
 		for (auto& image : result.value()) {
 			vk::ImageCreateInfo image_create_info{};
+			image_create_info.imageType = vk::ImageType::e2D;
+			image_create_info.format = state_.format.format;
 			image_create_info.extent.width = state_.extent.width;
 			image_create_info.extent.height = state_.extent.height;
 			image_create_info.extent.depth = 1u;
-			image_create_info.format = state_.format.format;
+			image_create_info.mipLevels = 1u;
+			image_create_info.arrayLayers = 1u;
+			image_create_info.samples = vk::SampleCountFlagBits::e1;
+			image_create_info.tiling = vk::ImageTiling::eOptimal;
+			image_create_info.usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
+			image_create_info.sharingMode = vk::SharingMode::eExclusive;
+			image_create_info.initialLayout = vk::ImageLayout::eUndefined;
 
 			images.emplace_back(image, image_create_info);
 		}
@@ -1641,7 +1649,7 @@ namespace edge::gfx {
 		// TODO: Add usage valudation
 		vk::FormatProperties format_properties;
 		adapter_->getFormatProperties(create_info.imageFormat, &format_properties);
-		create_info.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferDst;
+		create_info.imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst;
 
 		//create_info.preTransform = ((requested_state_.transform & surface_capabilities.supportedTransforms) == requested_state_.transform) ? requested_state_.transform : surface_capabilities.currentTransform;
         create_info.preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity;

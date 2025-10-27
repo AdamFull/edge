@@ -1059,11 +1059,29 @@ namespace edge::gfx {
 
 	class Pipeline : public DeviceHandle<vk::Pipeline> {
 	public:
-		Pipeline(vk::Pipeline handle = VK_NULL_HANDLE) noexcept
-			: DeviceHandle{ handle } {
+		Pipeline(vk::Pipeline handle = VK_NULL_HANDLE, vk::PipelineBindPoint bind_point = {}) noexcept
+			: DeviceHandle{ handle }
+			, bind_point_{ bind_point } {
 		}
 
+		Pipeline(Pipeline&& other) noexcept
+			: DeviceHandle(std::move(other))
+			, bind_point_{ std::move(other.bind_point_) } {
+		}
+
+		auto operator=(Pipeline&& other) noexcept -> Pipeline& {
+			if (this != &other) {
+				DeviceHandle::operator=(std::move(other));
+				bind_point_ = std::move(other.bind_point_);
+			}
+			return *this;
+		}
+
+		auto get_bind_point() const noexcept -> vk::PipelineBindPoint { return bind_point_; }
+
 		// TODO: add static create functions
+	private:
+		vk::PipelineBindPoint bind_point_{};
 	};
 
 	class ShaderModule : public DeviceHandle<vk::ShaderModule> {
