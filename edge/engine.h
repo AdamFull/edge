@@ -25,7 +25,7 @@ namespace edge {
 		gfx::ResourceUpdater updater_{};
 		gfx::ResourceUploader uploader_{};
 
-		mi::Vector<ILayer> layers_;
+		mi::Vector<Owned<ILayer>> layers_;
 
 		mi::Vector<std::pair<uint32_t, uint64_t>> pending_uploads_{};
 	};
