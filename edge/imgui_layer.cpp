@@ -1,7 +1,14 @@
 #include "imgui_layer.h"
 #include "core/platform/platform.h"
+#include "core/gfx/gfx_renderer.h"
+#include "core/gfx/gfx_resource_updater.h"
+#include "core/gfx/gfx_resource_uploader.h"
+
+#include "../assets/shaders/imgui.h"
 
 #include <imgui.h>
+
+#define EDGE_LOGGER_SCOPE "ImGuiLayer"
 
 namespace edge {
 	inline constexpr auto translate_key_code(KeyboardKeyCode code) -> ImGuiKey {
@@ -139,11 +146,12 @@ namespace edge {
 		}
 	}
 
-	auto ImGuiLayer::create(platform::IPlatformContext& context) -> Owned<ImGuiLayer> {
+	auto ImGuiLayer::create(platform::IPlatformContext& context, gfx::Renderer& renderer, gfx::ResourceUploader& uploader, gfx::ResourceUpdater& updater) -> Owned<ImGuiLayer> {
 		Owned<ImGuiLayer> self = std::make_unique<ImGuiLayer>();
-
 		self->dispatcher_ = &context.get_event_dispatcher();
-
+		self->renderer_ = &renderer;
+		self->resource_uploader_ = &uploader;
+		self->resource_updater_ = &updater;
 		return self;
 	}
 
@@ -166,12 +174,36 @@ namespace edge {
 
 		io.Fonts->GetTexDataAsRGBA32(&font_pixels, &font_width, &font_height);
 
-		//gfx::ImageImportInfo font_inport_info{};
-		//font_inport_info.raw.data.resize(font_width * font_height * 4);
-		//font_inport_info.raw.width = font_width;
-		//font_inport_info.raw.height = font_height;
-		//uploader_.load_image(std::move(font_inport_info));
+		// Upload font image
+		gfx::ImageImportInfo font_inport_info{};
+		font_inport_info.raw.data.resize(font_width * font_height * 4);
+		std::memcpy(font_inport_info.raw.data.data(), font_pixels, font_inport_info.raw.data.size());
+		font_inport_info.raw.width = font_width;
+		font_inport_info.raw.height = font_height;
+		font_upload_task_ = resource_uploader_->load_image(std::move(font_inport_info));
 
+		// Create vertex buffer
+		vertex_buffer_id_ = renderer_->create_render_resource();
+		gfx::BufferCreateInfo buffer_create_info{};
+		buffer_create_info.size = sizeof(ImDrawVert);
+		buffer_create_info.count = 1024 * 1024;
+		buffer_create_info.flags = gfx::kDynamicVertexBuffer;
+		buffer_create_info.minimal_alignment = sizeof(ImDrawVert);
+		auto buffer_create_result = gfx::Buffer::create(buffer_create_info);
+		GFX_ASSERT_MSG(buffer_create_result.has_value(), "Failed to create vertex buffer.");
+		renderer_->setup_render_resource(vertex_buffer_id_, std::move(buffer_create_result.value()), gfx::ResourceStateFlag::eUndefined);
+
+		// Create index buffer
+		index_buffer_id_ = renderer_->create_render_resource();
+		buffer_create_info.size = sizeof(ImDrawIdx);
+		buffer_create_info.count = 1024 * 1024;
+		buffer_create_info.flags = gfx::kDynamicIndexBuffer;
+		buffer_create_info.minimal_alignment = sizeof(ImDrawIdx);
+		buffer_create_result = gfx::Buffer::create(buffer_create_info);
+		GFX_ASSERT_MSG(buffer_create_result.has_value(), "Failed to create index buffer.");
+		renderer_->setup_render_resource(index_buffer_id_, std::move(buffer_create_result.value()), gfx::ResourceStateFlag::eUndefined);
+
+		// Register event listener
 		listener_id_ = dispatcher_->add_listener<events::EventTag::eWindow, events::EventTag::eRawInput>(
 			[](const events::Dispatcher::event_variant_t& e, void* user_ptr) {
 				auto* self = static_cast<ImGuiLayer*>(user_ptr);
@@ -210,17 +242,188 @@ namespace edge {
 	}
 
 	auto ImGuiLayer::update(float delta_time) -> void {
-		//ImGuiIO& io = ImGui::GetIO();
-		//io.DisplaySize = ImVec2(static_cast<float>(window_->get_width()), static_cast<float>(window_->get_height()));
-		//io.DeltaTime = delta_time;
-		//
-		//
-		//ImGui::NewFrame();
-		//
-		//ImGui::Render();
+		if (font_upload_task_ != ~0u) {
+			if (resource_uploader_->is_task_done(font_upload_task_)) {
+				auto uploading_result = resource_uploader_->get_task_result(font_upload_task_);
+				if (uploading_result) {
+					font_image_id_ = renderer_->create_render_resource();
+					renderer_->setup_render_resource(font_image_id_, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
+				}
+				GFX_ASSERT_MSG(uploading_result.has_value(), "Failed to upload font texture.");
+				font_upload_task_ = ~0u;
+			}
+		}
+
+		renderer_->add_shader_pass({
+			.name = u8"ImGui",
+			.pipeline_name = "imgui",
+			.setup_cb = [this](gfx::Renderer& pass, gfx::CommandBuffer const& cmd) -> void {
+				auto backbuffer_id = pass.get_backbuffer_resource_id();
+				auto& backbuffer = pass.get_render_resource(backbuffer_id);
+				auto& backbuffer_image = backbuffer.get_handle<gfx::Image>();
+				auto extent = backbuffer_image.get_extent();
+				
+				pass.add_color_attachment(backbuffer_id);
+				pass.set_render_area({ {}, {extent.width, extent.height } });
+
+				auto& vertex_buffer_resource = pass.get_render_resource(vertex_buffer_id_);
+				vertex_buffer_resource.transfer_state(cmd, gfx::ResourceStateFlag::eVertexRead);
+				auto& index_buffer_resource = pass.get_render_resource(index_buffer_id_);
+				index_buffer_resource.transfer_state(cmd, gfx::ResourceStateFlag::eIndexRead);
+				},
+			.execute_cb = [this](gfx::Renderer& pass, gfx::CommandBuffer const& cmd, float delta_time) -> void {
+				if (!ImGui::GetCurrentContext()) {
+					return;
+				}
+
+				ImGui::Render();
+
+				ImDrawData* draw_data = ImGui::GetDrawData();
+				if (draw_data && (draw_data->TotalVtxCount != 0) && (draw_data->TotalIdxCount != 0)) {
+					mi::Vector<ImDrawVert> vertices{};
+					mi::Vector<ImDrawIdx> indices{};
+
+					// TODO: calculate total required vertex size
+
+					// TODO: check do i need to update vertex buffer
+					for (int32_t i = 0; i < draw_data->CmdListsCount; i++) {
+						const ImDrawList* cmd_list = draw_data->CmdLists[i];
+
+						auto* vtx_end = cmd_list->VtxBuffer.Data + cmd_list->VtxBuffer.Size;
+						vertices.insert(vertices.end(), cmd_list->VtxBuffer.Data, vtx_end);
+
+						auto* idx_end = cmd_list->IdxBuffer.Data + cmd_list->IdxBuffer.Size;
+						indices.insert(indices.end(), cmd_list->IdxBuffer.Data, idx_end);
+					}
+
+					auto& vertex_buffer_resource = pass.get_render_resource(vertex_buffer_id_);
+					auto& vertex_buffer = vertex_buffer_resource.get_handle<gfx::Buffer>();
+					if (!vertices.empty()) {
+						// TODO: check is enough space
+						vertex_buffer.update(vertices.data(), vertices.size() * sizeof(ImDrawVert), 0ull);
+						// TODO: Add host update barrier
+					}
+
+					auto& index_buffer_resource = pass.get_render_resource(index_buffer_id_);
+					auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
+					if (!indices.empty()) {
+						// TODO: check is enough space
+						index_buffer.update(indices.data(), indices.size() * sizeof(ImDrawIdx), 0ull);
+						// TODO: Add host update barrier
+					}
+
+					cmd->bindIndexBuffer(index_buffer.get_handle(), 0ull, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
+
+					ImGuiIO& io = ImGui::GetIO();
+					vk::Viewport viewport{ 0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y, 0.f, 1.f };
+					cmd->setViewport(0u, 1u, &viewport);
+
+					gfx::imgui::PushConstant push_constant{};
+					push_constant.vertices = vertex_buffer.get_device_address();
+					push_constant.scale.x = 2.f / draw_data->DisplaySize.x;
+					push_constant.scale.y = 2.f / draw_data->DisplaySize.y;
+					push_constant.translate.x = -1.0f - draw_data->DisplayPos.x * push_constant.scale.x;
+					push_constant.translate.y = -1.0f - draw_data->DisplayPos.y * push_constant.scale.y;
+					if (font_image_id_ != ~0u) {
+						auto& font_resource = pass.get_render_resource(font_image_id_);
+						push_constant.image_id = font_resource.get_srv_index();
+					}
+					else {
+						push_constant.image_id = 0u;
+					}
+					// TODO: Push constants will be needed in any time when i update image binding id
+					auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
+					pass.push_constant_range(cmd, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, { constant_range_ptr, sizeof(push_constant) });
+
+					// Will project scissor/clipping rectangles into framebuffer space
+					ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
+					ImVec2 clip_scale = draw_data->FramebufferScale; // (1,1) unless using retina display which are often (2,2)
+
+#if 0
+					// Collect resource dependencies
+					for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
+						const ImDrawList* cmd_list = draw_data->CmdLists[n];
+						for (int32_t cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++) {
+							const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
+
+							edge::gfx::ITexture* resource_binding{ (edge::gfx::ITexture*)pcmd->TextureId };
+							if (sizeof(ImTextureID) < sizeof(ImU64)) {
+								// We don't support texture switches if ImTextureID hasn't been redefined to be 64-bit. Do a flaky check that other textures haven't been used.
+								IM_ASSERT(pcmd->TextureId == (ImTextureID)font_image_);
+								resource_binding = font_image_;
+							}
+
+							if (!pcmd->TextureId) {
+								resource_binding = font_image_;
+							}
+
+							//self.read_resource(render_label::texture0, resource_binding, ~0u);
+							//self.bind_resource(render_label::sampler0, linear_clamp_to_edge_sampler);
+						}
+					}
+#endif
+					// Render command lists
+		// (Because we merged all buffers into a single one, we maintain our own offset into them)
+					int32_t global_vtx_offset = 0;
+					int32_t global_idx_offset = 0;
+					for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
+						const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
+						for (int32_t cmd_i = 0; cmd_i < im_cmd_list->CmdBuffer.Size; cmd_i++) {
+							const ImDrawCmd* pcmd = &im_cmd_list->CmdBuffer[cmd_i];
+
+							if (pcmd->UserCallback != nullptr) {
+								// User callback, registered via ImDrawList::AddCallback()
+								// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
+								//if (pcmd->UserCallback == ImDrawCallback_ResetRenderState)
+								//	ImGui_ImplVulkan_SetupRenderState(draw_data, pipeline, command_buffer, rb, fb_width, fb_height);
+								//else
+								pcmd->UserCallback(im_cmd_list, pcmd);
+							}
+							else {
+								// Project scissor/clipping rectangles into framebuffer space
+								ImVec2 clip_min((pcmd->ClipRect.x - clip_off.x)* clip_scale.x, (pcmd->ClipRect.y - clip_off.y)* clip_scale.y);
+								ImVec2 clip_max((pcmd->ClipRect.z - clip_off.x)* clip_scale.x, (pcmd->ClipRect.w - clip_off.y)* clip_scale.y);
+
+								// Clamp to viewport as vkCmdSetScissor() won't accept values that are off bounds
+								if (clip_min.x < 0.0f) { clip_min.x = 0.0f; }
+								if (clip_min.y < 0.0f) { clip_min.y = 0.0f; }
+								if (clip_max.x > io.DisplaySize.x) { clip_max.x = io.DisplaySize.x; }
+								if (clip_max.y > io.DisplaySize.y) { clip_max.y = io.DisplaySize.y; }
+								if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
+									continue;
+
+								// Apply scissor/clipping rectangle
+								vk::Rect2D scissor_rect{ { (int32_t)(clip_min.x), (int32_t)(clip_min.y) }, { (uint32_t)(clip_max.x - clip_min.x), (uint32_t)(clip_max.y - clip_min.y) } };
+								cmd->setScissor(0u, 1u, &scissor_rect);
+								
+								//uint32_t resource_binding = reinterpret_cast<uint32_t>(pcmd->TextureId);
+								// TODO: need to process resource bindings here
+
+								cmd->drawIndexed(pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
+							}
+						}
+						global_idx_offset += im_cmd_list->IdxBuffer.Size;
+						global_vtx_offset += im_cmd_list->VtxBuffer.Size;
+					}
+				}
+				}
+			});
+
+		auto& backbuffer = renderer_->get_backbuffer_resource();
+		auto& backbuffer_image = backbuffer.get_handle<gfx::Image>();
+		auto backbuffer_extent = backbuffer_image.get_extent();
+
+		ImGuiIO& io = ImGui::GetIO();
+		io.DisplaySize = ImVec2(static_cast<float>(backbuffer_extent.width), static_cast<float>(backbuffer_extent.height));
+		io.DeltaTime = delta_time;
+		
+		ImGui::NewFrame();
+		ImGui::ShowDemoWindow();
 	}
 
 	auto ImGuiLayer::fixed_update(float delta_time) -> void {
 
 	}
 }
+
+#undef EDGE_LOGGER_SCOPE
