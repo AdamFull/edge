@@ -289,32 +289,35 @@ namespace edge {
 							auto& render_resource = pass.get_render_resource(resource_id);
 							auto& image = render_resource.get_handle<gfx::Image>();
 
-							auto pitch = tex->UpdateRect.w * tex->BytesPerPixel;
-
-							// Create staging memory for update data
-							gfx::BufferCreateInfo buffer_create_info{};
-							buffer_create_info.size = pitch * tex->UpdateRect.h;
-							buffer_create_info.count = 1u;
-							buffer_create_info.minimal_alignment = 4u;
-							buffer_create_info.flags = gfx::kStagingBuffer;
-							auto buffer_create_result = gfx::Buffer::create(buffer_create_info);
-							GFX_ASSERT_MSG(buffer_create_result.has_value(), "Failed to create staging buffer for texture update.");
-							auto staging_buffer = std::move(buffer_create_result.value());
-
-							auto mapping_result = staging_buffer.map();
-							GFX_ASSERT_MSG(mapping_result.has_value(), "Failed to map staging memory.");
-							auto mapped_range = std::move(mapping_result.value());
-
-							for (int y = 0; y < tex->UpdateRect.h; y++) {
-								std::memcpy(mapped_range.data() + pitch * y, tex->GetPixelsAt(tex->UpdateRect.x, tex->UpdateRect.y + y), pitch);
+							// TODO: Move it all to uploader
+							// TODO: At first try to use command list from Updater
+							uint64_t total_size = 0;
+							for (auto& update_region : tex->Updates) {
+								EDGE_SLOGD("Updating image {} region: [{}, {}, {}, {}]", tex->GetTexID(), update_region.x, update_region.y, update_region.w, update_region.h);
+								auto region_pitch = update_region.w * tex->BytesPerPixel;
+								total_size += region_pitch * update_region.h;
 							}
+
+							auto& resource_set = resource_updater_->acquire_resource_set();
+							auto allocation_result = resource_updater_->get_or_allocate_staging_memory(resource_set, total_size, 4ull);
+							GFX_ASSERT_MSG(allocation_result.has_value(), "Failed to create staging buffer for texture update.");
+							auto buffer_range = std::move(allocation_result.value());
+							auto mapped_range = buffer_range.get_range();
 
 							render_resource.transfer_state(cmd, gfx::ResourceStateFlag::eCopyDst);
 
+							uint64_t buffer_offset = 0;
 							mi::Vector<vk::BufferImageCopy2KHR> copy_regions{};
 							for (auto& update_region : tex->Updates) {
+								auto region_pitch = update_region.w * tex->BytesPerPixel;
+
+								for (int y = 0; y < update_region.h; y++) {
+									const void* src_pixels = tex->GetPixelsAt(update_region.x, update_region.y + y);
+									std::memcpy(mapped_range.data() + buffer_offset + (region_pitch * y), src_pixels, region_pitch);
+								}
+
 								vk::BufferImageCopy2KHR image_copy_region{};
-								image_copy_region.bufferOffset; // TODO: setup buffer offset
+								image_copy_region.bufferOffset = buffer_offset + buffer_range.get_offset();
 								image_copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
 								image_copy_region.imageSubresource.mipLevel = 0u;
 								image_copy_region.imageSubresource.baseArrayLayer = 0u;
@@ -322,10 +325,12 @@ namespace edge {
 								image_copy_region.imageOffset = vk::Offset3D{ update_region.x, update_region.y, 0 };
 								image_copy_region.imageExtent = vk::Extent3D{ update_region.w, update_region.h, 1u };
 								copy_regions.push_back(image_copy_region);
+
+								buffer_offset += region_pitch * update_region.h;
 							}
 
 							vk::CopyBufferToImageInfo2KHR copy_info{};
-							//copy_info.srcBuffer = upload_info.memory_range.get_buffer();
+							copy_info.srcBuffer = buffer_range.get_buffer();
 							copy_info.dstImage = image.get_handle();
 							copy_info.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
 							copy_info.regionCount = static_cast<uint32_t>(copy_regions.size());
@@ -334,10 +339,12 @@ namespace edge {
 
 							render_resource.transfer_state(cmd, gfx::ResourceStateFlag::eShaderResource);
 
+							tex->SetStatus(ImTextureStatus_OK);
+
 							// TODO: Uploader is not support partial update yet, because of that trying to update manually
 						}
 						else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
-
+							EDGE_SLOGW("ImGui wants to delete image {}, but it's not implemented yet. ", tex->GetTexID());
 						}
 					}
 				}
@@ -355,7 +362,7 @@ namespace edge {
 				
 
 				if (draw_data->TotalVtxCount > static_cast<int>(current_vertex_capacity_)) {
-					EDGE_LOGW("ImGui vertex buffer too small ({} < {}), need to resize", current_vertex_capacity_, draw_data->TotalVtxCount);
+					EDGE_SLOGW("ImGui vertex buffer too small ({} < {}), need to resize", current_vertex_capacity_, draw_data->TotalVtxCount);
 
 					uint32_t new_size = current_index_capacity_;
 					while (new_size < draw_data->TotalVtxCount) {
@@ -366,7 +373,7 @@ namespace edge {
 				}
 
 				if (draw_data->TotalIdxCount > static_cast<int>(current_index_capacity_)) {
-					EDGE_LOGW("ImGui index buffer too small ({} < {}), need to resize", current_index_capacity_, draw_data->TotalIdxCount);
+					EDGE_SLOGW("ImGui index buffer too small ({} < {}), need to resize", current_index_capacity_, draw_data->TotalIdxCount);
 					
 					uint32_t new_size = current_index_capacity_;
 					while (new_size < draw_data->TotalIdxCount) {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "core/events.h"
+#include "core/gfx/gfx_context.h"
 #include "core/foundation/foundation.h"
 
 #include "layer.h"
