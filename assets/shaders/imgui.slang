@@ -24,10 +24,12 @@ VSOutput vs_main(uint32_t vertex_index: SV_VertexID) {
 
 [shader("fragment")]
 float4 ps_main(VSOutput input) : SV_Target0 {
-    if (pc.image_id == ~0u)
+    if (pc.image_index == 0xffff)
     {
         return input.color;
     }
 
-    return input.color * g_srv_textures[pc.image_id].Sample(g_samplers[0], input.uv);
+    let image = g_srv_textures[pc.image_index];
+    let sampler = g_samplers[pc.sampler_index];
+    return input.color * image.Sample(sampler, input.uv);
 }

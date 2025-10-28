@@ -3,7 +3,7 @@ type: graphics
 source: imgui.slang
 profile: spirv_1_1
 rasterization:
-    cull_mode: front
+    cull_mode: none
     front_face: ccw
 color_blending:
     logic_op_enable: false
@@ -13,7 +13,7 @@ color_blending:
       blending: true
       src_color: src_alpha
       dst_color: one_minus_src_alpha
-      src_alpha: one_mimus_src_alpha
+      src_alpha: one_minus_src_alpha
       dst_alpha: zero
 input_assembly:
     primitive_topology: triangle_list
