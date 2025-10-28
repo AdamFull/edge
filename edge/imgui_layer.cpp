@@ -174,7 +174,7 @@ namespace edge {
 		io.BackendRendererUserData = (void*)this;
 		io.BackendRendererName = "edge";
 		io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
-		//io.BackendFlags |= ImGuiBackendFlags_RendererHasViewports;  // We can Create multi-viewports on the Renderer side (optional)
+		io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;  // We can honor ImGuiPlatformIO::Textures[] requests during render.
 
 		io.Fonts->Build();
 
@@ -182,14 +182,6 @@ namespace edge {
 		int font_width, font_height;
 
 		io.Fonts->GetTexDataAsRGBA32(&font_pixels, &font_width, &font_height);
-
-		// Upload font image
-		gfx::ImageImportInfo font_inport_info{};
-		font_inport_info.raw.data.resize(font_width * font_height * 4);
-		std::memcpy(font_inport_info.raw.data.data(), font_pixels, font_inport_info.raw.data.size());
-		font_inport_info.raw.width = font_width;
-		font_inport_info.raw.height = font_height;
-		font_upload_task_ = resource_uploader_->load_image(std::move(font_inport_info));
 
 		// Create vertex buffer
 		vertex_buffer_id_ = renderer_->create_render_resource();
@@ -238,18 +230,6 @@ namespace edge {
 	}
 
 	auto ImGuiLayer::update(float delta_time) -> void {
-		if (font_upload_task_ != ~0u) {
-			if (resource_uploader_->is_task_done(font_upload_task_)) {
-				auto uploading_result = resource_uploader_->get_task_result(font_upload_task_);
-				if (uploading_result) {
-					font_image_id_ = renderer_->create_render_resource();
-					renderer_->setup_render_resource(font_image_id_, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
-				}
-				GFX_ASSERT_MSG(uploading_result.has_value(), "Failed to upload font texture.");
-				font_upload_task_ = ~0u;
-			}
-		}
-
 		renderer_->add_shader_pass({
 			.name = u8"ImGui",
 			.pipeline_name = "imgui",
@@ -258,7 +238,7 @@ namespace edge {
 				auto& backbuffer = pass.get_render_resource(backbuffer_id);
 				auto& backbuffer_image = backbuffer.get_handle<gfx::Image>();
 				auto extent = backbuffer_image.get_extent();
-				
+
 				pass.add_color_attachment(backbuffer_id);
 				pass.set_render_area({ {}, {extent.width, extent.height } });
 
@@ -266,8 +246,7 @@ namespace edge {
 				vertex_buffer_resource.transfer_state(cmd, gfx::ResourceStateFlag::eVertexRead);
 				auto& index_buffer_resource = pass.get_render_resource(index_buffer_id_);
 				index_buffer_resource.transfer_state(cmd, gfx::ResourceStateFlag::eIndexRead);
-				},
-			.execute_cb = [this](gfx::Renderer& pass, gfx::CommandBuffer const& cmd, float delta_time) -> void {
+
 				if (!ImGui::GetCurrentContext()) {
 					return;
 				}
@@ -278,6 +257,102 @@ namespace edge {
 				if (!draw_data || draw_data->TotalVtxCount == 0 || draw_data->TotalIdxCount == 0) {
 					return;
 				}
+
+				if (draw_data->Textures != nullptr) {
+					for (ImTextureData* tex : *draw_data->Textures) {
+						if (tex->Status == ImTextureStatus_OK) {
+							continue;
+						}
+
+						if (tex->Status == ImTextureStatus_WantCreate) {
+							gfx::ImageImportInfo import_info{};
+							import_info.raw.width = tex->Width;
+							import_info.raw.height = tex->Height;
+							import_info.raw.data.resize(tex->Width * tex->Height * tex->BytesPerPixel);
+							std::memcpy(import_info.raw.data.data(), tex->Pixels, import_info.raw.data.size());
+							auto uploading_task_id = resource_uploader_->load_image(std::move(import_info));
+							resource_uploader_->wait_for_task(uploading_task_id);
+
+							auto new_texture = pass.create_render_resource();
+
+							auto uploading_result = resource_uploader_->get_task_result(uploading_task_id);
+							if (uploading_result) {
+								renderer_->setup_render_resource(new_texture, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
+							}
+
+							// TODO: add internal tracking of resource uploads
+							tex->SetTexID((ImTextureID)new_texture);
+							tex->SetStatus(ImTextureStatus_OK);
+						}
+						else if (tex->Status == ImTextureStatus_WantUpdates) {
+							auto resource_id = tex->GetTexID();
+							auto& render_resource = pass.get_render_resource(resource_id);
+							auto& image = render_resource.get_handle<gfx::Image>();
+
+							auto pitch = tex->UpdateRect.w * tex->BytesPerPixel;
+
+							// Create staging memory for update data
+							gfx::BufferCreateInfo buffer_create_info{};
+							buffer_create_info.size = pitch * tex->UpdateRect.h;
+							buffer_create_info.count = 1u;
+							buffer_create_info.minimal_alignment = 4u;
+							buffer_create_info.flags = gfx::kStagingBuffer;
+							auto buffer_create_result = gfx::Buffer::create(buffer_create_info);
+							GFX_ASSERT_MSG(buffer_create_result.has_value(), "Failed to create staging buffer for texture update.");
+							auto staging_buffer = std::move(buffer_create_result.value());
+
+							auto mapping_result = staging_buffer.map();
+							GFX_ASSERT_MSG(mapping_result.has_value(), "Failed to map staging memory.");
+							auto mapped_range = std::move(mapping_result.value());
+
+							for (int y = 0; y < tex->UpdateRect.h; y++) {
+								std::memcpy(mapped_range.data() + pitch * y, tex->GetPixelsAt(tex->UpdateRect.x, tex->UpdateRect.y + y), pitch);
+							}
+
+							render_resource.transfer_state(cmd, gfx::ResourceStateFlag::eCopyDst);
+
+							mi::Vector<vk::BufferImageCopy2KHR> copy_regions{};
+							for (auto& update_region : tex->Updates) {
+								vk::BufferImageCopy2KHR image_copy_region{};
+								image_copy_region.bufferOffset; // TODO: setup buffer offset
+								image_copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+								image_copy_region.imageSubresource.mipLevel = 0u;
+								image_copy_region.imageSubresource.baseArrayLayer = 0u;
+								image_copy_region.imageSubresource.layerCount = 1u;
+								image_copy_region.imageOffset = vk::Offset3D{ update_region.x, update_region.y, 0 };
+								image_copy_region.imageExtent = vk::Extent3D{ update_region.w, update_region.h, 1u };
+								copy_regions.push_back(image_copy_region);
+							}
+
+							vk::CopyBufferToImageInfo2KHR copy_info{};
+							//copy_info.srcBuffer = upload_info.memory_range.get_buffer();
+							copy_info.dstImage = image.get_handle();
+							copy_info.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+							copy_info.regionCount = static_cast<uint32_t>(copy_regions.size());
+							copy_info.pRegions = copy_regions.data();
+							cmd->copyBufferToImage2KHR(&copy_info);
+
+							render_resource.transfer_state(cmd, gfx::ResourceStateFlag::eShaderResource);
+
+							// TODO: Uploader is not support partial update yet, because of that trying to update manually
+						}
+						else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
+
+						}
+					}
+				}
+
+				},
+			.execute_cb = [this](gfx::Renderer& pass, gfx::CommandBuffer const& cmd, float delta_time) -> void {
+				if (!ImGui::GetCurrentContext()) {
+					return;
+				}
+
+				ImDrawData* draw_data = ImGui::GetDrawData();
+				if (!draw_data || draw_data->TotalVtxCount == 0 || draw_data->TotalIdxCount == 0) {
+					return;
+				}
+				
 
 				if (draw_data->TotalVtxCount > static_cast<int>(current_vertex_capacity_)) {
 					EDGE_LOGW("ImGui vertex buffer too small ({} < {}), need to resize", current_vertex_capacity_, draw_data->TotalVtxCount);
@@ -316,16 +391,9 @@ namespace edge {
 				push_constant.translate.x = -1.0f - draw_data->DisplayPos.x * push_constant.scale.x;
 				push_constant.translate.y = -1.0f - draw_data->DisplayPos.y * push_constant.scale.y;
 				push_constant.sampler_index = 0u;
-				if (font_image_id_ != ~0u) {
-					auto& font_resource = pass.get_render_resource(font_image_id_);
-					push_constant.image_index = font_resource.get_srv_index();
-				}
-				else {
-					push_constant.image_index = 0xffff;
-				}
 				// TODO: Push constants will be needed in any time when i update image binding id
-				auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
-				pass.push_constant_range(cmd, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, { constant_range_ptr, sizeof(push_constant) });
+				//auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
+				//pass.push_constant_range(cmd, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, { constant_range_ptr, sizeof(push_constant) });
 
 				cmd->bindIndexBuffer(index_buffer.get_handle(), 0ull, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
 
@@ -360,6 +428,8 @@ namespace edge {
 				global_vtx_offset = 0;
 				global_idx_offset = 0;
 
+				uint32_t last_image_index = ~0u;
+
 				for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
 					const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
 					for (int32_t cmd_i = 0; cmd_i < im_cmd_list->CmdBuffer.Size; cmd_i++) {
@@ -381,8 +451,16 @@ namespace edge {
 						vk::Rect2D scissor_rect{ { (int32_t)(clip_min.x), (int32_t)(clip_min.y) }, { (uint32_t)(clip_max.x - clip_min.x), (uint32_t)(clip_max.y - clip_min.y) } };
 						cmd->setScissor(0u, 1u, &scissor_rect);
 						
-						// Bind textures
-
+						uint32_t new_image_index = pcmd->GetTexID();
+						if (new_image_index != last_image_index) {
+							auto& render_resource = pass.get_render_resource(new_image_index);
+							push_constant.image_index = render_resource.get_srv_index();
+							auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
+							pass.push_constant_range(cmd,
+								vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
+								{ constant_range_ptr, sizeof(push_constant) });
+							last_image_index = new_image_index;
+						}
 
 						cmd->drawIndexed(pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
 					}

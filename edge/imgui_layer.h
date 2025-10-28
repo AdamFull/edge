@@ -46,8 +46,6 @@ namespace edge {
 		gfx::Renderer* renderer_{ nullptr };
 		gfx::ResourceUploader* resource_uploader_{ nullptr };
 		gfx::ResourceUpdater* resource_updater_{ nullptr };
-		uint32_t font_upload_task_{ ~0u };
-		uint32_t font_image_id_{ ~0u };
 		uint32_t vertex_buffer_id_{ ~0u };
 		uint32_t index_buffer_id_{ ~0u };
 		uint64_t listener_id_{ ~0ull };
