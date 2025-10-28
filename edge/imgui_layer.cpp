@@ -289,36 +289,35 @@ namespace edge {
 
 				ImDrawData* draw_data = ImGui::GetDrawData();
 				if (draw_data && (draw_data->TotalVtxCount != 0) && (draw_data->TotalIdxCount != 0)) {
-					mi::Vector<ImDrawVert> vertices{};
-					mi::Vector<ImDrawIdx> indices{};
-
-					// TODO: calculate total required vertex size
-
-					// TODO: check do i need to update vertex buffer
+					uint64_t total_vertex_count{ 0ull };
+					uint64_t total_index_count{ 0ull };
 					for (int32_t i = 0; i < draw_data->CmdListsCount; i++) {
 						const ImDrawList* cmd_list = draw_data->CmdLists[i];
 
-						auto* vtx_end = cmd_list->VtxBuffer.Data + cmd_list->VtxBuffer.Size;
-						vertices.insert(vertices.end(), cmd_list->VtxBuffer.Data, vtx_end);
-
-						auto* idx_end = cmd_list->IdxBuffer.Data + cmd_list->IdxBuffer.Size;
-						indices.insert(indices.end(), cmd_list->IdxBuffer.Data, idx_end);
+						total_vertex_count += cmd_list->VtxBuffer.Size;
+						total_index_count += cmd_list->IdxBuffer.Size;
 					}
 
 					auto& vertex_buffer_resource = pass.get_render_resource(vertex_buffer_id_);
 					auto& vertex_buffer = vertex_buffer_resource.get_handle<gfx::Buffer>();
-					if (!vertices.empty()) {
-						// TODO: check is enough space
-						vertex_buffer.update(vertices.data(), vertices.size() * sizeof(ImDrawVert), 0ull);
-						// TODO: Add host update barrier
-					}
+					auto mapped_vertex_range = vertex_buffer.map().value();
 
 					auto& index_buffer_resource = pass.get_render_resource(index_buffer_id_);
 					auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
-					if (!indices.empty()) {
-						// TODO: check is enough space
-						index_buffer.update(indices.data(), indices.size() * sizeof(ImDrawIdx), 0ull);
-						// TODO: Add host update barrier
+					auto mapped_index_range = index_buffer.map().value();
+
+					// TODO: check do i need to update vertex buffer
+					uint64_t vertex_byte_offset{ 0ull };
+					uint64_t index_byte_offset{ 0ull };
+					for (int32_t i = 0; i < draw_data->CmdListsCount; i++) {
+						const ImDrawList* cmd_list = draw_data->CmdLists[i];
+
+						auto vertex_byte_size = cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
+						std::memcpy(mapped_vertex_range.data() + vertex_byte_offset, cmd_list->VtxBuffer.Data, vertex_byte_size);
+						vertex_byte_offset += vertex_byte_size;
+
+						auto index_byte_size = cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+						std::memcpy(mapped_index_range.data() + index_byte_offset, cmd_list->IdxBuffer.Data, vertex_byte_size);
 					}
 
 					cmd->bindIndexBuffer(index_buffer.get_handle(), 0ull, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
@@ -333,12 +332,13 @@ namespace edge {
 					push_constant.scale.y = 2.f / draw_data->DisplaySize.y;
 					push_constant.translate.x = -1.0f - draw_data->DisplayPos.x * push_constant.scale.x;
 					push_constant.translate.y = -1.0f - draw_data->DisplayPos.y * push_constant.scale.y;
+					push_constant.sampler_index = 0u;
 					if (font_image_id_ != ~0u) {
 						auto& font_resource = pass.get_render_resource(font_image_id_);
-						push_constant.image_id = font_resource.get_srv_index();
+						push_constant.image_index = font_resource.get_srv_index();
 					}
 					else {
-						push_constant.image_id = 0u;
+						push_constant.image_index = 0xffff;
 					}
 					// TODO: Push constants will be needed in any time when i update image binding id
 					auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
@@ -372,44 +372,34 @@ namespace edge {
 					}
 #endif
 					// Render command lists
-		// (Because we merged all buffers into a single one, we maintain our own offset into them)
+					// (Because we merged all buffers into a single one, we maintain our own offset into them)
 					int32_t global_vtx_offset = 0;
 					int32_t global_idx_offset = 0;
 					for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
 						const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
 						for (int32_t cmd_i = 0; cmd_i < im_cmd_list->CmdBuffer.Size; cmd_i++) {
 							const ImDrawCmd* pcmd = &im_cmd_list->CmdBuffer[cmd_i];
+							
+							// Project scissor/clipping rectangles into framebuffer space
+							ImVec2 clip_min((pcmd->ClipRect.x - clip_off.x) * clip_scale.x, (pcmd->ClipRect.y - clip_off.y) * clip_scale.y);
+							ImVec2 clip_max((pcmd->ClipRect.z - clip_off.x) * clip_scale.x, (pcmd->ClipRect.w - clip_off.y) * clip_scale.y);
 
-							if (pcmd->UserCallback != nullptr) {
-								// User callback, registered via ImDrawList::AddCallback()
-								// (ImDrawCallback_ResetRenderState is a special callback value used by the user to request the renderer to reset render state.)
-								//if (pcmd->UserCallback == ImDrawCallback_ResetRenderState)
-								//	ImGui_ImplVulkan_SetupRenderState(draw_data, pipeline, command_buffer, rb, fb_width, fb_height);
-								//else
-								pcmd->UserCallback(im_cmd_list, pcmd);
-							}
-							else {
-								// Project scissor/clipping rectangles into framebuffer space
-								ImVec2 clip_min((pcmd->ClipRect.x - clip_off.x)* clip_scale.x, (pcmd->ClipRect.y - clip_off.y)* clip_scale.y);
-								ImVec2 clip_max((pcmd->ClipRect.z - clip_off.x)* clip_scale.x, (pcmd->ClipRect.w - clip_off.y)* clip_scale.y);
+							// Clamp to viewport as vkCmdSetScissor() won't accept values that are off bounds
+							if (clip_min.x < 0.0f) { clip_min.x = 0.0f; }
+							if (clip_min.y < 0.0f) { clip_min.y = 0.0f; }
+							if (clip_max.x > io.DisplaySize.x) { clip_max.x = io.DisplaySize.x; }
+							if (clip_max.y > io.DisplaySize.y) { clip_max.y = io.DisplaySize.y; }
+							if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
+								continue;
 
-								// Clamp to viewport as vkCmdSetScissor() won't accept values that are off bounds
-								if (clip_min.x < 0.0f) { clip_min.x = 0.0f; }
-								if (clip_min.y < 0.0f) { clip_min.y = 0.0f; }
-								if (clip_max.x > io.DisplaySize.x) { clip_max.x = io.DisplaySize.x; }
-								if (clip_max.y > io.DisplaySize.y) { clip_max.y = io.DisplaySize.y; }
-								if (clip_max.x <= clip_min.x || clip_max.y <= clip_min.y)
-									continue;
+							// Apply scissor/clipping rectangle
+							vk::Rect2D scissor_rect{ { (int32_t)(clip_min.x), (int32_t)(clip_min.y) }, { (uint32_t)(clip_max.x - clip_min.x), (uint32_t)(clip_max.y - clip_min.y) } };
+							cmd->setScissor(0u, 1u, &scissor_rect);
+							
+							//uint32_t resource_binding = reinterpret_cast<uint32_t>(pcmd->TextureId);
+							// TODO: need to process resource bindings here
 
-								// Apply scissor/clipping rectangle
-								vk::Rect2D scissor_rect{ { (int32_t)(clip_min.x), (int32_t)(clip_min.y) }, { (uint32_t)(clip_max.x - clip_min.x), (uint32_t)(clip_max.y - clip_min.y) } };
-								cmd->setScissor(0u, 1u, &scissor_rect);
-								
-								//uint32_t resource_binding = reinterpret_cast<uint32_t>(pcmd->TextureId);
-								// TODO: need to process resource bindings here
-
-								cmd->drawIndexed(pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
-							}
+							cmd->drawIndexed(pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
 						}
 						global_idx_offset += im_cmd_list->IdxBuffer.Size;
 						global_vtx_offset += im_cmd_list->VtxBuffer.Size;
