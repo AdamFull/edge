@@ -123,28 +123,9 @@ namespace edge::gfx {
 		}
 	}
 
-	// TODO: Select descriptor type
-	auto RenderResource::get_descriptor(uint32_t mip) const -> DescriptorType {
-		if (std::holds_alternative<Buffer>(resource_handle_)) {
-			auto& buffer = std::get<Buffer>(resource_handle_);
-			return vk::DescriptorBufferInfo{ buffer .get_handle(), 0ull, buffer.get_size() };
-		}
-		else if (std::holds_alternative<Image>(resource_handle_)) {
-			if (mip == ~0u) {
-				auto& image_view = std::get<ImageView>(srv_view_);
-				return vk::DescriptorImageInfo{ VK_NULL_HANDLE, image_view.get_handle(), vk::ImageLayout::eShaderReadOnlyOptimal };
-			}
-			
-			auto& image_view = std::get<ImageView>(uav_views_[mip]);
-			return vk::DescriptorImageInfo{ VK_NULL_HANDLE, image_view.get_handle(), vk::ImageLayout::eGeneral };
-		}
-		return std::monostate{};
-	}
-
 	auto RenderResource::setup(Buffer&& buffer, ResourceStateFlags initial_flags) -> void {
 		resource_handle_ = std::move(buffer);
-		assert(false && "NOT IMPLEMENTED");
-		auto& handle = std::get<Buffer>(resource_handle_);
+		state_ = initial_flags;
 	}
 
 	auto RenderResource::update(Image&& image, ResourceStateFlags initial_flags) -> void {
@@ -153,7 +134,8 @@ namespace edge::gfx {
 	}
 
 	auto RenderResource::update(Buffer&& buffer, ResourceStateFlags initial_flags) -> void {
-		assert(false && "NOT IMPLEMENTED");
+		reset();
+		setup(std::move(buffer), initial_flags);
 	}
 
 	auto RenderResource::reset() -> void {
@@ -171,6 +153,24 @@ namespace edge::gfx {
 		uav_resource_indices_.clear();
 	}
 
+	// TODO: Select descriptor type
+	auto RenderResource::get_descriptor(uint32_t mip) const -> DescriptorType {
+		if (std::holds_alternative<Buffer>(resource_handle_)) {
+			auto& buffer = std::get<Buffer>(resource_handle_);
+			return vk::DescriptorBufferInfo{ buffer.get_handle(), 0ull, buffer.get_size() };
+		}
+		else if (std::holds_alternative<Image>(resource_handle_)) {
+			if (mip == ~0u) {
+				auto& image_view = std::get<ImageView>(srv_view_);
+				return vk::DescriptorImageInfo{ VK_NULL_HANDLE, image_view.get_handle(), vk::ImageLayout::eShaderReadOnlyOptimal };
+			}
+
+			auto& image_view = std::get<ImageView>(uav_views_[mip]);
+			return vk::DescriptorImageInfo{ VK_NULL_HANDLE, image_view.get_handle(), vk::ImageLayout::eGeneral };
+		}
+		return std::monostate{};
+	}
+
 	auto RenderResource::has_handle() const -> bool {
 		return !std::holds_alternative<std::monostate>(resource_handle_);
 	}
@@ -182,7 +182,15 @@ namespace edge::gfx {
 		}
 
 		if (std::holds_alternative<Buffer>(resource_handle_)) {
-			assert(false && "NOT IMPLEMENTED");
+			auto& handle = std::get<Buffer>(resource_handle_);
+
+			BufferBarrier barrier{};
+			barrier.buffer = &handle;
+			barrier.src_state = state_;
+			barrier.dst_state = new_state;
+			cmdbuf.push_barrier(barrier);
+
+			state_ = new_state;
 		}
 		else if (std::holds_alternative<Image>(resource_handle_)) {
 			auto& handle = std::get<Image>(resource_handle_);
@@ -347,7 +355,9 @@ namespace edge::gfx {
 	}
 
 	auto Renderer::setup_render_resource(uint32_t resource_id, Buffer&& buffer, ResourceStateFlags initial_state) -> void {
-		assert(false && "NOT IMPLEMENTED");
+		auto& render_resource = render_resources_[resource_id];
+		render_resource.setup(std::move(buffer), initial_state);
+		// NOTE: Not needed to update descriptors, because using pointers for buffers
 	}
 
 	auto Renderer::get_render_resource(uint32_t resource_id) -> RenderResource& {
@@ -476,7 +486,7 @@ namespace edge::gfx {
 			}
 
 			if (shader_pass.setup_cb) {
-				shader_pass.setup_cb(*this);
+				shader_pass.setup_cb(*this, cmd);
 			}
 
 			Barrier barrier{};

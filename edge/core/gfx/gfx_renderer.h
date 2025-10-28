@@ -7,7 +7,7 @@
 namespace edge::gfx {
 	class Renderer;
 
-	using PassSetupCb = std::function<void(Renderer&)>;
+	using PassSetupCb = std::function<void(Renderer&, CommandBuffer const&)>;
 	using PassExecuteCb = std::function<void(Renderer&, CommandBuffer const&, float)>;
 
 	struct ShaderPassInfo {
