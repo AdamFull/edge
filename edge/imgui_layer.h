@@ -16,6 +16,13 @@ namespace edge {
 		class ResourceUpdater;
 	}
 
+	struct ImGuiImageHandle {
+		uint32_t sampler_resource{ ~0u };
+		uint32_t image_rezource{ ~0u };
+
+		bool is_valid() const { return sampler_resource != ~0u && image_rezource != ~0u; }
+	};
+
 	class ImGuiLayer final : public ILayer, public NonCopyable {
 	public:
 		ImGuiLayer() = default;
@@ -32,6 +39,9 @@ namespace edge {
 		auto update(float delta_time) -> void override;
 		auto fixed_update(float delta_time) -> void override;
 	private:
+		auto create_or_update_vertex_buffer(uint32_t requested_capacity) -> void;
+		auto create_or_update_index_buffer(uint32_t requested_capacity) -> void;
+
 		events::Dispatcher* dispatcher_{ nullptr };
 		gfx::Renderer* renderer_{ nullptr };
 		gfx::ResourceUploader* resource_uploader_{ nullptr };
@@ -41,5 +51,10 @@ namespace edge {
 		uint32_t vertex_buffer_id_{ ~0u };
 		uint32_t index_buffer_id_{ ~0u };
 		uint64_t listener_id_{ ~0ull };
+
+		static constexpr uint32_t kInitialVertexCount = 2048u;
+		static constexpr uint32_t kInitialIndexCount = 4096u;
+		uint32_t current_vertex_capacity_{ kInitialVertexCount };
+		uint32_t current_index_capacity_{ kInitialIndexCount };
 	};
 }
