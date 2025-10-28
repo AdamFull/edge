@@ -1,5 +1,13 @@
 #pragma once
 
+#define SAMPLER_SLOT 0
+#define SRV_TEXTURE_SLOT 1
+#define UAV_TEXTURE_SLOT 2
+
+#define MAX_SAMPLER_SLOTS 65535
+#define MAX_SRV_TEXTURE_SLOTS 65535
+#define MAX_UAV_TEXTURE_SLOTS 65535
+
 #ifdef __cplusplus
 
 #include <glm/glm.hpp>
