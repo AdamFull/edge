@@ -5,6 +5,7 @@
 #include <zstd.h>
 
 #include "gfx_shader_effect.h"
+#include "../../assets/shaders/interop.h"
 
 namespace edge::gfx {
 	void TechniqueStage::deserialize(BinaryReader& reader) {
@@ -331,7 +332,7 @@ namespace edge::gfx {
 		// At first write SRV descriptor
 		if (image_usage & vk::ImageUsageFlagBits::eSampled) {
 			image_descriptors_.push_back(std::move(std::get<vk::DescriptorImageInfo>(render_resource.get_descriptor())));
-			descriptor_write.dstBinding = 1u; // TODO: Make constants for magic numbers (binding 1 is for sampled images)
+			descriptor_write.dstBinding = SRV_TEXTURE_SLOT;
 			descriptor_write.dstArrayElement = render_resource.get_srv_index();
 			descriptor_write.descriptorType = vk::DescriptorType::eSampledImage;
 			descriptor_write.pImageInfo = &image_descriptors_.back();
@@ -341,7 +342,7 @@ namespace edge::gfx {
 		// Not needed to write UAV descriptors for non storage images
 		// Write uav descriptors
 		if (image_usage & vk::ImageUsageFlagBits::eStorage) {
-			descriptor_write.dstBinding = 2u;
+			descriptor_write.dstBinding = UAV_TEXTURE_SLOT;
 			descriptor_write.descriptorType = vk::DescriptorType::eStorageImage;
 
 			for (int32_t mip = 0; mip < image.get_level_count(); ++mip) {
@@ -652,13 +653,13 @@ namespace edge::gfx {
 
 		// Create descriptor layout
 		DescriptorSetLayoutBuilder set_layout_builder{};
-		set_layout_builder.add_binding(0, vk::DescriptorType::eSampler, UINT16_MAX,
+		set_layout_builder.add_binding(SAMPLER_SLOT, vk::DescriptorType::eSampler, MAX_SAMPLER_SLOTS,
 			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
 			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
-		set_layout_builder.add_binding(1, vk::DescriptorType::eSampledImage, UINT16_MAX,
+		set_layout_builder.add_binding(SRV_TEXTURE_SLOT, vk::DescriptorType::eSampledImage, MAX_SRV_TEXTURE_SLOTS,
 			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
 			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
-		set_layout_builder.add_binding(2, vk::DescriptorType::eStorageImage, UINT16_MAX,
+		set_layout_builder.add_binding(UAV_TEXTURE_SLOT, vk::DescriptorType::eStorageImage, MAX_UAV_TEXTURE_SLOTS,
 			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
 			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
 
@@ -762,7 +763,7 @@ namespace edge::gfx {
 
 		vk::WriteDescriptorSet sampler_write{};
 		sampler_write.dstSet = descriptor_set_.get_handle();
-		sampler_write.dstBinding = 0u;
+		sampler_write.dstBinding = SAMPLER_SLOT;
 		sampler_write.dstArrayElement = 0u;
 		sampler_write.descriptorCount = 1u;
 		sampler_write.descriptorType = vk::DescriptorType::eSampler;
