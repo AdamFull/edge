@@ -92,14 +92,14 @@ namespace edge {
 
 		// Synchronize main queue with uploader and updater queues
 		mi::Vector<vk::SemaphoreSubmitInfoKHR> uploader_submitted_semaphores{};
-		auto updater_semaphore = updater_.flush({});
-		if (updater_semaphore.semaphore) {
-			uploader_submitted_semaphores.push_back(updater_semaphore);
-		}
-
 		auto uploader_semaphore = uploader_.get_last_submitted_semaphore();
 		if (uploader_semaphore.semaphore) {
 			uploader_submitted_semaphores.push_back(uploader_semaphore);
+		}
+
+		auto updater_semaphore = updater_.flush(uploader_submitted_semaphores);
+		if (updater_semaphore.semaphore) {
+			uploader_submitted_semaphores.push_back(updater_semaphore);
 		}
 
 		renderer_->end_frame(uploader_submitted_semaphores);
