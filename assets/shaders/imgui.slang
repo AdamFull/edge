@@ -1,5 +1,7 @@
 #include "imgui.h"
 
+import shader_layout;
+
 struct VSOutput {
     float2 uv : TEXCOORD0;
     float4 color : COLOR0;
@@ -22,6 +24,10 @@ VSOutput vs_main(uint32_t vertex_index: SV_VertexID) {
 
 [shader("fragment")]
 float4 ps_main(VSOutput input) : SV_Target0 {
-    //return input.color * texture0.Sample(sampler0, input.uv);
-    return input.color;
+    if (pc.image_id == ~0u)
+    {
+        return input.color;
+    }
+
+    return input.color * g_srv_textures[pc.image_id].Sample(g_samplers[0], input.uv);
 }

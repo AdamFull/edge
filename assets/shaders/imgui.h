@@ -13,5 +13,6 @@ namespace edge::gfx::imgui {
 		TYPE_PTR(Vertex) vertices;
 		float2 scale;
 		float2 translate;
+		uint32_t image_id;
 	};
 }
