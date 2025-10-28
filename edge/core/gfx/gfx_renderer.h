@@ -24,6 +24,7 @@ namespace edge::gfx {
 		using DescriptorType = std::variant<std::monostate, vk::DescriptorBufferInfo, vk::DescriptorImageInfo>;
 
 		RenderResource() = default;
+		RenderResource(Renderer* renderer);
 		~RenderResource();
 
 		RenderResource(RenderResource&& other) noexcept;
@@ -60,6 +61,8 @@ namespace edge::gfx {
 
 		auto transfer_state(CommandBuffer const& cmdbuf, ResourceStateFlags new_state) -> void;
 	private:
+		Renderer* renderer_{ nullptr };
+
 		static mi::FreeList<uint32_t> srv_free_list_;
 		static mi::FreeList<uint32_t> uav_free_list_;
 
@@ -129,6 +132,10 @@ namespace edge::gfx {
 
 	class Renderer : public NonCopyable{
 	public:
+		friend class RenderResource;
+
+		using ResourceVariant = std::variant<Buffer, Image, BufferView, ImageView>;
+
 		Renderer() = default;
 		~Renderer();
 
@@ -249,5 +256,7 @@ namespace edge::gfx {
 		mi::Vector<vk::RenderingAttachmentInfo> color_attachments_{};
 		vk::RenderingAttachmentInfo depth_attachment_{};
 		vk::RenderingAttachmentInfo stencil_attachment_{};
+
+		mi::Vector<ResourceVariant> deletion_queue_{};
 	};
 }

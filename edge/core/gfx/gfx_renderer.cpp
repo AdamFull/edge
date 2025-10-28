@@ -26,24 +26,22 @@ namespace edge::gfx {
 	mi::FreeList<uint32_t> RenderResource::srv_free_list_{};
 	mi::FreeList<uint32_t> RenderResource::uav_free_list_{};
 
+	RenderResource::RenderResource(Renderer* renderer)
+		: renderer_{ renderer } {
+
+	}
+
 	RenderResource::~RenderResource() {
 		if (has_handle()) {
-			if (srv_resource_index_ != ~0u) {
-				srv_free_list_.deallocate(srv_resource_index_);
-				srv_resource_index_ = ~0u;
-			}
-
-			for (auto& index : uav_resource_indices_) {
-				uav_free_list_.deallocate(index);
-			}
-			uav_resource_indices_.clear();
+			reset();
 		}
 	}
 
 	RenderResource::RenderResource(RenderResource&& other) noexcept {
-		resource_handle_ = std::move(other.resource_handle_);
-		srv_view_ = std::move(other.srv_view_);
-		srv_resource_index_ = std::move(other.srv_resource_index_);
+		renderer_ = std::exchange(other.renderer_, nullptr);
+		resource_handle_ = std::exchange(other.resource_handle_, std::monostate{});
+		srv_view_ = std::exchange(other.srv_view_, std::monostate{});
+		srv_resource_index_ = std::exchange(other.srv_resource_index_, ~0u);
 		uav_views_ = std::exchange(other.uav_views_, {});
 		uav_resource_indices_ = std::exchange(other.uav_resource_indices_, {});
 		state_ = std::exchange(other.state_, {});
@@ -51,9 +49,10 @@ namespace edge::gfx {
 
 	auto RenderResource::operator=(RenderResource&& other) noexcept -> RenderResource& {
 		if (this != &other) {
-			resource_handle_ = std::move(other.resource_handle_);
-			srv_view_ = std::move(other.srv_view_);
-			srv_resource_index_ = std::move(other.srv_resource_index_);
+			renderer_ = std::exchange(other.renderer_, nullptr);
+			resource_handle_ = std::exchange(other.resource_handle_, std::monostate{});
+			srv_view_ = std::exchange(other.srv_view_, std::monostate{});
+			srv_resource_index_ = std::exchange(other.srv_resource_index_, ~0u);
 			uav_views_ = std::exchange(other.uav_views_, {});
 			uav_resource_indices_ = std::exchange(other.uav_resource_indices_, {});
 			state_ = std::exchange(other.state_, {});
@@ -140,13 +139,35 @@ namespace edge::gfx {
 	}
 
 	auto RenderResource::reset() -> void {
-		resource_handle_ = std::monostate{};
-		srv_view_ = std::monostate{};
-		uav_views_.clear();
+		if (std::holds_alternative<BufferView>(srv_view_)) {
+			renderer_->deletion_queue_.push_back(std::move(std::get<BufferView>(srv_view_)));
+		}
+		else if (std::holds_alternative<ImageView>(srv_view_)) {
+			renderer_->deletion_queue_.push_back(std::move(std::get<ImageView>(srv_view_)));
+		}
+
+		for (auto&& uav_view : uav_views_) {
+			if (std::holds_alternative<BufferView>(uav_view)) {
+				renderer_->deletion_queue_.push_back(std::move(std::get<BufferView>(uav_view)));
+			}
+			else if (std::holds_alternative<ImageView>(uav_view)) {
+				renderer_->deletion_queue_.push_back(std::move(std::get<ImageView>(uav_view)));
+			}
+		}
+
+		if (std::holds_alternative<Buffer>(resource_handle_)) {
+			renderer_->deletion_queue_.push_back(std::move(std::get<Buffer>(resource_handle_)));
+		}
+		else if (std::holds_alternative<Image>(resource_handle_)) {
+			renderer_->deletion_queue_.push_back(std::move(std::get<Image>(resource_handle_)));
+		}
+
 		state_ = ResourceStateFlag::eUndefined;
 
-		srv_free_list_.deallocate(srv_resource_index_);
-		srv_resource_index_ = ~0u;
+		if (srv_resource_index_ != ~0u) {
+			srv_free_list_.deallocate(srv_resource_index_);
+			srv_resource_index_ = ~0u;
+		}
 
 		for (auto& index : uav_resource_indices_) {
 			uav_free_list_.deallocate(index);
@@ -300,7 +321,7 @@ namespace edge::gfx {
 	}
 
 	auto Renderer::create_render_resource() -> uint32_t {
-		render_resources_.push_back({});
+		render_resources_.emplace_back(this);
 		return render_resource_free_list_.allocate();
 	}
 
@@ -417,6 +438,8 @@ namespace edge::gfx {
 
 		auto* current_frame = get_current_frame();
 		current_frame->begin();
+
+		deletion_queue_.clear();
 
 		auto const& semaphore = current_frame->get_image_available_semaphore();
 		acquired_semaphore_ = *semaphore;
