@@ -41,6 +41,8 @@ namespace edge::gfx {
 			return {};
 		}
 
+		end_commands(resource_set);
+
 		uint64_t wait_value = resource_set.counter.fetch_add(1, std::memory_order_relaxed);
 		uint64_t signal_value = wait_value + 1;
 
