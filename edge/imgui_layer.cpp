@@ -306,26 +306,6 @@ namespace edge {
 					auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
 					auto mapped_index_range = index_buffer.map().value();
 
-					// TODO: check do i need to update vertex buffer
-					uint64_t vertex_byte_offset{ 0ull };
-					uint64_t index_byte_offset{ 0ull };
-					for (int32_t i = 0; i < draw_data->CmdListsCount; i++) {
-						const ImDrawList* cmd_list = draw_data->CmdLists[i];
-
-						auto vertex_byte_size = cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
-						std::memcpy(mapped_vertex_range.data() + vertex_byte_offset, cmd_list->VtxBuffer.Data, vertex_byte_size);
-						vertex_byte_offset += vertex_byte_size;
-
-						auto index_byte_size = cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
-						std::memcpy(mapped_index_range.data() + index_byte_offset, cmd_list->IdxBuffer.Data, vertex_byte_size);
-					}
-
-					cmd->bindIndexBuffer(index_buffer.get_handle(), 0ull, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
-
-					ImGuiIO& io = ImGui::GetIO();
-					vk::Viewport viewport{ 0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y, 0.f, 1.f };
-					cmd->setViewport(0u, 1u, &viewport);
-
 					gfx::imgui::PushConstant push_constant{};
 					push_constant.vertices = vertex_buffer.get_device_address();
 					push_constant.scale.x = 2.f / draw_data->DisplaySize.x;
@@ -343,6 +323,12 @@ namespace edge {
 					// TODO: Push constants will be needed in any time when i update image binding id
 					auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
 					pass.push_constant_range(cmd, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, { constant_range_ptr, sizeof(push_constant) });
+
+					cmd->bindIndexBuffer(index_buffer.get_handle(), 0ull, sizeof(ImDrawIdx) == 2 ? vk::IndexType::eUint16 : vk::IndexType::eUint32);
+
+					ImGuiIO& io = ImGui::GetIO();
+					vk::Viewport viewport{ 0.f, 0.f, io.DisplaySize.x, io.DisplaySize.y, 0.f, 1.f };
+					cmd->setViewport(0u, 1u, &viewport);
 
 					// Will project scissor/clipping rectangles into framebuffer space
 					ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
@@ -372,11 +358,17 @@ namespace edge {
 					}
 #endif
 					// Render command lists
-					// (Because we merged all buffers into a single one, we maintain our own offset into them)
 					int32_t global_vtx_offset = 0;
 					int32_t global_idx_offset = 0;
 					for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
 						const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
+
+						auto vertex_byte_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
+						std::memcpy(mapped_vertex_range.data() + global_vtx_offset, im_cmd_list->VtxBuffer.Data, vertex_byte_size);
+
+						auto index_byte_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+						std::memcpy(mapped_index_range.data() + global_idx_offset, im_cmd_list->IdxBuffer.Data, vertex_byte_size);
+
 						for (int32_t cmd_i = 0; cmd_i < im_cmd_list->CmdBuffer.Size; cmd_i++) {
 							const ImDrawCmd* pcmd = &im_cmd_list->CmdBuffer[cmd_i];
 							
@@ -396,11 +388,11 @@ namespace edge {
 							vk::Rect2D scissor_rect{ { (int32_t)(clip_min.x), (int32_t)(clip_min.y) }, { (uint32_t)(clip_max.x - clip_min.x), (uint32_t)(clip_max.y - clip_min.y) } };
 							cmd->setScissor(0u, 1u, &scissor_rect);
 							
-							//uint32_t resource_binding = reinterpret_cast<uint32_t>(pcmd->TextureId);
-							// TODO: need to process resource bindings here
+							// Bind textures
 
 							cmd->drawIndexed(pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
 						}
+
 						global_idx_offset += im_cmd_list->IdxBuffer.Size;
 						global_vtx_offset += im_cmd_list->VtxBuffer.Size;
 					}
