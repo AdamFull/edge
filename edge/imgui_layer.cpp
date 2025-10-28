@@ -152,6 +152,15 @@ namespace edge {
 		self->renderer_ = &renderer;
 		self->resource_uploader_ = &uploader;
 		self->resource_updater_ = &updater;
+
+		ImGui::SetAllocatorFunctions(
+			[](size_t size, void* user_data) -> void* {
+				return mi_malloc(size);
+			},
+			[](void* ptr, void* user_data) -> void {
+				mi_free(ptr);
+			}, nullptr);
+
 		return self;
 	}
 
