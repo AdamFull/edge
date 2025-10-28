@@ -337,41 +337,31 @@ namespace edge {
 				ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
 				ImVec2 clip_scale = draw_data->FramebufferScale; // (1,1) unless using retina display which are often (2,2)
 
-#if 0
-				// Collect resource dependencies
-				for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
-					const ImDrawList* cmd_list = draw_data->CmdLists[n];
-					for (int32_t cmd_i = 0; cmd_i < cmd_list->CmdBuffer.Size; cmd_i++) {
-						const ImDrawCmd* pcmd = &cmd_list->CmdBuffer[cmd_i];
-
-						edge::gfx::ITexture* resource_binding{ (edge::gfx::ITexture*)pcmd->TextureId };
-						if (sizeof(ImTextureID) < sizeof(ImU64)) {
-							// We don't support texture switches if ImTextureID hasn't been redefined to be 64-bit. Do a flaky check that other textures haven't been used.
-							IM_ASSERT(pcmd->TextureId == (ImTextureID)font_image_);
-							resource_binding = font_image_;
-						}
-
-						if (!pcmd->TextureId) {
-							resource_binding = font_image_;
-						}
-
-						//self.read_resource(render_label::texture0, resource_binding, ~0u);
-						//self.bind_resource(render_label::sampler0, linear_clamp_to_edge_sampler);
-					}
-				}
-#endif
-				// Render command lists
 				int32_t global_vtx_offset = 0;
 				int32_t global_idx_offset = 0;
+
 				for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
 					const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
 
 					auto vertex_byte_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
-					std::memcpy(mapped_vertex_range.data() + global_vtx_offset, im_cmd_list->VtxBuffer.Data, vertex_byte_size);
+					std::memcpy(mapped_vertex_range.data() + global_vtx_offset,
+						im_cmd_list->VtxBuffer.Data, vertex_byte_size);
 
+					// FIX: Was using vertex_byte_size instead of index_byte_size
 					auto index_byte_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
-					std::memcpy(mapped_index_range.data() + global_idx_offset, im_cmd_list->IdxBuffer.Data, index_byte_size);
+					std::memcpy(mapped_index_range.data() + global_idx_offset,
+						im_cmd_list->IdxBuffer.Data, index_byte_size);
 
+					global_vtx_offset += vertex_byte_size;
+					global_idx_offset += index_byte_size;
+				}
+
+				// Reset offsets for drawing
+				global_vtx_offset = 0;
+				global_idx_offset = 0;
+
+				for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
+					const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
 					for (int32_t cmd_i = 0; cmd_i < im_cmd_list->CmdBuffer.Size; cmd_i++) {
 						const ImDrawCmd* pcmd = &im_cmd_list->CmdBuffer[cmd_i];
 						
