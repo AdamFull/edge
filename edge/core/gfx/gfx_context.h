@@ -750,6 +750,8 @@ namespace edge::gfx {
 
 		static auto create(const BufferCreateInfo& create_info) -> Result<Buffer>;
 		auto create_view(vk::DeviceSize size, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined) -> Result<BufferView>;
+
+		auto get_device_address() const -> vk::DeviceAddress;
 	private:
 		vk::BufferCreateInfo create_info_;
 	};
@@ -920,6 +922,12 @@ namespace edge::gfx {
 		vk::SwapchainKHR old_swapchain_{ VK_NULL_HANDLE };
 	};
 
+	struct BufferBarrier {
+		Buffer const* buffer;
+		ResourceStateFlags src_state;
+		ResourceStateFlags dst_state;
+	};
+
 	struct ImageBarrier {
 		Image const* image;
 		ResourceStateFlags src_state;
@@ -928,6 +936,7 @@ namespace edge::gfx {
 	};
 
 	struct Barrier {
+		Span<const BufferBarrier> buffer_barriers;
 		Span<const ImageBarrier> image_barriers;
 	};
 
@@ -965,6 +974,7 @@ namespace edge::gfx {
 
 		auto push_barrier(const Barrier& barrier) const -> void;
 		auto push_barrier(const ImageBarrier& barrier) const -> void;
+		auto push_barrier(const BufferBarrier& barrier) const -> void;
 
 		auto begin_marker(std::string_view name, uint32_t color = 0xFFFFFFFF) const -> void;
 		auto end_marker() const -> void;

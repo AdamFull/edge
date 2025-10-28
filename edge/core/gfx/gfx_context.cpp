@@ -1488,6 +1488,13 @@ namespace edge::gfx {
 		return BufferView{ buffer_view, offset, size, format };
 	}
 
+	auto Buffer::get_device_address() const -> vk::DeviceAddress {
+		vk::BufferDeviceAddressInfoKHR address_info{};
+		address_info.buffer = handle_;
+
+		return device_->getBufferAddressKHR(&address_info);
+	}
+
 #undef EDGE_LOGGER_SCOPE // Buffer
 
 #define EDGE_LOGGER_SCOPE "gfx::MemoryAllocator"
@@ -1879,6 +1886,25 @@ namespace edge::gfx {
 		mi::Vector<vk::MemoryBarrier2KHR> memory_barriers{};
 
 		mi::Vector<vk::BufferMemoryBarrier2KHR> buffer_barriers{};
+		if (!barrier.buffer_barriers.empty()) {
+			buffer_barriers.resize(barrier.buffer_barriers.size());
+		}
+
+		for (int32_t i = 0; i < static_cast<int32_t>(barrier.buffer_barriers.size()); ++i) {
+			auto const& src_barrier = barrier.buffer_barriers[i];
+			auto& dst_barrier = buffer_barriers[i];
+			dst_barrier.buffer = src_barrier.buffer->get_handle();
+			dst_barrier.offset = 0ull;
+			dst_barrier.size = src_barrier.buffer->get_size();
+
+			auto src_state = util::get_resource_state(src_barrier.src_state);
+			dst_barrier.srcAccessMask = src_state.access_flags;
+			dst_barrier.srcStageMask = src_state.stage_flags;
+
+			auto new_state = util::get_resource_state(src_barrier.dst_state);
+			dst_barrier.dstAccessMask = new_state.access_flags;
+			dst_barrier.dstStageMask = new_state.stage_flags;
+		}
 
 		mi::Vector<vk::ImageMemoryBarrier2KHR> image_barriers{};
 		if (!barrier.image_barriers.empty()) {
@@ -1904,9 +1930,9 @@ namespace edge::gfx {
 
 		vk::DependencyInfoKHR dependency_info{};
 		dependency_info.pMemoryBarriers = memory_barriers.data();
-		// TODO: set count
+		dependency_info.memoryBarrierCount = static_cast<uint32_t>(memory_barriers.size());
 		dependency_info.pBufferMemoryBarriers = buffer_barriers.data();
-		// TODO: set count
+		dependency_info.bufferMemoryBarrierCount = static_cast<uint32_t>(buffer_barriers.size());
 		dependency_info.pImageMemoryBarriers = image_barriers.data();
 		dependency_info.imageMemoryBarrierCount = static_cast<uint32_t>(barrier.image_barriers.size());
 
@@ -1916,6 +1942,12 @@ namespace edge::gfx {
 	auto CommandBuffer::push_barrier(const ImageBarrier& image_barrier) const -> void {
 		Barrier barrier{};
 		barrier.image_barriers = { &image_barrier, 1ull };
+		push_barrier(barrier);
+	}
+
+	auto CommandBuffer::push_barrier(const BufferBarrier& buffer_barrier) const -> void {
+		Barrier barrier{};
+		barrier.buffer_barriers = { &buffer_barrier, 1ull };
 		push_barrier(barrier);
 	}
 
