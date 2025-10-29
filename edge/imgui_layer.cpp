@@ -223,6 +223,11 @@ namespace edge {
 		ImGui::NewFrame();
 		ImGui::ShowDemoWindow();
 
+		if (ImGui::Begin("Test Window")) {
+			ImGui::Image(3u, ImVec2{ 512, 512 });
+			ImGui::End();
+		}
+
 		ImGui::Render();
 	}
 
