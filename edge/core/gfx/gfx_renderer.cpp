@@ -481,18 +481,9 @@ namespace edge::gfx {
 		cmdbuf->resetQueryPool(*timestamp_query_, 0u, 2u);
 		cmdbuf->writeTimestamp2KHR(vk::PipelineStageFlagBits2::eTopOfPipe, *timestamp_query_, 0u);
 
-		// Bind global descriptor and layout
-		vk::BindDescriptorSetsInfo bind_descriptor_info{};
-		bind_descriptor_info.stageFlags = vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute;
-		bind_descriptor_info.layout = pipeline_layout_.get_handle();
-		bind_descriptor_info.firstSet = 0u;
-		bind_descriptor_info.dynamicOffsetCount = 0u;
-		bind_descriptor_info.pDynamicOffsets = nullptr;
-		bind_descriptor_info.descriptorSetCount = 1u;
 		auto const& descriptor_set_handle = descriptor_set_.get_handle();
-		bind_descriptor_info.pDescriptorSets = &descriptor_set_handle;
-
-		cmdbuf->bindDescriptorSets2KHR(&bind_descriptor_info);
+		cmdbuf->bindDescriptorSets(vk::PipelineBindPoint::eCompute, pipeline_layout_.get_handle(), 0u, 1u, &descriptor_set_handle, 0u, nullptr);
+		cmdbuf->bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipeline_layout_.get_handle(), 0u, 1u, &descriptor_set_handle, 0u, nullptr);
 
 		delta_time_ = delta_time;
 	}

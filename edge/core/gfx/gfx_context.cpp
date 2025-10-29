@@ -1029,7 +1029,7 @@ namespace edge::gfx {
 				};
 
 			auto& requested_extensions = per_device_extensions[device_idx];
-			requested_extensions = adapters[device_idx].get_core_extension_names(properties.apiVersion);
+			requested_extensions = adapters[device_idx].get_core_extension_names(minimal_api_ver);
 
 			auto check_ext_alresdy_enabled = [&requested_extensions](const char* extension_name) -> bool {
 				return std::find_if(requested_extensions.begin(), requested_extensions.end(), [&extension_name](const char* name) {
@@ -2300,7 +2300,6 @@ namespace edge::gfx {
 			.add_extension(VK_KHR_SWAPCHAIN_EXTENSION_NAME)
 			.add_extension(VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME)
 			.add_extension(VK_KHR_MAINTENANCE_4_EXTENSION_NAME)
-			//.add_extension(VK_KHR_MAINTENANCE_6_EXTENSION_NAME)
 			.add_extension(VK_KHR_CREATE_RENDERPASS_2_EXTENSION_NAME)
 			.add_extension(VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME)
 			.add_extension(VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME)
