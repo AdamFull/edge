@@ -51,6 +51,8 @@ namespace edge {
 		uint32_t index_buffer_id_{ ~0u };
 		uint64_t listener_id_{ ~0ull };
 
+		mi::HashMap<uint32_t, uint32_t> pending_uploads_map_{};
+
 		static constexpr uint32_t kInitialVertexCount = 2048u;
 		static constexpr uint32_t kInitialIndexCount = 4096u;
 		uint32_t current_vertex_capacity_{ kInitialVertexCount };

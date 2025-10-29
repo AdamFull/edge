@@ -243,9 +243,40 @@ namespace edge {
 				pass.set_render_area({ {}, {extent.width, extent.height } });
 
 				auto& vertex_buffer_resource = pass.get_render_resource(vertex_buffer_id_);
-				vertex_buffer_resource.transfer_state(cmd, gfx::ResourceStateFlag::eVertexRead);
+				auto& vertex_buffer = vertex_buffer_resource.get_handle<gfx::Buffer>();
+
+				vk::BufferMemoryBarrier2KHR vertex_buffer_barrier{};
+				vertex_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
+				vertex_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
+				vertex_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eVertexShader;
+				vertex_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eShaderRead;
+				vertex_buffer_barrier.buffer = vertex_buffer.get_handle();
+				vertex_buffer_barrier.offset = 0ull;
+				vertex_buffer_barrier.size = VK_WHOLE_SIZE;
+
+
 				auto& index_buffer_resource = pass.get_render_resource(index_buffer_id_);
-				index_buffer_resource.transfer_state(cmd, gfx::ResourceStateFlag::eIndexRead);
+				auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
+				
+				vk::BufferMemoryBarrier2KHR index_buffer_barrier{};
+				index_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
+				index_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
+				index_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eIndexInput;
+				index_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eIndexRead;
+				index_buffer_barrier.buffer = index_buffer.get_handle();
+				index_buffer_barrier.offset = 0ull;
+				index_buffer_barrier.size = VK_WHOLE_SIZE;
+
+				vk::BufferMemoryBarrier2KHR buffer_barriers[] = { vertex_buffer_barrier, index_buffer_barrier };
+
+				vk::DependencyInfoKHR dependency_info{};
+				dependency_info.memoryBarrierCount = 0u;
+				dependency_info.pMemoryBarriers = nullptr;
+				dependency_info.bufferMemoryBarrierCount = 2u;
+				dependency_info.pBufferMemoryBarriers = buffer_barriers;
+				dependency_info.imageMemoryBarrierCount = 0u;
+				dependency_info.pImageMemoryBarriers = nullptr;
+				cmd->pipelineBarrier2KHR(&dependency_info);
 
 				if (!ImGui::GetCurrentContext()) {
 					return;
@@ -261,26 +292,36 @@ namespace edge {
 				if (draw_data->Textures != nullptr) {
 					for (ImTextureData* tex : *draw_data->Textures) {
 						if (tex->Status == ImTextureStatus_OK) {
+							// Update pending resources
+							auto found = pending_uploads_map_.find(tex->GetTexID());
+							if (found == pending_uploads_map_.end()) {
+								continue;
+							}
+
+							if (!resource_uploader_->is_task_done(found->second)) {
+								continue;
+							}
+
+							auto uploading_result = resource_uploader_->get_task_result(found->second);
+							if (uploading_result) {
+								renderer_->setup_render_resource(found->first, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
+							}
+
+							pending_uploads_map_.erase(found);
+
 							continue;
 						}
 
 						if (tex->Status == ImTextureStatus_WantCreate) {
+							auto new_texture = pass.create_render_resource();
+
 							gfx::ImageImportInfo import_info{};
 							import_info.raw.width = tex->Width;
 							import_info.raw.height = tex->Height;
 							import_info.raw.data.resize(tex->Width * tex->Height * tex->BytesPerPixel);
 							std::memcpy(import_info.raw.data.data(), tex->Pixels, import_info.raw.data.size());
-							auto uploading_task_id = resource_uploader_->load_image(std::move(import_info));
-							resource_uploader_->wait_for_task(uploading_task_id);
+							pending_uploads_map_[new_texture] = resource_uploader_->load_image(std::move(import_info));
 
-							auto new_texture = pass.create_render_resource();
-
-							auto uploading_result = resource_uploader_->get_task_result(uploading_task_id);
-							if (uploading_result) {
-								renderer_->setup_render_resource(new_texture, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
-							}
-
-							// TODO: add internal tracking of resource uploads
 							tex->SetTexID((ImTextureID)new_texture);
 							tex->SetStatus(ImTextureStatus_OK);
 						}
@@ -304,7 +345,7 @@ namespace edge {
 							auto buffer_range = std::move(allocation_result.value());
 							auto mapped_range = buffer_range.get_range();
 
-							render_resource.transfer_state(cmd, gfx::ResourceStateFlag::eCopyDst);
+							render_resource.transfer_state(resource_set.command_buffer, gfx::ResourceStateFlag::eCopyDst);
 
 							uint64_t buffer_offset = 0;
 							mi::Vector<vk::BufferImageCopy2KHR> copy_regions{};
@@ -335,9 +376,9 @@ namespace edge {
 							copy_info.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
 							copy_info.regionCount = static_cast<uint32_t>(copy_regions.size());
 							copy_info.pRegions = copy_regions.data();
-							cmd->copyBufferToImage2KHR(&copy_info);
+							resource_set.command_buffer->copyBufferToImage2KHR(&copy_info);
 
-							render_resource.transfer_state(cmd, gfx::ResourceStateFlag::eShaderResource);
+							render_resource.transfer_state(resource_set.command_buffer, gfx::ResourceStateFlag::eShaderResource);
 
 							tex->SetStatus(ImTextureStatus_OK);
 
