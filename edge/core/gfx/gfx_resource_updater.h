@@ -28,5 +28,7 @@ namespace edge::gfx {
 
 		mi::Vector<ResourceSet> resource_sets_{};
 		uint32_t current_resource_set_{ 0u };
+
+		vk::SemaphoreSubmitInfoKHR previously_signalled_semaphore_{};
 	};
 }

@@ -50,12 +50,12 @@ namespace edge::gfx {
 		vk::SemaphoreSubmitInfoKHR signal_info{};
 		signal_info.semaphore = *resource_set.semaphore;
 		signal_info.value = signal_value;
-		signal_info.stageMask = vk::PipelineStageFlagBits2::eCopy;
+		signal_info.stageMask = vk::PipelineStageFlagBits2::eAllCommands;
 		signal_info.deviceIndex = 0;
 
 		mi::Vector<vk::SemaphoreSubmitInfoKHR> semaphores_to_wait{};
 		if (!resource_set.first_submission) {
-			semaphores_to_wait.emplace_back(*resource_set.semaphore, wait_value, vk::PipelineStageFlagBits2::eCopy, 0u);
+			semaphores_to_wait.push_back(previously_signalled_semaphore_);
 		}
 		for (auto& semaphore : wait_semaphores) {
 			if (!semaphore.semaphore) {
@@ -81,6 +81,8 @@ namespace edge::gfx {
 		if (resource_set.first_submission) {
 			resource_set.first_submission = false;
 		}
+
+		previously_signalled_semaphore_ = signal_info;
 
 		current_resource_set_ = (current_resource_set_ + 1u) % static_cast<uint32_t>(resource_sets_.size());
 
