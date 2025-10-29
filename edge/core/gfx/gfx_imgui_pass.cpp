@@ -233,7 +233,7 @@ namespace edge::gfx {
 					image_barrier.subresourceRange.layerCount = image.get_layer_count();
 					image_barriers_.push_back(image_barrier);
 
-					render_resource.set_state(required_backbuffer_state);
+					render_resource.set_state(required_resource_state);
 				}
 			}
 		}
