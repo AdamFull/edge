@@ -26,10 +26,10 @@ namespace edge::gfx {
 		self->pipeline_ = pipeline;
 
 		self->vertex_buffer_render_resource_id_ = renderer.create_render_resource();
-		self->update_buffer_resource(self->vertex_buffer_render_resource_id_, self->current_vertex_capacity_, sizeof(ImDrawVert), kDynamicVertexBuffer);
+		self->update_buffer_resource(self->vertex_buffer_render_resource_id_, self->current_vertex_capacity_, sizeof(ImDrawVert), kVertexBufferFlags);
 
 		self->index_buffer_render_resource_id_ = renderer.create_render_resource();
-		self->update_buffer_resource(self->index_buffer_render_resource_id_, self->current_index_capacity_, sizeof(ImDrawIdx), kDynamicIndexBuffer);
+		self->update_buffer_resource(self->index_buffer_render_resource_id_, self->current_index_capacity_, sizeof(ImDrawIdx), kIndexBufferFlags);
 
 		return self;
 	}
@@ -59,14 +59,14 @@ namespace edge::gfx {
 			EDGE_SLOGW("ImGui vertex buffer too small ({} < {}), need to resize", current_vertex_capacity_, draw_data->TotalVtxCount);
 
 			current_vertex_capacity_ = grow(current_vertex_capacity_, draw_data->TotalVtxCount);
-			update_buffer_resource(vertex_buffer_render_resource_id_, current_vertex_capacity_, sizeof(ImDrawVert), kDynamicVertexBuffer);
+			update_buffer_resource(vertex_buffer_render_resource_id_, current_vertex_capacity_, sizeof(ImDrawVert), kVertexBufferFlags);
 		}
 
 		if (draw_data->TotalIdxCount > static_cast<int>(current_index_capacity_)) {
 			EDGE_SLOGW("ImGui index buffer too small ({} < {}), need to resize", current_index_capacity_, draw_data->TotalIdxCount);
 
 			current_index_capacity_ = grow(current_index_capacity_, draw_data->TotalIdxCount);
-			update_buffer_resource(index_buffer_render_resource_id_, current_index_capacity_, sizeof(ImDrawIdx), kDynamicIndexBuffer);
+			update_buffer_resource(index_buffer_render_resource_id_, current_index_capacity_, sizeof(ImDrawIdx), kIndexBufferFlags);
 		}
 
 		auto& vertex_buffer_resource = renderer_->get_render_resource(vertex_buffer_render_resource_id_);
