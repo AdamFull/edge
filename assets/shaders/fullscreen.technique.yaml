@@ -9,7 +9,7 @@ color_blending:
     logic_op_enable: false
     logic_op: clear
     attachments:
-    - format: undefined # for backbuffer
+    - format: eR8G8B8A8Unorm
       blending: false
       color_write_mask: rgba
 input_assembly:
