@@ -66,6 +66,7 @@ target_compile_definitions(${PROJECT_NAME}
 target_sources(${PROJECT_NAME} PRIVATE
 	"gfx_context.cpp"
 	"gfx_imgui_pass.cpp"
+	"gfx_test_pass.cpp"
 	"gfx_renderer.cpp"
 	"gfx_resource_uploader.cpp"
 	"gfx_resource_updater.cpp"

@@ -4,6 +4,7 @@
 #include "imgui_layer.h"
 
 #include "core/gfx/gfx_imgui_pass.h"
+#include "core/gfx/gfx_test_pass.h"
 
 #include "../assets/shaders/fullscreen.h"
 
@@ -72,6 +73,9 @@ namespace edge {
 		for (auto& layer : layers_) {
 			layer->attach();
 		}
+
+		auto* fullscreen_pipeline = shader_library_.get_pipeline("fullscreen");
+		renderer_->add_shader_pass(gfx::TestPass::create(*renderer_, 2u, fullscreen_pipeline));
 
 		auto* imgui_pipeline = shader_library_.get_pipeline("imgui");
 		renderer_->add_shader_pass(gfx::ImGuiPass::create(*renderer_, updater_, uploader_, imgui_pipeline));
