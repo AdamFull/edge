@@ -102,21 +102,20 @@ namespace edge::gfx {
 				if (tex->Status == ImTextureStatus_OK) {
 					// Update pending resources
 					auto found = pending_image_uploads_.find(tex->GetTexID());
-					if (found != pending_image_uploads_.end()) {
-						if (!uploader_->is_task_done(found->second)) {
-							continue;
-						}
-
-						auto uploading_result = uploader_->get_task_result(found->second);
-						if (uploading_result) {
-							renderer_->setup_render_resource(found->first, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
-						}
-
-						pending_image_uploads_.erase(found);
+					if (found == pending_image_uploads_.end()) {
+						continue;
 					}
-					else {
-						// TODO: Check for layout translation
+
+					if (!uploader_->is_task_done(found->second)) {
+						continue;
 					}
+
+					auto uploading_result = uploader_->get_task_result(found->second);
+					if (uploading_result) {
+						renderer_->setup_render_resource(found->first, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
+					}
+
+					pending_image_uploads_.erase(found);
 				}
 				else if (tex->Status == ImTextureStatus_WantCreate) {
 					auto new_texture = renderer_->create_render_resource();
@@ -193,6 +192,48 @@ namespace edge::gfx {
 				else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
 					// TODO: Delete resource
 					EDGE_SLOGW("ImGui wants to delete image {}, but it's not implemented yet. ", tex->GetTexID());
+				}
+			}
+		}
+
+		// Process binded images
+		for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
+			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
+			for (int32_t cmd_i = 0; cmd_i < im_cmd_list->CmdBuffer.Size; cmd_i++) {
+				const ImDrawCmd* pcmd = &im_cmd_list->CmdBuffer[cmd_i];
+
+				auto render_resource_id = pcmd->GetTexID();
+				auto& render_resource = renderer_->get_render_resource(render_resource_id);
+
+				// Skip pending resources
+				if (!render_resource.has_handle()) {
+					continue;
+				}
+
+				auto& image = render_resource.get_handle<Image>();
+
+				auto resource_state = render_resource.get_state();
+				auto required_resource_state = ResourceStateFlag::eShaderResource;
+				if (resource_state != required_resource_state) {
+					auto src_state = util::get_resource_state(resource_state);
+					auto dst_state = util::get_resource_state(required_resource_state);
+
+					vk::ImageMemoryBarrier2KHR image_barrier{};
+					image_barrier.srcStageMask = src_state.stage_flags;
+					image_barrier.srcAccessMask = src_state.access_flags;
+					image_barrier.dstStageMask = dst_state.stage_flags;
+					image_barrier.dstAccessMask = dst_state.access_flags;
+					image_barrier.oldLayout = util::get_image_layout(resource_state);
+					image_barrier.newLayout = util::get_image_layout(required_resource_state);
+					image_barrier.image = image.get_handle();
+					image_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+					image_barrier.subresourceRange.baseMipLevel = 0u;
+					image_barrier.subresourceRange.levelCount = image.get_level_count();
+					image_barrier.subresourceRange.baseArrayLayer = 0u;
+					image_barrier.subresourceRange.layerCount = image.get_layer_count();
+					image_barriers_.push_back(image_barrier);
+
+					render_resource.set_state(required_backbuffer_state);
 				}
 			}
 		}
