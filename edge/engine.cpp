@@ -26,7 +26,7 @@ namespace edge {
 		}
 		renderer_ = std::move(gfx_renderer_result.value());
 
-		auto gfx_updater_result = gfx::ResourceUpdater::create(32ull * 1024ull * 1024ull, 2u);
+		auto gfx_updater_result = gfx::ResourceUpdater::create(renderer_->get_queue(), 32ull * 1024ull * 1024ull, 2u);
 		if (!gfx_updater_result) {
 			EDGE_LOGE("Failed to create resource updater. Reason: {}.", vk::to_string(gfx_updater_result.error()));
 			return false;
