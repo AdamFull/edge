@@ -33,8 +33,8 @@ namespace edge::gfx {
 		uint32_t vertex_buffer_render_resource_id_{ ~0u };
 		uint32_t index_buffer_render_resource_id_{ ~0u };
 
-		static constexpr BufferFlags kVertexBufferFlags = kDynamicVertexBuffer;
-		static constexpr BufferFlags kIndexBufferFlags = kDynamicIndexBuffer;
+		static constexpr BufferFlags kVertexBufferFlags = kVertexBuffer;
+		static constexpr BufferFlags kIndexBufferFlags = kIndexBuffer;
 
 		static constexpr uint32_t kInitialVertexCount = 2048u;
 		static constexpr uint32_t kInitialIndexCount = 4096u;
