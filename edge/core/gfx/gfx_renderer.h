@@ -1,21 +1,12 @@
 #pragma once
 
 #include "gfx_shader_library.h"
+#include "gfx_shader_pass.h"
 
 #include <variant>
 
 namespace edge::gfx {
 	class Renderer;
-
-	using PassSetupCb = std::function<void(Renderer&, CommandBuffer const&)>;
-	using PassExecuteCb = std::function<void(Renderer&, CommandBuffer const&, float)>;
-
-	struct ShaderPassInfo {
-		mi::U8String name{};
-		mi::String pipeline_name{};
-		PassSetupCb setup_cb{};
-		PassExecuteCb execute_cb{};
-	};
 
 	class RenderResource : public NonCopyable {
 	public:
@@ -158,7 +149,6 @@ namespace edge::gfx {
 			, descriptor_set_{ std::exchange(other.descriptor_set_, {}) }
 			, pipeline_layout_{ std::exchange(other.pipeline_layout_, {}) }
 			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, {}) } 
-			, shader_library_{ std::exchange(other.shader_library_, {}) }
 			, render_resources_{ std::exchange(other.render_resources_, {}) }
 			, shader_passes_{ std::exchange(other.shader_passes_, {}) }
 			, render_resource_free_list_{ std::move(other.render_resource_free_list_) } {
@@ -179,8 +169,6 @@ namespace edge::gfx {
 				pipeline_layout_ = std::exchange(other.pipeline_layout_, {});
 				push_constant_buffer_ = std::exchange(other.push_constant_buffer_, {});
 
-				shader_library_ = std::exchange(other.shader_library_, {});
-
 				render_resources_ = std::exchange(other.render_resources_, {});
 				shader_passes_ = std::exchange(other.shader_passes_, {});
 				render_resource_free_list_ = std::move(other.render_resource_free_list_);
@@ -195,11 +183,7 @@ namespace edge::gfx {
 		auto setup_render_resource(uint32_t resource_id, Buffer&& buffer, ResourceStateFlags initial_state) -> void;
 		auto get_render_resource(uint32_t resource_id) -> RenderResource&;
 
-		auto set_render_area(vk::Rect2D render_area) -> void;
-		auto set_layer_count(uint32_t layer_count) -> void;
-		auto add_color_attachment(uint32_t resource_id, vk::AttachmentLoadOp load_op = vk::AttachmentLoadOp::eClear, vk::ClearColorValue clear_color = {}) -> void;
-
-		auto add_shader_pass(ShaderPassInfo&& shader_pass_info) -> void;
+		auto add_shader_pass(Owned<IShaderPass>&& pass) -> void;
 
 		auto begin_frame(float delta_time) -> void;
 		auto execute_graph(float delta_time) -> void;
@@ -217,6 +201,8 @@ namespace edge::gfx {
 		auto push_constant_range(CommandBuffer const& cmd, vk::ShaderStageFlags stage_flags, Span<const uint8_t> range) const -> void;
 
 		auto get_queue() const noexcept -> Queue const&;
+		auto get_pipeline_layout() const noexcept -> PipelineLayout const&;
+		auto get_swapchain() const noexcept -> Swapchain const&;
 	private:
 		auto _construct(const RendererCreateInfo& create_info) -> vk::Result;
 
@@ -251,18 +237,8 @@ namespace edge::gfx {
 		mi::Vector<vk::DescriptorBufferInfo> buffer_descriptors_{};
 		Sampler test_sampler_{};
 
-		ShaderLibrary shader_library_;
-
 		mi::Vector<RenderResource> render_resources_{};
-		mi::Vector<ShaderPassInfo> shader_passes_{};
+		mi::Vector<Owned<IShaderPass>> shader_passes_{};
 		mi::FreeList<uint32_t> render_resource_free_list_{};
-
-		// TODO: This is temporary
-		mi::Vector<ImageBarrier> image_barriers_{};
-		vk::Rect2D render_area_{};
-		uint32_t layer_count_{ 1u };
-		mi::Vector<vk::RenderingAttachmentInfo> color_attachments_{};
-		vk::RenderingAttachmentInfo depth_attachment_{};
-		vk::RenderingAttachmentInfo stencil_attachment_{};
 	};
 }

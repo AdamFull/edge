@@ -390,46 +390,8 @@ namespace edge::gfx {
 		return render_resources_[resource_id];
 	}
 
-	auto Renderer::set_render_area(vk::Rect2D render_area) -> void {
-		render_area_ = render_area;
-	}
-
-	auto Renderer::set_layer_count(uint32_t layer_count) -> void {
-		layer_count_ = layer_count;
-	}
-
-	auto Renderer::add_color_attachment(uint32_t resource_id, vk::AttachmentLoadOp load_op, vk::ClearColorValue clear_color) -> void {
-		auto& render_resource = render_resources_[resource_id];
-		auto& image = render_resource.get_handle<Image>();
-
-		auto resource_state = render_resource.get_state();
-		if (resource_state != ResourceStateFlag::eRenderTarget) {
-			ImageBarrier barrier{};
-			barrier.image = &image;
-			barrier.src_state = resource_state;
-			barrier.dst_state = ResourceStateFlag::eRenderTarget;
-			barrier.subresource_range.aspectMask = vk::ImageAspectFlagBits::eColor;
-			barrier.subresource_range.baseMipLevel = 0u;
-			barrier.subresource_range.levelCount = image.get_level_count();
-			barrier.subresource_range.baseArrayLayer = 0u;
-			barrier.subresource_range.layerCount = image.get_layer_count() * image.get_face_count();
-			image_barriers_.push_back(barrier);
-			render_resource.set_state(barrier.dst_state);
-		}
-
-		auto& image_view = render_resource.get_srv_view<ImageView>();
-
-		vk::RenderingAttachmentInfo attachment_info{};
-		attachment_info.imageView = image_view.get_handle();
-		attachment_info.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-		attachment_info.loadOp = load_op;
-		attachment_info.storeOp = vk::AttachmentStoreOp::eNone;
-		attachment_info.clearValue = clear_color;
-		color_attachments_.push_back(attachment_info);
-	}
-
-	auto Renderer::add_shader_pass(ShaderPassInfo&& shader_pass_info) -> void {
-		shader_passes_.push_back(std::move(shader_pass_info));
+	auto Renderer::add_shader_pass(Owned<IShaderPass>&& pass) -> void {
+		shader_passes_.push_back(std::move(pass));
 	}
 
 	auto Renderer::begin_frame(float delta_time) -> void {
@@ -496,51 +458,8 @@ namespace edge::gfx {
 
 		auto& cmd = active_frame_->get_command_buffer();
 		for (auto& shader_pass : shader_passes_) {
-			auto* pipeline = shader_library_.get_pipeline(shader_pass.pipeline_name);
-			GFX_ASSERT_MSG(pipeline, "Pipeline \"{}\" was not found.", shader_pass.pipeline_name);
-			if (!pipeline) {
-				continue;
-			}
-
-			if (shader_pass.setup_cb) {
-				shader_pass.setup_cb(*this, cmd);
-			}
-
-			Barrier barrier{};
-			barrier.image_barriers = image_barriers_;
-			cmd.push_barrier(barrier);
-			image_barriers_.clear();
-
-			auto bind_point = pipeline->get_bind_point();
-			auto is_graphics_pipeline = bind_point == vk::PipelineBindPoint::eGraphics;
-			cmd->bindPipeline(bind_point, pipeline->get_handle());
-
-			if (is_graphics_pipeline) {
-				vk::RenderingInfoKHR rendering_info{};
-				rendering_info.renderArea = render_area_;
-				rendering_info.layerCount = layer_count_;
-				rendering_info.colorAttachmentCount = static_cast<uint32_t>(color_attachments_.size());
-				rendering_info.pColorAttachments = rendering_info.colorAttachmentCount != 0u ? color_attachments_.data() : nullptr;
-				rendering_info.pDepthAttachment = depth_attachment_.imageView ? &depth_attachment_ : nullptr;
-				rendering_info.pStencilAttachment = stencil_attachment_.imageView ? &stencil_attachment_ : nullptr;
-
-				cmd->beginRenderingKHR(&rendering_info);
-
-				color_attachments_.clear();
-				depth_attachment_ = vk::RenderingAttachmentInfo{};
-				stencil_attachment_ = vk::RenderingAttachmentInfo{};
-			}
-
-			if (shader_pass.execute_cb) {
-				shader_pass.execute_cb(*this, cmd, delta_time);
-			}
-
-			if (is_graphics_pipeline) {
-				cmd->endRenderingKHR();
-			}
+			shader_pass->execute(cmd, delta_time);
 		}
-
-		shader_passes_.clear();
 	}
 
 	auto Renderer::end_frame(Span<vk::SemaphoreSubmitInfoKHR> wait_external_semaphores) -> void {
@@ -628,6 +547,14 @@ namespace edge::gfx {
 
 	auto Renderer::get_queue() const noexcept -> Queue const& {
 		return queue_;
+	}
+
+	auto Renderer::get_pipeline_layout() const noexcept -> PipelineLayout const& {
+		return pipeline_layout_;
+	}
+
+	auto Renderer::get_swapchain() const noexcept -> Swapchain const& {
+		return swapchain_;
 	}
 
 	auto Renderer::_construct(const RendererCreateInfo& create_info) -> vk::Result {
@@ -727,19 +654,6 @@ namespace edge::gfx {
 			}); result != vk::Result::eSuccess) {
 			return result;
 		}
-
-		ShaderLibraryInfo shader_library_info{};
-		shader_library_info.pipeline_layout = &pipeline_layout_;
-		shader_library_info.pipeline_cache_path = u8"/shader_cache.cache";
-		shader_library_info.library_path = u8"/assets/shaders";
-		shader_library_info.backbuffer_format = swapchain_.get_format();
-
-		auto shader_library_result = ShaderLibrary::construct(shader_library_info);
-		if (!shader_library_result) {
-			GFX_ASSERT_MSG(false, "Failed to create shader library. Reason: {}.", vk::to_string(shader_library_result.error()));
-			return shader_library_result.error();
-		}
-		shader_library_ = std::move(shader_library_result.value());
 
 		for (int32_t i = 0; i < k_frame_overlap_; ++i) {
 			auto command_list_result = command_pool_.allocate_command_buffer();

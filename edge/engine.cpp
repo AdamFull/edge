@@ -3,7 +3,11 @@
 #include "core/filesystem/filesystem.h"
 #include "imgui_layer.h"
 
+#include "core/gfx/gfx_imgui_pass.h"
+
 #include "../assets/shaders/fullscreen.h"
+
+#define EDGE_LOGGER_SCOPE "Engine"
 
 namespace edge {
 	auto Engine::initialize(platform::IPlatformContext& context) -> bool {
@@ -41,6 +45,22 @@ namespace edge {
 		uploader_ = std::move(gfx_uploader_result.value());
 		uploader_.start_streamer();
 
+		auto& pipeline_layout = renderer_->get_pipeline_layout();
+		auto& swapchain = renderer_->get_swapchain();
+
+		gfx::ShaderLibraryInfo shader_library_info{};
+		shader_library_info.pipeline_layout = &pipeline_layout;
+		shader_library_info.pipeline_cache_path = u8"/shader_cache.cache";
+		shader_library_info.library_path = u8"/assets/shaders";
+		shader_library_info.backbuffer_format = swapchain.get_format();
+
+		auto shader_library_result = gfx::ShaderLibrary::construct(shader_library_info);
+		if (!shader_library_result) {
+			GFX_ASSERT_MSG(false, "Failed to create shader library. Reason: {}.", vk::to_string(shader_library_result.error()));
+			return false;
+		}
+		shader_library_ = std::move(shader_library_result.value());
+
 		window_ = &context.get_window();
 
 		// Resource uploader test
@@ -48,10 +68,13 @@ namespace edge {
 		auto streamer_id = uploader_.load_image({ .path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg" });
 		pending_uploads_.push_back(std::make_pair(resource_id, streamer_id));
 
-		layers_.push_back(ImGuiLayer::create(context, *renderer_, uploader_, updater_));
+		layers_.push_back(ImGuiLayer::create(context));
 		for (auto& layer : layers_) {
 			layer->attach();
 		}
+
+		auto* imgui_pipeline = shader_library_.get_pipeline("imgui");
+		renderer_->add_shader_pass(gfx::ImGuiPass::create(*renderer_, updater_, uploader_, imgui_pipeline));
 
 		return true;
 	}
@@ -109,3 +132,5 @@ namespace edge {
 
 	}
 }
+
+#undef EDGE_LOGGER_SCOPE 

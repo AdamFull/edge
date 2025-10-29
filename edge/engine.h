@@ -4,6 +4,7 @@
 #include "core/gfx/gfx_renderer.h"
 #include "core/gfx/gfx_resource_updater.h"
 #include "core/gfx/gfx_resource_uploader.h"
+#include "core/gfx/gfx_shader_library.h"
 
 #include "layer.h"
 
@@ -24,6 +25,7 @@ namespace edge {
 		std::unique_ptr<gfx::Renderer> renderer_{};
 		gfx::ResourceUpdater updater_{};
 		gfx::ResourceUploader uploader_{};
+		gfx::ShaderLibrary shader_library_{};
 
 		mi::Vector<Owned<ILayer>> layers_;
 
