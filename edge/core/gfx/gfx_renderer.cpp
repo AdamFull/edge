@@ -139,27 +139,29 @@ namespace edge::gfx {
 	}
 
 	auto RenderResource::reset() -> void {
+		auto* current_frame = renderer_->get_current_frame();
+
 		if (std::holds_alternative<BufferView>(srv_view_)) {
-			renderer_->deletion_queue_.push_back(std::move(std::get<BufferView>(srv_view_)));
+			current_frame->enqueue_resource_deletion(std::move(std::get<BufferView>(srv_view_)));
 		}
 		else if (std::holds_alternative<ImageView>(srv_view_)) {
-			renderer_->deletion_queue_.push_back(std::move(std::get<ImageView>(srv_view_)));
+			current_frame->enqueue_resource_deletion(std::move(std::get<ImageView>(srv_view_)));
 		}
 
 		for (auto&& uav_view : uav_views_) {
 			if (std::holds_alternative<BufferView>(uav_view)) {
-				renderer_->deletion_queue_.push_back(std::move(std::get<BufferView>(uav_view)));
+				current_frame->enqueue_resource_deletion(std::move(std::get<BufferView>(uav_view)));
 			}
 			else if (std::holds_alternative<ImageView>(uav_view)) {
-				renderer_->deletion_queue_.push_back(std::move(std::get<ImageView>(uav_view)));
+				current_frame->enqueue_resource_deletion(std::move(std::get<ImageView>(uav_view)));
 			}
 		}
 
 		if (std::holds_alternative<Buffer>(resource_handle_)) {
-			renderer_->deletion_queue_.push_back(std::move(std::get<Buffer>(resource_handle_)));
+			current_frame->enqueue_resource_deletion(std::move(std::get<Buffer>(resource_handle_)));
 		}
 		else if (std::holds_alternative<Image>(resource_handle_)) {
-			renderer_->deletion_queue_.push_back(std::move(std::get<Image>(resource_handle_)));
+			current_frame->enqueue_resource_deletion(std::move(std::get<Image>(resource_handle_)));
 		}
 
 		state_ = ResourceStateFlag::eUndefined;
@@ -263,6 +265,8 @@ namespace edge::gfx {
 
 			is_recording_ = command_buffer_.begin() == vk::Result::eSuccess;
 			GFX_ASSERT_MSG(is_recording_, "Failed to begin command buffer.");
+
+			deletion_queue_.clear();
 		}
 	}
 
@@ -438,8 +442,6 @@ namespace edge::gfx {
 
 		auto* current_frame = get_current_frame();
 		current_frame->begin();
-
-		deletion_queue_.clear();
 
 		auto const& semaphore = current_frame->get_image_available_semaphore();
 		acquired_semaphore_ = *semaphore;
@@ -631,6 +633,10 @@ namespace edge::gfx {
 
 	auto Renderer::push_constant_range(CommandBuffer const& cmd, vk::ShaderStageFlags stage_flags, Span<const uint8_t> range) const -> void {
 		cmd->pushConstants(pipeline_layout_.get_handle(), stage_flags, 0u, range.size(), range.data());
+	}
+
+	auto Renderer::get_queue() const noexcept -> Queue const& {
+		return queue_;
 	}
 
 	auto Renderer::_construct(const RendererCreateInfo& create_info) -> vk::Result {

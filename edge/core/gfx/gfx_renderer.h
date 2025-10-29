@@ -78,6 +78,8 @@ namespace edge::gfx {
 
 	class Frame : public NonCopyable {
 	public:
+		using ResourceVariant = std::variant<Buffer, Image, BufferView, ImageView>;
+
 		Frame() = default;
 		~Frame();
 
@@ -105,6 +107,10 @@ namespace edge::gfx {
 		auto begin() -> void;
 		auto end() -> void;
 
+		auto enqueue_resource_deletion(ResourceVariant&& resource) -> void {
+			deletion_queue_.push_back(std::move(resource));
+		}
+
 		auto get_image_available_semaphore() const noexcept -> Semaphore const& { return image_available_; }
 		auto get_rendering_finished_semaphore() const noexcept -> Semaphore const& { return rendering_finished_; }
 		auto get_fence() const noexcept -> Fence const& { return fence_; }
@@ -119,6 +125,8 @@ namespace edge::gfx {
 
 		CommandBuffer command_buffer_{};
 		bool is_recording_{ false };
+
+		mi::Vector<ResourceVariant> deletion_queue_{};
 	};
 
 	struct RendererCreateInfo {
@@ -133,8 +141,6 @@ namespace edge::gfx {
 	class Renderer : public NonCopyable{
 	public:
 		friend class RenderResource;
-
-		using ResourceVariant = std::variant<Buffer, Image, BufferView, ImageView>;
 
 		Renderer() = default;
 		~Renderer();
@@ -209,6 +215,8 @@ namespace edge::gfx {
 		auto get_gpu_delta_time() const -> float { return gpu_delta_time_; }
 
 		auto push_constant_range(CommandBuffer const& cmd, vk::ShaderStageFlags stage_flags, Span<const uint8_t> range) const -> void;
+
+		auto get_queue() const noexcept -> Queue const&;
 	private:
 		auto _construct(const RendererCreateInfo& create_info) -> vk::Result;
 
@@ -256,7 +264,5 @@ namespace edge::gfx {
 		mi::Vector<vk::RenderingAttachmentInfo> color_attachments_{};
 		vk::RenderingAttachmentInfo depth_attachment_{};
 		vk::RenderingAttachmentInfo stencil_attachment_{};
-
-		mi::Vector<ResourceVariant> deletion_queue_{};
 	};
 }
