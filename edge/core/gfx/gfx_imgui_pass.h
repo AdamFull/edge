@@ -22,6 +22,7 @@ namespace edge::gfx {
 		auto push_buffer_barrier(uint32_t resource_id, ResourceStateFlags required_state) -> void;
 		auto update_imgui_texture(ImTextureData* tex) -> void;
 		auto collect_external_resource_barriers(ImDrawData* draw_data) -> void;
+		auto update_geometry_buffers(ImDrawData* draw_data) -> void;
 		auto update_buffer_resource(uint32_t resource_id, vk::DeviceSize element_count, vk::DeviceSize element_size, BufferFlags usage) -> void;
 
 		Renderer* renderer_{ nullptr };

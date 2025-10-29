@@ -55,64 +55,13 @@ namespace edge::gfx {
 			return;
 		}
 
-		if (draw_data->TotalVtxCount > static_cast<int>(current_vertex_capacity_)) {
-			EDGE_SLOGW("ImGui vertex buffer too small ({} < {}), need to resize", current_vertex_capacity_, draw_data->TotalVtxCount);
-
-			current_vertex_capacity_ = grow(current_vertex_capacity_, draw_data->TotalVtxCount);
-			update_buffer_resource(vertex_buffer_render_resource_id_, current_vertex_capacity_, sizeof(ImDrawVert), kVertexBufferFlags);
-		}
-
-		if (draw_data->TotalIdxCount > static_cast<int>(current_index_capacity_)) {
-			EDGE_SLOGW("ImGui index buffer too small ({} < {}), need to resize", current_index_capacity_, draw_data->TotalIdxCount);
-
-			current_index_capacity_ = grow(current_index_capacity_, draw_data->TotalIdxCount);
-			update_buffer_resource(index_buffer_render_resource_id_, current_index_capacity_, sizeof(ImDrawIdx), kIndexBufferFlags);
-		}
+		update_geometry_buffers(draw_data);
 
 		auto& vertex_buffer_resource = renderer_->get_render_resource(vertex_buffer_render_resource_id_);
 		auto& vertex_buffer = vertex_buffer_resource.get_handle<gfx::Buffer>();
-		auto mapped_vertex_range = vertex_buffer.map().value();
 
 		auto& index_buffer_resource = renderer_->get_render_resource(index_buffer_render_resource_id_);
 		auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
-		auto mapped_index_range = index_buffer.map().value();
-
-		// Update geometry buffers
-		int32_t global_vtx_offset = 0;
-		int32_t global_idx_offset = 0;
-
-		for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
-			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
-
-			auto vertex_byte_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
-			std::memcpy(mapped_vertex_range.data() + global_vtx_offset, im_cmd_list->VtxBuffer.Data, vertex_byte_size);
-
-			auto index_byte_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
-			std::memcpy(mapped_index_range.data() + global_idx_offset, im_cmd_list->IdxBuffer.Data, index_byte_size);
-
-			global_vtx_offset += vertex_byte_size;
-			global_idx_offset += index_byte_size;
-		}
-
-		vk::BufferMemoryBarrier2KHR vertex_buffer_barrier{};
-		vertex_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
-		vertex_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
-		vertex_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eVertexShader;
-		vertex_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eShaderRead;
-		vertex_buffer_barrier.buffer = vertex_buffer.get_handle();
-		vertex_buffer_barrier.offset = 0ull;
-		vertex_buffer_barrier.size = global_vtx_offset;
-		buffer_barriers_.push_back(vertex_buffer_barrier);
-
-		vk::BufferMemoryBarrier2KHR index_buffer_barrier{};
-		index_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
-		index_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
-		index_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eIndexInput;
-		index_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eIndexRead;
-		index_buffer_barrier.buffer = index_buffer.get_handle();
-		index_buffer_barrier.offset = 0ull;
-		index_buffer_barrier.size = global_idx_offset;
-		buffer_barriers_.push_back(index_buffer_barrier);
 
 		auto backbuffer_id = renderer_->get_backbuffer_resource_id();
 		push_image_barrier(backbuffer_id, ResourceStateFlag::eRenderTarget);
@@ -128,8 +77,8 @@ namespace edge::gfx {
 		image_barriers_.clear();
 
 		// Reset offsets for drawing
-		global_vtx_offset = 0;
-		global_idx_offset = 0;
+		int32_t global_vtx_offset = 0;
+		int32_t global_idx_offset = 0;
 
 		auto& backbuffer_resource = renderer_->get_render_resource(backbuffer_id);
 		auto& backbuffer_image = backbuffer_resource.get_handle<gfx::Image>();
@@ -346,6 +295,67 @@ namespace edge::gfx {
 				push_image_barrier(render_resource_id, ResourceStateFlag::eShaderResource);
 			}
 		}
+	}
+
+	auto ImGuiPass::update_geometry_buffers(ImDrawData* draw_data) -> void {
+		if (draw_data->TotalVtxCount > static_cast<int>(current_vertex_capacity_)) {
+			EDGE_SLOGW("ImGui vertex buffer too small ({} < {}), need to resize", current_vertex_capacity_, draw_data->TotalVtxCount);
+
+			current_vertex_capacity_ = grow(current_vertex_capacity_, draw_data->TotalVtxCount);
+			update_buffer_resource(vertex_buffer_render_resource_id_, current_vertex_capacity_, sizeof(ImDrawVert), kVertexBufferFlags);
+		}
+
+		if (draw_data->TotalIdxCount > static_cast<int>(current_index_capacity_)) {
+			EDGE_SLOGW("ImGui index buffer too small ({} < {}), need to resize", current_index_capacity_, draw_data->TotalIdxCount);
+
+			current_index_capacity_ = grow(current_index_capacity_, draw_data->TotalIdxCount);
+			update_buffer_resource(index_buffer_render_resource_id_, current_index_capacity_, sizeof(ImDrawIdx), kIndexBufferFlags);
+		}
+
+		auto& vertex_buffer_resource = renderer_->get_render_resource(vertex_buffer_render_resource_id_);
+		auto& vertex_buffer = vertex_buffer_resource.get_handle<gfx::Buffer>();
+		auto mapped_vertex_range = vertex_buffer.map().value();
+
+		auto& index_buffer_resource = renderer_->get_render_resource(index_buffer_render_resource_id_);
+		auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
+		auto mapped_index_range = index_buffer.map().value();
+
+		// Update geometry buffers
+		int32_t global_vtx_offset = 0;
+		int32_t global_idx_offset = 0;
+
+		for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
+			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
+
+			auto vertex_byte_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
+			std::memcpy(mapped_vertex_range.data() + global_vtx_offset, im_cmd_list->VtxBuffer.Data, vertex_byte_size);
+
+			auto index_byte_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+			std::memcpy(mapped_index_range.data() + global_idx_offset, im_cmd_list->IdxBuffer.Data, index_byte_size);
+
+			global_vtx_offset += vertex_byte_size;
+			global_idx_offset += index_byte_size;
+		}
+
+		vk::BufferMemoryBarrier2KHR vertex_buffer_barrier{};
+		vertex_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
+		vertex_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
+		vertex_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eVertexShader;
+		vertex_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eShaderRead;
+		vertex_buffer_barrier.buffer = vertex_buffer.get_handle();
+		vertex_buffer_barrier.offset = 0ull;
+		vertex_buffer_barrier.size = global_vtx_offset;
+		buffer_barriers_.push_back(vertex_buffer_barrier);
+
+		vk::BufferMemoryBarrier2KHR index_buffer_barrier{};
+		index_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
+		index_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
+		index_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eIndexInput;
+		index_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eIndexRead;
+		index_buffer_barrier.buffer = index_buffer.get_handle();
+		index_buffer_barrier.offset = 0ull;
+		index_buffer_barrier.size = global_idx_offset;
+		buffer_barriers_.push_back(index_buffer_barrier);
 	}
 
 	auto ImGuiPass::update_buffer_resource(uint32_t resource_id, vk::DeviceSize element_count, vk::DeviceSize element_size, BufferFlags usage) -> void {
