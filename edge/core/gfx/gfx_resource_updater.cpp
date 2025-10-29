@@ -5,7 +5,7 @@
 namespace edge::gfx {
 	ResourceUpdater::~ResourceUpdater() {
 		if (queue_) {
-			auto wait_result = queue_->waitIdle();
+			auto wait_result = (*queue_)->waitIdle();
 			GFX_ASSERT_MSG(wait_result == vk::Result::eSuccess, "Failed to wait queue submission finished.");
 		}
 	}
@@ -27,8 +27,9 @@ namespace edge::gfx {
 		return *this;
 	}
 
-	auto ResourceUpdater::create(vk::DeviceSize arena_size, uint32_t uploader_count) -> Result<ResourceUpdater> {
+	auto ResourceUpdater::create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count) -> Result<ResourceUpdater> {
 		ResourceUpdater self{};
+		self.queue_ = &queue;
 		if (auto result = self._construct(arena_size, uploader_count); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
@@ -74,7 +75,7 @@ namespace edge::gfx {
 		submit_info.commandBufferInfoCount = 1u;
 		submit_info.pCommandBufferInfos = &command_buffer_info;
 
-		auto submit_result = queue_->submit2KHR(1u, &submit_info, VK_NULL_HANDLE);
+		auto submit_result = (*queue_)->submit2KHR(1u, &submit_info, VK_NULL_HANDLE);
 		GFX_ASSERT_MSG(submit_result == vk::Result::eSuccess, "Failed to submit uploader queue.");
 
 		if (resource_set.first_submission) {
@@ -87,16 +88,16 @@ namespace edge::gfx {
 	}
 
 	auto ResourceUpdater::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result {
-		auto queue_result = device_.get_queue({
-				.required_caps = QueuePresets::kGraphics,
-				.strategy = QueueSelectionStrategy::ePreferDedicated
-			});
-		if (!queue_result) {
-			return queue_result.error();
-		}
-		queue_ = std::move(queue_result.value());
+		//auto queue_result = device_.get_queue({
+		//		.required_caps = QueuePresets::kGraphics,
+		//		.strategy = QueueSelectionStrategy::ePreferDedicated
+		//	});
+		//if (!queue_result) {
+		//	return queue_result.error();
+		//}
+		//queue_ = std::move(queue_result.value());
 
-		auto command_pool_result = queue_.create_command_pool();
+		auto command_pool_result = queue_->create_command_pool();
 		if (!command_pool_result) {
 			return command_pool_result.error();
 		}

@@ -11,7 +11,7 @@ namespace edge::gfx {
 		ResourceUpdater(ResourceUpdater&& other) noexcept;
 		auto operator=(ResourceUpdater&& other) noexcept -> ResourceUpdater&;
 
-		static auto create(vk::DeviceSize arena_size, uint32_t uploader_count = 1u) -> Result<ResourceUpdater>;
+		static auto create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count = 1u) -> Result<ResourceUpdater>;
 
 		auto acquire_resource_set() -> ResourceSet&;
 		auto get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> Result<BufferRange>;
@@ -23,7 +23,7 @@ namespace edge::gfx {
 		auto begin_commands(ResourceSet& resource_set) -> void;
 		auto end_commands(ResourceSet& resource_set) -> void;
 
-		Queue queue_{};
+		Queue const* queue_{ nullptr };
 		CommandPool command_pool_{};
 
 		mi::Vector<ResourceSet> resource_sets_{};
