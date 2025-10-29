@@ -5,7 +5,11 @@
 namespace edge::gfx {
 	ResourceUpdater::~ResourceUpdater() {
 		if (queue_) {
+#ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
+			auto wait_result = queue_->waitIdle();
+#else
 			auto wait_result = (*queue_)->waitIdle();
+#endif
 			GFX_ASSERT_MSG(wait_result == vk::Result::eSuccess, "Failed to wait queue submission finished.");
 		}
 	}
@@ -29,7 +33,9 @@ namespace edge::gfx {
 
 	auto ResourceUpdater::create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count) -> Result<ResourceUpdater> {
 		ResourceUpdater self{};
+#ifndef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
 		self.queue_ = &queue;
+#endif
 		if (auto result = self._construct(arena_size, uploader_count); result != vk::Result::eSuccess) {
 			return std::unexpected(result);
 		}
@@ -75,7 +81,11 @@ namespace edge::gfx {
 		submit_info.commandBufferInfoCount = 1u;
 		submit_info.pCommandBufferInfos = &command_buffer_info;
 
+#ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
+		auto submit_result = queue_->submit2KHR(1u, &submit_info, VK_NULL_HANDLE);
+#else
 		auto submit_result = (*queue_)->submit2KHR(1u, &submit_info, VK_NULL_HANDLE);
+#endif
 		GFX_ASSERT_MSG(submit_result == vk::Result::eSuccess, "Failed to submit uploader queue.");
 
 		if (resource_set.first_submission) {
@@ -90,16 +100,22 @@ namespace edge::gfx {
 	}
 
 	auto ResourceUpdater::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result {
-		//auto queue_result = device_.get_queue({
-		//		.required_caps = QueuePresets::kGraphics,
-		//		.strategy = QueueSelectionStrategy::ePreferDedicated
-		//	});
-		//if (!queue_result) {
-		//	return queue_result.error();
-		//}
-		//queue_ = std::move(queue_result.value());
-
+#ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
+		auto queue_result = device_.get_queue({
+				.required_caps = QueuePresets::kGraphics,
+				.strategy = QueueSelectionStrategy::ePreferDedicated
+			});
+		if (!queue_result) {
+			return queue_result.error();
+		}
+		queue_ = std::move(queue_result.value());
+#endif
+		
+#ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
+		auto command_pool_result = queue_.create_command_pool();
+#else
 		auto command_pool_result = queue_->create_command_pool();
+#endif
 		if (!command_pool_result) {
 			return command_pool_result.error();
 		}
