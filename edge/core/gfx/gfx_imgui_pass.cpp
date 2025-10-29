@@ -39,214 +39,17 @@ namespace edge::gfx {
 			return;
 		}
 
-		auto backbuffer_id = renderer_->get_backbuffer_resource_id();
-		auto& backbuffer_resource = renderer_->get_render_resource(backbuffer_id);
-		auto& backbuffer_image = backbuffer_resource.get_handle<gfx::Image>();
-		auto& backbuffer_image_view = backbuffer_resource.get_srv_view<ImageView>();
-		auto backbuffer_extent = backbuffer_image.get_extent();
-
-		auto backbuffer_state = backbuffer_resource.get_state();
-		auto required_backbuffer_state = ResourceStateFlag::eRenderTarget;
-		if (backbuffer_state != required_backbuffer_state) {
-			auto src_state = util::get_resource_state(backbuffer_state);
-			auto dst_state = util::get_resource_state(required_backbuffer_state);
-
-			vk::ImageMemoryBarrier2KHR image_barrier{};
-			image_barrier.srcStageMask = src_state.stage_flags;
-			image_barrier.srcAccessMask = src_state.access_flags;
-			image_barrier.dstStageMask = dst_state.stage_flags;
-			image_barrier.dstAccessMask = dst_state.access_flags;
-			image_barrier.oldLayout = util::get_image_layout(backbuffer_state);
-			image_barrier.newLayout = vk::ImageLayout::eColorAttachmentOptimal;
-			image_barrier.image = backbuffer_image.get_handle();
-			image_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-			image_barrier.subresourceRange.baseMipLevel = 0u;
-			image_barrier.subresourceRange.levelCount = 1u;
-			image_barrier.subresourceRange.baseArrayLayer = 0u;
-			image_barrier.subresourceRange.layerCount = 1u;
-			image_barriers_.push_back(image_barrier);
-
-			backbuffer_resource.set_state(required_backbuffer_state);
-		}
-
-		auto& vertex_buffer_resource = renderer_->get_render_resource(vertex_buffer_render_resource_id_);
-		auto& vertex_buffer = vertex_buffer_resource.get_handle<gfx::Buffer>();
-
-		vk::BufferMemoryBarrier2KHR vertex_buffer_barrier{};
-		vertex_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
-		vertex_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
-		vertex_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eVertexShader;
-		vertex_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eShaderRead;
-		vertex_buffer_barrier.buffer = vertex_buffer.get_handle();
-		vertex_buffer_barrier.offset = 0ull;
-		vertex_buffer_barrier.size = VK_WHOLE_SIZE;
-		buffer_barriers_.push_back(vertex_buffer_barrier);
-
-		auto& index_buffer_resource = renderer_->get_render_resource(index_buffer_render_resource_id_);
-		auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
-
-		vk::BufferMemoryBarrier2KHR index_buffer_barrier{};
-		index_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
-		index_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
-		index_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eIndexInput;
-		index_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eIndexRead;
-		index_buffer_barrier.buffer = index_buffer.get_handle();
-		index_buffer_barrier.offset = 0ull;
-		index_buffer_barrier.size = VK_WHOLE_SIZE;
-		buffer_barriers_.push_back(index_buffer_barrier);
+		ImDrawData* draw_data = ImGui::GetDrawData();
 
 		// Process images
-		ImDrawData* draw_data = ImGui::GetDrawData();
 		if (draw_data && draw_data->Textures) {
 			for (ImTextureData* tex : *draw_data->Textures) {
-				if (tex->Status == ImTextureStatus_OK) {
-					// Update pending resources
-					auto found = pending_image_uploads_.find(tex->GetTexID());
-					if (found == pending_image_uploads_.end()) {
-						continue;
-					}
-
-					if (!uploader_->is_task_done(found->second)) {
-						continue;
-					}
-
-					auto uploading_result = uploader_->get_task_result(found->second);
-					if (uploading_result) {
-						renderer_->setup_render_resource(found->first, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
-					}
-
-					pending_image_uploads_.erase(found);
-				}
-				else if (tex->Status == ImTextureStatus_WantCreate) {
-					auto new_texture = renderer_->create_render_resource();
-
-					gfx::ImageImportInfo import_info{};
-					import_info.raw.width = tex->Width;
-					import_info.raw.height = tex->Height;
-					import_info.raw.data.resize(tex->Width * tex->Height * tex->BytesPerPixel);
-					std::memcpy(import_info.raw.data.data(), tex->Pixels, import_info.raw.data.size());
-					pending_image_uploads_[new_texture] = uploader_->load_image(std::move(import_info));
-
-					tex->SetTexID((ImTextureID)new_texture);
-					tex->SetStatus(ImTextureStatus_OK);
-				}
-				else if (tex->Status == ImTextureStatus_WantUpdates) {
-					auto resource_id = tex->GetTexID();
-					auto& render_resource = renderer_->get_render_resource(resource_id);
-					auto& image = render_resource.get_handle<gfx::Image>();
-
-					// TODO: Move it all to uploader
-					// TODO: At first try to use command list from Updater
-					uint64_t total_size = 0;
-					for (auto& update_region : tex->Updates) {
-						EDGE_SLOGD("Updating image {} region: [{}, {}, {}, {}]", tex->GetTexID(), update_region.x, update_region.y, update_region.w, update_region.h);
-						auto region_pitch = update_region.w * tex->BytesPerPixel;
-						total_size += region_pitch * update_region.h;
-					}
-
-					auto& resource_set = updater_->acquire_resource_set();
-					auto allocation_result = updater_->get_or_allocate_staging_memory(resource_set, total_size, 4ull);
-					GFX_ASSERT_MSG(allocation_result.has_value(), "Failed to create staging buffer for texture update.");
-					auto buffer_range = std::move(allocation_result.value());
-					auto mapped_range = buffer_range.get_range();
-
-					render_resource.transfer_state(resource_set.command_buffer, gfx::ResourceStateFlag::eCopyDst);
-
-					uint64_t buffer_offset = 0;
-					mi::Vector<vk::BufferImageCopy2KHR> copy_regions{};
-					for (auto& update_region : tex->Updates) {
-						auto region_pitch = update_region.w * tex->BytesPerPixel;
-
-						for (int y = 0; y < update_region.h; y++) {
-							const void* src_pixels = tex->GetPixelsAt(update_region.x, update_region.y + y);
-							std::memcpy(mapped_range.data() + buffer_offset + (region_pitch * y), src_pixels, region_pitch);
-						}
-
-						vk::BufferImageCopy2KHR image_copy_region{};
-						image_copy_region.bufferOffset = buffer_offset + buffer_range.get_offset();
-						image_copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-						image_copy_region.imageSubresource.mipLevel = 0u;
-						image_copy_region.imageSubresource.baseArrayLayer = 0u;
-						image_copy_region.imageSubresource.layerCount = 1u;
-						image_copy_region.imageOffset = vk::Offset3D{ update_region.x, update_region.y, 0 };
-						image_copy_region.imageExtent = vk::Extent3D{ update_region.w, update_region.h, 1u };
-						copy_regions.push_back(image_copy_region);
-
-						buffer_offset += region_pitch * update_region.h;
-					}
-
-					vk::CopyBufferToImageInfo2KHR copy_info{};
-					copy_info.srcBuffer = buffer_range.get_buffer();
-					copy_info.dstImage = image.get_handle();
-					copy_info.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-					copy_info.regionCount = static_cast<uint32_t>(copy_regions.size());
-					copy_info.pRegions = copy_regions.data();
-					resource_set.command_buffer->copyBufferToImage2KHR(&copy_info);
-
-					render_resource.transfer_state(resource_set.command_buffer, gfx::ResourceStateFlag::eShaderResource);
-
-					tex->SetStatus(ImTextureStatus_OK);
-
-					// TODO: Uploader is not support partial update yet, because of that trying to update manually
-				}
-				else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
-					// TODO: Delete resource
-					EDGE_SLOGW("ImGui wants to delete image {}, but it's not implemented yet. ", tex->GetTexID());
-				}
+				update_imgui_texture(tex);
 			}
 		}
 
 		// Process binded images
-		for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
-			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
-			for (int32_t cmd_i = 0; cmd_i < im_cmd_list->CmdBuffer.Size; cmd_i++) {
-				const ImDrawCmd* pcmd = &im_cmd_list->CmdBuffer[cmd_i];
-
-				auto render_resource_id = pcmd->GetTexID();
-				auto& render_resource = renderer_->get_render_resource(render_resource_id);
-
-				// Skip pending resources
-				if (!render_resource.has_handle()) {
-					continue;
-				}
-
-				auto& image = render_resource.get_handle<Image>();
-
-				auto resource_state = render_resource.get_state();
-				auto required_resource_state = ResourceStateFlag::eShaderResource;
-				if (resource_state != required_resource_state) {
-					auto src_state = util::get_resource_state(resource_state);
-					auto dst_state = util::get_resource_state(required_resource_state);
-
-					vk::ImageMemoryBarrier2KHR image_barrier{};
-					image_barrier.srcStageMask = src_state.stage_flags;
-					image_barrier.srcAccessMask = src_state.access_flags;
-					image_barrier.dstStageMask = dst_state.stage_flags;
-					image_barrier.dstAccessMask = dst_state.access_flags;
-					image_barrier.oldLayout = util::get_image_layout(resource_state);
-					image_barrier.newLayout = util::get_image_layout(required_resource_state);
-					image_barrier.image = image.get_handle();
-					image_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-					image_barrier.subresourceRange.baseMipLevel = 0u;
-					image_barrier.subresourceRange.levelCount = image.get_level_count();
-					image_barrier.subresourceRange.baseArrayLayer = 0u;
-					image_barrier.subresourceRange.layerCount = image.get_layer_count();
-					image_barriers_.push_back(image_barrier);
-
-					render_resource.set_state(required_resource_state);
-				}
-			}
-		}
-
-		vk::DependencyInfoKHR dependency_info{};
-		dependency_info.bufferMemoryBarrierCount = static_cast<uint32_t>(buffer_barriers_.size());
-		dependency_info.pBufferMemoryBarriers = buffer_barriers_.data();
-		dependency_info.imageMemoryBarrierCount = static_cast<uint32_t>(image_barriers_.size());
-		dependency_info.pImageMemoryBarriers = image_barriers_.data();
-		cmd->pipelineBarrier2KHR(&dependency_info);
-
-		buffer_barriers_.clear();
-		image_barriers_.clear();
+		collect_external_resource_barriers(draw_data);
 
 		if (!draw_data || draw_data->TotalVtxCount == 0 || draw_data->TotalIdxCount == 0) {
 			return;
@@ -266,7 +69,12 @@ namespace edge::gfx {
 			update_buffer_resource(index_buffer_render_resource_id_, current_index_capacity_, sizeof(ImDrawIdx), kDynamicIndexBuffer);
 		}
 
+		auto& vertex_buffer_resource = renderer_->get_render_resource(vertex_buffer_render_resource_id_);
+		auto& vertex_buffer = vertex_buffer_resource.get_handle<gfx::Buffer>();
 		auto mapped_vertex_range = vertex_buffer.map().value();
+
+		auto& index_buffer_resource = renderer_->get_render_resource(index_buffer_render_resource_id_);
+		auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
 		auto mapped_index_range = index_buffer.map().value();
 
 		// Update geometry buffers
@@ -286,9 +94,47 @@ namespace edge::gfx {
 			global_idx_offset += index_byte_size;
 		}
 
+		vk::BufferMemoryBarrier2KHR vertex_buffer_barrier{};
+		vertex_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
+		vertex_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
+		vertex_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eVertexShader;
+		vertex_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eShaderRead;
+		vertex_buffer_barrier.buffer = vertex_buffer.get_handle();
+		vertex_buffer_barrier.offset = 0ull;
+		vertex_buffer_barrier.size = global_vtx_offset;
+		buffer_barriers_.push_back(vertex_buffer_barrier);
+
+		vk::BufferMemoryBarrier2KHR index_buffer_barrier{};
+		index_buffer_barrier.srcStageMask = vk::PipelineStageFlagBits2KHR::eHost;
+		index_buffer_barrier.srcAccessMask = vk::AccessFlagBits2KHR::eHostWrite;
+		index_buffer_barrier.dstStageMask = vk::PipelineStageFlagBits2KHR::eIndexInput;
+		index_buffer_barrier.dstAccessMask = vk::AccessFlagBits2KHR::eIndexRead;
+		index_buffer_barrier.buffer = index_buffer.get_handle();
+		index_buffer_barrier.offset = 0ull;
+		index_buffer_barrier.size = global_idx_offset;
+		buffer_barriers_.push_back(index_buffer_barrier);
+
+		auto backbuffer_id = renderer_->get_backbuffer_resource_id();
+		push_image_barrier(backbuffer_id, ResourceStateFlag::eRenderTarget);
+
+		vk::DependencyInfoKHR dependency_info{};
+		dependency_info.bufferMemoryBarrierCount = static_cast<uint32_t>(buffer_barriers_.size());
+		dependency_info.pBufferMemoryBarriers = buffer_barriers_.data();
+		dependency_info.imageMemoryBarrierCount = static_cast<uint32_t>(image_barriers_.size());
+		dependency_info.pImageMemoryBarriers = image_barriers_.data();
+		cmd->pipelineBarrier2KHR(&dependency_info);
+
+		buffer_barriers_.clear();
+		image_barriers_.clear();
+
 		// Reset offsets for drawing
 		global_vtx_offset = 0;
 		global_idx_offset = 0;
+
+		auto& backbuffer_resource = renderer_->get_render_resource(backbuffer_id);
+		auto& backbuffer_image = backbuffer_resource.get_handle<gfx::Image>();
+		auto& backbuffer_image_view = backbuffer_resource.get_srv_view<ImageView>();
+		auto backbuffer_extent = backbuffer_image.get_extent();
 
 		vk::RenderingAttachmentInfo color_attachment{};
 		color_attachment.imageView = backbuffer_image_view.get_handle();
@@ -366,6 +212,150 @@ namespace edge::gfx {
 		}
 
 		cmd->endRenderingKHR();
+	}
+
+	auto ImGuiPass::push_image_barrier(uint32_t resource_id, ResourceStateFlags required_state) -> void {
+		auto& render_resource = renderer_->get_render_resource(resource_id);
+		auto& image = render_resource.get_handle<Image>();
+		auto source_state = render_resource.get_state();
+
+		if (source_state != required_state) {
+			auto src_state = util::get_resource_state(source_state);
+			auto dst_state = util::get_resource_state(required_state);
+
+			vk::ImageMemoryBarrier2KHR image_barrier{};
+			image_barrier.srcStageMask = src_state.stage_flags;
+			image_barrier.srcAccessMask = src_state.access_flags;
+			image_barrier.dstStageMask = dst_state.stage_flags;
+			image_barrier.dstAccessMask = dst_state.access_flags;
+			image_barrier.oldLayout = util::get_image_layout(source_state);
+			image_barrier.newLayout = util::get_image_layout(required_state);
+			image_barrier.image = image.get_handle();
+			image_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+			image_barrier.subresourceRange.baseMipLevel = 0u;
+			image_barrier.subresourceRange.levelCount = image.get_level_count();
+			image_barrier.subresourceRange.baseArrayLayer = 0u;
+			image_barrier.subresourceRange.layerCount = image.get_level_count();
+			image_barriers_.push_back(image_barrier);
+
+			render_resource.set_state(required_state);
+		}
+	}
+
+	auto ImGuiPass::update_imgui_texture(ImTextureData* tex) -> void {
+		if (tex->Status == ImTextureStatus_OK) {
+			// Update pending resources
+			auto found = pending_image_uploads_.find(tex->GetTexID());
+			if (found == pending_image_uploads_.end()) {
+				return;
+			}
+
+			if (!uploader_->is_task_done(found->second)) {
+				return;
+			}
+
+			auto uploading_result = uploader_->get_task_result(found->second);
+			if (uploading_result) {
+				renderer_->setup_render_resource(found->first, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
+			}
+
+			pending_image_uploads_.erase(found);
+		}
+		else if (tex->Status == ImTextureStatus_WantCreate) {
+			auto new_texture = renderer_->create_render_resource();
+
+			gfx::ImageImportInfo import_info{};
+			import_info.raw.width = tex->Width;
+			import_info.raw.height = tex->Height;
+			import_info.raw.data.resize(tex->Width * tex->Height * tex->BytesPerPixel);
+			std::memcpy(import_info.raw.data.data(), tex->Pixels, import_info.raw.data.size());
+			pending_image_uploads_[new_texture] = uploader_->load_image(std::move(import_info));
+
+			tex->SetTexID((ImTextureID)new_texture);
+			tex->SetStatus(ImTextureStatus_OK);
+		}
+		else if (tex->Status == ImTextureStatus_WantUpdates) {
+			auto resource_id = tex->GetTexID();
+			auto& render_resource = renderer_->get_render_resource(resource_id);
+			auto& image = render_resource.get_handle<gfx::Image>();
+
+			// TODO: Move it all to uploader
+			// TODO: At first try to use command list from Updater
+			uint64_t total_size = 0;
+			for (auto& update_region : tex->Updates) {
+				EDGE_SLOGD("Updating image {} region: [{}, {}, {}, {}]", tex->GetTexID(), update_region.x, update_region.y, update_region.w, update_region.h);
+				auto region_pitch = update_region.w * tex->BytesPerPixel;
+				total_size += region_pitch * update_region.h;
+			}
+
+			auto& resource_set = updater_->acquire_resource_set();
+			auto allocation_result = updater_->get_or_allocate_staging_memory(resource_set, total_size, 4ull);
+			GFX_ASSERT_MSG(allocation_result.has_value(), "Failed to create staging buffer for texture update.");
+			auto buffer_range = std::move(allocation_result.value());
+			auto mapped_range = buffer_range.get_range();
+
+			render_resource.transfer_state(resource_set.command_buffer, gfx::ResourceStateFlag::eCopyDst);
+
+			uint64_t buffer_offset = 0;
+			mi::Vector<vk::BufferImageCopy2KHR> copy_regions{};
+			for (auto& update_region : tex->Updates) {
+				auto region_pitch = update_region.w * tex->BytesPerPixel;
+
+				for (int y = 0; y < update_region.h; y++) {
+					const void* src_pixels = tex->GetPixelsAt(update_region.x, update_region.y + y);
+					std::memcpy(mapped_range.data() + buffer_offset + (region_pitch * y), src_pixels, region_pitch);
+				}
+
+				vk::BufferImageCopy2KHR image_copy_region{};
+				image_copy_region.bufferOffset = buffer_offset + buffer_range.get_offset();
+				image_copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+				image_copy_region.imageSubresource.mipLevel = 0u;
+				image_copy_region.imageSubresource.baseArrayLayer = 0u;
+				image_copy_region.imageSubresource.layerCount = 1u;
+				image_copy_region.imageOffset = vk::Offset3D{ update_region.x, update_region.y, 0 };
+				image_copy_region.imageExtent = vk::Extent3D{ update_region.w, update_region.h, 1u };
+				copy_regions.push_back(image_copy_region);
+
+				buffer_offset += region_pitch * update_region.h;
+			}
+
+			vk::CopyBufferToImageInfo2KHR copy_info{};
+			copy_info.srcBuffer = buffer_range.get_buffer();
+			copy_info.dstImage = image.get_handle();
+			copy_info.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+			copy_info.regionCount = static_cast<uint32_t>(copy_regions.size());
+			copy_info.pRegions = copy_regions.data();
+			resource_set.command_buffer->copyBufferToImage2KHR(&copy_info);
+
+			render_resource.transfer_state(resource_set.command_buffer, gfx::ResourceStateFlag::eShaderResource);
+
+			tex->SetStatus(ImTextureStatus_OK);
+
+			// TODO: Uploader is not support partial update yet, because of that trying to update manually
+		}
+		else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
+			// TODO: Delete resource
+			EDGE_SLOGW("ImGui wants to delete image {}, but it's not implemented yet. ", tex->GetTexID());
+		}
+	}
+
+	auto ImGuiPass::collect_external_resource_barriers(ImDrawData* draw_data) -> void {
+		for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
+			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
+			for (int32_t cmd_i = 0; cmd_i < im_cmd_list->CmdBuffer.Size; cmd_i++) {
+				const ImDrawCmd* pcmd = &im_cmd_list->CmdBuffer[cmd_i];
+
+				auto render_resource_id = pcmd->GetTexID();
+				auto& render_resource = renderer_->get_render_resource(render_resource_id);
+
+				// Skip pending resources
+				if (!render_resource.has_handle()) {
+					continue;
+				}
+
+				push_image_barrier(render_resource_id, ResourceStateFlag::eShaderResource);
+			}
+		}
 	}
 
 	auto ImGuiPass::update_buffer_resource(uint32_t resource_id, vk::DeviceSize element_count, vk::DeviceSize element_size, BufferFlags usage) -> void {
