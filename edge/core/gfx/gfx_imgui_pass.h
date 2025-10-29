@@ -19,6 +19,7 @@ namespace edge::gfx {
 		auto execute(CommandBuffer const& cmd, float delta_time) -> void override;
 	private:
 		auto push_image_barrier(uint32_t resource_id, ResourceStateFlags required_state) -> void;
+		auto push_buffer_barrier(uint32_t resource_id, ResourceStateFlags required_state) -> void;
 		auto update_imgui_texture(ImTextureData* tex) -> void;
 		auto collect_external_resource_barriers(ImDrawData* draw_data) -> void;
 		auto update_buffer_resource(uint32_t resource_id, vk::DeviceSize element_count, vk::DeviceSize element_size, BufferFlags usage) -> void;

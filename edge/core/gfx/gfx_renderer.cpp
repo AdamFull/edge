@@ -199,43 +199,73 @@ namespace edge::gfx {
 		return !std::holds_alternative<std::monostate>(resource_handle_);
 	}
 
+	auto RenderResource::make_translation(ResourceStateFlags new_state) -> BarrierType {
+		auto src_state = util::get_resource_state(state_);
+		auto dst_state = util::get_resource_state(new_state);
+
+		BarrierType out_barrier{};
+		if (std::holds_alternative<Buffer>(resource_handle_)) {
+			auto& handle = std::get<Buffer>(resource_handle_);
+
+			vk::BufferMemoryBarrier2KHR barrier{};
+			barrier.srcStageMask = src_state.stage_flags;
+			barrier.srcAccessMask = src_state.access_flags;
+			barrier.dstStageMask = dst_state.stage_flags;
+			barrier.dstAccessMask = dst_state.access_flags;
+			barrier.buffer = handle.get_handle();
+			barrier.offset = 0ull;
+			barrier.size = VK_WHOLE_SIZE;
+			out_barrier = barrier;
+		}
+		else if (std::holds_alternative<Image>(resource_handle_)) {
+			auto& handle = std::get<Image>(resource_handle_);
+
+			vk::ImageMemoryBarrier2KHR barrier{};
+			barrier.srcStageMask = src_state.stage_flags;
+			barrier.srcAccessMask = src_state.access_flags;
+			barrier.dstStageMask = dst_state.stage_flags;
+			barrier.dstAccessMask = dst_state.access_flags;
+			barrier.oldLayout = util::get_image_layout(state_);
+			barrier.newLayout = util::get_image_layout(new_state);
+			barrier.image = handle.get_handle();
+			barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+			barrier.subresourceRange.baseMipLevel = 0u;
+			barrier.subresourceRange.levelCount = handle.get_level_count();
+			barrier.subresourceRange.baseArrayLayer = 0u;
+			barrier.subresourceRange.layerCount = handle.get_level_count();
+			out_barrier = barrier;
+		}
+
+		state_ = new_state;
+
+		return out_barrier;
+	}
+
 	auto RenderResource::transfer_state(CommandBuffer const& cmdbuf, ResourceStateFlags new_state) -> void {
 		if (new_state == state_) {
 			// Already in this state
 			return;
 		}
 
+		vk::DependencyInfoKHR dependency_info{};
+
+		auto barrier = make_translation(new_state);
+
 		if (std::holds_alternative<Buffer>(resource_handle_)) {
-			auto& handle = std::get<Buffer>(resource_handle_);
-
-			BufferBarrier barrier{};
-			barrier.buffer = &handle;
-			barrier.src_state = state_;
-			barrier.dst_state = new_state;
-			cmdbuf.push_barrier(barrier);
-
-			state_ = new_state;
+			auto& buffer_barrier = std::get<vk::BufferMemoryBarrier2KHR>(barrier);
+			dependency_info.bufferMemoryBarrierCount = 1u;
+			dependency_info.pBufferMemoryBarriers = &buffer_barrier;
 		}
 		else if (std::holds_alternative<Image>(resource_handle_)) {
-			auto& handle = std::get<Image>(resource_handle_);
-			auto usage = handle.get_usage();
-
-			ImageBarrier barrier{};
-			barrier.src_state = state_;
-			barrier.dst_state = new_state;
-			barrier.image = &handle;
-			barrier.subresource_range.aspectMask = (usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) ? vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor;
-			barrier.subresource_range.baseMipLevel = 0u;
-			barrier.subresource_range.levelCount = handle.get_level_count();
-			barrier.subresource_range.baseArrayLayer = 0u;
-			barrier.subresource_range.layerCount = handle.get_layer_count() * handle.get_face_count();
-			cmdbuf.push_barrier(barrier);
-
-			state_ = new_state;
+			auto& image_barrier = std::get<vk::ImageMemoryBarrier2KHR>(barrier);
+			dependency_info.imageMemoryBarrierCount = 1u;
+			dependency_info.pImageMemoryBarriers = &image_barrier;
 		}
 		else {
 			GFX_ASSERT_MSG(false, "RenderResource is not initialized yet.");
 		}
+
+		cmdbuf->pipelineBarrier2KHR(&dependency_info);
 	}
 
 #undef EDGE_LOGGER_SCOPE // RenderResource

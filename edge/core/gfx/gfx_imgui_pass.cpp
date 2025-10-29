@@ -216,29 +216,19 @@ namespace edge::gfx {
 
 	auto ImGuiPass::push_image_barrier(uint32_t resource_id, ResourceStateFlags required_state) -> void {
 		auto& render_resource = renderer_->get_render_resource(resource_id);
-		auto& image = render_resource.get_handle<Image>();
 		auto source_state = render_resource.get_state();
-
 		if (source_state != required_state) {
-			auto src_state = util::get_resource_state(source_state);
-			auto dst_state = util::get_resource_state(required_state);
+			auto barrier = render_resource.make_translation(required_state);
+			image_barriers_.push_back(std::get<vk::ImageMemoryBarrier2KHR>(barrier));
+		}
+	}
 
-			vk::ImageMemoryBarrier2KHR image_barrier{};
-			image_barrier.srcStageMask = src_state.stage_flags;
-			image_barrier.srcAccessMask = src_state.access_flags;
-			image_barrier.dstStageMask = dst_state.stage_flags;
-			image_barrier.dstAccessMask = dst_state.access_flags;
-			image_barrier.oldLayout = util::get_image_layout(source_state);
-			image_barrier.newLayout = util::get_image_layout(required_state);
-			image_barrier.image = image.get_handle();
-			image_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-			image_barrier.subresourceRange.baseMipLevel = 0u;
-			image_barrier.subresourceRange.levelCount = image.get_level_count();
-			image_barrier.subresourceRange.baseArrayLayer = 0u;
-			image_barrier.subresourceRange.layerCount = image.get_level_count();
-			image_barriers_.push_back(image_barrier);
-
-			render_resource.set_state(required_state);
+	auto ImGuiPass::push_buffer_barrier(uint32_t resource_id, ResourceStateFlags required_state) -> void {
+		auto& render_resource = renderer_->get_render_resource(resource_id);
+		auto source_state = render_resource.get_state();
+		if (source_state != required_state) {
+			auto barrier = render_resource.make_translation(required_state);
+			buffer_barriers_.push_back(std::get<vk::BufferMemoryBarrier2KHR>(barrier));
 		}
 	}
 

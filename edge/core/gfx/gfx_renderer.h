@@ -13,6 +13,7 @@ namespace edge::gfx {
 		using HandleType = std::variant<std::monostate, Buffer, Image>;
 		using ViewType = std::variant<std::monostate, BufferView, ImageView>;
 		using DescriptorType = std::variant<std::monostate, vk::DescriptorBufferInfo, vk::DescriptorImageInfo>;
+		using BarrierType = std::variant<std::monostate, vk::BufferMemoryBarrier2KHR, vk::ImageMemoryBarrier2KHR>;
 
 		RenderResource() = default;
 		RenderResource(Renderer* renderer);
@@ -49,6 +50,8 @@ namespace edge::gfx {
 		}
 
 		auto has_handle() const -> bool;
+
+		auto make_translation(ResourceStateFlags new_state) -> BarrierType;
 
 		auto transfer_state(CommandBuffer const& cmdbuf, ResourceStateFlags new_state) -> void;
 	private:
