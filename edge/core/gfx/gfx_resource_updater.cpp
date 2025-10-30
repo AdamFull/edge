@@ -3,6 +3,248 @@
 #define EDGE_LOGGER_SCOPE "gfx::ResourceUpdater"
 
 namespace edge::gfx {
+	BufferUpdater::BufferUpdater(ResourceSet& resource_set, Buffer& dst_buffer, ResourceStateFlags initial_state, ResourceStateFlags final_state, BufferRange&& range)
+		: resource_set_{ &resource_set }
+		, dst_buffer_{ &dst_buffer }
+		, initial_state_{ initial_state }
+		, final_state_{ final_state }
+		, staging_range_{ std::move(range) } {
+
+	}
+
+	BufferUpdater::BufferUpdater(BufferUpdater&& other) noexcept {
+		resource_set_ = std::exchange(other.resource_set_, nullptr);
+		dst_buffer_ = std::exchange(other.dst_buffer_, nullptr);
+		initial_state_ = std::move(other.initial_state_);
+		final_state_ = std::move(other.final_state_);
+		staging_range_ = std::move(other.staging_range_);
+		staging_offset_ = std::exchange(other.staging_offset_, 0ull);
+		copy_regions_ = std::move(other.copy_regions_);
+		submitted_ = std::move(other.submitted_);
+	}
+
+	auto BufferUpdater::operator=(BufferUpdater&& other) noexcept -> BufferUpdater& {
+		if (this != &other) {
+			resource_set_ = std::exchange(other.resource_set_, nullptr);
+			dst_buffer_ = std::exchange(other.dst_buffer_, nullptr);
+			initial_state_ = std::move(other.initial_state_);
+			final_state_ = std::move(other.final_state_);
+			staging_range_ = std::move(other.staging_range_);
+			staging_offset_ = std::exchange(other.staging_offset_, 0ull);
+			copy_regions_ = std::move(other.copy_regions_);
+			submitted_ = std::move(other.submitted_);
+		}
+		return *this;
+	}
+
+	auto BufferUpdater::write(Span<const uint8_t> data, vk::DeviceSize dst_offset, vk::DeviceSize size) -> vk::Result {
+		GFX_ASSERT_MSG(!submitted_, "Cannot write after submit");
+		GFX_ASSERT_MSG(staging_range_.get_buffer() != nullptr, "Invalid staging buffer");
+
+		auto copy_size = size > 0 ? size : data.size();
+		GFX_ASSERT_MSG(copy_size <= data.size(), "Copy size exceeds data size");
+
+		auto available_size = staging_range_.get_size() - staging_offset_;
+		if (copy_size > available_size) {
+			EDGE_LOGE("Insufficient staging memory: need {}, have {}", copy_size, available_size);
+			return vk::Result::eErrorOutOfDeviceMemory;
+		}
+
+		staging_range_.write(data.data(), copy_size, staging_offset_);
+		copy_regions_.push_back(staging_range_.make_buffer_region_update(staging_offset_, dst_offset, copy_size));
+		staging_offset_ += copy_size;
+
+		return vk::Result::eSuccess;
+	}
+
+	auto BufferUpdater::submit() -> void {
+		GFX_ASSERT_MSG(!submitted_, "Already submitted");
+		GFX_ASSERT_MSG(resource_set_ != nullptr, "Invalid resource set");
+		GFX_ASSERT_MSG(!copy_regions_.empty(), "No data to copy");
+
+		auto& cmd = resource_set_->command_buffer;
+		submitted_ = true;
+
+		auto src_state = util::get_resource_state(initial_state_);
+		auto dst_state = util::get_resource_state(ResourceStateFlag::eCopyDst);
+
+		vk::BufferMemoryBarrier2KHR pre_barrier{};
+		pre_barrier.srcStageMask = src_state.stage_flags;
+		pre_barrier.srcAccessMask = src_state.access_flags;
+		pre_barrier.dstStageMask = dst_state.stage_flags;
+		pre_barrier.dstAccessMask = dst_state.access_flags;
+		pre_barrier.buffer = dst_buffer_->get_handle();
+		pre_barrier.offset = 0ull;
+		pre_barrier.size = VK_WHOLE_SIZE;
+
+		vk::DependencyInfoKHR pre_dependency{};
+		pre_dependency.bufferMemoryBarrierCount = 1u;
+		pre_dependency.pBufferMemoryBarriers = &pre_barrier;
+
+		cmd->pipelineBarrier2KHR(&pre_dependency);
+
+		vk::CopyBufferInfo2KHR copy_info{};
+		copy_info.srcBuffer = staging_range_.get_buffer();
+		copy_info.dstBuffer = dst_buffer_->get_handle();
+		copy_info.regionCount = static_cast<uint32_t>(copy_regions_.size());
+		copy_info.pRegions = copy_regions_.data();
+
+		cmd->copyBuffer2KHR(&copy_info);
+
+		src_state = util::get_resource_state(ResourceStateFlag::eCopyDst);
+		dst_state = util::get_resource_state(final_state_);
+
+		vk::BufferMemoryBarrier2KHR post_barrier{};
+		post_barrier.srcStageMask = src_state.stage_flags;
+		post_barrier.srcAccessMask = src_state.access_flags;
+		post_barrier.dstStageMask = dst_state.stage_flags;
+		post_barrier.dstAccessMask = dst_state.access_flags;
+		post_barrier.buffer = dst_buffer_->get_handle();
+		post_barrier.offset = 0ull;
+		post_barrier.size = VK_WHOLE_SIZE;
+
+		vk::DependencyInfoKHR post_dependency{};
+		post_dependency.bufferMemoryBarrierCount = 1u;
+		post_dependency.pBufferMemoryBarriers = &post_barrier;
+
+		cmd->pipelineBarrier2KHR(&post_dependency);
+	}
+
+
+	ImageUpdater::ImageUpdater(ResourceSet& resource_set, Image& dst_image, ResourceStateFlags initial_state, ResourceStateFlags final_state, BufferRange&& range) 
+		: resource_set_{ &resource_set }
+		, dst_image_{ &dst_image }
+		, initial_state_{ initial_state }
+		, final_state_{ final_state }
+		, staging_range_{ std::move(range) } {
+	}
+
+	ImageUpdater::ImageUpdater(ImageUpdater&& other) noexcept {
+		resource_set_ = std::exchange(other.resource_set_, nullptr);
+		dst_image_ = std::exchange(other.dst_image_, nullptr);
+		initial_state_ = std::move(other.initial_state_);
+		final_state_ = std::move(other.final_state_);
+		staging_range_ = std::move(other.staging_range_);
+		staging_offset_ = std::exchange(other.staging_offset_, 0ull);
+		copy_regions_ = std::move(other.copy_regions_);
+		submitted_ = std::move(other.submitted_);
+	}
+
+	auto ImageUpdater::operator=(ImageUpdater&& other) noexcept -> ImageUpdater& {
+		if (this != &other) {
+			resource_set_ = std::exchange(other.resource_set_, nullptr);
+			dst_image_ = std::exchange(other.dst_image_, nullptr);
+			initial_state_ = std::move(other.initial_state_);
+			final_state_ = std::move(other.final_state_);
+			staging_range_ = std::move(other.staging_range_);
+			staging_offset_ = std::exchange(other.staging_offset_, 0ull);
+			copy_regions_ = std::move(other.copy_regions_);
+			submitted_ = std::move(other.submitted_);
+		}
+		return *this;
+	}
+
+	auto ImageUpdater::write(ImageSubresourceData const& subresource_data) -> vk::Result {
+		GFX_ASSERT_MSG(!submitted_, "Cannot write after submit");
+		GFX_ASSERT_MSG(staging_range_.get_buffer() != nullptr, "Invalid staging buffer");
+		GFX_ASSERT_MSG(!subresource_data.data.empty(), "Data cannot be empty");
+
+		auto data_size = subresource_data.data.size();
+		auto available_size = staging_range_.get_size() - staging_offset_;
+		if (data_size > available_size) {
+			EDGE_LOGE("Insufficient staging memory: need {}, have {}", data_size, available_size);
+			return vk::Result::eErrorOutOfDeviceMemory;
+		}
+
+		staging_range_.write(subresource_data.data.data(), data_size, staging_offset_);
+
+		auto extent = subresource_data.extent;
+		if (extent.width == 0 || extent.height == 0) {
+			auto image_extent = dst_image_->get_extent();
+			auto mip = subresource_data.mip_level;
+			extent.width = std::max(1u, image_extent.width >> mip);
+			extent.height = std::max(1u, image_extent.height >> mip);
+			extent.depth = std::max(1u, image_extent.depth >> mip);
+		}
+
+		vk::ImageSubresourceLayers subresource_layers{};
+		subresource_layers.aspectMask = vk::ImageAspectFlagBits::eColor;
+		subresource_layers.mipLevel = subresource_data.mip_level;
+		subresource_layers.baseArrayLayer = subresource_data.array_layer;
+		subresource_layers.layerCount = 1u;
+
+		copy_regions_.push_back(staging_range_.make_image_region_update(staging_offset_, subresource_layers, subresource_data.offset, extent));
+
+		staging_offset_ += data_size;
+
+		return vk::Result::eSuccess;
+	}
+
+	auto ImageUpdater::submit() -> void {
+		GFX_ASSERT_MSG(!submitted_, "Already submitted");
+		GFX_ASSERT_MSG(resource_set_ != nullptr, "Invalid resource set");
+		GFX_ASSERT_MSG(!copy_regions_.empty(), "No data to copy");
+
+		auto& cmd = resource_set_->command_buffer;
+		submitted_ = true;
+
+		auto src_state = util::get_resource_state(initial_state_);
+		auto dst_state = util::get_resource_state(ResourceStateFlag::eCopyDst);
+
+		vk::ImageMemoryBarrier2KHR pre_barrier{};
+		pre_barrier.srcStageMask = src_state.stage_flags;
+		pre_barrier.srcAccessMask = src_state.access_flags;
+		pre_barrier.dstStageMask = dst_state.stage_flags;
+		pre_barrier.dstAccessMask = dst_state.access_flags;
+		pre_barrier.oldLayout = util::get_image_layout(initial_state_);
+		pre_barrier.newLayout = util::get_image_layout(ResourceStateFlag::eCopyDst);
+		pre_barrier.image = dst_image_->get_handle();
+		pre_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+		pre_barrier.subresourceRange.baseMipLevel = 0u;
+		pre_barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+		pre_barrier.subresourceRange.baseArrayLayer = 0u;
+		pre_barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+
+		vk::DependencyInfoKHR pre_dependency{};
+		pre_dependency.imageMemoryBarrierCount = 1u;
+		pre_dependency.pImageMemoryBarriers = &pre_barrier;
+
+		cmd->pipelineBarrier2KHR(&pre_dependency);
+
+		vk::CopyBufferToImageInfo2KHR copy_info{};
+		copy_info.srcBuffer = staging_range_.get_buffer();
+		copy_info.dstImage = dst_image_->get_handle();
+		copy_info.dstImageLayout = pre_barrier.newLayout;
+		copy_info.regionCount = static_cast<uint32_t>(copy_regions_.size());
+		copy_info.pRegions = copy_regions_.data();
+
+		cmd->copyBufferToImage2KHR(&copy_info);
+
+		src_state = util::get_resource_state(ResourceStateFlag::eCopyDst);
+		dst_state = util::get_resource_state(final_state_);
+
+		vk::ImageMemoryBarrier2KHR post_barrier{};
+		post_barrier.srcStageMask = src_state.stage_flags;
+		post_barrier.srcAccessMask = src_state.access_flags;
+		post_barrier.dstStageMask = dst_state.stage_flags;
+		post_barrier.dstAccessMask = dst_state.access_flags;
+		post_barrier.oldLayout = util::get_image_layout(ResourceStateFlag::eCopyDst); 
+		post_barrier.newLayout = util::get_image_layout(final_state_);
+		post_barrier.image = dst_image_->get_handle();
+		post_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
+		post_barrier.subresourceRange.baseMipLevel = 0u;
+		post_barrier.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+		post_barrier.subresourceRange.baseArrayLayer = 0u;
+		post_barrier.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
+
+		vk::DependencyInfoKHR post_dependency{};
+		post_dependency.imageMemoryBarrierCount = 1u;
+		post_dependency.pImageMemoryBarriers = &post_barrier;
+
+		cmd->pipelineBarrier2KHR(&post_dependency);
+	}
+
+
 	ResourceUpdater::~ResourceUpdater() {
 		if (queue_) {
 #ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
@@ -40,6 +282,42 @@ namespace edge::gfx {
 			return std::unexpected(result);
 		}
 		return self;
+	}
+
+	auto ResourceUpdater::update_buffer(Buffer& buffer, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size) -> Result<BufferUpdater> {
+		auto staging_size = required_size > 0 ? required_size : buffer.get_size();
+
+		auto& resource_set = acquire_resource_set();
+		auto staging_buffer_result = get_or_allocate_staging_memory(resource_set, staging_size, 16ull);
+		if (!staging_buffer_result) {
+			return std::unexpected(staging_buffer_result.error());
+		}
+
+		return BufferUpdater(resource_set, buffer, current_state, final_state, std::move(staging_buffer_result.value()));
+	}
+
+	auto ResourceUpdater::update_image(Image& image, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size) -> Result<ImageUpdater> {
+		
+		vk::DeviceSize staging_size{};
+		if (required_size > 0) {
+			staging_size = required_size;
+		}
+		else {
+			auto extent = image.get_extent();
+			auto layer_count = image.get_face_count() * image.get_layer_count();
+			auto level_count = image.get_level_count();
+			auto format = image.get_format();
+
+			staging_size = util::calculate_image_size(format, extent.width, extent.height, extent.depth, level_count, layer_count);
+		}
+
+		auto& resource_set = acquire_resource_set();
+		auto staging_buffer_result = get_or_allocate_staging_memory(resource_set, staging_size, 16ull);
+		if (!staging_buffer_result) {
+			return std::unexpected(staging_buffer_result.error());
+		}
+
+		return ImageUpdater(resource_set, image, current_state, final_state, std::move(staging_buffer_result.value()));
 	}
 
 	auto ResourceUpdater::flush(Span<vk::SemaphoreSubmitInfoKHR> wait_semaphores) -> vk::SemaphoreSubmitInfoKHR {
