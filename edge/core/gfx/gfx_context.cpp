@@ -1394,6 +1394,18 @@ namespace edge::gfx {
 		return self;
 	}
 
+	auto BufferRange::make_buffer_region_update(vk::DeviceSize src_offset, vk::DeviceSize dst_offset, vk::DeviceSize size) const -> vk::BufferCopy2KHR {
+		return { offset_ + src_offset, dst_offset, size };
+	}
+
+	auto BufferRange::make_image_region_update(vk::DeviceSize src_offset, vk::ImageSubresourceLayers subresource_layers, vk::Offset3D offset, vk::Extent3D extent) const -> vk::BufferImageCopy2KHR {
+		return { offset_ + src_offset, 0u, 0u, subresource_layers, offset, extent };
+	}
+
+	auto BufferRange::write(const void* data, vk::DeviceSize size, vk::DeviceSize offset) -> void {
+		std::memcpy(range_.data() + offset, data, size);
+	}
+
 	auto BufferRange::_construct(Buffer const* buffer, vk::DeviceSize size) -> vk::Result {
 		auto map_result = buffer->map();
 		if (!map_result) {

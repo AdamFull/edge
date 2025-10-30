@@ -160,6 +160,357 @@ namespace edge::gfx {
 
 			return vk::ImageLayout::eUndefined;
 		}
+
+		inline constexpr auto get_format_size(vk::Format format) -> uint32_t {
+			switch (format) {
+			case vk::Format::eR8Unorm:
+			case vk::Format::eR8Snorm:
+			case vk::Format::eR8Uint:
+			case vk::Format::eR8Sint:
+			case vk::Format::eR8Srgb:
+				return 1;
+
+			case vk::Format::eR8G8Unorm:
+			case vk::Format::eR8G8Snorm:
+			case vk::Format::eR8G8Uint:
+			case vk::Format::eR8G8Sint:
+			case vk::Format::eR8G8Srgb:
+			case vk::Format::eR16Unorm:
+			case vk::Format::eR16Snorm:
+			case vk::Format::eR16Uint:
+			case vk::Format::eR16Sint:
+			case vk::Format::eR16Sfloat:
+			case vk::Format::eD16Unorm:
+				return 2;
+
+			case vk::Format::eR8G8B8Unorm:
+			case vk::Format::eR8G8B8Snorm:
+			case vk::Format::eR8G8B8Uint:
+			case vk::Format::eR8G8B8Sint:
+			case vk::Format::eR8G8B8Srgb:
+			case vk::Format::eB8G8R8Unorm:
+			case vk::Format::eB8G8R8Snorm:
+			case vk::Format::eB8G8R8Uint:
+			case vk::Format::eB8G8R8Sint:
+			case vk::Format::eB8G8R8Srgb:
+				return 3;
+
+			case vk::Format::eR8G8B8A8Unorm:
+			case vk::Format::eR8G8B8A8Snorm:
+			case vk::Format::eR8G8B8A8Uint:
+			case vk::Format::eR8G8B8A8Sint:
+			case vk::Format::eR8G8B8A8Srgb:
+			case vk::Format::eB8G8R8A8Unorm:
+			case vk::Format::eB8G8R8A8Snorm:
+			case vk::Format::eB8G8R8A8Uint:
+			case vk::Format::eB8G8R8A8Sint:
+			case vk::Format::eB8G8R8A8Srgb:
+			case vk::Format::eA8B8G8R8UnormPack32:
+			case vk::Format::eA8B8G8R8SnormPack32:
+			case vk::Format::eA8B8G8R8UintPack32:
+			case vk::Format::eA8B8G8R8SintPack32:
+			case vk::Format::eA8B8G8R8SrgbPack32:
+			case vk::Format::eR16G16Unorm:
+			case vk::Format::eR16G16Snorm:
+			case vk::Format::eR16G16Uint:
+			case vk::Format::eR16G16Sint:
+			case vk::Format::eR16G16Sfloat:
+			case vk::Format::eR32Uint:
+			case vk::Format::eR32Sint:
+			case vk::Format::eR32Sfloat:
+			case vk::Format::eD32Sfloat:
+			case vk::Format::eD24UnormS8Uint:
+			case vk::Format::eA2R10G10B10UnormPack32:
+			case vk::Format::eA2R10G10B10UintPack32:
+			case vk::Format::eA2B10G10R10UnormPack32:
+			case vk::Format::eA2B10G10R10UintPack32:
+			case vk::Format::eB10G11R11UfloatPack32:
+			case vk::Format::eE5B9G9R9UfloatPack32:
+				return 4;
+
+			case vk::Format::eR16G16B16Unorm:
+			case vk::Format::eR16G16B16Snorm:
+			case vk::Format::eR16G16B16Uint:
+			case vk::Format::eR16G16B16Sint:
+			case vk::Format::eR16G16B16Sfloat:
+				return 6;
+
+			case vk::Format::eR16G16B16A16Unorm:
+			case vk::Format::eR16G16B16A16Snorm:
+			case vk::Format::eR16G16B16A16Uint:
+			case vk::Format::eR16G16B16A16Sint:
+			case vk::Format::eR16G16B16A16Sfloat:
+			case vk::Format::eR32G32Uint:
+			case vk::Format::eR32G32Sint:
+			case vk::Format::eR32G32Sfloat:
+			case vk::Format::eR64Uint:
+			case vk::Format::eR64Sint:
+			case vk::Format::eR64Sfloat:
+				return 8;
+
+			case vk::Format::eR32G32B32Uint:
+			case vk::Format::eR32G32B32Sint:
+			case vk::Format::eR32G32B32Sfloat:
+				return 12;
+
+			case vk::Format::eR32G32B32A32Uint:
+			case vk::Format::eR32G32B32A32Sint:
+			case vk::Format::eR32G32B32A32Sfloat:
+			case vk::Format::eR64G64Uint:
+			case vk::Format::eR64G64Sint:
+			case vk::Format::eR64G64Sfloat:
+				return 16;
+
+			case vk::Format::eR64G64B64Uint:
+			case vk::Format::eR64G64B64Sint:
+			case vk::Format::eR64G64B64Sfloat:
+				return 24;
+
+			case vk::Format::eR64G64B64A64Uint:
+			case vk::Format::eR64G64B64A64Sint:
+			case vk::Format::eR64G64B64A64Sfloat:
+				return 32;
+
+			case vk::Format::eBc1RgbUnormBlock:
+			case vk::Format::eBc1RgbSrgbBlock:
+			case vk::Format::eBc1RgbaUnormBlock:
+			case vk::Format::eBc1RgbaSrgbBlock:
+			case vk::Format::eBc4UnormBlock:
+			case vk::Format::eBc4SnormBlock:
+				return 8;
+
+			case vk::Format::eBc2UnormBlock:
+			case vk::Format::eBc2SrgbBlock:
+			case vk::Format::eBc3UnormBlock:
+			case vk::Format::eBc3SrgbBlock:
+			case vk::Format::eBc5UnormBlock:
+			case vk::Format::eBc5SnormBlock:
+			case vk::Format::eBc6HUfloatBlock:
+			case vk::Format::eBc6HSfloatBlock:
+			case vk::Format::eBc7UnormBlock:
+			case vk::Format::eBc7SrgbBlock:
+				return 16;
+
+			case vk::Format::eEtc2R8G8B8UnormBlock:
+			case vk::Format::eEtc2R8G8B8SrgbBlock:
+			case vk::Format::eEtc2R8G8B8A1UnormBlock:
+			case vk::Format::eEtc2R8G8B8A1SrgbBlock:
+			case vk::Format::eEacR11UnormBlock:
+			case vk::Format::eEacR11SnormBlock:
+				return 8;
+
+			case vk::Format::eEtc2R8G8B8A8UnormBlock:
+			case vk::Format::eEtc2R8G8B8A8SrgbBlock:
+			case vk::Format::eEacR11G11UnormBlock:
+			case vk::Format::eEacR11G11SnormBlock:
+				return 16;
+
+			case vk::Format::eAstc4x4UnormBlock:
+			case vk::Format::eAstc4x4SrgbBlock:
+			case vk::Format::eAstc5x4UnormBlock:
+			case vk::Format::eAstc5x4SrgbBlock:
+			case vk::Format::eAstc5x5UnormBlock:
+			case vk::Format::eAstc5x5SrgbBlock:
+			case vk::Format::eAstc6x5UnormBlock:
+			case vk::Format::eAstc6x5SrgbBlock:
+			case vk::Format::eAstc6x6UnormBlock:
+			case vk::Format::eAstc6x6SrgbBlock:
+			case vk::Format::eAstc8x5UnormBlock:
+			case vk::Format::eAstc8x5SrgbBlock:
+			case vk::Format::eAstc8x6UnormBlock:
+			case vk::Format::eAstc8x6SrgbBlock:
+			case vk::Format::eAstc8x8UnormBlock:
+			case vk::Format::eAstc8x8SrgbBlock:
+			case vk::Format::eAstc10x5UnormBlock:
+			case vk::Format::eAstc10x5SrgbBlock:
+			case vk::Format::eAstc10x6UnormBlock:
+			case vk::Format::eAstc10x6SrgbBlock:
+			case vk::Format::eAstc10x8UnormBlock:
+			case vk::Format::eAstc10x8SrgbBlock:
+			case vk::Format::eAstc10x10UnormBlock:
+			case vk::Format::eAstc10x10SrgbBlock:
+			case vk::Format::eAstc12x10UnormBlock:
+			case vk::Format::eAstc12x10SrgbBlock:
+			case vk::Format::eAstc12x12UnormBlock:
+			case vk::Format::eAstc12x12SrgbBlock:
+				return 16;
+
+			default:
+				return 0;
+			}
+		}
+
+		inline constexpr auto is_format_compressed(vk::Format format) -> bool {
+			switch (format) {
+			case vk::Format::eBc1RgbUnormBlock:
+			case vk::Format::eBc1RgbSrgbBlock:
+			case vk::Format::eBc1RgbaUnormBlock:
+			case vk::Format::eBc1RgbaSrgbBlock:
+			case vk::Format::eBc2UnormBlock:
+			case vk::Format::eBc2SrgbBlock:
+			case vk::Format::eBc3UnormBlock:
+			case vk::Format::eBc3SrgbBlock:
+			case vk::Format::eBc4UnormBlock:
+			case vk::Format::eBc4SnormBlock:
+			case vk::Format::eBc5UnormBlock:
+			case vk::Format::eBc5SnormBlock:
+			case vk::Format::eBc6HUfloatBlock:
+			case vk::Format::eBc6HSfloatBlock:
+			case vk::Format::eBc7UnormBlock:
+			case vk::Format::eBc7SrgbBlock:
+			case vk::Format::eEtc2R8G8B8UnormBlock:
+			case vk::Format::eEtc2R8G8B8SrgbBlock:
+			case vk::Format::eEtc2R8G8B8A1UnormBlock:
+			case vk::Format::eEtc2R8G8B8A1SrgbBlock:
+			case vk::Format::eEtc2R8G8B8A8UnormBlock:
+			case vk::Format::eEtc2R8G8B8A8SrgbBlock:
+			case vk::Format::eEacR11UnormBlock:
+			case vk::Format::eEacR11SnormBlock:
+			case vk::Format::eEacR11G11UnormBlock:
+			case vk::Format::eEacR11G11SnormBlock:
+			case vk::Format::eAstc4x4UnormBlock:
+			case vk::Format::eAstc4x4SrgbBlock:
+			case vk::Format::eAstc5x4UnormBlock:
+			case vk::Format::eAstc5x4SrgbBlock:
+			case vk::Format::eAstc5x5UnormBlock:
+			case vk::Format::eAstc5x5SrgbBlock:
+			case vk::Format::eAstc6x5UnormBlock:
+			case vk::Format::eAstc6x5SrgbBlock:
+			case vk::Format::eAstc6x6UnormBlock:
+			case vk::Format::eAstc6x6SrgbBlock:
+			case vk::Format::eAstc8x5UnormBlock:
+			case vk::Format::eAstc8x5SrgbBlock:
+			case vk::Format::eAstc8x6UnormBlock:
+			case vk::Format::eAstc8x6SrgbBlock:
+			case vk::Format::eAstc8x8UnormBlock:
+			case vk::Format::eAstc8x8SrgbBlock:
+			case vk::Format::eAstc10x5UnormBlock:
+			case vk::Format::eAstc10x5SrgbBlock:
+			case vk::Format::eAstc10x6UnormBlock:
+			case vk::Format::eAstc10x6SrgbBlock:
+			case vk::Format::eAstc10x8UnormBlock:
+			case vk::Format::eAstc10x8SrgbBlock:
+			case vk::Format::eAstc10x10UnormBlock:
+			case vk::Format::eAstc10x10SrgbBlock:
+			case vk::Format::eAstc12x10UnormBlock:
+			case vk::Format::eAstc12x10SrgbBlock:
+			case vk::Format::eAstc12x12UnormBlock:
+			case vk::Format::eAstc12x12SrgbBlock:
+				return true;
+			default:
+				return false;
+			}
+		}
+
+		inline constexpr auto get_format_block_size(vk::Format format) -> std::pair<uint32_t, uint32_t> {
+			switch (format) {
+			case vk::Format::eBc1RgbUnormBlock:
+			case vk::Format::eBc1RgbSrgbBlock:
+			case vk::Format::eBc1RgbaUnormBlock:
+			case vk::Format::eBc1RgbaSrgbBlock:
+			case vk::Format::eBc2UnormBlock:
+			case vk::Format::eBc2SrgbBlock:
+			case vk::Format::eBc3UnormBlock:
+			case vk::Format::eBc3SrgbBlock:
+			case vk::Format::eBc4UnormBlock:
+			case vk::Format::eBc4SnormBlock:
+			case vk::Format::eBc5UnormBlock:
+			case vk::Format::eBc5SnormBlock:
+			case vk::Format::eBc6HUfloatBlock:
+			case vk::Format::eBc6HSfloatBlock:
+			case vk::Format::eBc7UnormBlock:
+			case vk::Format::eBc7SrgbBlock:
+			case vk::Format::eEtc2R8G8B8UnormBlock:
+			case vk::Format::eEtc2R8G8B8SrgbBlock:
+			case vk::Format::eEtc2R8G8B8A1UnormBlock:
+			case vk::Format::eEtc2R8G8B8A1SrgbBlock:
+			case vk::Format::eEtc2R8G8B8A8UnormBlock:
+			case vk::Format::eEtc2R8G8B8A8SrgbBlock:
+			case vk::Format::eEacR11UnormBlock:
+			case vk::Format::eEacR11SnormBlock:
+			case vk::Format::eEacR11G11UnormBlock:
+			case vk::Format::eEacR11G11SnormBlock:
+			case vk::Format::eAstc4x4UnormBlock:
+			case vk::Format::eAstc4x4SrgbBlock:
+				return { 4, 4 };
+
+			case vk::Format::eAstc5x4UnormBlock:
+			case vk::Format::eAstc5x4SrgbBlock:
+				return { 5, 4 };
+			case vk::Format::eAstc5x5UnormBlock:
+			case vk::Format::eAstc5x5SrgbBlock:
+				return { 5, 5 };
+			case vk::Format::eAstc6x5UnormBlock:
+			case vk::Format::eAstc6x5SrgbBlock:
+				return { 6, 5 };
+			case vk::Format::eAstc6x6UnormBlock:
+			case vk::Format::eAstc6x6SrgbBlock:
+				return { 6, 6 };
+			case vk::Format::eAstc8x5UnormBlock:
+			case vk::Format::eAstc8x5SrgbBlock:
+				return { 8, 5 };
+			case vk::Format::eAstc8x6UnormBlock:
+			case vk::Format::eAstc8x6SrgbBlock:
+				return { 8, 6 };
+			case vk::Format::eAstc8x8UnormBlock:
+			case vk::Format::eAstc8x8SrgbBlock:
+				return { 8, 8 };
+			case vk::Format::eAstc10x5UnormBlock:
+			case vk::Format::eAstc10x5SrgbBlock:
+				return { 10, 5 };
+			case vk::Format::eAstc10x6UnormBlock:
+			case vk::Format::eAstc10x6SrgbBlock:
+				return { 10, 6 };
+			case vk::Format::eAstc10x8UnormBlock:
+			case vk::Format::eAstc10x8SrgbBlock:
+				return { 10, 8 };
+			case vk::Format::eAstc10x10UnormBlock:
+			case vk::Format::eAstc10x10SrgbBlock:
+				return { 10, 10 };
+			case vk::Format::eAstc12x10UnormBlock:
+			case vk::Format::eAstc12x10SrgbBlock:
+				return { 12, 10 };
+			case vk::Format::eAstc12x12UnormBlock:
+			case vk::Format::eAstc12x12SrgbBlock:
+				return { 12, 12 };
+
+			default:
+				return { 1, 1 };
+			}
+		}
+
+		inline auto calculate_subresource_size(vk::Format format, uint32_t width, uint32_t height, uint32_t depth = 1u) -> vk::DeviceSize {
+			if (is_format_compressed(format)) {
+				auto [block_width, block_height] = get_format_block_size(format);
+				auto block_size = get_format_size(format);
+
+				auto blocks_x = (width + block_width - 1) / block_width;
+				auto blocks_y = (height + block_height - 1) / block_height;
+
+				return static_cast<vk::DeviceSize>(blocks_x) * blocks_y * depth * block_size;
+			}
+
+			auto pixel_size = get_format_size(format);
+			return static_cast<vk::DeviceSize>(width) * height * depth * pixel_size;
+		}
+
+		inline auto calculate_mipchain_size(vk::Format format, uint32_t width, uint32_t height, uint32_t depth = 1u, uint32_t mip_levels = 1u) -> vk::DeviceSize {
+			vk::DeviceSize total_size = 0;
+
+			for (uint32_t mip = 0; mip < mip_levels; ++mip) {
+				auto mip_width = std::max(1u, width >> mip);
+				auto mip_height = std::max(1u, height >> mip);
+				auto mip_depth = std::max(1u, depth >> mip);
+
+				total_size += calculate_subresource_size(format, mip_width, mip_height, mip_depth);
+			}
+
+			return total_size;
+		}
+
+		inline auto calculate_image_size(vk::Format format, uint32_t width, uint32_t height, uint32_t depth = 1u, uint32_t mip_levels = 1u, uint32_t array_layers = 1u) -> vk::DeviceSize {
+			return calculate_mipchain_size(format, width, height, depth, mip_levels) * array_layers;
+		}
 	}
 
 	class Instance;
@@ -935,9 +1286,20 @@ namespace edge::gfx {
 
 		static auto create(Buffer const* buffer = nullptr, vk::DeviceSize offset = 0ull, vk::DeviceSize size = 0ull) -> Result<BufferRange>;
 
-		auto get_offset() const -> vk::DeviceSize { return offset_; }
-		auto get_range() const -> Span<uint8_t> { return range_; }
-		auto get_buffer() const -> vk::Buffer { return buffer_; }
+		auto make_buffer_region_update(vk::DeviceSize src_offset, vk::DeviceSize dst_offset, vk::DeviceSize size) const -> vk::BufferCopy2KHR;
+		auto make_image_region_update(vk::DeviceSize src_offset, vk::ImageSubresourceLayers subresource_layers, vk::Offset3D offset, vk::Extent3D extent) const -> vk::BufferImageCopy2KHR;
+
+		auto write(const void* data, vk::DeviceSize size, vk::DeviceSize offset = 0ull) -> void;
+
+		template<typename T>
+		auto write(Span<const T> data, vk::DeviceSize offset = 0ull) -> void {
+			return write(reinterpret_cast<const void*>(data.data()), data.size() * sizeof(T), offset);
+		}
+
+		auto get_offset() const noexcept -> vk::DeviceSize { return offset_; }
+		auto get_size() const noexcept -> vk::DeviceSize { return range_.size(); }
+		auto get_range() const noexcept -> Span<uint8_t> { return range_; }
+		auto get_buffer() const noexcept -> vk::Buffer { return buffer_; }
 	private:
 		auto _construct(Buffer const* buffer, vk::DeviceSize size) -> vk::Result;
 
