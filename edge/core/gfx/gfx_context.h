@@ -601,7 +601,7 @@ namespace edge::gfx {
 		auto is_extension_enabled(const char* extension_name) const -> bool;
 		auto is_layer_enabled(const char* layer_name) const -> bool;
 
-		auto get_adapters() const -> Result<mi::Vector<Adapter>>;
+		auto get_adapters() const -> mi::Vector<Adapter>;
 	private:
 		vk::DebugUtilsMessengerEXT debug_messenger_{ VK_NULL_HANDLE };
 		mi::Vector<const char*> enabled_extensions_{};
@@ -636,9 +636,9 @@ namespace edge::gfx {
 		}
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
-		static auto create(const vk::AndroidSurfaceCreateInfoKHR& create_info) -> Result<Surface>;
+		static auto create(const vk::AndroidSurfaceCreateInfoKHR& create_info) -> Surface;
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
-		static auto create(const vk::Win32SurfaceCreateInfoKHR& create_info) -> Result<Surface>;
+		static auto create(const vk::Win32SurfaceCreateInfoKHR& create_info) -> Surface;
 #endif
 	};
 
@@ -745,7 +745,7 @@ namespace edge::gfx {
 		auto is_valid() const -> bool;
 
 		// Build the instance
-		auto build() -> Result<Instance>;
+		auto build() -> Instance;
 
 		// Get current configuration for inspection
 		auto get_app_info() const -> const vk::ApplicationInfo& { return app_info_; }
@@ -905,7 +905,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		auto select() -> Result<std::tuple<Adapter, Device>>;
+		auto select() -> std::tuple<Adapter, Device>;
 
 	private:
 		auto build_queue_families(vk::PhysicalDevice adapter, vk::SurfaceKHR surface) const -> mi::Vector<Device::QueueFamilyInfo>;
@@ -959,7 +959,7 @@ namespace edge::gfx {
 
 		static auto create(const QueueRequest& request) -> Result<Queue>;
 
-		auto create_command_pool() const -> Result<CommandPool>;
+		auto create_command_pool() const -> CommandPool;
 
 		// create command pool
 		auto get_family_index() const -> uint32_t { return family_index_; }
@@ -975,7 +975,7 @@ namespace edge::gfx {
 			: DeviceHandle{ handle } {
 		}
 
-		static auto create(vk::FenceCreateFlags flags) -> Result<Fence>;
+		static auto create(vk::FenceCreateFlags flags) -> Fence;
 
 		auto wait(uint64_t timeout = std::numeric_limits<uint64_t>::max()) const -> vk::Result;
 		auto reset() const -> vk::Result;
@@ -987,9 +987,7 @@ namespace edge::gfx {
 			: DeviceHandle{ handle } {
 		}
 
-		static auto create(vk::SemaphoreType type = vk::SemaphoreType::eBinary, uint64_t initial_value = 0ull) -> Result<Semaphore>;
-
-		auto signal(uint64_t value) const -> vk::Result;
+		static auto create(vk::SemaphoreType type = vk::SemaphoreType::eBinary, uint64_t initial_value = 0ull) -> Semaphore;
 	};
 
 	class MemoryAllocator : public NonCopyable {
@@ -1012,8 +1010,8 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		auto allocate_image(const vk::ImageCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Result<Image>;
-		auto allocate_buffer(const vk::BufferCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Result<Buffer>;
+		auto allocate_image(const vk::ImageCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Image;
+		auto allocate_buffer(const vk::BufferCreateInfo& create_info, const VmaAllocationCreateInfo& allocation_create_info) const -> Buffer;
 
 		auto operator*() const noexcept -> VmaAllocator const& { return handle_; }
 		auto operator*() noexcept -> VmaAllocator& { return handle_; }
@@ -1079,15 +1077,12 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		auto map() const -> Result<Span<uint8_t>> {
-			if (!allocation_) {
-				return std::unexpected(vk::Result::eErrorInitializationFailed);
-			}
+		auto map() const -> Span<uint8_t> {
+			EDGE_FATAL_ERROR(allocation_, "Trying to map unallocated memory.");
 
 			if (!persistent_ && !is_mapped()) {
-				if (auto result = vmaMapMemory(*memory_allocator_, allocation_, reinterpret_cast<void**>(&mapped_memory_)); result != VK_SUCCESS) {
-					return std::unexpected(static_cast<vk::Result>(result));
-				}
+				auto result = vmaMapMemory(*memory_allocator_, allocation_, reinterpret_cast<void**>(&mapped_memory_));
+				EDGE_FATAL_ERROR(result == VK_SUCCESS, "Failed to map memory. vk::Result::e{}", vk::to_string(static_cast<vk::Result>(result)));
 			}
 			return Span<uint8_t>(mapped_memory_, allocation_info_.size);
 		}
@@ -1103,42 +1098,34 @@ namespace edge::gfx {
 			}
 		}
 
-		auto flush(vk::DeviceSize offset = 0, vk::DeviceSize size = VK_WHOLE_SIZE) const -> vk::Result {
-			if (!allocation_) {
-				return vk::Result::eErrorInitializationFailed;
-			}
+		auto flush(vk::DeviceSize offset = 0, vk::DeviceSize size = VK_WHOLE_SIZE) const -> void {
+			EDGE_FATAL_ERROR(allocation_, "Trying to flush unallocated memory.");
 
 			if (!coherent_) {
-				return static_cast<vk::Result>(vmaFlushAllocation(*memory_allocator_, allocation_, offset, size));
+				auto result = vmaFlushAllocation(*memory_allocator_, allocation_, offset, size);
+				EDGE_FATAL_ERROR(result == VK_SUCCESS, "Failed to flush memory allocation. vk::Result::e{}", vk::to_string(static_cast<vk::Result>(result)));
 			}
-			return vk::Result::eSuccess;
 		}
 
-		auto update(std::span<const uint8_t> data, uint64_t offset) const -> vk::Result {
-			return update(data.data(), data.size(), offset);
+		auto update(std::span<const uint8_t> data, uint64_t offset) const -> void {
+			update(data.data(), data.size(), offset);
 		}
 
-		auto update(const void* data, uint64_t size, uint64_t offset) const -> vk::Result {
-			if (!allocation_) {
-				return vk::Result::eErrorInitializationFailed;
-			}
+		auto update(const void* data, uint64_t size, uint64_t offset) const -> void {
+			EDGE_FATAL_ERROR(allocation_, "Trying to update unallocated memory.");
 
 			if (persistent_) {
 				std::memcpy(mapped_memory_ + offset, data, size);
-				return flush(offset, size);
+				flush(offset, size);
 			}
 			else {
-				if (auto result = map(); !result) {
-					return result.error();
-				}
+				map();
 
 				std::memcpy(mapped_memory_ + offset, data, size);
 				unmap();
 
-				return flush(offset, size);
+				flush(offset, size);
 			}
-
-			return vk::Result::eSuccess;
 		}
 
 		auto get_size() const -> uint64_t { return allocation_info_.size; }
@@ -1196,8 +1183,8 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto create(const ImageCreateInfo& create_info) -> Result<Image>;
-		auto create_view(const vk::ImageSubresourceRange& range, vk::ImageViewType type) -> Result<ImageView>;
+		static auto create(const ImageCreateInfo& create_info) -> Image;
+		auto create_view(const vk::ImageSubresourceRange& range, vk::ImageViewType type) -> ImageView;
 
 		auto get_extent() const noexcept -> vk::Extent3D { return create_info_.extent; }
 		auto get_face_count() const noexcept -> uint32_t;
@@ -1253,8 +1240,8 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto create(const BufferCreateInfo& create_info) -> Result<Buffer>;
-		auto create_view(vk::DeviceSize size, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined) -> Result<BufferView>;
+		static auto create(const BufferCreateInfo& create_info) -> Buffer;
+		auto create_view(vk::DeviceSize size, vk::DeviceSize offset = 0ull, vk::Format format = vk::Format::eUndefined) -> BufferView;
 
 		auto get_device_address() const -> vk::DeviceAddress;
 	private:
@@ -1284,7 +1271,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto create(Buffer const* buffer = nullptr, vk::DeviceSize offset = 0ull, vk::DeviceSize size = 0ull) -> Result<BufferRange>;
+		static auto create(Buffer const* buffer = nullptr, vk::DeviceSize offset = 0ull, vk::DeviceSize size = 0ull) -> BufferRange;
 
 		auto make_buffer_region_update(vk::DeviceSize src_offset, vk::DeviceSize dst_offset, vk::DeviceSize size) const -> vk::BufferCopy2KHR;
 		auto make_image_region_update(vk::DeviceSize src_offset, vk::ImageSubresourceLayers subresource_layers, vk::Offset3D offset, vk::Extent3D extent) const -> vk::BufferImageCopy2KHR;
@@ -1301,7 +1288,7 @@ namespace edge::gfx {
 		auto get_range() const noexcept -> Span<uint8_t> { return range_; }
 		auto get_buffer() const noexcept -> vk::Buffer { return buffer_; }
 	private:
-		auto _construct(Buffer const* buffer, vk::DeviceSize size) -> vk::Result;
+		auto _construct(Buffer const* buffer, vk::DeviceSize size) -> void;
 
 		vk::Buffer buffer_{ VK_NULL_HANDLE };
 		vk::DeviceSize offset_{ 0ull };
@@ -1367,7 +1354,7 @@ namespace edge::gfx {
 
 		auto reset() -> void;
 
-		auto get_images() const -> Result<mi::Vector<Image>>;
+		auto get_images() const -> mi::Vector<Image>;
 
 		auto get_state() const -> State const& { return state_; }
 		auto get_image_count() const noexcept -> uint32_t { return state_.image_count; }
@@ -1427,7 +1414,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		auto build() -> Result<Swapchain>;
+		auto build() -> Swapchain;
 	private:
 		static auto choose_suitable_extent(vk::Extent2D request_extent, const vk::SurfaceCapabilitiesKHR& surface_caps) -> vk::Extent2D;
 		static auto choose_surface_format(const vk::SurfaceFormatKHR requested_surface_format, const mi::Vector<vk::SurfaceFormatKHR>& available_surface_formats, bool prefer_hdr = false) -> vk::SurfaceFormatKHR;
@@ -1505,7 +1492,7 @@ namespace edge::gfx {
 
 		}
 
-		auto allocate_command_buffer(vk::CommandBufferLevel level = vk::CommandBufferLevel::ePrimary) const -> Result<CommandBuffer>;
+		auto allocate_command_buffer(vk::CommandBufferLevel level = vk::CommandBufferLevel::ePrimary) const -> CommandBuffer;
 	};
 
 	class Sampler : public DeviceHandle<vk::Sampler> {
@@ -1515,7 +1502,7 @@ namespace edge::gfx {
 			, create_info_{ create_info } {
 		}
 
-		static auto create(const vk::SamplerCreateInfo& create_info) -> Result<Sampler>;
+		static auto create(const vk::SamplerCreateInfo& create_info) -> Sampler;
 
 		// TODO: implement move 
 
@@ -1560,7 +1547,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto create(vk::QueryType type, uint32_t query_count) -> Result<QueryPool>;
+		static auto create(vk::QueryType type, uint32_t query_count) -> QueryPool;
 
 		auto get_data(uint32_t query_index, void* data) const -> vk::Result;
 		auto get_data(uint32_t first_query, uint32_t query_count, void* data) const -> vk::Result;
@@ -1577,7 +1564,7 @@ namespace edge::gfx {
 			: DeviceHandle{ handle } {
 		}
 
-		static auto create(Span<const uint8_t> data) -> Result<PipelineCache>;
+		static auto create(Span<const uint8_t> data) -> PipelineCache;
 
 		auto get_data(mi::Vector<uint8_t>& data) const -> vk::Result;
 		auto get_data(void*& data, size_t& size) const -> vk::Result;
@@ -1616,7 +1603,7 @@ namespace edge::gfx {
 			: DeviceHandle{ handle } {
 		}
 
-		static auto create(Span<const uint8_t> code) -> Result<ShaderModule>;
+		static auto create(Span<const uint8_t> code) -> ShaderModule;
 	private:
 		vk::PipelineShaderStageCreateInfo shader_stage_create_info_;
 	};
@@ -1716,7 +1703,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		auto build(vk::DescriptorSetLayoutCreateFlags flags = {}) -> Result<DescriptorSetLayout>;
+		auto build(vk::DescriptorSetLayoutCreateFlags flags = {}) -> DescriptorSetLayout;
 	private:
 		mi::Vector<vk::DescriptorSetLayoutBinding> layout_bindings_{};
 		mi::Vector<vk::DescriptorBindingFlagsEXT> binding_flags_{};
@@ -1739,7 +1726,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		auto build() -> Result<PipelineLayout>;
+		auto build() -> PipelineLayout;
 	private:
 		mi::Vector<vk::DescriptorSetLayout> descriptor_set_layouts_{};
 		mi::Vector<vk::PushConstantRange> push_constant_ranges_{};
@@ -1766,9 +1753,9 @@ namespace edge::gfx {
 			: DeviceHandle{ handle } {
 		}
 
-		static auto create(PoolSizes const& requested_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags = {}) -> Result<DescriptorPool>;
+		static auto create(PoolSizes const& requested_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags = {}) -> DescriptorPool;
 
-		auto allocate_descriptor_set(DescriptorSetLayout const& layout) const -> Result<DescriptorSet>;
+		auto allocate_descriptor_set(DescriptorSetLayout const& layout) const -> DescriptorSet;
 		auto free_descriptor_set(DescriptorSet const& set) const -> void;
 	};
 
@@ -1787,6 +1774,6 @@ namespace edge::gfx {
 		PoolSizes pool_sizes_{};
 	};
 
-	auto initialize_graphics(const ContextInfo& info) -> vk::Result;
+	auto initialize_graphics(const ContextInfo& info) -> void;
 	auto shutdown_graphics() -> void;
 }

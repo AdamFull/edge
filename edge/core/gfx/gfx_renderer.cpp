@@ -91,11 +91,7 @@ namespace edge::gfx {
 		srv_subresource_range.levelCount = handle.get_level_count();
 		srv_subresource_range.baseArrayLayer = 0u;
 		srv_subresource_range.layerCount = handle.get_layer_count() * handle.get_face_count();
-
-		auto srv_view_result = handle.create_view(srv_subresource_range, view_type);
-		GFX_ASSERT_MSG(srv_view_result.has_value(), "Failed to create srv image view.");
-		srv_view_ = std::move(srv_view_result.value());
-
+		srv_view_ = handle.create_view(srv_subresource_range, view_type);
 		srv_resource_index_ = srv_free_list_.allocate();
 
 		// UAV descriptors not needed for non storage targets (read only)
@@ -113,11 +109,7 @@ namespace edge::gfx {
 				uav_subresource_range.levelCount = 1u;
 				uav_subresource_range.baseArrayLayer = 0u;
 				uav_subresource_range.layerCount = handle.get_layer_count() * handle.get_face_count();
-
-				auto uav_view_result = handle.create_view(uav_subresource_range, view_type);
-				GFX_ASSERT_MSG(uav_view_result.has_value(), "Failed to create uav image view for mip {}.", mip);
-				uav_views_.push_back(std::move(uav_view_result.value()));
-
+				uav_views_.push_back(handle.create_view(uav_subresource_range, view_type));
 				uav_resource_indices_.push_back(uav_free_list_.allocate());
 			}
 		}
@@ -277,12 +269,10 @@ namespace edge::gfx {
 		
 	}
 
-	auto Frame::construct(CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Result<Frame> {
+	auto Frame::construct(CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Frame {
 		Frame self{};
 		self.command_buffer_ = std::move(command_buffer);
-		if (auto result = self._construct(descriptor_layout); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
+		self._construct(descriptor_layout);
 		return self;
 	}
 
@@ -308,31 +298,12 @@ namespace edge::gfx {
 		}
 	}
 
-	auto Frame::_construct(DescriptorSetLayout const& descriptor_layout) -> vk::Result {
+	auto Frame::_construct(DescriptorSetLayout const& descriptor_layout) -> void {
 		assert(device_ && "Device handle is null.");
 
-		auto image_sem_result = Semaphore::create();
-		if (!image_sem_result) {
-			GFX_ASSERT_MSG(false, "Failed to create image available semaphore: {}", vk::to_string(image_sem_result.error()));
-			return image_sem_result.error();
-		}
-		image_available_ = std::move(image_sem_result.value());
-
-		auto render_sem_result = Semaphore::create();
-		if (!render_sem_result) {
-			GFX_ASSERT_MSG(false, "Failed to create rendering finished semaphore: {}", vk::to_string(render_sem_result.error()));
-			return render_sem_result.error();
-		}
-		rendering_finished_ = std::move(render_sem_result.value());
-
-		auto fence_result = Fence::create(vk::FenceCreateFlagBits::eSignaled);
-		if (!fence_result) {
-			GFX_ASSERT_MSG(false, "Failed to create frame fence: {}", vk::to_string(fence_result.error()));
-			return fence_result.error();
-		}
-		fence_ = std::move(fence_result.value());
-
-		return vk::Result::eSuccess;
+		image_available_ = Semaphore::create();
+		rendering_finished_ = Semaphore::create();
+		fence_ = Fence::create(vk::FenceCreateFlagBits::eSignaled);
 	}
 
 #undef EDGE_LOGGER_SCOPE // Frames
@@ -340,17 +311,19 @@ namespace edge::gfx {
 #define EDGE_LOGGER_SCOPE "gfx::Renderer"
 
 	Renderer::~Renderer() {
-		auto wait_result = queue_->waitIdle();
-		GFX_ASSERT_MSG(wait_result == vk::Result::eSuccess, "Failed waiting for queue finish all work before destruction.");
+		if (queue_) {
+			auto wait_result = queue_->waitIdle();
+			GFX_ASSERT_MSG(wait_result == vk::Result::eSuccess, "Failed waiting for queue finish all work before destruction.");
+		}
 
-		descriptor_pool_.free_descriptor_set(descriptor_set_);
+		if (descriptor_pool_) {
+			descriptor_pool_.free_descriptor_set(descriptor_set_);
+		}
 	}
 
-	auto Renderer::construct(const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>> {
-		auto self = std::make_unique<Renderer>();
-		if (auto result = self->_construct(create_info); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
+	auto Renderer::construct(const RendererCreateInfo& create_info) -> Renderer {
+		Renderer self{};
+		self._construct(create_info);
 		return self;
 	}
 
@@ -587,7 +560,7 @@ namespace edge::gfx {
 		return swapchain_;
 	}
 
-	auto Renderer::_construct(const RendererCreateInfo& create_info) -> vk::Result {
+	auto Renderer::_construct(const RendererCreateInfo& create_info) -> void {
 		GFX_ASSERT_MSG(device_, "Device handle is null.");
 
 		write_descriptor_sets_.reserve(256);
@@ -598,29 +571,15 @@ namespace edge::gfx {
 				.required_caps = QueuePresets::kPresentGraphics,
 				.strategy = QueueSelectionStrategy::ePreferDedicated
 			});
-		if (!queue_result) {
-			GFX_ASSERT_MSG(false, "Failed to request queue. Reason: {}.", vk::to_string(queue_result.error()));
-			return queue_result.error();
-		}
+		EDGE_FATAL_ERROR(queue_result.has_value(), "Failed to request graphics queue for renderer.");
 		queue_ = std::move(queue_result.value());
 
-		auto command_pool_result = queue_.create_command_pool();
-		if (!command_pool_result) {
-			GFX_ASSERT_MSG(false, "Failed to create command pool. Reason: {}.", vk::to_string(command_pool_result.error()));
-			return command_pool_result.error();
-		}
-		command_pool_ = std::move(command_pool_result.value());
+		command_pool_ = queue_.create_command_pool();
 
 		vk::QueryPoolCreateInfo query_pool_create_info{};
 		query_pool_create_info.queryCount = 1u;
 		query_pool_create_info.queryType = vk::QueryType::eTimestamp;
-
-		auto query_pool_result = QueryPool::create(vk::QueryType::eTimestamp, 1u);
-		if (!query_pool_result) {
-			GFX_ASSERT_MSG(false, "Failed to create timestamp query. Reason: {}.", vk::to_string(query_pool_result.error()));
-			return query_pool_result.error();
-		}
-		timestamp_query_ = std::move(query_pool_result.value());
+		timestamp_query_ = QueryPool::create(vk::QueryType::eTimestamp, 1u);
 		timestamp_query_.reset(0u);
 
 		vk::PhysicalDeviceProperties adapter_properties;
@@ -640,65 +599,29 @@ namespace edge::gfx {
 			vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute,
 			vk::DescriptorBindingFlagBits::ePartiallyBound | vk::DescriptorBindingFlagBits::eUpdateAfterBind);
 
-		auto descriptor_set_layout_result = set_layout_builder.build(vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool);
-		if (!descriptor_set_layout_result) {
-			GFX_ASSERT_MSG(false, "Failed to create descriptor set layout. Reason: {}.", vk::to_string(descriptor_set_layout_result.error()));
-			return descriptor_set_layout_result.error();
-		}
-		descriptor_layout_ = std::move(descriptor_set_layout_result.value());
+		descriptor_layout_ = set_layout_builder.build(vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool);
 
 		auto const& requested_sizes = descriptor_layout_.get_pool_sizes();
-		auto descriptor_pool_result = DescriptorPool::create(requested_sizes, 1u, vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBindEXT);
-		if (!descriptor_pool_result) {
-			GFX_ASSERT_MSG(false, "Failed to create frame descriptor pool handle. Reason: {}.", vk::to_string(descriptor_pool_result.error()));
-			return descriptor_pool_result.error();
-		}
-		descriptor_pool_ = std::move(descriptor_pool_result.value());
-
-		auto descriptor_set_result = descriptor_pool_.allocate_descriptor_set(descriptor_layout_);
-		if (!descriptor_set_result) {
-			GFX_ASSERT_MSG(false, "Failed to create frame descriptor set handle. Reason: {}.", vk::to_string(descriptor_set_result.error()));
-			return descriptor_set_result.error();
-		}
-		descriptor_set_ = std::move(descriptor_set_result.value());
+		descriptor_pool_ = DescriptorPool::create(requested_sizes, 1u, vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBindEXT);
+		descriptor_set_ = descriptor_pool_.allocate_descriptor_set(descriptor_layout_);
 
 		PipelineLayoutBuilder pipeline_layout_builder{};
 		// TODO: add ability to set specific set point
 		pipeline_layout_builder.add_set_layout(descriptor_layout_);
 		pipeline_layout_builder.add_constant_range(vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, 0u, adapter_properties.limits.maxPushConstantsSize);
-
-		auto pipeline_layout_result = pipeline_layout_builder.build();
-		if (!pipeline_layout_result) {
-			GFX_ASSERT_MSG(false, "Failed to create common pipeline layout. Reason: {}.", vk::to_string(pipeline_layout_result.error()));
-			return pipeline_layout_result.error();
-		}
-		pipeline_layout_ = std::move(pipeline_layout_result.value());
+		pipeline_layout_ = pipeline_layout_builder.build();
 
 		push_constant_buffer_.resize(adapter_properties.limits.maxPushConstantsSize);
 
-		if (auto result = create_swapchain({
+		create_swapchain({
 			.format = {create_info.preferred_format, create_info.preferred_color_space},
 			.extent = create_info.extent,
 			.vsync = create_info.enable_vsync,
 			.hdr = create_info.enable_hdr
-			}); result != vk::Result::eSuccess) {
-			return result;
-		}
+			});
 
 		for (int32_t i = 0; i < k_frame_overlap_; ++i) {
-			auto command_list_result = command_pool_.allocate_command_buffer();
-			if (!command_list_result) {
-				GFX_ASSERT_MSG(false, "Failed to allocate command list for frame at index {}. Reason: {}.", i, vk::to_string(command_list_result.error()));
-				return command_list_result.error();
-			}
-
-			if (auto frame_result = Frame::construct(std::move(command_list_result.value()), descriptor_layout_); !frame_result.has_value()) {
-				GFX_ASSERT_MSG(false, "Failed to create frame at index {}. Reason: {}.", i, vk::to_string(frame_result.error()));
-				return frame_result.error();
-			}
-			else {
-				frames_.push_back(std::move(frame_result.value()));
-			}
+			frames_.push_back(Frame::construct(command_pool_.allocate_command_buffer(), descriptor_layout_));
 		}
 
 		vk::SamplerCreateInfo sampler_create_info{};
@@ -711,12 +634,7 @@ namespace edge::gfx {
 		sampler_create_info.mipLodBias = 1.0f;
 		sampler_create_info.anisotropyEnable = VK_TRUE;
 		sampler_create_info.maxAnisotropy = 4.0f;
-
-		auto sampler_result = Sampler::create(sampler_create_info);
-		if (!sampler_result) {
-			GFX_ASSERT_MSG(false, "Failed to create test sampler. Reason: {}.", vk::to_string(sampler_result.error()));
-		}
-		test_sampler_ = std::move(sampler_result.value());
+		test_sampler_ = Sampler::create(sampler_create_info);
 
 		// Push test sampler
 		vk::DescriptorImageInfo sampler_descriptor{};
@@ -735,8 +653,6 @@ namespace edge::gfx {
 		sampler_write.pBufferInfo = nullptr;
 		sampler_write.pTexelBufferView = nullptr;
 		write_descriptor_sets_.push_back(std::move(sampler_write));
-
-		return vk::Result::eSuccess;
 	}
 
 	auto Renderer::handle_surface_change(bool force) -> bool {
@@ -763,9 +679,7 @@ namespace edge::gfx {
 			auto swapchain_state = swapchain_.get_state();
 			swapchain_state.extent = surface_capabilities.currentExtent;
 
-			if (auto result = create_swapchain(swapchain_state); result != vk::Result::eSuccess) {
-				return false;
-			}
+			create_swapchain(swapchain_state);
 
 			active_frame_ = nullptr;
 			swapchain_image_index_ = 0u;
@@ -775,8 +689,8 @@ namespace edge::gfx {
 		return false;
 	}
 
-	auto Renderer::create_swapchain(const Swapchain::State& state) -> vk::Result {
-		if (auto result = SwapchainBuilder{}
+	auto Renderer::create_swapchain(const Swapchain::State& state) -> void {
+		auto swapchain = SwapchainBuilder{}
 			.set_old_swapchain(*swapchain_)
 			.set_image_extent(state.extent)
 			.set_image_format(state.format.format)
@@ -784,37 +698,25 @@ namespace edge::gfx {
 			.set_image_count(state.image_count)
 			.enable_hdr(state.hdr)
 			.enable_vsync(state.vsync)
-			.build(); !result.has_value()) {
-			GFX_ASSERT_MSG(false, "Failed to recreate swapchain with reason: {}", vk::to_string(result.error()));
-			return result.error();
+			.build();
+
+		swapchain_.reset();
+		swapchain_ = std::move(swapchain);
+
+		auto swapchain_images = swapchain_.get_images();
+		if (swapchain_targets_.empty()) {
+			for (auto&& image : swapchain_images) {
+				auto new_resource = create_render_resource();
+				setup_render_resource(new_resource, std::move(image), ResourceStateFlag::eUndefined);
+				swapchain_targets_.push_back(new_resource);
+			}
 		}
 		else {
-			swapchain_.reset();
-			swapchain_ = std::move(result.value());
-
-			auto images_result = swapchain_.get_images();
-			if (!images_result) {
-				GFX_ASSERT_MSG(false, "Failed to request swapchain images. Reason: {}.", vk::to_string(images_result.error()));
-				return result.error();
-			}
-			auto swapchain_images = std::move(images_result.value());
-
-			if (swapchain_targets_.empty()) {
-				for (auto&& image : swapchain_images) {
-					auto new_resource = create_render_resource();
-					setup_render_resource(new_resource, std::move(image), ResourceStateFlag::eUndefined);
-					swapchain_targets_.push_back(new_resource);
-				}
-			}
-			else {
-				for (int32_t i = 0; i < static_cast<int32_t>(swapchain_images.size()); ++i) {
-					auto& render_resource = render_resources_[swapchain_targets_[i]];
-					render_resource.update(std::move(swapchain_images[i]), ResourceStateFlag::eUndefined);
-				}
+			for (int32_t i = 0; i < static_cast<int32_t>(swapchain_images.size()); ++i) {
+				auto& render_resource = render_resources_[swapchain_targets_[i]];
+				render_resource.update(std::move(swapchain_images[i]), ResourceStateFlag::eUndefined);
 			}
 		}
-
-		return vk::Result::eSuccess;
 	}
 
 #undef EDGE_LOGGER_SCOPE // Renderer

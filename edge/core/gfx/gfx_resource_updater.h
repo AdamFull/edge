@@ -67,17 +67,17 @@ namespace edge::gfx {
 		ResourceUpdater(ResourceUpdater&& other) noexcept;
 		auto operator=(ResourceUpdater&& other) noexcept -> ResourceUpdater&;
 
-		static auto create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count = 1u) -> Result<ResourceUpdater>;
+		static auto create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count = 1u) -> ResourceUpdater;
 
-		auto update_buffer(Buffer& buffer, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size = 0ull) -> Result<BufferUpdater>;
-		auto update_image(Image& image, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size = 0ull) -> Result<ImageUpdater>;
+		auto update_buffer(Buffer& buffer, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size = 0ull) -> BufferUpdater;
+		auto update_image(Image& image, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size = 0ull) -> ImageUpdater;
 
 		auto acquire_resource_set() -> ResourceSet&;
-		auto get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> Result<BufferRange>;
+		auto get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> BufferRange;
 
 		auto flush(Span<vk::SemaphoreSubmitInfoKHR> wait_semaphores) -> vk::SemaphoreSubmitInfoKHR;
 	private:
-		auto _construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result;
+		auto _construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> void;
 		
 		auto begin_commands(ResourceSet& resource_set) -> void;
 		auto end_commands(ResourceSet& resource_set) -> void;

@@ -96,7 +96,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto construct(CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Result<Frame>;
+		static auto construct(CommandBuffer&& command_buffer, DescriptorSetLayout const& descriptor_layout) -> Frame;
 
 		auto begin() -> void;
 		auto end() -> void;
@@ -111,7 +111,7 @@ namespace edge::gfx {
 		auto get_command_buffer() const noexcept -> CommandBuffer const& { return command_buffer_; }
 		auto is_recording() const noexcept -> bool { return is_recording_; }
 	private:
-		auto _construct(DescriptorSetLayout const& descriptor_layout) -> vk::Result;
+		auto _construct(DescriptorSetLayout const& descriptor_layout) -> void;
 
 		Semaphore image_available_{};
 		Semaphore rendering_finished_{};
@@ -142,16 +142,26 @@ namespace edge::gfx {
 		Renderer(Renderer&& other) noexcept
 			: queue_{ std::exchange(other.queue_, {}) }
 			, command_pool_{ std::exchange(other.command_pool_, {}) }
+			, timestamp_query_{ std::exchange(other.timestamp_query_, {}) }
+			, timestamp_frequency_{ std::exchange(other.timestamp_frequency_, {}) }
 			, swapchain_{ std::exchange(other.swapchain_, {}) }
 			, swapchain_image_index_{ std::exchange(other.swapchain_image_index_, {}) }
+			, swapchain_targets_{ std::exchange(other.swapchain_image_index_, {}) }
 			, frames_{ std::exchange(other.frames_, {}) }
 			, frame_number_{ std::exchange(other.frame_number_, {}) }
+			, acquired_semaphore_{ std::exchange(other.acquired_semaphore_, {}) }
+			, active_frame_{ std::exchange(other.active_frame_, {}) }
 			
 			, descriptor_layout_{ std::exchange(other.descriptor_layout_, {}) }
 			, descriptor_pool_{ std::exchange(other.descriptor_pool_, {}) }
 			, descriptor_set_{ std::exchange(other.descriptor_set_, {}) }
 			, pipeline_layout_{ std::exchange(other.pipeline_layout_, {}) }
 			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, {}) } 
+			, write_descriptor_sets_{ std::exchange(other.write_descriptor_sets_, {}) }
+			, image_descriptors_{ std::exchange(other.image_descriptors_, {}) }
+			, buffer_descriptors_{ std::exchange(other.buffer_descriptors_, {}) }
+			, test_sampler_{ std::exchange(other.test_sampler_, {}) }
+
 			, render_resources_{ std::exchange(other.render_resources_, {}) }
 			, shader_passes_{ std::exchange(other.shader_passes_, {}) }
 			, render_resource_free_list_{ std::move(other.render_resource_free_list_) } {
@@ -161,16 +171,25 @@ namespace edge::gfx {
 			if (this != &other) {
 				queue_ = std::exchange(other.queue_, {});
 				command_pool_ = std::exchange(other.command_pool_, {});
+				timestamp_query_ = std::exchange(other.timestamp_query_, {});
+				timestamp_frequency_ = std::exchange(other.timestamp_frequency_, {});
 				swapchain_ = std::exchange(other.swapchain_, {});
 				swapchain_image_index_ = std::exchange(other.swapchain_image_index_, {});
+				swapchain_targets_ = std::exchange(other.swapchain_targets_, {});
 				frames_ = std::exchange(other.frames_, {});
 				frame_number_ = std::exchange(other.frame_number_, {});
+				acquired_semaphore_ = std::exchange(other.acquired_semaphore_, {});
+				active_frame_ = std::exchange(other.active_frame_, {});
 
 				descriptor_layout_ = std::exchange(other.descriptor_layout_, {});
 				descriptor_pool_ = std::exchange(other.descriptor_pool_, {});
 				descriptor_set_ = std::exchange(other.descriptor_set_, {});
 				pipeline_layout_ = std::exchange(other.pipeline_layout_, {});
 				push_constant_buffer_ = std::exchange(other.push_constant_buffer_, {});
+				write_descriptor_sets_ = std::exchange(other.write_descriptor_sets_, {});
+				image_descriptors_ = std::exchange(other.image_descriptors_, {});
+				buffer_descriptors_ = std::exchange(other.buffer_descriptors_, {});
+				test_sampler_ = std::exchange(other.test_sampler_, {});
 
 				render_resources_ = std::exchange(other.render_resources_, {});
 				shader_passes_ = std::exchange(other.shader_passes_, {});
@@ -179,7 +198,7 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto construct(const RendererCreateInfo& create_info) -> Result<std::unique_ptr<Renderer>>;
+		static auto construct(const RendererCreateInfo& create_info) -> Renderer;
 
 		auto create_render_resource() -> uint32_t;
 		auto setup_render_resource(uint32_t resource_id, Image&& image, ResourceStateFlags initial_state) -> void;
@@ -207,10 +226,10 @@ namespace edge::gfx {
 		auto get_pipeline_layout() const noexcept -> PipelineLayout const&;
 		auto get_swapchain() const noexcept -> Swapchain const&;
 	private:
-		auto _construct(const RendererCreateInfo& create_info) -> vk::Result;
+		auto _construct(const RendererCreateInfo& create_info) -> void;
 
 		auto handle_surface_change(bool force = false) -> bool;
-		auto create_swapchain(const Swapchain::State& state) -> vk::Result;
+		auto create_swapchain(const Swapchain::State& state) -> void;
 
 		Queue queue_;
 		CommandPool command_pool_;

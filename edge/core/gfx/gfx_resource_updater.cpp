@@ -273,30 +273,22 @@ namespace edge::gfx {
 		return *this;
 	}
 
-	auto ResourceUpdater::create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count) -> Result<ResourceUpdater> {
+	auto ResourceUpdater::create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count) -> ResourceUpdater {
 		ResourceUpdater self{};
 #ifndef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
 		self.queue_ = &queue;
 #endif
-		if (auto result = self._construct(arena_size, uploader_count); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
+		self._construct(arena_size, uploader_count);
 		return self;
 	}
 
-	auto ResourceUpdater::update_buffer(Buffer& buffer, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size) -> Result<BufferUpdater> {
+	auto ResourceUpdater::update_buffer(Buffer& buffer, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size) -> BufferUpdater {
 		auto staging_size = required_size > 0 ? required_size : buffer.get_size();
-
 		auto& resource_set = acquire_resource_set();
-		auto staging_buffer_result = get_or_allocate_staging_memory(resource_set, staging_size, 16ull);
-		if (!staging_buffer_result) {
-			return std::unexpected(staging_buffer_result.error());
-		}
-
-		return BufferUpdater(resource_set, buffer, current_state, final_state, std::move(staging_buffer_result.value()));
+		return BufferUpdater(resource_set, buffer, current_state, final_state, get_or_allocate_staging_memory(resource_set, staging_size, 16ull));
 	}
 
-	auto ResourceUpdater::update_image(Image& image, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size) -> Result<ImageUpdater> {
+	auto ResourceUpdater::update_image(Image& image, ResourceStateFlags current_state, ResourceStateFlags final_state, vk::DeviceSize required_size) -> ImageUpdater {
 		
 		vk::DeviceSize staging_size{};
 		if (required_size > 0) {
@@ -312,12 +304,7 @@ namespace edge::gfx {
 		}
 
 		auto& resource_set = acquire_resource_set();
-		auto staging_buffer_result = get_or_allocate_staging_memory(resource_set, staging_size, 16ull);
-		if (!staging_buffer_result) {
-			return std::unexpected(staging_buffer_result.error());
-		}
-
-		return ImageUpdater(resource_set, image, current_state, final_state, std::move(staging_buffer_result.value()));
+		return ImageUpdater(resource_set, image, current_state, final_state, get_or_allocate_staging_memory(resource_set, staging_size, 16ull));
 	}
 
 	auto ResourceUpdater::flush(Span<vk::SemaphoreSubmitInfoKHR> wait_semaphores) -> vk::SemaphoreSubmitInfoKHR {
@@ -377,27 +364,21 @@ namespace edge::gfx {
 		return signal_info;
 	}
 
-	auto ResourceUpdater::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result {
+	auto ResourceUpdater::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> void {
 #ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
 		auto queue_result = device_.get_queue({
 				.required_caps = QueuePresets::kGraphics,
 				.strategy = QueueSelectionStrategy::ePreferDedicated
 			});
-		if (!queue_result) {
-			return queue_result.error();
-		}
+		EDGE_FATAL_ERROR(queue_result.has_value(), "Queue request failed. Can't initialize resource updater.");
 		queue_ = std::move(queue_result.value());
 #endif
 		
 #ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
-		auto command_pool_result = queue_.create_command_pool();
+		command_pool_ = queue_.create_command_pool();
 #else
-		auto command_pool_result = queue_->create_command_pool();
+		command_pool_ = queue_->create_command_pool();
 #endif
-		if (!command_pool_result) {
-			return command_pool_result.error();
-		}
-		command_pool_ = std::move(command_pool_result.value());
 
 		BufferCreateInfo buffer_create_info{};
 		buffer_create_info.flags = BufferFlag::eStaging;
@@ -407,33 +388,14 @@ namespace edge::gfx {
 
 		resource_sets_.resize(uploader_count);
 		for (auto& set : resource_sets_) {
-			auto buffer_result = Buffer::create(buffer_create_info);
-			if (buffer_result) {
-				set.arena = std::move(buffer_result.value());
-			}
-			GFX_ASSERT_MSG(buffer_result.has_value(), "Failed to create staging memory.");
-
+			set.arena = Buffer::create(buffer_create_info);
 			set.temporary_buffers.reserve(128);
-
-			auto semaphore_result = Semaphore::create(vk::SemaphoreType::eTimeline);
-			if (!semaphore_result) {
-				GFX_ASSERT_MSG(false, "Failed to create resource set's semaphore, but it's required.");
-				return semaphore_result.error();
-			}
-			set.semaphore = std::move(semaphore_result.value());
-
-			auto command_buffer_result = command_pool_.allocate_command_buffer();
-			if (!command_buffer_result) {
-				GFX_ASSERT_MSG(false, "Failed to create resource set command buffer, but it's required.");
-				return command_buffer_result.error();
-			}
-			set.command_buffer = std::move(command_buffer_result.value());
+			set.semaphore = Semaphore::create(vk::SemaphoreType::eTimeline);
+			set.command_buffer = command_pool_.allocate_command_buffer();
 		}
-
-		return vk::Result::eSuccess;
 	}
 
-	auto ResourceUpdater::get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> Result<BufferRange> {
+	auto ResourceUpdater::get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> BufferRange {
 		auto aligned_requested_size = aligned_size(required_memory, required_alignment);
 		auto available_size = resource_set.arena.get_size() - resource_set.offset;
 
@@ -443,13 +405,7 @@ namespace edge::gfx {
 			create_info.count = 1u;
 			create_info.minimal_alignment = required_alignment;
 			create_info.flags = kStagingBuffer;
-
-			auto buffer_result = Buffer::create(create_info);
-			if (!buffer_result) {
-				return std::unexpected(buffer_result.error());
-			}
-
-			auto& new_buffer = resource_set.temporary_buffers.emplace_back(std::move(buffer_result.value()));
+			auto& new_buffer = resource_set.temporary_buffers.emplace_back(Buffer::create(create_info));
 			GFX_ASSERT_MSG(resource_set.temporary_buffers.size() < 128, "Warning, all temporary buffer links now is invalid.");
 			return BufferRange::create(&new_buffer, 0ull, new_buffer.get_size());
 		}

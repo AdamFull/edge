@@ -35,11 +35,11 @@ namespace edge::gfx {
 			return *this;
 		}
 
-		static auto construct(const ShaderLibraryInfo& info) -> Result<ShaderLibrary>;
+		static auto construct(const ShaderLibraryInfo& info) -> ShaderLibrary;
 
 		auto get_pipeline(mi::String const& pipeline_name) const -> Pipeline const*;
 	private:
-		auto _construct(const ShaderLibraryInfo& info) -> vk::Result;
+		auto _construct(const ShaderLibraryInfo& info) -> void;
 
 		PipelineCache pipeline_cache_;
 		mi::U8String pipeline_cache_path_;

@@ -225,9 +225,7 @@ namespace edge::gfx {
 				total_size += region_pitch * update_region.h;
 			}
 
-			auto image_updater_result = updater_->update_image(image, render_resource.get_state(), ResourceStateFlag::eGraphicsShader, total_size);
-			GFX_ASSERT_MSG(image_updater_result.has_value(), "Failed to create image updater.");
-			auto image_updater = std::move(image_updater_result.value());
+			auto image_updater = updater_->update_image(image, render_resource.get_state(), ResourceStateFlag::eGraphicsShader, total_size);
 
 			mi::Vector<uint8_t> packed_data(total_size);
 
@@ -302,13 +300,8 @@ namespace edge::gfx {
 		auto& index_buffer_resource = renderer_->get_render_resource(index_buffer_render_resource_id_);
 		auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
 
-		auto vertex_buffer_updater_result = updater_->update_buffer(vertex_buffer, vertex_buffer_resource.get_state(), ResourceStateFlag::eGraphicsShader, draw_data->TotalVtxCount * sizeof(ImDrawVert));
-		GFX_ASSERT_MSG(vertex_buffer_updater_result.has_value(), "Failed to create vertex buffer updater.");
-		auto vertex_buffer_updater = std::move(vertex_buffer_updater_result.value());
-		
-		auto index_buffer_updater_result = updater_->update_buffer(index_buffer, index_buffer_resource.get_state(), ResourceStateFlag::eIndexRead, draw_data->TotalIdxCount * sizeof(ImDrawIdx));
-		GFX_ASSERT_MSG(index_buffer_updater_result.has_value(), "Failed to create index buffer updater.");
-		auto index_buffer_updater = std::move(index_buffer_updater_result.value());
+		auto vertex_buffer_updater = updater_->update_buffer(vertex_buffer, vertex_buffer_resource.get_state(), ResourceStateFlag::eGraphicsShader, draw_data->TotalVtxCount * sizeof(ImDrawVert));
+		auto index_buffer_updater = updater_->update_buffer(index_buffer, index_buffer_resource.get_state(), ResourceStateFlag::eIndexRead, draw_data->TotalIdxCount * sizeof(ImDrawIdx));
 		
 		vk::DeviceSize vtx_offset{ 0 };
 		vk::DeviceSize idx_offset{ 0 };
@@ -337,10 +330,8 @@ namespace edge::gfx {
 		buffer_create_info.flags = usage;
 		buffer_create_info.minimal_alignment = element_size;
 
-		auto buffer_create_result = gfx::Buffer::create(buffer_create_info);
-		GFX_ASSERT_MSG(buffer_create_result.has_value(), "Failed to create/update buffer.");
 		auto& render_resource = renderer_->get_render_resource(resource_id);
-		render_resource.update(std::move(buffer_create_result.value()), gfx::ResourceStateFlag::eUndefined);
+		render_resource.update(gfx::Buffer::create(buffer_create_info), gfx::ResourceStateFlag::eUndefined);
 	}
 }
 

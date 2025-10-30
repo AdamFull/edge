@@ -69,11 +69,9 @@ namespace edge::gfx {
 		return *this;
 	}
 
-	auto ResourceUploader::create(vk::DeviceSize arena_size, uint32_t uploader_count) -> Result<ResourceUploader> {
+	auto ResourceUploader::create(vk::DeviceSize arena_size, uint32_t uploader_count) -> ResourceUploader {
 		ResourceUploader self{};
-		if (auto result = self._construct(arena_size, uploader_count); result != vk::Result::eSuccess) {
-			return std::unexpected(result);
-		}
+		self._construct(arena_size, uploader_count);
 		return self;
 	}
 
@@ -160,7 +158,7 @@ namespace edge::gfx {
 		return semaphore_submit_info;
 	}
 
-	auto ResourceUploader::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result {
+	auto ResourceUploader::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> void {
 		auto queue_result = device_.get_queue({
 				.required_caps = QueuePresets::kDedicatedTransfer,
 				.strategy = QueueSelectionStrategy::ePreferDedicated
@@ -175,16 +173,11 @@ namespace edge::gfx {
 				.strategy = QueueSelectionStrategy::ePreferDedicated
 				});
 			if (!queue_result) {
-				return queue_result.error();
+				// TODO: select any available
 			}
 		}
 		queue_ = std::move(queue_result.value());
-
-		auto command_pool_result = queue_.create_command_pool();
-		if (!command_pool_result) {
-			return command_pool_result.error();
-		}
-		command_pool_ = std::move(command_pool_result.value());
+		command_pool_ = queue_.create_command_pool();
 
 		BufferCreateInfo buffer_create_info{};
 		buffer_create_info.flags = BufferFlag::eStaging;
@@ -194,33 +187,14 @@ namespace edge::gfx {
 
 		resource_sets_.resize(uploader_count);
 		for (auto& set : resource_sets_) {
-			auto buffer_result = Buffer::create(buffer_create_info);
-			if (buffer_result) {
-				set.arena = std::move(buffer_result.value());
-			}
-			GFX_ASSERT_MSG(buffer_result.has_value(), "Failed to create staging memory.");
-
+			set.arena = Buffer::create(buffer_create_info);
 			set.temporary_buffers.reserve(128);
-
-			auto semaphore_result = Semaphore::create(vk::SemaphoreType::eTimeline);
-			if (!semaphore_result) {
-				GFX_ASSERT_MSG(false, "Failed to create resource set's semaphore, but it's required.");
-				return semaphore_result.error();
-			}
-			set.semaphore = std::move(semaphore_result.value());
-
-			auto command_buffer_result = command_pool_.allocate_command_buffer();
-			if (!command_buffer_result) {
-				GFX_ASSERT_MSG(false, "Failed to create resource set command buffer, but it's required.");
-				return command_buffer_result.error();
-			}
-			set.command_buffer = std::move(command_buffer_result.value());
+			set.semaphore = Semaphore::create(vk::SemaphoreType::eTimeline);
+			set.command_buffer = command_pool_.allocate_command_buffer();
 		}
 
 		pending_tasks_.reserve(100);
 		finished_tasks_.reserve(100);
-
-		return vk::Result::eSuccess;
 	}
 
 	auto ResourceUploader::worker_loop() -> void {
@@ -403,13 +377,7 @@ namespace edge::gfx {
 		create_info.format = upload_info.format;
 		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
 
-		auto image_result = Image::create(create_info);
-		if (!image_result) {
-			GFX_ASSERT_MSG(false, "Failed to load texture. Can't create image handle. Reason: {}", vk::to_string(image_result.error()));
-			resource_set.command_buffer.end_marker();
-			return UploadResult{ task.sync_token, task.type, UploadingStatus::eFailed, ResourceStateFlag::eUndefined, {} };
-		}
-		auto image = std::move(image_result.value());
+		auto image = Image::create(create_info);
 
 		ImageBarrier image_barrier{};
 		image_barrier.image = &image;
@@ -467,13 +435,7 @@ namespace edge::gfx {
 		upload_info.src_copy_offsets.push_back(0ull);
 
 		// TODO: generate mips
-
-		auto staging_result = get_or_allocate_staging_memory(resource_set, image_raw_data.size(), 4ull);
-		if (!staging_result) {
-			GFX_ASSERT_MSG(false, "Failed to request staging memory. Reason: {}", vk::to_string(staging_result.error()));
-			return std::unexpected(ImageLoadStatus::eOutOfMemory);
-		}
-		upload_info.memory_range = std::move(staging_result.value());
+		upload_info.memory_range = get_or_allocate_staging_memory(resource_set, image_raw_data.size(), 4ull);
 
 		auto byte_range = upload_info.memory_range.get_range();
 		std::memcpy(byte_range.data(), image_raw_data.data(), image_raw_data.size());
@@ -537,13 +499,8 @@ namespace edge::gfx {
 
 		// TODO: add mip generation for basic formats
 
-		auto staging_result = get_or_allocate_staging_memory(resource_set, ktxtexture->dataSize, 16ull);
-		if (!staging_result) {
-			GFX_ASSERT_MSG(false, "Failed to request staging memory. Reason: {}", vk::to_string(staging_result.error()));
-			ktxTexture_Destroy(ktxtexture);
-			return std::unexpected(ImageLoadStatus::eOutOfMemory);
-		}
-		upload_info.memory_range = std::move(staging_result.value());
+		
+		upload_info.memory_range = get_or_allocate_staging_memory(resource_set, ktxtexture->dataSize, 16ull);
 
 		auto byte_range = upload_info.memory_range.get_range();
 		std::memcpy(byte_range.data(), ktxtexture->pData, ktxtexture->dataSize);
@@ -553,7 +510,7 @@ namespace edge::gfx {
 		return upload_info;
 	}
 
-	auto ResourceUploader::get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> Result<BufferRange> {
+	auto ResourceUploader::get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> BufferRange {
 		auto aligned_requested_size = aligned_size(required_memory, required_alignment);
 		auto available_size = resource_set.arena.get_size() - resource_set.offset;
 
@@ -563,13 +520,7 @@ namespace edge::gfx {
 			create_info.count = 1u;
 			create_info.minimal_alignment = required_alignment;
 			create_info.flags = kStagingBuffer;
-
-			auto buffer_result = Buffer::create(create_info);
-			if (!buffer_result) {
-				return std::unexpected(buffer_result.error());
-			}
-
-			auto& new_buffer = resource_set.temporary_buffers.emplace_back(std::move(buffer_result.value()));
+			auto& new_buffer = resource_set.temporary_buffers.emplace_back(Buffer::create(create_info));
 			GFX_ASSERT_MSG(resource_set.temporary_buffers.size() < 128, "Warning, all temporary buffer links now is invalid.");
 			return BufferRange::create(&new_buffer, 0ull, new_buffer.get_size());
 		}

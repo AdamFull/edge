@@ -21,10 +21,7 @@ namespace edge::gfx {
 		image_create_info.level_count = 1u;
 		image_create_info.flags = ImageFlag::eWriteColor | ImageFlag::eSample;
 		image_create_info.format = vk::Format::eR8G8B8A8Unorm;
-		auto image_create_result = Image::create(image_create_info);
-		GFX_ASSERT_MSG(image_create_result.has_value(), "Failed to create render target.");
-
-		renderer.setup_render_resource(self->render_target_, std::move(image_create_result.value()), ResourceStateFlag::eUndefined);
+		renderer.setup_render_resource(self->render_target_, Image::create(image_create_info), ResourceStateFlag::eUndefined);
 
 		return self;
 	}

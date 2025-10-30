@@ -101,7 +101,7 @@ namespace edge::gfx {
 		ResourceUploader(ResourceUploader&& other) noexcept;
 		auto operator=(ResourceUploader&& other) noexcept -> ResourceUploader&;
 
-		static auto create(vk::DeviceSize arena_size, uint32_t uploader_count = 1u) -> Result<ResourceUploader>;
+		static auto create(vk::DeviceSize arena_size, uint32_t uploader_count = 1u) -> ResourceUploader;
 
 		auto start_streamer() -> void;
 		auto stop_streamer() -> void;
@@ -116,7 +116,7 @@ namespace edge::gfx {
 
 		auto get_last_submitted_semaphore() -> vk::SemaphoreSubmitInfoKHR;
 	private:
-		auto _construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> vk::Result;
+		auto _construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> void;
 
 		enum class ImageLoadStatus {
 			eDone,
@@ -138,7 +138,7 @@ namespace edge::gfx {
 		auto worker_loop() -> void;
 		auto process_task(ResourceSet& resource_set, UploadTask const& task) -> UploadResult;
 		auto process_image(ResourceSet& resource_set, UploadTask const& task) -> UploadResult;
-		auto get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> Result<BufferRange>;
+		auto get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> BufferRange;
 		auto _load_image_raw(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, uint32_t width, uint32_t height, vk::Format format, bool generate_mipmap) -> ImageLoadResult;
 		auto _load_image_stb(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, vk::Format format) -> ImageLoadResult;
 		auto _load_image_ktx(ResourceSet& resource_set, Span<const uint8_t> image_raw_data) -> ImageLoadResult;

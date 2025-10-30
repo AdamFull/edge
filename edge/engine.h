@@ -22,7 +22,7 @@ namespace edge {
 		auto fixed_update(float delta_time) -> void override;
 	private:
 		platform::IPlatformWindow* window_{ nullptr };
-		std::unique_ptr<gfx::Renderer> renderer_{};
+		gfx::Renderer renderer_{};
 		gfx::ResourceUpdater updater_{};
 		gfx::ResourceUploader uploader_{};
 		gfx::ShaderLibrary shader_library_{};
