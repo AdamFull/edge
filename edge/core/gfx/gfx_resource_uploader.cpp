@@ -188,7 +188,7 @@ namespace edge::gfx {
 
 		BufferCreateInfo buffer_create_info{};
 		buffer_create_info.flags = BufferFlag::eStaging;
-		buffer_create_info.size = std::max(4096ull, arena_size);
+		buffer_create_info.size = std::max(vk::DeviceSize{4096ull}, arena_size);
 		buffer_create_info.count = 1u;
 		buffer_create_info.minimal_alignment = 16u;
 
