@@ -218,8 +218,6 @@ namespace edge::gfx {
 			auto& render_resource = renderer_->get_render_resource(resource_id);
 			auto& image = render_resource.get_handle<gfx::Image>();
 
-			// TODO: Move it all to uploader
-			// TODO: At first try to use command list from Updater
 			uint64_t total_size = 0;
 			for (auto& update_region : tex->Updates) {
 				EDGE_SLOGD("Updating image {} region: [{}, {}, {}, {}]", tex->GetTexID(), update_region.x, update_region.y, update_region.w, update_region.h);
@@ -227,50 +225,36 @@ namespace edge::gfx {
 				total_size += region_pitch * update_region.h;
 			}
 
-			auto& resource_set = updater_->acquire_resource_set();
-			auto allocation_result = updater_->get_or_allocate_staging_memory(resource_set, total_size, 4ull);
-			GFX_ASSERT_MSG(allocation_result.has_value(), "Failed to create staging buffer for texture update.");
-			auto buffer_range = std::move(allocation_result.value());
-			auto mapped_range = buffer_range.get_range();
+			auto image_updater_result = updater_->update_image(image, render_resource.get_state(), ResourceStateFlag::eGraphicsShader, total_size);
+			GFX_ASSERT_MSG(image_updater_result.has_value(), "Failed to create image updater.");
+			auto image_updater = std::move(image_updater_result.value());
 
-			render_resource.transfer_state(resource_set.command_buffer, gfx::ResourceStateFlag::eCopyDst);
+			mi::Vector<uint8_t> packed_data(total_size);
 
 			uint64_t buffer_offset = 0;
-			mi::Vector<vk::BufferImageCopy2KHR> copy_regions{};
 			for (auto& update_region : tex->Updates) {
 				auto region_pitch = update_region.w * tex->BytesPerPixel;
 
 				for (int y = 0; y < update_region.h; y++) {
 					const void* src_pixels = tex->GetPixelsAt(update_region.x, update_region.y + y);
-					std::memcpy(mapped_range.data() + buffer_offset + (region_pitch * y), src_pixels, region_pitch);
+					std::memcpy(packed_data.data() + buffer_offset + (region_pitch * y), src_pixels, region_pitch);
 				}
 
-				vk::BufferImageCopy2KHR image_copy_region{};
-				image_copy_region.bufferOffset = buffer_offset + buffer_range.get_offset();
-				image_copy_region.imageSubresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-				image_copy_region.imageSubresource.mipLevel = 0u;
-				image_copy_region.imageSubresource.baseArrayLayer = 0u;
-				image_copy_region.imageSubresource.layerCount = 1u;
-				image_copy_region.imageOffset = vk::Offset3D{ update_region.x, update_region.y, 0 };
-				image_copy_region.imageExtent = vk::Extent3D{ update_region.w, update_region.h, 1u };
-				copy_regions.push_back(image_copy_region);
+				auto region_size = region_pitch * update_region.h;
 
-				buffer_offset += region_pitch * update_region.h;
+				ImageSubresourceData subresource_data{};
+				subresource_data.data = Span(packed_data.data() + buffer_offset, region_size);
+				subresource_data.offset = vk::Offset3D{ update_region.x, update_region.y, 0 };
+				subresource_data.extent = vk::Extent3D{ update_region.w, update_region.h, 1u };
+
+				image_updater.write(subresource_data);
+
+				buffer_offset += region_size;
 			}
 
-			vk::CopyBufferToImageInfo2KHR copy_info{};
-			copy_info.srcBuffer = buffer_range.get_buffer();
-			copy_info.dstImage = image.get_handle();
-			copy_info.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-			copy_info.regionCount = static_cast<uint32_t>(copy_regions.size());
-			copy_info.pRegions = copy_regions.data();
-			resource_set.command_buffer->copyBufferToImage2KHR(&copy_info);
-
-			render_resource.transfer_state(resource_set.command_buffer, gfx::ResourceStateFlag::eShaderResource);
+			image_updater.submit();
 
 			tex->SetStatus(ImTextureStatus_OK);
-
-			// TODO: Uploader is not support partial update yet, because of that trying to update manually
 		}
 		else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
 			// TODO: Delete resource
@@ -318,103 +302,32 @@ namespace edge::gfx {
 		auto& index_buffer_resource = renderer_->get_render_resource(index_buffer_render_resource_id_);
 		auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
 
-		auto total_vertex_size = draw_data->TotalVtxCount * sizeof(ImDrawVert);
-		auto total_index_size = draw_data->TotalIdxCount * sizeof(ImDrawIdx);
-		auto total_staging_size = total_vertex_size + total_index_size;
-
-		auto& resouece_set = updater_->acquire_resource_set();
-		auto staging_buffer_result = updater_->get_or_allocate_staging_memory(resouece_set, total_staging_size, sizeof(ImDrawVert));
-		GFX_ASSERT_MSG(staging_buffer_result.has_value(), "Failed to allocate staging memory.");
-		auto staging_buffer = std::move(staging_buffer_result.value());
-		auto mapped_range = staging_buffer.get_range();
-
-		mi::Vector<vk::BufferMemoryBarrier2KHR> buffer_barriers{};
+		auto vertex_buffer_updater_result = updater_->update_buffer(vertex_buffer, vertex_buffer_resource.get_state(), ResourceStateFlag::eGraphicsShader, draw_data->TotalVtxCount * sizeof(ImDrawVert));
+		GFX_ASSERT_MSG(vertex_buffer_updater_result.has_value(), "Failed to create vertex buffer updater.");
+		auto vertex_buffer_updater = std::move(vertex_buffer_updater_result.value());
 		
-		// Translate buffers to copy destination state
-		{
-			auto state = vertex_buffer_resource.get_state();
-			if (state != ResourceStateFlag::eCopyDst) {
-				auto barrier = vertex_buffer_resource.make_translation(ResourceStateFlag::eCopyDst);
-				buffer_barriers.push_back(std::get<vk::BufferMemoryBarrier2KHR>(barrier));
-			}
-		}
-
-		{
-			auto state = index_buffer_resource.get_state();
-			if (state != ResourceStateFlag::eCopyDst) {
-				auto barrier = index_buffer_resource.make_translation(ResourceStateFlag::eCopyDst);
-				buffer_barriers.push_back(std::get<vk::BufferMemoryBarrier2KHR>(barrier));
-			}
-		}
-
-		vk::DependencyInfoKHR dependency_info{};
-		dependency_info.bufferMemoryBarrierCount = static_cast<uint32_t>(buffer_barriers.size());
-		dependency_info.pBufferMemoryBarriers = buffer_barriers.data();
-		resouece_set.command_buffer->pipelineBarrier2KHR(&dependency_info);
-		buffer_barriers.clear();
-
-		mi::Vector<vk::BufferCopy2KHR> vertex_copy_regions{};
-		mi::Vector<vk::BufferCopy2KHR> index_copy_regions{};
-
-		int32_t vtx_offset{ 0 };
-		int32_t idx_offset{ 0 };
-
+		auto index_buffer_updater_result = updater_->update_buffer(index_buffer, index_buffer_resource.get_state(), ResourceStateFlag::eIndexRead, draw_data->TotalIdxCount * sizeof(ImDrawIdx));
+		GFX_ASSERT_MSG(index_buffer_updater_result.has_value(), "Failed to create index buffer updater.");
+		auto index_buffer_updater = std::move(index_buffer_updater_result.value());
+		
+		vk::DeviceSize vtx_offset{ 0 };
+		vk::DeviceSize idx_offset{ 0 };
+		
 		for (int32_t n = 0; n < draw_data->CmdListsCount; n++) {
 			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
-
-			vk::BufferCopy2KHR vertex_region{};
-			vertex_region.srcOffset = vtx_offset;
-			vertex_region.dstOffset = vtx_offset;
-			vertex_region.size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
-			vertex_copy_regions.push_back(vertex_region);
-			std::memcpy(mapped_range.data() + vertex_region.srcOffset, im_cmd_list->VtxBuffer.Data, vertex_region.size);
-
-			vk::BufferCopy2KHR index_region{};
-			index_region.srcOffset = total_vertex_size + idx_offset;
-			index_region.dstOffset = idx_offset;
-			index_region.size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
-			index_copy_regions.push_back(index_region);
-			std::memcpy(mapped_range.data() + index_region.srcOffset, im_cmd_list->IdxBuffer.Data, index_region.size);
-
-			vtx_offset += vertex_region.size;
-			idx_offset += index_region.size;
+		
+			auto vtx_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
+			vertex_buffer_updater.write({ reinterpret_cast<const uint8_t*>(im_cmd_list->VtxBuffer.Data), vtx_size }, vtx_offset);
+		
+			auto idx_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+			index_buffer_updater.write({ reinterpret_cast<const uint8_t*>(im_cmd_list->IdxBuffer.Data), idx_size }, idx_offset);
+		
+			vtx_offset += vtx_size;
+			idx_offset += idx_size;
 		}
-
-		vk::CopyBufferInfo2KHR copy_vertex_buffer{};
-		copy_vertex_buffer.srcBuffer = staging_buffer.get_buffer();
-		copy_vertex_buffer.dstBuffer = vertex_buffer.get_handle();
-		copy_vertex_buffer.regionCount = static_cast<uint32_t>(vertex_copy_regions.size());
-		copy_vertex_buffer.pRegions = vertex_copy_regions.data();
-		resouece_set.command_buffer->copyBuffer2KHR(&copy_vertex_buffer);
-
-		vk::CopyBufferInfo2KHR copy_index_buffer{};
-		copy_index_buffer.srcBuffer = staging_buffer.get_buffer();
-		copy_index_buffer.dstBuffer = index_buffer.get_handle();
-		copy_index_buffer.regionCount = static_cast<uint32_t>(index_copy_regions.size());
-		copy_index_buffer.pRegions = index_copy_regions.data();
-		resouece_set.command_buffer->copyBuffer2KHR(&copy_index_buffer);
-
-		// Translate buffers to ready state
-		{
-			auto state = vertex_buffer_resource.get_state();
-			if (state != ResourceStateFlag::eGraphicsShader) {
-				auto barrier = vertex_buffer_resource.make_translation(ResourceStateFlag::eGraphicsShader);
-				buffer_barriers.push_back(std::get<vk::BufferMemoryBarrier2KHR>(barrier));
-			}
-		}
-
-		{
-			auto state = index_buffer_resource.get_state();
-			if (state != ResourceStateFlag::eIndexRead) {
-				auto barrier = index_buffer_resource.make_translation(ResourceStateFlag::eIndexRead);
-				buffer_barriers.push_back(std::get<vk::BufferMemoryBarrier2KHR>(barrier));
-			}
-		}
-
-		dependency_info.bufferMemoryBarrierCount = static_cast<uint32_t>(buffer_barriers.size());
-		dependency_info.pBufferMemoryBarriers = buffer_barriers.data();
-		resouece_set.command_buffer->pipelineBarrier2KHR(&dependency_info);
-		buffer_barriers.clear();
+		
+		vertex_buffer_updater.submit();
+		index_buffer_updater.submit();
 	}
 
 	auto ImGuiPass::update_buffer_resource(uint32_t resource_id, vk::DeviceSize element_count, vk::DeviceSize element_size, BufferFlags usage) -> void {
