@@ -20,14 +20,22 @@ namespace edge {
 				.window = &context.get_window()
 			});
 
+		auto queue_result = gfx::device_.get_queue({
+				.required_caps = gfx::QueuePresets::kPresentGraphics,
+				.strategy = gfx::QueueSelectionStrategy::ePreferDedicated
+			});
+		EDGE_FATAL_ERROR(queue_result.has_value(), "Failed to request graphics queue for renderer.");
+		main_queue_ = std::move(queue_result.value());
+
 		gfx::RendererCreateInfo renderer_create_info{};
 		renderer_create_info.enable_hdr = true;
 		renderer_create_info.enable_vsync = false;
+		renderer_create_info.queue = &main_queue_;
 		renderer_ = gfx::Renderer::construct(renderer_create_info);
 
-		updater_ = gfx::ResourceUpdater::create(renderer_.get_queue(), 32ull * 1024ull * 1024ull, 2u);
+		updater_ = gfx::ResourceUpdater::create(main_queue_, 32ull * 1024ull * 1024ull, 2u);
 
-		uploader_ = gfx::ResourceUploader::create(128ull * 1024ull * 1024ull, 2u);
+		uploader_ = gfx::ResourceUploader::create(main_queue_, 128ull * 1024ull * 1024ull, 2u);
 		uploader_.start_streamer();
 
 		auto& pipeline_layout = renderer_.get_pipeline_layout();

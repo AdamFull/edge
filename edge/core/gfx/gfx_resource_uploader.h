@@ -101,7 +101,7 @@ namespace edge::gfx {
 		ResourceUploader(ResourceUploader&& other) noexcept;
 		auto operator=(ResourceUploader&& other) noexcept -> ResourceUploader&;
 
-		static auto create(vk::DeviceSize arena_size, uint32_t uploader_count = 1u) -> ResourceUploader;
+		static auto create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count = 1u) -> ResourceUploader;
 
 		auto start_streamer() -> void;
 		auto stop_streamer() -> void;
@@ -145,7 +145,8 @@ namespace edge::gfx {
 		auto begin_commands(ResourceSet& resource_set) -> void;
 		auto end_commands(ResourceSet& resource_set) -> void;
 
-		Queue queue_{};
+		Queue const* queue_{};
+		Owned<Queue> owned_queue_{};
 		CommandPool command_pool_{};
 
 		mi::Vector<ResourceSet> resource_sets_{};

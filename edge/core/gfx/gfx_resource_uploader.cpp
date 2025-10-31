@@ -36,6 +36,7 @@ namespace edge::gfx {
 		other.stop_streamer();
 
 		queue_ = std::move(other.queue_);
+		owned_queue_ = std::move(other.owned_queue_);
 		command_pool_ = std::move(other.command_pool_);
 		resource_sets_ = std::exchange(other.resource_sets_, {});
 		current_resource_set_.store(other.current_resource_set_.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -54,6 +55,7 @@ namespace edge::gfx {
 			other.stop_streamer();
 
 			queue_ = std::move(other.queue_);
+			owned_queue_ = std::move(other.owned_queue_);
 			command_pool_ = std::move(other.command_pool_);
 			resource_sets_ = std::exchange(other.resource_sets_, {});
 			current_resource_set_.store(other.current_resource_set_.load(std::memory_order_relaxed), std::memory_order_relaxed);
@@ -69,8 +71,9 @@ namespace edge::gfx {
 		return *this;
 	}
 
-	auto ResourceUploader::create(vk::DeviceSize arena_size, uint32_t uploader_count) -> ResourceUploader {
+	auto ResourceUploader::create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count) -> ResourceUploader {
 		ResourceUploader self{};
+		self.queue_ = &queue;
 		self._construct(arena_size, uploader_count);
 		return self;
 	}
@@ -90,7 +93,7 @@ namespace edge::gfx {
 		}
 
 		if (queue_) {
-			auto wait_result = queue_->waitIdle();
+			auto wait_result = (*queue_)->waitIdle();
 			GFX_ASSERT_MSG(wait_result == vk::Result::eSuccess, "Failed to wait queue submission finished.");
 		}
 	}
@@ -165,19 +168,24 @@ namespace edge::gfx {
 			});
 
 		// Try to get dedicated transfer queue
-		if (!queue_result) {
-			EDGE_SLOGW("No dedicated transfer queue found, trying to get graphics.");
-			// Fallback to universal
+		if (queue_result) {
+			EDGE_SLOGD("Found dedicated transfer queue for resource uploader.");
+			owned_queue_ = std::make_unique<Queue>(std::move(queue_result.value()));
+			queue_ = owned_queue_.get();
+		}
+		else {
 			queue_result = device_.get_queue({
 				.required_caps = QueuePresets::kGraphics,
 				.strategy = QueueSelectionStrategy::ePreferDedicated
 				});
-			if (!queue_result) {
-				// TODO: select any available
+			if (queue_result) {
+				EDGE_SLOGD("Found dedicated graphics queue for resource uploader.");
+				owned_queue_ = std::make_unique<Queue>(std::move(queue_result.value()));
+				queue_ = owned_queue_.get();
 			}
 		}
-		queue_ = std::move(queue_result.value());
-		command_pool_ = queue_.create_command_pool();
+
+		command_pool_ = queue_->create_command_pool();
 
 		BufferCreateInfo buffer_create_info{};
 		buffer_create_info.flags = BufferFlag::eStaging;
@@ -265,7 +273,7 @@ namespace edge::gfx {
 					submit_info.commandBufferInfoCount = 1u;
 					submit_info.pCommandBufferInfos = &command_buffer_info;
 
-					auto submit_result = queue_->submit2KHR(1u, &submit_info, VK_NULL_HANDLE);
+					auto submit_result = (*queue_)->submit2KHR(1u, &submit_info, VK_NULL_HANDLE);
 					GFX_ASSERT_MSG(submit_result == vk::Result::eSuccess, "Failed to submit uploader queue.");
 
 					if (resource_set.first_submission) {

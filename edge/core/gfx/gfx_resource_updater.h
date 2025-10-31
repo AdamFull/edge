@@ -2,8 +2,6 @@
 
 #include "gfx_resource_uploader.h"
 
-#define RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
-
 namespace edge::gfx {
 	class ResourceUpdater;
 
@@ -82,11 +80,8 @@ namespace edge::gfx {
 		auto begin_commands(ResourceSet& resource_set) -> void;
 		auto end_commands(ResourceSet& resource_set) -> void;
 
-#ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
-		Queue queue_{};
-#else
 		Queue const* queue_{ nullptr };
-#endif
+		Owned<Queue> owned_queue_{};
 		CommandPool command_pool_{};
 
 		mi::Vector<ResourceSet> resource_sets_{};

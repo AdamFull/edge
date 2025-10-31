@@ -312,7 +312,7 @@ namespace edge::gfx {
 
 	Renderer::~Renderer() {
 		if (queue_) {
-			auto wait_result = queue_->waitIdle();
+			auto wait_result = (*queue_)->waitIdle();
 			GFX_ASSERT_MSG(wait_result == vk::Result::eSuccess, "Failed waiting for queue finish all work before destruction.");
 		}
 
@@ -323,6 +323,7 @@ namespace edge::gfx {
 
 	auto Renderer::construct(const RendererCreateInfo& create_info) -> Renderer {
 		Renderer self{};
+		self.queue_ = create_info.queue;
 		self._construct(create_info);
 		return self;
 	}
@@ -514,7 +515,7 @@ namespace edge::gfx {
 		submit_info.commandBufferInfoCount = 1u;
 		submit_info.pCommandBufferInfos = &cmd_buffer_submit_info;
 
-		if (auto result = queue_->submit2KHR(1u, &submit_info, active_frame_->get_fence()); result != vk::Result::eSuccess) {
+		if (auto result = (*queue_)->submit2KHR(1u, &submit_info, active_frame_->get_fence()); result != vk::Result::eSuccess) {
 			GFX_ASSERT_MSG(false, "Failed to submit queue. Reason: {}", vk::to_string(result));
 			return;
 		}
@@ -527,7 +528,7 @@ namespace edge::gfx {
 			present_info.pSwapchains = &(*swapchain_);
 			present_info.pImageIndices = &swapchain_image_index_;
 
-			if (auto result = queue_->presentKHR(&present_info); result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
+			if (auto result = (*queue_)->presentKHR(&present_info); result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR) {
 				GFX_ASSERT_MSG(false, "Failed to present images. Reason: {}", vk::to_string(result));
 				return;
 			}
@@ -548,10 +549,6 @@ namespace edge::gfx {
 		cmd->pushConstants(pipeline_layout_.get_handle(), stage_flags, 0u, range.size(), range.data());
 	}
 
-	auto Renderer::get_queue() const noexcept -> Queue const& {
-		return queue_;
-	}
-
 	auto Renderer::get_pipeline_layout() const noexcept -> PipelineLayout const& {
 		return pipeline_layout_;
 	}
@@ -567,14 +564,7 @@ namespace edge::gfx {
 		image_descriptors_.reserve(256);
 		buffer_descriptors_.reserve(256);
 
-		auto queue_result = device_.get_queue({
-				.required_caps = QueuePresets::kPresentGraphics,
-				.strategy = QueueSelectionStrategy::ePreferDedicated
-			});
-		EDGE_FATAL_ERROR(queue_result.has_value(), "Failed to request graphics queue for renderer.");
-		queue_ = std::move(queue_result.value());
-
-		command_pool_ = queue_.create_command_pool();
+		command_pool_ = queue_->create_command_pool();
 
 		vk::QueryPoolCreateInfo query_pool_create_info{};
 		query_pool_create_info.queryCount = 1u;
@@ -672,7 +662,7 @@ namespace edge::gfx {
 
 		auto current_extent = swapchain_.get_extent();
 		if (current_extent != surface_capabilities.currentExtent) {
-			if (auto result = queue_->waitIdle(); result != vk::Result::eSuccess) {
+			if (auto result = (*queue_)->waitIdle(); result != vk::Result::eSuccess) {
 				return false;
 			}
 

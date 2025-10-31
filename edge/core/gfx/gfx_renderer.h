@@ -130,6 +130,7 @@ namespace edge::gfx {
 
 		bool enable_hdr{ false };
 		bool enable_vsync{ false };
+		Queue* queue{ nullptr };
 	};
 
 	class Renderer : public NonCopyable{
@@ -140,7 +141,7 @@ namespace edge::gfx {
 		~Renderer();
 
 		Renderer(Renderer&& other) noexcept
-			: queue_{ std::exchange(other.queue_, {}) }
+			: queue_{ std::exchange(other.queue_, nullptr) }
 			, command_pool_{ std::exchange(other.command_pool_, {}) }
 			, timestamp_query_{ std::exchange(other.timestamp_query_, {}) }
 			, timestamp_frequency_{ std::exchange(other.timestamp_frequency_, {}) }
@@ -169,7 +170,7 @@ namespace edge::gfx {
 
 		auto operator=(Renderer&& other) noexcept -> Renderer& {
 			if (this != &other) {
-				queue_ = std::exchange(other.queue_, {});
+				queue_ = std::exchange(other.queue_, nullptr);
 				command_pool_ = std::exchange(other.command_pool_, {});
 				timestamp_query_ = std::exchange(other.timestamp_query_, {});
 				timestamp_frequency_ = std::exchange(other.timestamp_frequency_, {});
@@ -222,7 +223,6 @@ namespace edge::gfx {
 
 		auto push_constant_range(CommandBuffer const& cmd, vk::ShaderStageFlags stage_flags, Span<const uint8_t> range) const -> void;
 
-		auto get_queue() const noexcept -> Queue const&;
 		auto get_pipeline_layout() const noexcept -> PipelineLayout const&;
 		auto get_swapchain() const noexcept -> Swapchain const&;
 	private:
@@ -231,7 +231,7 @@ namespace edge::gfx {
 		auto handle_surface_change(bool force = false) -> bool;
 		auto create_swapchain(const Swapchain::State& state) -> void;
 
-		Queue queue_;
+		Queue* queue_{ nullptr };
 		CommandPool command_pool_;
 		QueryPool timestamp_query_;
 		double timestamp_frequency_{ 1.0 };

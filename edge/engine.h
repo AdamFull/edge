@@ -22,6 +22,7 @@ namespace edge {
 		auto fixed_update(float delta_time) -> void override;
 	private:
 		platform::IPlatformWindow* window_{ nullptr };
+		gfx::Queue main_queue_{};
 		gfx::Renderer renderer_{};
 		gfx::ResourceUpdater updater_{};
 		gfx::ResourceUploader uploader_{};

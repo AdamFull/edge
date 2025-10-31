@@ -247,37 +247,35 @@ namespace edge::gfx {
 
 	ResourceUpdater::~ResourceUpdater() {
 		if (queue_) {
-#ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
-			auto wait_result = queue_->waitIdle();
-#else
 			auto wait_result = (*queue_)->waitIdle();
-#endif
 			GFX_ASSERT_MSG(wait_result == vk::Result::eSuccess, "Failed to wait queue submission finished.");
 		}
 	}
 
 	ResourceUpdater::ResourceUpdater(ResourceUpdater&& other) noexcept {
 		queue_ = std::move(other.queue_);
+		owned_queue_ = std::move(other.owned_queue_);
 		command_pool_ = std::move(other.command_pool_);
 		resource_sets_ = std::exchange(other.resource_sets_, {});
 		current_resource_set_ = std::move(other.current_resource_set_);
+		previously_signalled_semaphore_ = std::move(other.previously_signalled_semaphore_);
 	}
 	
 	auto ResourceUpdater::operator=(ResourceUpdater&& other) noexcept -> ResourceUpdater& {
 		if (this != &other) {
 			queue_ = std::move(other.queue_);
+			owned_queue_ = std::move(other.owned_queue_);
 			command_pool_ = std::move(other.command_pool_);
 			resource_sets_ = std::exchange(other.resource_sets_, {});
 			current_resource_set_ = std::move(other.current_resource_set_);
+			previously_signalled_semaphore_ = std::move(other.previously_signalled_semaphore_);
 		}
 		return *this;
 	}
 
 	auto ResourceUpdater::create(Queue const& queue, vk::DeviceSize arena_size, uint32_t uploader_count) -> ResourceUpdater {
 		ResourceUpdater self{};
-#ifndef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
 		self.queue_ = &queue;
-#endif
 		self._construct(arena_size, uploader_count);
 		return self;
 	}
@@ -345,12 +343,7 @@ namespace edge::gfx {
 		submit_info.pSignalSemaphoreInfos = &signal_info;
 		submit_info.commandBufferInfoCount = 1u;
 		submit_info.pCommandBufferInfos = &command_buffer_info;
-
-#ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
-		auto submit_result = queue_->submit2KHR(1u, &submit_info, VK_NULL_HANDLE);
-#else
 		auto submit_result = (*queue_)->submit2KHR(1u, &submit_info, VK_NULL_HANDLE);
-#endif
 		GFX_ASSERT_MSG(submit_result == vk::Result::eSuccess, "Failed to submit uploader queue.");
 
 		if (resource_set.first_submission) {
@@ -365,20 +358,17 @@ namespace edge::gfx {
 	}
 
 	auto ResourceUpdater::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> void {
-#ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
 		auto queue_result = device_.get_queue({
 				.required_caps = QueuePresets::kGraphics,
 				.strategy = QueueSelectionStrategy::ePreferDedicated
 			});
-		EDGE_FATAL_ERROR(queue_result.has_value(), "Queue request failed. Can't initialize resource updater.");
-		queue_ = std::move(queue_result.value());
-#endif
+		if (queue_result) {
+			EDGE_SLOGD("Found dedicated graphics queue for resource uploader.");
+			owned_queue_ = std::make_unique<Queue>(std::move(queue_result.value()));
+			queue_ = owned_queue_.get();
+		}
 		
-#ifdef RESOURCE_UPDATER_USE_INDIVIDUAL_QUEUE
-		command_pool_ = queue_.create_command_pool();
-#else
 		command_pool_ = queue_->create_command_pool();
-#endif
 
 		BufferCreateInfo buffer_create_info{};
 		buffer_create_info.flags = BufferFlag::eStaging;
