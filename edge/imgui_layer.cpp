@@ -228,9 +228,6 @@ namespace edge {
 	auto ImGuiLayer::attach() -> void {
 		ImGui::CreateContext();
 
-		ImGuiStyle& style = ImGui::GetStyle();
-		style.FontScaleDpi = window_->get_dpi_factor();
-
 		ImGuiIO& io = ImGui::GetIO();
 		IMGUI_CHECKVERSION();
 		IM_ASSERT(io.BackendRendererUserData == nullptr && "Already initialized a renderer backend!");
