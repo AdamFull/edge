@@ -5,6 +5,7 @@
 
 namespace edge::platform {
 	IPlatformContext* DesktopPlatformInput::platform_context_{ nullptr };
+	static bool gamepad_connection_states[4]{};
 
 	inline constexpr auto trnaslate_key_action(int action) -> KeyAction {
 		if (action == GLFW_PRESS)
@@ -253,6 +254,8 @@ namespace edge::platform {
 		if (platform_context_) {
 			spdlog::debug("[Desktop Window]: Gamepad[{}] {}.", jid, event == GLFW_CONNECTED ? "connected" : "disconnected");
 
+			gamepad_connection_states[jid] = event == GLFW_CONNECTED;
+
 			auto& dispatcher = platform_context_->get_event_dispatcher();
 			dispatcher.emit(events::GamepadConnectionEvent{
 				.gamepad_id = jid,
@@ -292,6 +295,18 @@ namespace edge::platform {
 		for (int32_t jid = 0; jid < GLFW_JOYSTICK_LAST + 1; ++jid) {
 			GLFWgamepadstate state;
 			if (glfwGetGamepadState(jid, &state)) {
+
+				if (!gamepad_connection_states[jid]) {
+					gamepad_connection_states[jid] = true;
+
+					auto& dispatcher = platform_context_->get_event_dispatcher();
+					dispatcher.emit(events::GamepadConnectionEvent{
+						.gamepad_id = jid,
+						.connected = true,
+						.name = glfwGetJoystickName(jid)
+						});
+				}
+
 				// Process buttons
 				for (int32_t btn = 0; btn < GLFW_GAMEPAD_BUTTON_LAST + 1; ++btn) {
 					dispatcher.emit(events::GamepadButtonEvent{
