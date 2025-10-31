@@ -8,6 +8,34 @@
 #define EDGE_LOGGER_SCOPE "ImGuiLayer"
 
 namespace edge {
+	constexpr float IMGUI_STICK_DEADZONE = 0.15f;
+	constexpr float IMGUI_TRIGGER_DEADZONE = 0.15f;
+	constexpr float IMGUI_TRIGGER_THRESHOLD = 0.15f;
+
+	// TODO: Move somewhere else
+	inline auto radial_deadzone(float x, float y, float deadzone) -> std::pair<float, float> {
+		float magnitude = std::sqrt(x * x + y * y);
+		if (magnitude < deadzone) {
+			return { 0.0f, 0.0f };
+		}
+
+		float scale = (magnitude - deadzone) / (1.0f - deadzone);
+		scale = std::min(scale, 1.0f);
+
+		float normalized_x = x / magnitude;
+		float normalized_y = y / magnitude;
+
+		return { normalized_x * scale, normalized_y * scale };
+	}
+
+	inline auto simple_deadzone(float value, float deadzone) -> float {
+		if (value < deadzone) {
+			return 0.0f;
+		}
+
+		return (value - deadzone) / (1.0f - deadzone);
+	}
+
 	inline constexpr auto translate_key_code(KeyboardKeyCode code) -> ImGuiKey {
 		switch (code)
 		{
@@ -165,6 +193,22 @@ namespace edge {
 		}
 	}
 
+	inline auto handle_axis_direction(ImGuiIO& io, ImGuiKey negative_key, ImGuiKey positive_key, float value, float threshold) -> void {
+		if (value < -threshold) {
+			io.AddKeyAnalogEvent(negative_key, true, -value);
+		}
+		else {
+			io.AddKeyAnalogEvent(negative_key, false, 0.0f);
+		}
+
+		if (value > threshold) {
+			io.AddKeyAnalogEvent(positive_key, true, value);
+		}
+		else {
+			io.AddKeyAnalogEvent(positive_key, false, 0.0f);
+		}
+	}
+
 	auto ImGuiLayer::create(platform::IPlatformContext& context) -> Owned<ImGuiLayer> {
 		Owned<ImGuiLayer> self = std::make_unique<ImGuiLayer>();
 		self->dispatcher_ = &context.get_event_dispatcher();
@@ -184,6 +228,9 @@ namespace edge {
 	auto ImGuiLayer::attach() -> void {
 		ImGui::CreateContext();
 
+		ImGuiStyle& style = ImGui::GetStyle();
+		style.FontScaleDpi = window_->get_content_scale_factor();
+
 		ImGuiIO& io = ImGui::GetIO();
 		IMGUI_CHECKVERSION();
 		IM_ASSERT(io.BackendRendererUserData == nullptr && "Already initialized a renderer backend!");
@@ -199,7 +246,8 @@ namespace edge {
 #if EDGE_PLATFORM_ANDROID
 		io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;
 #endif
-		//io.MouseDrawCursor = true;
+		io.ConfigDpiScaleFonts = true;
+		
 
 		io.Fonts->Build();
 
@@ -240,47 +288,38 @@ namespace edge {
 						ImGuiKey key = translate_gamepad_button(e.key_code);
 						if (key != ImGuiKey_None) {
 							io.AddKeyEvent(key, e.state);
+							io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 						}
 					}
 					else if constexpr (std::same_as<EventType, events::GamepadAxisEvent>) {
-						auto normalize = [](float v, float v0, float v1) -> float { return (v - v0) / (v1 - v0); };
-
 						switch (e.axis_code) {
 						case GamepadAxisCode::eLeftStick: {
-							auto x0 = normalize(e.values[0], -0.25f, -1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickLeft, x0 > 0.15f, x0);
-							auto x1 = normalize(e.values[0], 0.25f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickRight, x1 > 0.15f, x1);
-							auto y0 = normalize(e.values[1], -0.25f, -1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickUp, y0 > 0.15f, y0);
-							auto y1 = normalize(e.values[1], 0.25f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickDown, y1 > 0.15f, y1);
+							auto [x, y] = radial_deadzone(e.values[0], e.values[1], IMGUI_STICK_DEADZONE);
+							handle_axis_direction(io, ImGuiKey_GamepadLStickLeft, ImGuiKey_GamepadLStickRight, x, 0.0f);
+							handle_axis_direction(io, ImGuiKey_GamepadLStickUp, ImGuiKey_GamepadLStickDown, y, 0.0f);
 							break;
 						}
 						case GamepadAxisCode::eRightStick: {
-							auto x0 = normalize(e.values[0], -0.25f, -1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickLeft, x0 > 0.15f, x0);
-							auto x1 = normalize(e.values[0], 0.25f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickRight, x1 > 0.15f, x1);
-							auto y0 = normalize(e.values[1], -0.25f, -1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickUp, y0 > 0.15f, y0);
-							auto y1 = normalize(e.values[1], 0.25f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickDown, y1 > 0.15f, y1);
+							auto [x, y] = radial_deadzone(e.values[0], e.values[1], IMGUI_STICK_DEADZONE);
+							handle_axis_direction(io, ImGuiKey_GamepadRStickLeft, ImGuiKey_GamepadRStickRight, x, 0.0f);
+							handle_axis_direction(io, ImGuiKey_GamepadRStickUp, ImGuiKey_GamepadRStickDown, y, 0.0f);
 							break;
 						}
 						case GamepadAxisCode::eLeftTrigger: {
-							auto v = normalize(e.values[0], -0.75f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, v > 0.15f, v);
+							float value = simple_deadzone(e.values[0], IMGUI_TRIGGER_DEADZONE);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, value > IMGUI_TRIGGER_THRESHOLD, value);
 							break;
 						}
 						case GamepadAxisCode::eRightTrigger: {
-							auto v = normalize(e.values[0], -0.75f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, v > 0.15f, v);
+							float value = simple_deadzone(e.values[0], IMGUI_TRIGGER_DEADZONE);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, value > IMGUI_TRIGGER_THRESHOLD, value);
 							break;
 						}
 						default:
 							break;
 						}
+
+						io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 					}
 					else if constexpr (std::same_as<EventType, events::WindowFocusChangedEvent>) {
 						io.AddFocusEvent(e.focused);
