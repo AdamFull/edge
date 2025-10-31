@@ -21,7 +21,6 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
 
 namespace edge::gfx {
-#define EDGE_LOGGER_SCOPE "gfx::VulkanLifetime"
 	class VulkanLifetime {
 	public:
 		VulkanLifetime() {
@@ -87,8 +86,6 @@ namespace edge::gfx {
 		std::unique_ptr<vk::AllocationCallbacks> callbacks_;
 	};
 
-#undef EDGE_LOGGER_SCOPE // VulkanLifetime
-
 	vk::detail::DynamicLoader loader_;
 	vk::AllocationCallbacks const* allocator_{ nullptr };
 	Instance instance_{};
@@ -120,18 +117,17 @@ namespace edge::gfx {
 	}
 
 #undef EDGE_LOGGER_SCOPE // Validation
-
 #define EDGE_LOGGER_SCOPE "gfx::util"
 
 	namespace util {
 		inline auto enumerate_instance_layer_properties() -> mi::Vector<vk::LayerProperties> {
 			uint32_t count;
 			auto result = vk::enumerateInstanceLayerProperties(&count, nullptr);
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to enumerate instance layer properties. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "vk::enumerateInstanceLayerProperties");
 
 			mi::Vector<vk::LayerProperties> output(count);
 			result = vk::enumerateInstanceLayerProperties(&count, output.data());
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to enumerate instance layer properties. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "vk::enumerateInstanceLayerProperties");
 
 			return output;
 		}
@@ -139,11 +135,11 @@ namespace edge::gfx {
 		inline auto enumerate_instance_extension_properties(const char* layer_name) -> mi::Vector<vk::ExtensionProperties> {
 			uint32_t count;
 			auto result = vk::enumerateInstanceExtensionProperties(layer_name, &count, nullptr);
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to enumerate instance extension properties. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "vk::enumerateInstanceExtensionProperties");
 
 			mi::Vector<vk::ExtensionProperties> output(count);
 			result = vk::enumerateInstanceExtensionProperties(layer_name, &count, output.data());
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to enumerate instance extension properties. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "vk::enumerateInstanceExtensionProperties");
 
 			return output;
 		}
@@ -151,11 +147,11 @@ namespace edge::gfx {
 		inline auto enumerate_physical_devices(vk::Instance instance) -> mi::Vector<vk::PhysicalDevice> {
 			uint32_t count;
 			auto result = instance.enumeratePhysicalDevices(&count, nullptr);
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to enumerate physical devices. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "enumeratePhysicalDevices");
 
 			mi::Vector<vk::PhysicalDevice> output(count);
 			result = instance.enumeratePhysicalDevices(&count, output.data());
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to enumerate physical devices. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "enumeratePhysicalDevices");
 
 			return output;
 		}
@@ -163,11 +159,11 @@ namespace edge::gfx {
 		inline auto enumerate_device_extension_properties(vk::PhysicalDevice device, const char* layer_name = nullptr) -> mi::Vector<vk::ExtensionProperties> {
 			uint32_t count;
 			auto result = device.enumerateDeviceExtensionProperties(layer_name, &count, nullptr);
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to enumerate physical device extension properties. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "enumerateDeviceExtensionProperties");
 
 			mi::Vector<vk::ExtensionProperties> output(count);
 			result = device.enumerateDeviceExtensionProperties(layer_name, &count, output.data());
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to enumerate physical device extension properties. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "enumerateDeviceExtensionProperties");
 
 			return output;
 		}
@@ -185,11 +181,11 @@ namespace edge::gfx {
 		inline auto get_surface_formats(vk::PhysicalDevice device, vk::SurfaceKHR surface) -> mi::Vector<vk::SurfaceFormatKHR> {
 			uint32_t count;
 			auto result = device.getSurfaceFormatsKHR(surface, &count, nullptr);
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to get surface supported formats. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "getSurfaceFormatsKHR");
 
 			mi::Vector<vk::SurfaceFormatKHR> output(count);
 			result = device.getSurfaceFormatsKHR(surface, &count, output.data());
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to get surface supported formats. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "getSurfaceFormatsKHR");
 
 			return output;
 		}
@@ -197,11 +193,11 @@ namespace edge::gfx {
 		inline auto get_surface_present_modes(vk::PhysicalDevice device, vk::SurfaceKHR surface) -> mi::Vector<vk::PresentModeKHR> {
 			uint32_t count;
 			auto result = device.getSurfacePresentModesKHR(surface, &count, nullptr);
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to get surface supported present modes. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "getSurfacePresentModesKHR");
 
 			mi::Vector<vk::PresentModeKHR> output(count);
 			result = device.getSurfacePresentModesKHR(surface, &count, output.data());
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to get surface supported present modes. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "getSurfacePresentModesKHR");
 
 			return output;
 		}
@@ -209,11 +205,11 @@ namespace edge::gfx {
 		inline auto get_swapchain_images(vk::Device device, vk::SwapchainKHR swapchain) -> mi::Vector<vk::Image> {
 			uint32_t count;
 			auto result = device.getSwapchainImagesKHR(swapchain, &count, nullptr);
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to get swapchain images. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "getSwapchainImagesKHR");
 
 			mi::Vector<vk::Image> output(count);
 			result = device.getSwapchainImagesKHR(swapchain, &count, output.data());
-			EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to get swapchain images. vk::Result::e{}", vk::to_string(result));
+			EDGE_FATAL_VK_ERROR(result, "getSwapchainImagesKHR");
 
 			return output;
 		}
@@ -304,7 +300,6 @@ namespace edge::gfx {
 	}
 
 #undef EDGE_LOGGER_SCOPE // gfx util
-
 #define EDGE_LOGGER_SCOPE "gfx::Instance"
 
 	Instance::Instance(vk::Instance handle, vk::DebugUtilsMessengerEXT debug_messenger, mi::Vector<const char*>&& enabled_extensions, mi::Vector<const char*> enabled_layers)
@@ -358,7 +353,6 @@ namespace edge::gfx {
 	}
 
 #undef EDGE_LOGGER_SCOPE // Instance
-
 #define EDGE_LOGGER_SCOPE "gfx::InstanceBuilder"
 
 	auto InstanceBuilder::is_valid() const -> bool {
@@ -484,7 +478,7 @@ namespace edge::gfx {
 
 		vk::Instance instance_handle;
 		auto result = vk::createInstance(&create_info_, allocator_, &instance_handle);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::Instance. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "vk::createInstance");
 
 		// initialize the Vulkan-Hpp default dispatcher on the instance
 		VULKAN_HPP_DEFAULT_DISPATCHER.init(instance_handle);
@@ -494,33 +488,31 @@ namespace edge::gfx {
 
 		vk::DebugUtilsMessengerEXT debug_messenger{ VK_NULL_HANDLE };
 		result = instance_handle.createDebugUtilsMessengerEXT(&debug_messenger_create_info, allocator_, &debug_messenger);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::DebugUtilsMessengerEXT. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createDebugUtilsMessengerEXT");
 
 		return Instance{ instance_handle, debug_messenger, std::move(enabled_extensions), std::move(enabled_layers) };
 	}
 
 #undef EDGE_LOGGER_SCOPE // InstanceBuilder
-
 #define EDGE_LOGGER_SCOPE "gfx::Surface"
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
 	auto Surface::create(const vk::AndroidSurfaceCreateInfoKHR& create_info) -> Result<Surface> {
 		vk::SurfaceKHR surface;
 		auto result = instance_->createAndroidSurfaceKHR(&create_info, allocator_, &surface);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create android surface. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createAndroidSurfaceKHR");
 		return Surface{ surface };
 	}
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
 	auto Surface::create(const vk::Win32SurfaceCreateInfoKHR& create_info) -> Surface {
 		vk::SurfaceKHR surface;
 		auto result = instance_->createWin32SurfaceKHR(&create_info, allocator_, &surface);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create win32 surface. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createWin32SurfaceKHR");
 		return Surface{ surface };
 	}
 #endif
 
 #undef EDGE_LOGGER_SCOPE // Surface
-
 #define EDGE_LOGGER_SCOPE "gfx::Adapter"
 
 	Adapter::Adapter(vk::PhysicalDevice handle, mi::Vector<vk::ExtensionProperties>&& device_extensions)
@@ -646,7 +638,6 @@ namespace edge::gfx {
 	}
 
 #undef EDGE_LOGGER_SCOPE // Adapter
-
 #define EDGE_LOGGER_SCOPE "gfx::Device"
 
 	Device::Device(vk::Device handle, mi::Vector<const char*>&& enabled_extensions, mi::Vector<QueueFamilyInfo>&& queue_families)
@@ -794,7 +785,6 @@ namespace edge::gfx {
 	}
 
 #undef EDGE_LOGGER_SCOPE // Device
-
 #define EDGE_LOGGER_SCOPE "gfx::DeviceSelector"
 
 	auto DeviceSelector::select() -> std::tuple<Adapter, Device> {
@@ -976,7 +966,7 @@ namespace edge::gfx {
 
 		vk::Device device;
 		auto result = selected_adapter.createDevice(&create_info, allocator_, &device);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create logical device. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createDevice");
 
 		auto queue_families = build_queue_families(selected_adapter, surface_);
 
@@ -1054,6 +1044,7 @@ namespace edge::gfx {
 	}
 
 #undef EDGE_LOGGER_SCOPE // DeviceSelector
+#define EDGE_LOGGER_SCOPE "gfx::Queue"
 
 	auto Queue::create(const QueueRequest& request) -> Result<Queue> {
 		int32_t best_score = -1;
@@ -1067,7 +1058,7 @@ namespace edge::gfx {
 
 		vk::CommandPool command_pool;
 		auto result = device_->createCommandPool(&create_info, allocator_, &command_pool);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::CommandPool. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createCommandPool");
 
 		return CommandPool{ command_pool };
 	}
@@ -1077,7 +1068,7 @@ namespace edge::gfx {
 		vk::FenceCreateInfo create_info{};
 		create_info.flags = flags;
 		auto result = device_->createFence(&create_info, allocator_, &handle);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::Fence. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createFence");
 
 		return Fence{ handle };
 	}
@@ -1099,11 +1090,12 @@ namespace edge::gfx {
 		vk::SemaphoreCreateInfo create_info{};
 		create_info.pNext = &semaphore_type_create_info;
 		auto result = device_->createSemaphore(&create_info, allocator_, &handle);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::Semaphore. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createSemaphore");
 
 		return Semaphore{ handle };
 	}
 
+#undef EDGE_LOGGER_SCOPE // Queue
 #define EDGE_LOGGER_SCOPE "gfx::Image"
 
 	auto Image::create(const ImageCreateInfo& create_info) -> Image {
@@ -1167,7 +1159,7 @@ namespace edge::gfx {
 
 		vk::ImageView image_view;
 		auto result = device_->createImageView(&create_info, allocator_, &image_view);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::ImageView. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_IMAGE_ERROR(result == vk::Result::eSuccess, "createImageView", create_info_.extent, create_info_.format, range.levelCount, range.layerCount);
 
 		return ImageView{ image_view, range };
 	}
@@ -1187,6 +1179,7 @@ namespace edge::gfx {
 	}
 
 #undef EDGE_LOGGER_SCOPE // Image
+#define EDGE_LOGGER_SCOPE "gfx::Buffer"
 
 	auto Buffer::create(const BufferCreateInfo& create_info) -> Buffer {
 		vk::PhysicalDeviceProperties properties;
@@ -1258,7 +1251,7 @@ namespace edge::gfx {
 
 		vk::BufferView buffer_view;
 		auto result = device_->createBufferView(&create_info, allocator_, &buffer_view);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::BufferView. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_BUFFER_ERROR(result != vk::Result::eSuccess, "createBufferView", create_info_.size, offset, size);
 
 		return BufferView{ buffer_view, offset, size, format };
 	}
@@ -1270,6 +1263,8 @@ namespace edge::gfx {
 		return device_->getBufferAddressKHR(&address_info);
 	}
 
+#undef EDGE_LOGGER_SCOPE
+#define EDGE_LOGGER_SCOPE "gfx::MemoryAllocator"
 
 	MemoryAllocator::~MemoryAllocator() {
 		if (handle_) {
@@ -1285,7 +1280,7 @@ namespace edge::gfx {
 
 		VkImageCreateInfo image_create_info = static_cast<VkImageCreateInfo>(create_info);
 		auto result = vmaCreateImage(handle_, &image_create_info, &allocation_create_info, &image, &allocation, &allocation_info);
-		EDGE_FATAL_ERROR(result == VK_SUCCESS, "Failed to create vk::Image. vk::Result::e{}", vk::to_string(static_cast<vk::Result>(result)));
+		EDGE_FATAL_VK_ERROR(static_cast<vk::Result>(result), "vmaCreateImage");
 
 		return Image(vk::Image(image), allocation, allocation_info, create_info);
 	}
@@ -1297,7 +1292,7 @@ namespace edge::gfx {
 
 		VkBufferCreateInfo buffer_create_info = static_cast<VkBufferCreateInfo>(create_info);
 		auto result = vmaCreateBuffer(handle_, &buffer_create_info, &allocation_create_info, &buffer, &allocation, &allocation_info);
-		EDGE_FATAL_ERROR(result == VK_SUCCESS, "Failed to create vk::Buffer. vk::Result::e{}", vk::to_string(static_cast<vk::Result>(result)));
+		EDGE_FATAL_VK_ERROR(static_cast<vk::Result>(result), "vmaCreateBuffer");
 
 		return Buffer(vk::Buffer(buffer), allocation, allocation_info, create_info);
 	}
@@ -1327,6 +1322,7 @@ namespace edge::gfx {
 		range_ = mapped_range.subspan(offset_, size);
 	}
 
+#undef EDGE_LOGGER_SCOPE
 #define EDGE_LOGGER_SCOPE "gfx::Swapchain"
 
 	auto Swapchain::reset() -> void {
@@ -1378,7 +1374,7 @@ namespace edge::gfx {
 		// Choose best properties based on surface capabilities
 		vk::SurfaceCapabilitiesKHR surface_capabilities;
 		auto result = adapter_->getSurfaceCapabilitiesKHR(*surface_, &surface_capabilities);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to get surface capabilities. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "getSurfaceCapabilitiesKHR");
 
 		auto potential_extent = requested_state_.extent;
 		if (potential_extent.width == 1 || potential_extent.height == 1) {
@@ -1432,7 +1428,7 @@ namespace edge::gfx {
 
 		vk::SwapchainKHR swapchain{ VK_NULL_HANDLE };
 		result = device.createSwapchainKHR(&create_info, allocator_, &swapchain);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create swapchain. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createSwapchainKHR");
 
 		Swapchain::State new_state{
 			.image_count = create_info.minImageCount,
@@ -1724,6 +1720,7 @@ namespace edge::gfx {
 	
 
 #undef EDGE_LOGGER_SCOPE // CommandBuffer
+#define EDGE_LOGGER_SCOPE "gfx::CommandPool"
 
 	auto CommandPool::allocate_command_buffer(vk::CommandBufferLevel level) const -> CommandBuffer {
 		vk::CommandBufferAllocateInfo allocate_info{};
@@ -1733,18 +1730,24 @@ namespace edge::gfx {
 
 		vk::CommandBuffer command_buffer;
 		auto result = device_->allocateCommandBuffers(&allocate_info, &command_buffer);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::CommandBuffer. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "allocateCommandBuffers");
 
 		return CommandBuffer{ handle_, command_buffer };
 	}
 
+#undef EDGE_LOGGER_SCOPE
+#define EDGE_LOGGER_SCOPE "gfx::Sampler"
+
 	auto Sampler::create(const vk::SamplerCreateInfo& create_info) -> Sampler {
 		vk::Sampler sampler;
 		auto result = device_->createSampler(&create_info, allocator_, &sampler);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::Sampler. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createSampler");
 
 		return Sampler{ sampler, create_info };
 	}
+
+#undef EDGE_LOGGER_SCOPE
+#define EDGE_LOGGER_SCOPE "gfx::QueryPool"
 
 	auto QueryPool::create(vk::QueryType type, uint32_t query_count) -> QueryPool {
 		vk::QueryPoolCreateInfo create_info{};
@@ -1757,7 +1760,7 @@ namespace edge::gfx {
 
 		vk::QueryPool query_pool;
 		auto result = device_->createQueryPool(&create_info, allocator_, &query_pool);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::QueryPool. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createQueryPool");
 		return QueryPool(query_pool, type, create_info.queryCount);
 	}
 
@@ -1812,12 +1815,15 @@ namespace edge::gfx {
 		device_->resetQueryPoolEXT(handle_, start_query, query_count ? query_count : max_query_);
 	}
 
+#undef EDGE_LOGGER_SCOPE
+#define EDGE_LOGGER_SCOPE "gfx::PipelineCache"
+
 	auto PipelineCache::create(Span<const uint8_t> data) -> PipelineCache {
 		vk::PipelineCacheCreateInfo create_info{};
 
 		vk::PipelineCache pipeline_cache;
 		auto result = device_->createPipelineCache(&create_info, allocator_, &pipeline_cache);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::PipelineCache. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createPipelineCache");
 		return PipelineCache{ pipeline_cache };
 	}
 
@@ -1835,6 +1841,9 @@ namespace edge::gfx {
 		return device_->getPipelineCacheData(handle_, &size, data);
 	}
 
+#undef EDGE_LOGGER_SCOPE
+#define EDGE_LOGGER_SCOPE "gfx::ShaderModule"
+
 	auto ShaderModule::create(Span<const uint8_t> code) -> ShaderModule {
 		vk::ShaderModuleCreateInfo create_info{};
 		create_info.codeSize = static_cast<uint32_t>(code.size());
@@ -1842,10 +1851,13 @@ namespace edge::gfx {
 
 		vk::ShaderModule shader_module;
 		auto result = device_->createShaderModule(&create_info, allocator_, &shader_module);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::ShaderModule. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createShaderModule");
 
 		return ShaderModule{ shader_module };
 	}
+
+#undef EDGE_LOGGER_SCOPE
+#define EDGE_LOGGER_SCOPE "gfx::DescriptorSetLayoutBuilder"
 
 	auto DescriptorSetLayoutBuilder::build(vk::DescriptorSetLayoutCreateFlags flags) -> DescriptorSetLayout {
 		vk::DescriptorSetLayoutBindingFlagsCreateInfoEXT ext_create_info{};
@@ -1859,11 +1871,14 @@ namespace edge::gfx {
 		create_info.pNext = &ext_create_info;
 
 		vk::DescriptorSetLayout descriptor_set_layout;
-		auto result = device_->createDescriptorSetLayout(&create_info, VulkanLifetime::get_instance().get_allocator(), &descriptor_set_layout);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::DescriptorSetLayout. vk::Result::e{}", vk::to_string(result));
+		auto result = device_->createDescriptorSetLayout(&create_info, allocator_, &descriptor_set_layout);
+		EDGE_FATAL_VK_ERROR(result, "createDescriptorSetLayout");
 
 		return DescriptorSetLayout{ descriptor_set_layout, pool_sizes_ };
 	}
+
+#undef EDGE_LOGGER_SCOPE
+#define EDGE_LOGGER_SCOPE "gfx::PipelineLayoutBuilder"
 
 	auto PipelineLayoutBuilder::add_set_layout(DescriptorSetLayout const& set_layout) -> PipelineLayoutBuilder& {
 		descriptor_set_layouts_.push_back(set_layout.get_handle());
@@ -1878,12 +1893,13 @@ namespace edge::gfx {
 		create_info.pPushConstantRanges = push_constant_ranges_.data();
 
 		vk::PipelineLayout pipeline_layout;
-		auto result = device_->createPipelineLayout(&create_info, VulkanLifetime::get_instance().get_allocator(), &pipeline_layout);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::PipelineLayout. vk::Result::e{}", vk::to_string(result));
+		auto result = device_->createPipelineLayout(&create_info, allocator_, &pipeline_layout);
+		EDGE_FATAL_VK_ERROR(result, "createPipelineLayout");
 
 		return PipelineLayout{ pipeline_layout };
 	}
 
+#undef EDGE_LOGGER_SCOPE
 #define EDGE_LOGGER_SCOPE "gfx::DescriptorPool"
 
 	auto DescriptorPool::create(PoolSizes const& requested_sizes, uint32_t max_descriptor_sets, vk::DescriptorPoolCreateFlags flags) -> DescriptorPool {
@@ -1902,7 +1918,7 @@ namespace edge::gfx {
 
 		vk::DescriptorPool descriptor_pool;
 		auto result = device_->createDescriptorPool(&create_info, allocator_, &descriptor_pool);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::DescriptorPool. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "createDescriptorPool");
 
 		return DescriptorPool{ descriptor_pool };
 	}
@@ -1916,7 +1932,7 @@ namespace edge::gfx {
 
 		vk::DescriptorSet descriptor_set;
 		auto result = device_->allocateDescriptorSets(&alloc_info, &descriptor_set);
-		EDGE_FATAL_ERROR(result == vk::Result::eSuccess, "Failed to create vk::DescriptorSet. vk::Result::e{}", vk::to_string(result));
+		EDGE_FATAL_VK_ERROR(result, "allocateDescriptorSets");
 
 		return DescriptorSet{ descriptor_set, layout.get_pool_sizes() };
 	}
@@ -2100,6 +2116,7 @@ namespace edge::gfx {
 
 		VmaAllocator vma_allocator;
 		auto vma_result = vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator);
+		vma_result = VK_ERROR_DEVICE_LOST;
 		EDGE_FATAL_ERROR(vma_result == VK_SUCCESS, "Failed to create vulakn memory allocator. Operation result: {}.", vk::to_string(static_cast<vk::Result>(vma_result)));
 		memory_allocator_ = MemoryAllocator(vma_allocator);
 	}

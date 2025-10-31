@@ -1022,6 +1022,8 @@ namespace edge::gfx {
 		VmaAllocator handle_{ VK_NULL_HANDLE };
 	};
 
+#define EDGE_LOGGER_SCOPE "gfx::MemoryAllocation"
+
 	template<typename T>
 	class MemoryAllocation : public Handle<T> {
 	public:
@@ -1145,6 +1147,8 @@ namespace edge::gfx {
 		bool persistent_{ false };
 		mutable uint8_t* mapped_memory_{ nullptr };
 	};
+
+#undef EDGE_LOGGER_SCOPE
 
 	struct ImageCreateInfo {
 		vk::Extent3D extent{ 1u, 1u, 1u };
