@@ -229,7 +229,7 @@ namespace edge {
 		ImGui::CreateContext();
 
 		ImGuiStyle& style = ImGui::GetStyle();
-		style.FontScaleDpi = window_->get_content_scale_factor();
+		style.FontScaleDpi = window_->get_dpi_factor();
 
 		ImGuiIO& io = ImGui::GetIO();
 		IMGUI_CHECKVERSION();
