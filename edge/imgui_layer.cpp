@@ -248,34 +248,34 @@ namespace edge {
 						switch (e.axis_code) {
 						case GamepadAxisCode::eLeftStick: {
 							auto x0 = normalize(e.values[0], -0.25f, -1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickLeft, x0 > 0.1f, x0);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickLeft, x0 > 0.15f, x0);
 							auto x1 = normalize(e.values[0], 0.25f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickRight, x1 > 0.1f, x1);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickRight, x1 > 0.15f, x1);
 							auto y0 = normalize(e.values[1], -0.25f, -1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickUp, y0 > 0.1f, y0);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickUp, y0 > 0.15f, y0);
 							auto y1 = normalize(e.values[1], 0.25f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickDown, y1 > 0.1f, y1);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickDown, y1 > 0.15f, y1);
 							break;
 						}
 						case GamepadAxisCode::eRightStick: {
 							auto x0 = normalize(e.values[0], -0.25f, -1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickLeft, x0 > 0.1f, x0);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickLeft, x0 > 0.15f, x0);
 							auto x1 = normalize(e.values[0], 0.25f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickRight, x1 > 0.1f, x1);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickRight, x1 > 0.15f, x1);
 							auto y0 = normalize(e.values[1], -0.25f, -1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickUp, y0 > 0.1f, y0);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickUp, y0 > 0.15f, y0);
 							auto y1 = normalize(e.values[1], 0.25f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickDown, y1 > 0.1f, y1);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickDown, y1 > 0.15f, y1);
 							break;
 						}
 						case GamepadAxisCode::eLeftTrigger: {
 							auto v = normalize(e.values[0], -0.75f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, v > 0.1f, v);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, v > 0.15f, v);
 							break;
 						}
 						case GamepadAxisCode::eRightTrigger: {
 							auto v = normalize(e.values[0], -0.75f, 1.0f);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, v > 0.1f, v);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, v > 0.15f, v);
 							break;
 						}
 						default:
@@ -305,7 +305,7 @@ namespace edge {
 		io.DeltaTime = delta_time;
 		
 		ImGui::NewFrame();
-		//ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
 		ImGui::ShowDemoWindow();
 
