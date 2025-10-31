@@ -21,9 +21,19 @@ namespace {
 	constexpr uint8_t KTX_MAGIC[] = { 0xAB, 0x4B, 0x54, 0x58 };
 
 	template<size_t N>
-	bool matches_magic(const edge::mi::Vector<uint8_t>& data, const uint8_t(&magic)[N]) {
+	bool matches_magic(edge::Span<const uint8_t>& data, const uint8_t(&magic)[N]) {
 		if (data.size() < N) return false;
 		return std::memcmp(data.data(), magic, N) == 0;
+	}
+
+	auto get_task_priority(const edge::gfx::UploadTask& task) -> uint32_t {
+		return std::visit([](const auto& import_info) -> uint32_t {
+			using T = std::decay_t<decltype(import_info)>;
+			if constexpr (std::is_base_of_v<edge::gfx::ImportImageCommon, T>) {
+				return import_info.priority;
+			}
+			return 0u;
+			}, task.import_info);
 	}
 }
 
@@ -98,7 +108,7 @@ namespace edge::gfx {
 		}
 	}
 
-	auto ResourceUploader::load_image(ImageImportInfo&& import_info) -> uint64_t {
+	auto ResourceUploader::load_image(ImportInfo&& import_info) -> uint64_t {
 		auto next_token = task_counter_.fetch_add(1ull, std::memory_order_relaxed); 
 
 		{
@@ -222,6 +232,11 @@ namespace edge::gfx {
 			}
 
 			if (!tasks_to_process.empty()) {
+				std::stable_sort(tasks_to_process.begin(), tasks_to_process.end(),
+					[](const UploadTask& a, const UploadTask& b) {
+						return get_task_priority(a) > get_task_priority(b);
+					});
+
 				auto& resource_set = resource_sets_[current_resource_set_.load(std::memory_order_relaxed)];
 
 				begin_commands(resource_set);
@@ -304,11 +319,12 @@ namespace edge::gfx {
 	}
 
 	auto ResourceUploader::process_image(ResourceSet& resource_set, UploadTask const& task) -> UploadResult {
-		auto& import_info = std::get<ImageImportInfo>(task.import_info);
-
 		ImageUploadInfo upload_info{};
 
-		if (!import_info.path.empty()) {
+		mi::U8String zone_name{ u8"Unknown" };
+
+		if (std::holds_alternative<ImportImageFromFile>(task.import_info)) {
+			auto& import_info = std::get<ImportImageFromFile>(task.import_info);
 			fs::InputFileStream file(import_info.path, std::ios_base::binary);
 			if (!file.is_open()) {
 				EDGE_SLOGW("Failed to open file: {}", reinterpret_cast<const char*>(import_info.path.c_str()));
@@ -328,34 +344,25 @@ namespace edge::gfx {
 				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
 			}
 
-			if (matches_magic(file_data, PNG_MAGIC) || matches_magic(file_data, JPEG_MAGIC)) {
-				vk::Format format{};
-				switch (import_info.import_type)
-				{
-				case ImageImportType::eDefault: format = vk::Format::eR8G8B8A8Srgb; break;
-				case ImageImportType::eNormalMap: format = vk::Format::eR8G8B8A8Unorm; break;
-				case ImageImportType::eSingleChannel: format = vk::Format::eR8Unorm; break;
-				}
+			auto result = load_image_from_memory(resource_set, file_data, import_info.import_type);
+			if (!result) {
+				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
+			}
+			upload_info = std::move(result.value());
 
-				auto result = _load_image_stb(resource_set, file_data, format);
-				if (!result) {
-					// TODO: Handle error
-				}
-				upload_info = std::move(result.value());
-			}
-			else if (matches_magic(file_data, KTX_MAGIC)) {
-				auto result = _load_image_ktx(resource_set, file_data);
-				if (!result) {
-					// TODO: Handle error
-				}
-				upload_info = std::move(result.value());
-			}
-			else {
-				// Unsupported format
-				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotSupported, {} };
-			}
+			zone_name = import_info.path;
 		}
-		else {
+		else if (std::holds_alternative<ImportImageFromMemory>(task.import_info)) {
+			auto& import_info = std::get<ImportImageFromMemory>(task.import_info);
+			auto result = load_image_from_memory(resource_set, import_info.data, import_info.import_type);
+			if (!result) {
+				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
+			}
+			upload_info = std::move(result.value());
+		}
+		else if (std::holds_alternative<ImportImageRaw>(task.import_info)) {
+			auto& import_info = std::get<ImportImageRaw>(task.import_info);
+
 			vk::Format format{};
 			switch (import_info.import_type)
 			{
@@ -364,14 +371,12 @@ namespace edge::gfx {
 			case ImageImportType::eSingleChannel: format = vk::Format::eR8Unorm; break;
 			}
 
-			auto result = _load_image_raw(resource_set, import_info.raw.data, import_info.raw.width, import_info.raw.height, format, false);
+			auto result = _load_image_raw(resource_set, import_info.data, import_info.width, import_info.height, format);
 			if (!result) {
-				// TODO: Handle error
+				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
 			}
 			upload_info = std::move(result.value());
 		}
-
-		mi::U8String zone_name = !import_info.path.empty() ? import_info.path : u8"image";
 
 		resource_set.command_buffer.begin_marker(reinterpret_cast<const char*>(zone_name.c_str()));
 
@@ -431,7 +436,27 @@ namespace edge::gfx {
 		return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eDone, image_barrier.dst_state, std::move(image) };
 	}
 
-	auto ResourceUploader::_load_image_raw(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, uint32_t width, uint32_t height, vk::Format format, bool generate_mipmap) -> ImageLoadResult {
+	auto ResourceUploader::load_image_from_memory(ResourceSet& resource_set, Span<const uint8_t> image_data, ImageImportType import_type) -> ImageLoadResult {
+		if (matches_magic(image_data, PNG_MAGIC) || matches_magic(image_data, JPEG_MAGIC)) {
+			vk::Format format{};
+			switch (import_type)
+			{
+			case ImageImportType::eDefault: format = vk::Format::eR8G8B8A8Srgb; break;
+			case ImageImportType::eNormalMap: format = vk::Format::eR8G8B8A8Unorm; break;
+			case ImageImportType::eSingleChannel: format = vk::Format::eR8Unorm; break;
+			}
+
+			return _load_image_stb(resource_set, image_data, format);
+		}
+		else if (matches_magic(image_data, KTX_MAGIC)) {
+			return _load_image_ktx(resource_set, image_data);
+		}
+		else {
+			return std::unexpected(ImageLoadStatus::eInvalidHeader);
+		}
+	}
+
+	auto ResourceUploader::_load_image_raw(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, uint32_t width, uint32_t height, vk::Format format) -> ImageLoadResult {
 		ImageUploadInfo upload_info{};
 		upload_info.width = width;
 		upload_info.height = height;
@@ -459,7 +484,7 @@ namespace edge::gfx {
 			return std::unexpected(ImageLoadStatus::eInvalidHeader);
 		}
 
-		auto result = _load_image_raw(resource_set, { data, static_cast<size_t>(width * height * 4) }, width, height, format, false);
+		auto result = _load_image_raw(resource_set, { data, static_cast<size_t>(width * height * 4) }, width, height, format);
 		stbi_image_free(data);
 		return result;
 	}

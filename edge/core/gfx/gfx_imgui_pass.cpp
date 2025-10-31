@@ -203,11 +203,12 @@ namespace edge::gfx {
 		else if (tex->Status == ImTextureStatus_WantCreate) {
 			auto new_texture = renderer_->create_render_resource();
 
-			gfx::ImageImportInfo import_info{};
-			import_info.raw.width = tex->Width;
-			import_info.raw.height = tex->Height;
-			import_info.raw.data.resize(tex->Width * tex->Height * tex->BytesPerPixel);
-			std::memcpy(import_info.raw.data.data(), tex->Pixels, import_info.raw.data.size());
+			gfx::ImportImageRaw import_info{};
+			import_info.priority = 1000u;
+			import_info.width = tex->Width;
+			import_info.height = tex->Height;
+			import_info.data.resize(tex->Width * tex->Height * tex->BytesPerPixel);
+			std::memcpy(import_info.data.data(), tex->Pixels, import_info.data.size());
 			pending_image_uploads_[new_texture] = uploader_->load_image(std::move(import_info));
 
 			tex->SetTexID((ImTextureID)new_texture);

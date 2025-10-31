@@ -23,25 +23,34 @@ namespace edge::gfx {
 		eSingleChannel
 	};
 
-	struct BufferImportInfo {
-		bool boba;
+	struct ImportImageCommon {
+		uint32_t priority{ 0u };
+		ImageImportType import_type{ ImageImportType::eDefault };
 	};
 
-	struct ImageImportInfo {
+	struct ImportImageFromFile : ImportImageCommon {
 		mi::U8String path{};
-		ImageImportType import_type{ ImageImportType::eDefault };
-		bool generate_mipmaps{ false };
-		struct {
-			mi::Vector<uint8_t> data{};
-			uint32_t width{ 1u };
-			uint32_t height{ 1u };
-		} raw{};
 	};
+
+	struct ImportImageFromMemory : ImportImageCommon {
+		Span<const uint8_t> data{};
+	};
+
+	struct ImportImageRaw : ImportImageCommon {
+		// TODO: Add offset description
+		mi::Vector<uint8_t> data{};
+		uint32_t width{ 1u };
+		uint32_t height{ 1u };
+		uint32_t level_count{ 1u };
+		uint32_t layer_count{ 1u };
+	};
+
+	using ImportInfo = std::variant<ImportImageFromFile, ImportImageFromMemory, ImportImageRaw>;
 
 	struct UploadTask {
 		UploadType type;
 		uint64_t sync_token;
-		std::variant<BufferImportInfo, ImageImportInfo> import_info;
+		ImportInfo import_info;
 	};
 
 	struct UploadResult {
@@ -105,7 +114,7 @@ namespace edge::gfx {
 
 		auto start_streamer() -> void;
 		auto stop_streamer() -> void;
-		[[nodiscard]] auto load_image(ImageImportInfo&& import_info) -> uint64_t;
+		[[nodiscard]] auto load_image(ImportInfo&& import_info) -> uint64_t;
 
 		auto is_task_done(uint64_t task_id) const -> bool;
 		auto wait_for_task(uint64_t task_id) -> void;
@@ -139,7 +148,9 @@ namespace edge::gfx {
 		auto process_task(ResourceSet& resource_set, UploadTask const& task) -> UploadResult;
 		auto process_image(ResourceSet& resource_set, UploadTask const& task) -> UploadResult;
 		auto get_or_allocate_staging_memory(ResourceSet& resource_set, vk::DeviceSize required_memory, vk::DeviceSize required_alignment) -> BufferRange;
-		auto _load_image_raw(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, uint32_t width, uint32_t height, vk::Format format, bool generate_mipmap) -> ImageLoadResult;
+
+		auto load_image_from_memory(ResourceSet& resource_set, Span<const uint8_t> image_data, ImageImportType import_type)-> ImageLoadResult;
+		auto _load_image_raw(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, uint32_t width, uint32_t height, vk::Format format) -> ImageLoadResult;
 		auto _load_image_stb(ResourceSet& resource_set, Span<const uint8_t> image_raw_data, vk::Format format) -> ImageLoadResult;
 		auto _load_image_ktx(ResourceSet& resource_set, Span<const uint8_t> image_raw_data) -> ImageLoadResult;
 		auto begin_commands(ResourceSet& resource_set) -> void;

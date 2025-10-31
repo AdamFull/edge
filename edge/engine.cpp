@@ -52,7 +52,7 @@ namespace edge {
 
 		// Resource uploader test
 		auto resource_id = renderer_->create_render_resource();
-		auto streamer_id = uploader_.load_image({ .path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg" });
+		auto streamer_id = uploader_.load_image(gfx::ImportImageFromFile{ .path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg" });
 		pending_uploads_.push_back(std::make_pair(resource_id, streamer_id));
 
 		layers_.push_back(ImGuiLayer::create(context));
