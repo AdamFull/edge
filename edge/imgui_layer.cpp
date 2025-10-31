@@ -133,6 +133,28 @@ namespace edge {
 		}
 	}
 
+	inline constexpr auto translate_gamepad_button(GamepadKeyCode code) -> ImGuiKey {
+		switch (code)
+		{
+		case GamepadKeyCode::eButtonA: return ImGuiKey_GamepadFaceDown;
+		case GamepadKeyCode::eButtonB: return ImGuiKey_GamepadFaceRight;
+		case GamepadKeyCode::eButtonX: return ImGuiKey_GamepadFaceLeft;
+		case GamepadKeyCode::eButtonY: return ImGuiKey_GamepadFaceUp;
+		case GamepadKeyCode::eButtonLeftBumper: return ImGuiKey_GamepadL1;
+		case GamepadKeyCode::eButtonRightBumper: return ImGuiKey_GamepadR1;
+		case GamepadKeyCode::eButtonBack: return ImGuiKey_GamepadBack;
+		case GamepadKeyCode::eButtonStart: return ImGuiKey_GamepadStart;
+		case GamepadKeyCode::eButtonGuide: return ImGuiKey_None; // ImGui doesnt have a guide button
+		case GamepadKeyCode::eButtonLeftThumb: return ImGuiKey_GamepadL3;
+		case GamepadKeyCode::eButtonRightThumb: return ImGuiKey_GamepadR3;
+		case GamepadKeyCode::eButtonDPadUp: return ImGuiKey_GamepadDpadUp;
+		case GamepadKeyCode::eButtonDPadRight: return ImGuiKey_GamepadDpadRight;
+		case GamepadKeyCode::eButtonDPadDown: return ImGuiKey_GamepadDpadDown;
+		case GamepadKeyCode::eButtonDPadLeft: return ImGuiKey_GamepadDpadLeft;
+		default: return ImGuiKey_None;
+		}
+	}
+
 	inline constexpr auto translate_mouse_code(MouseKeyCode code) -> ImGuiMouseButton {
 		switch (code)
 		{
@@ -168,8 +190,16 @@ namespace edge {
 
 		io.BackendRendererUserData = (void*)this;
 		io.BackendRendererName = "edge";
+		//io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
 		io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;  // We can honor the ImDrawCmd::VtxOffset field, allowing for large meshes.
 		io.BackendFlags |= ImGuiBackendFlags_RendererHasTextures;  // We can honor ImGuiPlatformIO::Textures[] requests during render.
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+#if EDGE_PLATFORM_ANDROID
+		io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;
+#endif
+		//io.MouseDrawCursor = true;
 
 		io.Fonts->Build();
 
@@ -198,6 +228,60 @@ namespace edge {
 					else if constexpr (std::same_as<EventType, events::CharacterInputEvent>) {
 						io.AddInputCharacter(e.charcode);
 					}
+					else if constexpr (std::same_as<EventType, events::GamepadConnectionEvent>) {
+						if (e.connected) {
+							io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
+						}
+						else {
+							io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
+						}
+					}
+					else if constexpr (std::same_as<EventType, events::GamepadButtonEvent>) {
+						ImGuiKey key = translate_gamepad_button(e.key_code);
+						if (key != ImGuiKey_None) {
+							io.AddKeyEvent(key, e.state);
+						}
+					}
+					else if constexpr (std::same_as<EventType, events::GamepadAxisEvent>) {
+						auto normalize = [](float v, float v0, float v1) -> float { return (v - v0) / (v1 - v0); };
+
+						switch (e.axis_code) {
+						case GamepadAxisCode::eLeftStick: {
+							auto x0 = normalize(e.values[0], -0.25f, -1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickLeft, x0 > 0.1f, x0);
+							auto x1 = normalize(e.values[0], 0.25f, 1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickRight, x1 > 0.1f, x1);
+							auto y0 = normalize(e.values[1], -0.25f, -1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickUp, y0 > 0.1f, y0);
+							auto y1 = normalize(e.values[1], 0.25f, 1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadLStickDown, y1 > 0.1f, y1);
+							break;
+						}
+						case GamepadAxisCode::eRightStick: {
+							auto x0 = normalize(e.values[0], -0.25f, -1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickLeft, x0 > 0.1f, x0);
+							auto x1 = normalize(e.values[0], 0.25f, 1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickRight, x1 > 0.1f, x1);
+							auto y0 = normalize(e.values[1], -0.25f, -1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickUp, y0 > 0.1f, y0);
+							auto y1 = normalize(e.values[1], 0.25f, 1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadRStickDown, y1 > 0.1f, y1);
+							break;
+						}
+						case GamepadAxisCode::eLeftTrigger: {
+							auto v = normalize(e.values[0], -0.75f, 1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, v > 0.1f, v);
+							break;
+						}
+						case GamepadAxisCode::eRightTrigger: {
+							auto v = normalize(e.values[0], -0.75f, 1.0f);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, v > 0.1f, v);
+							break;
+						}
+						default:
+							break;
+						}
+					}
 					else if constexpr (std::same_as<EventType, events::WindowFocusChangedEvent>) {
 						io.AddFocusEvent(e.focused);
 					}
@@ -221,9 +305,12 @@ namespace edge {
 		io.DeltaTime = delta_time;
 		
 		ImGui::NewFrame();
+		//ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+
 		ImGui::ShowDemoWindow();
 
-		if (ImGui::Begin("Test Window")) {
+		static bool test_window{ true };
+		if (ImGui::Begin("Test Window", &test_window)) {
 			ImGui::Image(3u, ImVec2{ 512, 512 });
 			ImGui::End();
 		}
