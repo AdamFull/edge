@@ -8,13 +8,13 @@
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 
-#if defined(VKW_DEBUG) || defined(VKW_VALIDATION_LAYERS)
+#if defined(EDGE_DEBUG) && defined(EDGE_VK_USE_VALIDATION_LAYERS)
 #ifndef USE_VALIDATION_LAYERS
 #define USE_VALIDATION_LAYERS
 #endif
 #endif
 
-#if defined(USE_VALIDATION_LAYERS) && (defined(VKW_VALIDATION_LAYERS_GPU_ASSISTED) || defined(VKW_VALIDATION_LAYERS_BEST_PRACTICES) || defined(VKW_VALIDATION_LAYERS_SYNCHRONIZATION))
+#if defined(USE_VALIDATION_LAYERS) && (defined(EDGE_VK_USE_GPU_ASSISTED_VALIDATION) || defined(EDGE_VK_USE_BEST_PRACTICES_VALIDATION) || defined(EDGE_VK_USE_SYNCHRONIZATION_VALIDATION))
 #ifndef USE_VALIDATION_LAYER_FEATURES
 #define USE_VALIDATION_LAYER_FEATURES
 #endif
@@ -451,6 +451,7 @@ namespace edge::gfx {
 			enabled_extensions.push_back(extension_name);
 		}
 
+#if defined(USE_VALIDATION_LAYERS)
 		vk::ValidationFeaturesEXT validation_features_info{};
 		if ((!validation_feature_enables_.empty() || !validation_feature_disables_.empty())) {
 			validation_features_info.enabledValidationFeatureCount = static_cast<uint32_t>(validation_feature_enables_.size());
@@ -460,7 +461,9 @@ namespace edge::gfx {
 			validation_features_info.pNext = create_info_.pNext;
 			create_info_.pNext = &validation_features_info;
 		}
+#endif
 
+#if defined(EDGE_DEBUG)
 		vk::DebugUtilsMessengerCreateInfoEXT debug_messenger_create_info{};
 		if (enable_debug_utils_) {
 			debug_messenger_create_info.messageSeverity = vk::DebugUtilsMessageSeverityFlagBitsEXT::eError | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
@@ -470,6 +473,7 @@ namespace edge::gfx {
 			debug_messenger_create_info.pNext = create_info_.pNext;
 			create_info_.pNext = &debug_messenger_create_info;
 		}
+#endif
 
 		create_info_.enabledExtensionCount = static_cast<uint32_t>(enabled_extensions.size());
 		create_info_.ppEnabledExtensionNames = enabled_extensions.empty() ? nullptr : enabled_extensions.data();
@@ -487,8 +491,10 @@ namespace edge::gfx {
 		volkLoadInstance(instance_handle);
 
 		vk::DebugUtilsMessengerEXT debug_messenger{ VK_NULL_HANDLE };
+#if defined(EDGE_DEBUG)
 		result = instance_handle.createDebugUtilsMessengerEXT(&debug_messenger_create_info, allocator_, &debug_messenger);
 		EDGE_FATAL_VK_ERROR(result, "createDebugUtilsMessengerEXT");
+#endif
 
 		return Instance{ instance_handle, debug_messenger, std::move(enabled_extensions), std::move(enabled_layers) };
 	}
@@ -1708,14 +1714,21 @@ namespace edge::gfx {
 	}
 
 	auto CommandBuffer::begin_marker(std::string_view name, uint32_t color) const -> void {
+#if defined(EDGE_DEBUG)
 		vk::DebugUtilsLabelEXT label{};
 		label.pLabelName = name.data();
 		label.color = make_color(color);
 		handle_.beginDebugUtilsLabelEXT(&label);
+#else
+		(void)name;
+		(void)color;
+#endif
 	}
 
 	auto CommandBuffer::end_marker() const -> void {
+#if defined(EDGE_DEBUG)
 		handle_.endDebugUtilsLabelEXT();
+#endif
 	}
 	
 
@@ -1962,7 +1975,7 @@ namespace edge::gfx {
 
 #if defined(USE_VALIDATION_LAYERS)
 			.add_layer("VK_LAYER_KHRONOS_validation")
-#if defined(VKW_VALIDATION_LAYERS_SYNCHRONIZATION)
+#if defined(EDGE_VK_USE_SYNCHRONIZATION_VALIDATION)
 			.add_layer("VK_LAYER_KHRONOS_synchronization2")
 #endif // VULKAN_VALIDATION_LAYERS_SYNCHRONIZATION
 #endif // USE_VALIDATION_LAYERS
@@ -1970,21 +1983,21 @@ namespace edge::gfx {
 			// Enable validation features
 #if defined(USE_VALIDATION_LAYER_FEATURES)
 			//.add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eDebugPrintf)
-#if defined(VKW_VALIDATION_LAYERS_GPU_ASSISTED)
+#if defined(EDGE_VK_USE_GPU_ASSISTED_VALIDATION)
 			.add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eGpuAssistedReserveBindingSlot)
 			.add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eGpuAssisted)
 #endif
-#if defined(VKW_VALIDATION_LAYERS_BEST_PRACTICES)
+#if defined(EDGE_VK_USE_BEST_PRACTICES_VALIDATION)
 			.add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eBestPractices)
 #endif
-#if defined(VKW_VALIDATION_LAYERS_SYNCHRONIZATION)
+#if defined(EDGE_VK_USE_SYNCHRONIZATION_VALIDATION)
 			.add_validation_feature_enable(vk::ValidationFeatureEnableEXT::eSynchronizationValidation)
 #endif
 #endif
 
 			.add_extension(VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_EXTENSION_NAME)
 
-#if defined(VKW_DEBUG)
+#if defined(EDGE_DEBUG)
 			.enable_debug_utils()
 #endif
 

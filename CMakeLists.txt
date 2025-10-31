@@ -166,6 +166,11 @@ else()
     add_executable(${PROJECT_NAME} ${APP_SOURCES})
 endif()
 
+target_compile_definitions(${PROJECT_NAME} PUBLIC
+    $<$<CONFIG:Debug>:EDGE_DEBUG>
+    $<$<CONFIG:Release>:EDGE_RELEASE>
+)
+
 add_subdirectory("external")
 add_subdirectory("edge/core")
 #add_subdirectory("edge/graphics")

@@ -38,8 +38,8 @@ namespace edge {
 		uploader_ = gfx::ResourceUploader::create(main_queue_, 128ull * 1024ull * 1024ull, 2u);
 		uploader_.start_streamer();
 
-		auto& pipeline_layout = renderer_.get_pipeline_layout();
-		auto& swapchain = renderer_.get_swapchain();
+		auto& pipeline_layout = renderer_->get_pipeline_layout();
+		auto& swapchain = renderer_->get_swapchain();
 
 		gfx::ShaderLibraryInfo shader_library_info{};
 		shader_library_info.pipeline_layout = &pipeline_layout;
@@ -51,7 +51,7 @@ namespace edge {
 		window_ = &context.get_window();
 
 		// Resource uploader test
-		auto resource_id = renderer_.create_render_resource();
+		auto resource_id = renderer_->create_render_resource();
 		auto streamer_id = uploader_.load_image({ .path = u8"/assets/images/Poliigon_BrickWallReclaimed_8320_BaseColor.jpg" });
 		pending_uploads_.push_back(std::make_pair(resource_id, streamer_id));
 
@@ -61,10 +61,10 @@ namespace edge {
 		}
 
 		auto* fullscreen_pipeline = shader_library_.get_pipeline("fullscreen");
-		renderer_.add_shader_pass(gfx::TestPass::create(renderer_, 2u, fullscreen_pipeline));
+		renderer_->add_shader_pass(gfx::TestPass::create(*renderer_, 2u, fullscreen_pipeline));
 
 		auto* imgui_pipeline = shader_library_.get_pipeline("imgui");
-		renderer_.add_shader_pass(gfx::ImGuiPass::create(renderer_, updater_, uploader_, imgui_pipeline));
+		renderer_->add_shader_pass(gfx::ImGuiPass::create(*renderer_, updater_, uploader_, imgui_pipeline));
 
 		return true;
 	}
@@ -79,14 +79,14 @@ namespace edge {
 	}
 
 	auto Engine::update(float delta_time) -> void {
-		renderer_.begin_frame(delta_time);
+		renderer_->begin_frame(delta_time);
 
 		// Collect uploaded resource updates
 		for (auto it = pending_uploads_.begin(); it != pending_uploads_.end();) {
 			if (uploader_.is_task_done(it->second)) {
 				auto task_result = uploader_.get_task_result(it->second);
 				if (task_result) {
-					renderer_.setup_render_resource(it->first, std::move(std::get<gfx::Image>(task_result->data)), task_result->state);
+					renderer_->setup_render_resource(it->first, std::move(std::get<gfx::Image>(task_result->data)), task_result->state);
 				}
 
 				it = pending_uploads_.erase(it);
@@ -101,7 +101,7 @@ namespace edge {
 		}
 
 		// Execute collected render commands
-		renderer_.execute_graph(delta_time);
+		renderer_->execute_graph(delta_time);
 
 		// Synchronize main queue with uploader and updater queues
 		mi::Vector<vk::SemaphoreSubmitInfoKHR> uploader_submitted_semaphores{};
@@ -115,7 +115,7 @@ namespace edge {
 			uploader_submitted_semaphores.push_back(updater_semaphore);
 		}
 
-		renderer_.end_frame(uploader_submitted_semaphores);
+		renderer_->end_frame(uploader_submitted_semaphores);
 	}
 
 	auto Engine::fixed_update(float delta_time) -> void {

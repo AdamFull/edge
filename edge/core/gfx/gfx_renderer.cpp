@@ -321,10 +321,10 @@ namespace edge::gfx {
 		}
 	}
 
-	auto Renderer::construct(const RendererCreateInfo& create_info) -> Renderer {
-		Renderer self{};
-		self.queue_ = create_info.queue;
-		self._construct(create_info);
+	auto Renderer::construct(const RendererCreateInfo& create_info) -> Owned<Renderer> {
+		auto self = std::make_unique<Renderer>();
+		self->queue_ = create_info.queue;
+		self->_construct(create_info);
 		return self;
 	}
 

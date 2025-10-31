@@ -133,73 +133,14 @@ namespace edge::gfx {
 		Queue* queue{ nullptr };
 	};
 
-	class Renderer : public NonCopyable{
+	class Renderer : public NonCopyMovable{
 	public:
 		friend class RenderResource;
 
 		Renderer() = default;
 		~Renderer();
 
-		Renderer(Renderer&& other) noexcept
-			: queue_{ std::exchange(other.queue_, nullptr) }
-			, command_pool_{ std::exchange(other.command_pool_, {}) }
-			, timestamp_query_{ std::exchange(other.timestamp_query_, {}) }
-			, timestamp_frequency_{ std::exchange(other.timestamp_frequency_, {}) }
-			, swapchain_{ std::exchange(other.swapchain_, {}) }
-			, swapchain_image_index_{ std::exchange(other.swapchain_image_index_, {}) }
-			, swapchain_targets_{ std::exchange(other.swapchain_image_index_, {}) }
-			, frames_{ std::exchange(other.frames_, {}) }
-			, frame_number_{ std::exchange(other.frame_number_, {}) }
-			, acquired_semaphore_{ std::exchange(other.acquired_semaphore_, {}) }
-			, active_frame_{ std::exchange(other.active_frame_, {}) }
-			
-			, descriptor_layout_{ std::exchange(other.descriptor_layout_, {}) }
-			, descriptor_pool_{ std::exchange(other.descriptor_pool_, {}) }
-			, descriptor_set_{ std::exchange(other.descriptor_set_, {}) }
-			, pipeline_layout_{ std::exchange(other.pipeline_layout_, {}) }
-			, push_constant_buffer_{ std::exchange(other.push_constant_buffer_, {}) } 
-			, write_descriptor_sets_{ std::exchange(other.write_descriptor_sets_, {}) }
-			, image_descriptors_{ std::exchange(other.image_descriptors_, {}) }
-			, buffer_descriptors_{ std::exchange(other.buffer_descriptors_, {}) }
-			, test_sampler_{ std::exchange(other.test_sampler_, {}) }
-
-			, render_resources_{ std::exchange(other.render_resources_, {}) }
-			, shader_passes_{ std::exchange(other.shader_passes_, {}) }
-			, render_resource_free_list_{ std::move(other.render_resource_free_list_) } {
-		}
-
-		auto operator=(Renderer&& other) noexcept -> Renderer& {
-			if (this != &other) {
-				queue_ = std::exchange(other.queue_, nullptr);
-				command_pool_ = std::exchange(other.command_pool_, {});
-				timestamp_query_ = std::exchange(other.timestamp_query_, {});
-				timestamp_frequency_ = std::exchange(other.timestamp_frequency_, {});
-				swapchain_ = std::exchange(other.swapchain_, {});
-				swapchain_image_index_ = std::exchange(other.swapchain_image_index_, {});
-				swapchain_targets_ = std::exchange(other.swapchain_targets_, {});
-				frames_ = std::exchange(other.frames_, {});
-				frame_number_ = std::exchange(other.frame_number_, {});
-				acquired_semaphore_ = std::exchange(other.acquired_semaphore_, {});
-				active_frame_ = std::exchange(other.active_frame_, {});
-
-				descriptor_layout_ = std::exchange(other.descriptor_layout_, {});
-				descriptor_pool_ = std::exchange(other.descriptor_pool_, {});
-				descriptor_set_ = std::exchange(other.descriptor_set_, {});
-				pipeline_layout_ = std::exchange(other.pipeline_layout_, {});
-				push_constant_buffer_ = std::exchange(other.push_constant_buffer_, {});
-				write_descriptor_sets_ = std::exchange(other.write_descriptor_sets_, {});
-				image_descriptors_ = std::exchange(other.image_descriptors_, {});
-				buffer_descriptors_ = std::exchange(other.buffer_descriptors_, {});
-				test_sampler_ = std::exchange(other.test_sampler_, {});
-
-				render_resources_ = std::exchange(other.render_resources_, {});
-				shader_passes_ = std::exchange(other.shader_passes_, {});
-				render_resource_free_list_ = std::move(other.render_resource_free_list_);
-			}			
-			return *this;
-		}
-
-		static auto construct(const RendererCreateInfo& create_info) -> Renderer;
+		static auto construct(const RendererCreateInfo& create_info) -> Owned<Renderer>;
 
 		auto create_render_resource() -> uint32_t;
 		auto setup_render_resource(uint32_t resource_id, Image&& image, ResourceStateFlags initial_state) -> void;

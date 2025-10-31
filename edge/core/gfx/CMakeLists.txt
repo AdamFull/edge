@@ -18,27 +18,25 @@ endif()
 
 if(${ENABLE_VULKAN_DEBUG})
     if(${ENABLE_VULKAN_VALIDATION_LAYERS})
-        target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_VALIDATION_LAYERS)
+        target_compile_definitions(${PROJECT_NAME} PUBLIC EDGE_VK_USE_VALIDATION_LAYERS)
 
            # GPU assisted validation layers are not available on macOS.
         if(${ENABLE_VULKAN_VALIDATION_LAYERS_GPU_ASSISTED})
             if (APPLE)
                 message(WARNING "GPU assisted validation layers are not currently available on macOS.")
             else()
-                target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_VALIDATION_LAYERS_GPU_ASSISTED)
+                target_compile_definitions(${PROJECT_NAME} PUBLIC EDGE_VK_USE_GPU_ASSISTED_VALIDATION)
             endif()
         endif()
         
         if(${ENABLE_VULKAN_VALIDATION_LAYERS_BEST_PRACTICES})
-            target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_VALIDATION_LAYERS_BEST_PRACTICES)
+            target_compile_definitions(${PROJECT_NAME} PUBLIC EDGE_VK_USE_BEST_PRACTICES_VALIDATION)
         endif()
         
         if(${ENABLE_VULKAN_VALIDATION_LAYERS_SYNCHRONIZATION} AND NOT ANDROID)
-            target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_VALIDATION_LAYERS_SYNCHRONIZATION)
+            target_compile_definitions(${PROJECT_NAME} PUBLIC EDGE_VK_USE_SYNCHRONIZATION_VALIDATION)
         endif()
     endif()
-
-    target_compile_definitions(${PROJECT_NAME} PUBLIC VKW_DEBUG)
 endif()
 
 if(${ENABLE_VULKAN_PORTABILITY})
