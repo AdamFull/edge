@@ -4,6 +4,8 @@
 #include <GLFW/glfw3.h>
 
 namespace edge::platform {
+	static std::array<GLFWgamepadstate, GLFW_JOYSTICK_LAST> last_gamepad_state{};
+
 	IPlatformContext* DesktopPlatformInput::platform_context_{ nullptr };
 	static bool gamepad_connection_states[4]{};
 
@@ -291,56 +293,69 @@ namespace edge::platform {
 	auto DesktopPlatformInput::update(float delta_time) -> void {
 		auto& dispatcher = platform_context_->get_event_dispatcher();
 
+		constexpr float axis_threshold = 0.01f;
+
 		// Process gamepad inputs
-		for (int32_t jid = 0; jid < GLFW_JOYSTICK_LAST + 1; ++jid) {
+		for (int32_t jid = 0; jid < GLFW_JOYSTICK_LAST; ++jid) {
 			GLFWgamepadstate state;
 			if (glfwGetGamepadState(jid, &state)) {
+				auto& prev_state = last_gamepad_state[jid];
 
-				if (!gamepad_connection_states[jid]) {
-					gamepad_connection_states[jid] = true;
-
-					auto& dispatcher = platform_context_->get_event_dispatcher();
-					dispatcher.emit(events::GamepadConnectionEvent{
-						.gamepad_id = jid,
-						.connected = true,
-						.name = glfwGetJoystickName(jid)
-						});
-				}
-
-				// Process buttons
 				for (int32_t btn = 0; btn < GLFW_GAMEPAD_BUTTON_LAST + 1; ++btn) {
-					dispatcher.emit(events::GamepadButtonEvent{
-						.gamepad_id = jid,
-						.key_code = translate_gamepad_key_code(btn),
-						.state = state.buttons[btn] == 1
-						});
+					bool current_state = state.buttons[btn] == GLFW_PRESS;
+					bool prev_button_state = prev_state.buttons[btn] == GLFW_PRESS;
+
+					if (current_state != prev_button_state) {
+						dispatcher.emit(events::GamepadButtonEvent{
+							.gamepad_id = jid,
+							.key_code = translate_gamepad_key_code(btn),
+							.state = current_state
+							});
+					}
 				}
 
-				// Process axis
-				dispatcher.emit(events::GamepadAxisEvent{
+				float left_x_diff = std::abs(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X] - prev_state.axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
+				float left_y_diff = std::abs(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] - prev_state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
+				if (left_x_diff > axis_threshold || left_y_diff > axis_threshold) {
+					dispatcher.emit(events::GamepadAxisEvent{
 						.gamepad_id = jid,
 						.values = { state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] },
 						.axis_code = GamepadAxisCode::eLeftStick
-					});
+						});
+				}
 
-				
-				dispatcher.emit(events::GamepadAxisEvent{
+				float right_x_diff = std::abs(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X] - prev_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
+				float right_y_diff = std::abs(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] - prev_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+				if (right_x_diff > axis_threshold || right_y_diff > axis_threshold) {
+					dispatcher.emit(events::GamepadAxisEvent{
 						.gamepad_id = jid,
 						.values = { state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] },
 						.axis_code = GamepadAxisCode::eRightStick
-					});
+						});
+				}
 
-				dispatcher.emit(events::GamepadAxisEvent{
+				float left_trigger_diff = std::abs(state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] - prev_state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]);
+				if (left_trigger_diff > axis_threshold) {
+					dispatcher.emit(events::GamepadAxisEvent{
 						.gamepad_id = jid,
 						.values = { state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] },
 						.axis_code = GamepadAxisCode::eLeftTrigger
-					});
+						});
+				}
 
-				dispatcher.emit(events::GamepadAxisEvent{
+				float right_trigger_diff = std::abs(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] - prev_state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]);
+				if (right_trigger_diff > axis_threshold) {
+					dispatcher.emit(events::GamepadAxisEvent{
 						.gamepad_id = jid,
 						.values = { state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] },
 						.axis_code = GamepadAxisCode::eRightTrigger
-					});
+						});
+				}
+
+				prev_state = state;
+			}
+			else {
+				last_gamepad_state[jid] = {};
 			}
 		}
 	}
