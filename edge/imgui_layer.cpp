@@ -312,8 +312,8 @@ namespace edge {
 		static bool test_window{ true };
 		if (ImGui::Begin("Test Window", &test_window)) {
 			ImGui::Image(3u, ImVec2{ 512, 512 });
-			ImGui::End();
 		}
+		ImGui::End();
 
 		ImGui::Render();
 	}
