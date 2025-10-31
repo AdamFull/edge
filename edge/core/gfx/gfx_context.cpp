@@ -2116,8 +2116,7 @@ namespace edge::gfx {
 
 		VmaAllocator vma_allocator;
 		auto vma_result = vmaCreateAllocator(&vma_allocator_create_info, &vma_allocator);
-		vma_result = VK_ERROR_DEVICE_LOST;
-		EDGE_FATAL_ERROR(vma_result == VK_SUCCESS, "Failed to create vulakn memory allocator. Operation result: {}.", vk::to_string(static_cast<vk::Result>(vma_result)));
+		EDGE_FATAL_VK_ERROR(static_cast<vk::Result>(vma_result), "vmaCreateAllocator");
 		memory_allocator_ = MemoryAllocator(vma_allocator);
 	}
 

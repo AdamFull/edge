@@ -1,4 +1,4 @@
-﻿﻿#pragma once
+﻿#pragma once
 
 #include <mimalloc.h>
 #include <spdlog/spdlog.h>
@@ -164,6 +164,7 @@ namespace edge::foundation {
 
                 auto time_t = std::chrono::system_clock::to_time_t(timestamp);
                 auto tm = *std::localtime(&time_t);
+                oss << std::endl;
                 oss << "===============================================================\n";
                 oss << "  FATAL ERROR OCCURRED\n";
                 oss << "===============================================================\n";
