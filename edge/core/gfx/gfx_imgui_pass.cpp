@@ -252,6 +252,7 @@ namespace edge::gfx {
 			}
 
 			image_updater.submit();
+			render_resource.set_state(ResourceStateFlag::eGraphicsShader);
 
 			tex->SetStatus(ImTextureStatus_OK);
 		}
@@ -321,7 +322,9 @@ namespace edge::gfx {
 		}
 		
 		vertex_buffer_updater.submit();
+		vertex_buffer_resource.set_state(ResourceStateFlag::eGraphicsShader);
 		index_buffer_updater.submit();
+		index_buffer_resource.set_state(ResourceStateFlag::eIndexRead);
 	}
 
 	auto ImGuiPass::update_buffer_resource(uint32_t resource_id, vk::DeviceSize element_count, vk::DeviceSize element_size, BufferFlags usage) -> void {
