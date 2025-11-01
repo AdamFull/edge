@@ -182,25 +182,29 @@ namespace edge::gfx {
 	}
 
 	auto ImGuiPass::update_imgui_texture(ImTextureData* tex) -> void {
-		if (tex->Status == ImTextureStatus_OK) {
+		{
 			// Update pending resources
 			auto found = pending_image_uploads_.find(tex->GetTexID());
-			if (found == pending_image_uploads_.end()) {
+			if (found != pending_image_uploads_.end()) {
+				if (!uploader_->is_task_done(found->second)) {
+					return;
+				}
+
+				auto uploading_result = uploader_->get_task_result(found->second);
+				if (uploading_result) {
+					renderer_->setup_render_resource(found->first, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
+				}
+
+				pending_image_uploads_.erase(found);
 				return;
 			}
-
-			if (!uploader_->is_task_done(found->second)) {
-				return;
-			}
-
-			auto uploading_result = uploader_->get_task_result(found->second);
-			if (uploading_result) {
-				renderer_->setup_render_resource(found->first, std::move(std::get<gfx::Image>(uploading_result->data)), uploading_result->state);
-			}
-
-			pending_image_uploads_.erase(found);
 		}
-		else if (tex->Status == ImTextureStatus_WantCreate) {
+
+		if (tex->Status == ImTextureStatus_OK) {
+			return;
+		}
+
+		if (tex->Status == ImTextureStatus_WantCreate) {
 			auto new_texture = renderer_->create_render_resource();
 
 			gfx::ImportImageRaw import_info{};
@@ -257,8 +261,11 @@ namespace edge::gfx {
 			tex->SetStatus(ImTextureStatus_OK);
 		}
 		else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
-			// TODO: Delete resource
-			EDGE_SLOGW("ImGui wants to delete image {}, but it's not implemented yet. ", tex->GetTexID());
+			auto resource_id = tex->GetTexID();
+			renderer_->destroy_render_resource(resource_id);
+			// TODO: change ImTextureID_Invalid. In my case 0 is valid
+			tex->SetTexID(ImTextureID_Invalid);
+			tex->SetStatus(ImTextureStatus_Destroyed);
 		}
 	}
 
