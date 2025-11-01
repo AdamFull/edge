@@ -289,6 +289,12 @@ set(MI_BUILD_SHARED OFF CACHE BOOL "Build shared library" FORCE)
 set(MI_BUILD_TESTS OFF CACHE BOOL "Build test executables" FORCE)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/mimalloc")
 
+# freetype
+set(FT_DISABLE_TESTS ON CACHE BOOL "" FORCE)
+set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/freetype")
+
 # imgui
 set(IMGUI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/imgui")
 set(IMGUI_FILES
@@ -298,15 +304,17 @@ set(IMGUI_FILES
     "${IMGUI_DIR}/imgui_tables.cpp"
     "${IMGUI_DIR}/imgui_widgets.cpp"
     "${IMGUI_DIR}/misc/cpp/imgui_stdlib.cpp"
-    #"${IMGUI_DIR}/misc/freetype/imgui_freetype.cpp"
+    "${IMGUI_DIR}/misc/freetype/imgui_freetype.cpp"
 )
 
 add_library(imgui STATIC ${IMGUI_FILES})
 target_compile_definitions(imgui PUBLIC
     IMGUI_DEFINE_MATH_OPERATORS
     IMGUI_USE_WCHAR32
+    IMGUI_ENABLE_FREETYPE
 )
 target_include_directories(imgui SYSTEM PUBLIC ${IMGUI_DIR})
+target_link_libraries(imgui PRIVATE freetype)
 
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
