@@ -1,9 +1,12 @@
-#include "imgui_layer.h"
+﻿#include "imgui_layer.h"
 #include "core/platform/platform.h"
+#include "core/filesystem/filesystem.h"
 
+#include "../assets/fonts/IconsMaterialDesignIcons.h"
 #include "../assets/shaders/imgui.h"
 
 #include <imgui.h>
+#include <misc/freetype/imgui_freetype.h>
 
 #define EDGE_LOGGER_SCOPE "ImGuiLayer"
 
@@ -244,9 +247,23 @@ namespace edge {
 		io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;
 #endif
 		io.ConfigDpiScaleFonts = true;
-		
 
-		io.Fonts->Build();
+		ImFontConfig default_config{};
+		default_config.SizePixels = 22.0f;
+
+		io.Fonts->AddFontDefault(&default_config);
+
+		mi::Vector<uint8_t> file_data;
+		fs::read_whole_file(fs::path::append(u8"/assets/fonts", reinterpret_cast<const char8_t*>(FONT_ICON_FILE_NAME_MDI)), std::ios_base::binary, file_data);
+
+		ImWchar range[] = { ICON_MIN_MDI, ICON_MAX_MDI, 0 };
+
+		ImFontConfig icons_config{};
+		std::strcpy(icons_config.Name, FONT_ICON_FILE_NAME_MDI);
+		icons_config.MergeMode = true;
+		icons_config.GlyphRanges = range;
+		icons_config.FontDataOwnedByAtlas = false;
+		icon_font_ = io.Fonts->AddFontFromMemoryTTF(file_data.data(), static_cast<int32_t>(file_data.size()), 0.0f, &icons_config);
 
 		io.DisplaySize = ImVec2(static_cast<float>(window_->get_width()), static_cast<float>(window_->get_height()));
 
@@ -344,14 +361,14 @@ namespace edge {
 		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
 
 		if (ImGui::BeginMainMenuBar()) {
-			if (ImGui::BeginMenu("File"))
+			if (ImGui::BeginMenu(ICON_MDI_FILE " File"))
 			{
 				if (ImGui::MenuItem("New"));
-				if (ImGui::MenuItem("Open", "Ctrl+O"));
+				if (ImGui::MenuItem(ICON_MDI_FOLDER_OPEN " Open", "Ctrl+O"));
 				if (ImGui::BeginMenu("Open Recent")) {
 					ImGui::EndMenu();
 				}
-				if (ImGui::MenuItem("Save", "Ctrl+S"));
+				if (ImGui::MenuItem(ICON_MDI_CONTENT_SAVE " Save", "Ctrl+S"));
 				if (ImGui::MenuItem("Save As.."));
 
 				ImGui::EndMenu();
