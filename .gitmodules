@@ -31,3 +31,6 @@
 	path = external/imgui
 	url = https://github.com/ocornut/imgui.git
 	branch = docking
+[submodule "external/freetype"]
+	path = external/freetype
+	url = https://github.com/freetype/freetype
