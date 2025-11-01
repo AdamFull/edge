@@ -329,7 +329,10 @@ namespace edge::gfx {
 	}
 
 	auto Renderer::create_render_resource() -> uint32_t {
-		render_resources_.emplace_back(this);
+		if (!render_resource_free_list_.free_count()) {
+			render_resources_.emplace_back(this);
+		}
+		
 		return render_resource_free_list_.allocate();
 	}
 
@@ -392,6 +395,11 @@ namespace edge::gfx {
 
 	auto Renderer::get_render_resource(uint32_t resource_id) -> RenderResource& {
 		return render_resources_[resource_id];
+	}
+
+	auto Renderer::destroy_render_resource(uint32_t resource_id) -> void {
+		render_resources_[resource_id] = { this };
+		render_resource_free_list_.deallocate(resource_id);
 	}
 
 	auto Renderer::add_shader_pass(Owned<IShaderPass>&& pass) -> void {

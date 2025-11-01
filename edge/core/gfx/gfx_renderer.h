@@ -146,6 +146,7 @@ namespace edge::gfx {
 		auto setup_render_resource(uint32_t resource_id, Image&& image, ResourceStateFlags initial_state) -> void;
 		auto setup_render_resource(uint32_t resource_id, Buffer&& buffer, ResourceStateFlags initial_state) -> void;
 		auto get_render_resource(uint32_t resource_id) -> RenderResource&;
+		auto destroy_render_resource(uint32_t resource_id) -> void;
 
 		auto add_shader_pass(Owned<IShaderPass>&& pass) -> void;
 
