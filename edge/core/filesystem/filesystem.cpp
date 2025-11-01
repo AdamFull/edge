@@ -274,4 +274,23 @@ namespace edge::fs {
 
 		return egptr() - gptr();
 	}
+
+
+
+
+	auto read_whole_file(std::u8string_view path, std::ios_base::openmode mode, mi::Vector<uint8_t>& out) -> bool {
+		fs::InputFileStream file(path, mode);
+		if (!file.is_open()) {
+			return false;
+		}
+
+		file.seekg(0, std::ios::end);
+		auto file_size = file.tellg();
+		file.seekg(0, std::ios::beg);
+
+		out.resize(file_size);
+
+		file.read(reinterpret_cast<char*>(out.data()), file_size);
+		return true;
+	}
 }

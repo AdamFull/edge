@@ -273,4 +273,7 @@ namespace edge::fs {
 	auto get_cache_directory_path() -> std::u8string_view;
 
 	[[nodiscard]] auto walk_directory(std::u8string_view path, bool recursive = false) -> DirectoryIterator;
+
+	// Helper functions
+	auto read_whole_file(std::u8string_view path, std::ios_base::openmode mode, mi::Vector<uint8_t>& out) -> bool;
 }
