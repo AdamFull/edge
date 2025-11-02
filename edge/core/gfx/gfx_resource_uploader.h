@@ -163,6 +163,8 @@ namespace edge::gfx {
 		mi::Vector<ResourceSet> resource_sets_{};
 		std::atomic_uint32_t current_resource_set_{ 0u };
 
+		ThreadPool thread_pool_{};
+
 		std::thread uploader_thread_{};
 		std::atomic_bool should_stop_{ false };
 

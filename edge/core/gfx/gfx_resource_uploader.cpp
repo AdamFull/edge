@@ -52,29 +52,26 @@ namespace {
 
 	auto downsample_avg(
 		const uint8_t* src, int32_t src_stride,
-		uint8_t* dst, int32_t dst_width, int32_t dst_height, int32_t dst_stride) -> void {
+		uint8_t* dst, int32_t dst_width, int32_t y_start, int32_t y_end, int32_t dst_stride) -> void {
 
-		for (int32_t y = 0; y < dst_height; ++y) {
+		for (int32_t y = y_start; y < y_end; ++y) {
 			auto const* src_row0 = reinterpret_cast<const uint32_t*>(src + (y * 2) * src_stride);
 			auto const* src_row1 = reinterpret_cast<const uint32_t*>(src + (y * 2 + 1) * src_stride);
 			auto* dst_row = reinterpret_cast<uint32_t*>(dst + y * dst_stride);
 
+			// TODO: Chebk by cpuid
 #if defined(USE_AVX2)
 			for (int32_t x = dst_width; x > 0; x -= 8, dst_row += 8, src_row0 += 16, src_row1 += 16) {
 				__m256i p00 = _mm256_loadu_si256((__m256i const*)(src_row0));
 				__m256i p01 = _mm256_loadu_si256((__m256i const*)(src_row0 + 8));
 				__m256i p10 = _mm256_loadu_si256((__m256i const*)(src_row1));
 				__m256i p11 = _mm256_loadu_si256((__m256i const*)(src_row1 + 8));
-
 				__m256i avg02 = _mm256_avg_epu8(p00, p10);
 				__m256i avg13 = _mm256_avg_epu8(p01, p11);
-
 				__m256i t0 = _mm256_unpacklo_epi32(avg02, avg13);
 				__m256i t1 = _mm256_unpackhi_epi32(avg02, avg13);
-
 				__m256i shuffle0 = _mm256_unpacklo_epi32(t0, t1);
 				__m256i shuffle1 = _mm256_unpackhi_epi32(t0, t1);
-
 				__m256i final_avg = _mm256_avg_epu8(shuffle0, shuffle1);
 				final_avg = _mm256_permute4x64_epi64(final_avg, 0xD8);
 				_mm256_storeu_si256((__m256i*)dst_row, final_avg);
@@ -85,21 +82,48 @@ namespace {
 				__m128i p01 = _mm_loadu_si128((__m128i const*)(src_row0 + 4));
 				__m128i p10 = _mm_loadu_si128((__m128i const*)(src_row1));
 				__m128i p11 = _mm_loadu_si128((__m128i const*)(src_row1 + 4));
-
 				__m128i avg02 = _mm_avg_epu8(p00, p10);
 				__m128i avg13 = _mm_avg_epu8(p01, p11);
-
 				__m128i t0 = _mm_unpacklo_epi32(avg02, avg13);
 				__m128i t1 = _mm_unpackhi_epi32(avg02, avg13);
-
 				__m128i shuffle0 = _mm_unpacklo_epi32(t0, t1);
 				__m128i shuffle1 = _mm_unpackhi_epi32(t0, t1);
-
 				__m128i final_avg = _mm_avg_epu8(shuffle0, shuffle1);
 				_mm_store_si128((__m128i*)dst_row, final_avg);
 			}
 #endif
 		}
+	}
+
+	auto downsample_avg_parallel(
+		const uint8_t* src, int32_t src_stride,
+		uint8_t* dst, int32_t dst_width, int32_t dst_height, int32_t dst_stride,
+		edge::ThreadPool& pool) -> void {
+
+		int32_t num_threads = static_cast<int32_t>(pool.num_threads());
+		int32_t num_chunks = num_threads * 4;
+		int32_t chunk_size = (dst_height + num_chunks - 1) / num_chunks;
+		chunk_size = std::max(8, chunk_size);
+
+		std::atomic<int32_t> tasks_remaining{ 0 };
+		std::mutex completion_mutex;
+		std::condition_variable completion_cv;
+
+		for (int32_t y_start = 0; y_start < dst_height; y_start += chunk_size) {
+			int32_t y_end = std::min(y_start + chunk_size, dst_height);
+			tasks_remaining++;
+
+			pool.enqueue([=, &tasks_remaining, &completion_cv]() {
+				downsample_avg(src, src_stride, dst, dst_width, y_start, y_end, dst_stride);
+
+				if (--tasks_remaining == 0) {
+					completion_cv.notify_one();
+				}
+				});
+		}
+
+		std::unique_lock<std::mutex> lock(completion_mutex);
+		completion_cv.wait(lock, [&tasks_remaining] { return tasks_remaining == 0; });
 	}
 }
 
@@ -589,11 +613,12 @@ namespace edge::gfx {
 				upload_info.src_copy_offsets[mip] = image_offset;
 
 #if USE_SIMD_MIP_GENERATOR
-				downsample_avg(
+				downsample_avg_parallel(
 					byte_range.data() + upload_info.src_copy_offsets[mip - 1u],
 					src_stride,
 					byte_range.data() + image_offset,
-					mip_width, mip_height, dst_stride
+					mip_width, mip_height, dst_stride,
+					thread_pool_
 				);
 #else
 				stbir_resize_uint8_linear(
