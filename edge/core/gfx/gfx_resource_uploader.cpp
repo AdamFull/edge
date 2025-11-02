@@ -8,8 +8,10 @@
 #include <ktx.h>
 #include <ktxvulkan.h>
 
-#define __AVX2__
+#include <latch>
 
+#ifndef EDGE_PLATFORM_ANDROID
+#define __AVX2__
 #if defined(__AVX2__)
 #include <immintrin.h>
 #define USE_AVX2 1
@@ -17,15 +19,13 @@
 #include <emmintrin.h>
 #define USE_SSE2 1
 #endif
+#endif
 
 #define USE_SIMD_MIP_GENERATOR (USE_AVX2 || USE_SSE2)
 
 #define EDGE_LOGGER_SCOPE "gfx::ResourceUploader"
 
 // TODO: Add more format support
-// TODO: Add mip generation
-// TODO: Manage queue transfer ownership when copy queue is available
-// TODO: Improve queue selection logic (now it's very poor and i'm not able to select some specific families
 // TODO: Add async texture copy
 // TODO: Add async readback
 
@@ -50,6 +50,7 @@ namespace {
 			}, task.import_info);
 	}
 
+#if USE_SIMD_MIP_GENERATOR
 	inline auto comp_avg(uint32_t a, uint32_t b) -> uint32_t {
 		return (((a ^ b) & 0xfefefefeUL) >> 1) + (a & b);
 	}
@@ -143,26 +144,21 @@ namespace {
 		int32_t chunk_size = (dst_height + num_chunks - 1) / num_chunks;
 		chunk_size = std::max(8, chunk_size);
 
-		std::atomic<int32_t> tasks_remaining{ 0 };
-		std::mutex completion_mutex;
-		std::condition_variable completion_cv;
+		int32_t actual_chunks = (dst_height + chunk_size - 1) / chunk_size;
+		std::latch completion_latch(actual_chunks);
 
 		for (int32_t y_start = 0; y_start < dst_height; y_start += chunk_size) {
 			int32_t y_end = std::min(y_start + chunk_size, dst_height);
-			tasks_remaining++;
 
-			pool.enqueue([=, &tasks_remaining, &completion_cv]() {
+			pool.enqueue([=, &completion_latch]() {
 				downsample_avg(src, src_stride, dst, dst_width, y_start, y_end, dst_stride);
-
-				if (--tasks_remaining == 0) {
-					completion_cv.notify_one();
-				}
+				completion_latch.count_down();
 				});
 		}
 
-		std::unique_lock<std::mutex> lock(completion_mutex);
-		completion_cv.wait(lock, [&tasks_remaining] { return tasks_remaining == 0; });
+		completion_latch.wait();
 	}
+#endif
 }
 
 namespace edge::gfx {
@@ -329,7 +325,7 @@ namespace edge::gfx {
 		buffer_create_info.flags = BufferFlag::eStaging;
 		buffer_create_info.size = std::max(vk::DeviceSize{4096ull}, arena_size);
 		buffer_create_info.count = 1u;
-		buffer_create_info.minimal_alignment = 16u;
+		buffer_create_info.minimal_alignment = 256u;
 
 		resource_sets_.resize(uploader_count);
 		for (auto& set : resource_sets_) {
