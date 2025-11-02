@@ -50,49 +50,87 @@ namespace {
 			}, task.import_info);
 	}
 
+	inline auto comp_avg(uint32_t a, uint32_t b) -> uint32_t {
+		return (((a ^ b) & 0xfefefefeUL) >> 1) + (a & b);
+	}
+
+	inline auto comp_avg(uint32_t const* a, uint32_t const* b) -> uint32_t {
+		return comp_avg(comp_avg(a[0], a[1]), comp_avg(b[0], b[1]));
+	}
+
 	auto downsample_avg(
 		const uint8_t* src, int32_t src_stride,
 		uint8_t* dst, int32_t dst_width, int32_t y_start, int32_t y_end, int32_t dst_stride) -> void {
+
+		constexpr int32_t prefetch_distance = 16;
 
 		for (int32_t y = y_start; y < y_end; ++y) {
 			auto const* src_row0 = reinterpret_cast<const uint32_t*>(src + (y * 2) * src_stride);
 			auto const* src_row1 = reinterpret_cast<const uint32_t*>(src + (y * 2 + 1) * src_stride);
 			auto* dst_row = reinterpret_cast<uint32_t*>(dst + y * dst_stride);
 
+			if (y + prefetch_distance < y_end) {
+				_mm_prefetch(reinterpret_cast<const char*>(src + ((y + prefetch_distance) * 2) * src_stride), _MM_HINT_T0);
+				_mm_prefetch(reinterpret_cast<const char*>(src + ((y + prefetch_distance) * 2 + 1) * src_stride), _MM_HINT_T0);
+			}
+
 			// TODO: Chebk by cpuid
-#if defined(USE_AVX2)
-			for (int32_t x = dst_width; x > 0; x -= 8, dst_row += 8, src_row0 += 16, src_row1 += 16) {
-				__m256i p00 = _mm256_loadu_si256((__m256i const*)(src_row0));
-				__m256i p01 = _mm256_loadu_si256((__m256i const*)(src_row0 + 8));
-				__m256i p10 = _mm256_loadu_si256((__m256i const*)(src_row1));
-				__m256i p11 = _mm256_loadu_si256((__m256i const*)(src_row1 + 8));
-				__m256i avg02 = _mm256_avg_epu8(p00, p10);
-				__m256i avg13 = _mm256_avg_epu8(p01, p11);
-				__m256i t0 = _mm256_unpacklo_epi32(avg02, avg13);
-				__m256i t1 = _mm256_unpackhi_epi32(avg02, avg13);
-				__m256i shuffle0 = _mm256_unpacklo_epi32(t0, t1);
-				__m256i shuffle1 = _mm256_unpackhi_epi32(t0, t1);
-				__m256i final_avg = _mm256_avg_epu8(shuffle0, shuffle1);
-				final_avg = _mm256_permute4x64_epi64(final_avg, 0xD8);
-				_mm256_storeu_si256((__m256i*)dst_row, final_avg);
+			int32_t x;
+			if (edge::g_cpu_features.has_avx2) {
+				for (x = 0; x + 8 <= dst_width; x += 8) {
+					__m256i p00 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src_row0));
+					__m256i p01 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src_row0 + 8));
+					__m256i p10 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src_row1));
+					__m256i p11 = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(src_row1 + 8));
+
+					__m256i avg02 = _mm256_avg_epu8(p00, p10);
+					__m256i avg13 = _mm256_avg_epu8(p01, p11);
+
+					__m256i t0 = _mm256_unpacklo_epi32(avg02, avg13);
+					__m256i t1 = _mm256_unpackhi_epi32(avg02, avg13);
+					__m256i shuffle0 = _mm256_unpacklo_epi32(t0, t1);
+					__m256i shuffle1 = _mm256_unpackhi_epi32(t0, t1);
+					__m256i final_avg = _mm256_avg_epu8(shuffle0, shuffle1);
+					final_avg = _mm256_permute4x64_epi64(final_avg, 0xD8);
+
+					_mm256_stream_si256(reinterpret_cast<__m256i*>(dst_row + x), final_avg);
+
+					src_row0 += 16;
+					src_row1 += 16;
+				}
 			}
-#elif defined(USE_SSE2)
-			for (int32_t x = dst_width; x > 0; x -= 4, dst_row += 4, src_row0 += 8, src_row1 += 8) {
-				__m128i p00 = _mm_loadu_si128((__m128i const*)(src_row0));
-				__m128i p01 = _mm_loadu_si128((__m128i const*)(src_row0 + 4));
-				__m128i p10 = _mm_loadu_si128((__m128i const*)(src_row1));
-				__m128i p11 = _mm_loadu_si128((__m128i const*)(src_row1 + 4));
-				__m128i avg02 = _mm_avg_epu8(p00, p10);
-				__m128i avg13 = _mm_avg_epu8(p01, p11);
-				__m128i t0 = _mm_unpacklo_epi32(avg02, avg13);
-				__m128i t1 = _mm_unpackhi_epi32(avg02, avg13);
-				__m128i shuffle0 = _mm_unpacklo_epi32(t0, t1);
-				__m128i shuffle1 = _mm_unpackhi_epi32(t0, t1);
-				__m128i final_avg = _mm_avg_epu8(shuffle0, shuffle1);
-				_mm_store_si128((__m128i*)dst_row, final_avg);
+			else if (edge::g_cpu_features.has_sse2) {
+				for (x = 0; x + 4 <= dst_width; x += 4) {
+					__m128i p00 = _mm_loadu_si128(reinterpret_cast<__m128i const*>(src_row0));
+					__m128i p01 = _mm_loadu_si128(reinterpret_cast<__m128i const*>(src_row0 + 4));
+					__m128i p10 = _mm_loadu_si128(reinterpret_cast<__m128i const*>(src_row1));
+					__m128i p11 = _mm_loadu_si128(reinterpret_cast<__m128i const*>(src_row1 + 4));
+
+					__m128i avg02 = _mm_avg_epu8(p00, p10);
+					__m128i avg13 = _mm_avg_epu8(p01, p11);
+
+					__m128i t0 = _mm_unpacklo_epi32(avg02, avg13);
+					__m128i t1 = _mm_unpackhi_epi32(avg02, avg13);
+					__m128i shuffle0 = _mm_unpacklo_epi32(t0, t1);
+					__m128i shuffle1 = _mm_unpackhi_epi32(t0, t1);
+					__m128i final_avg = _mm_avg_epu8(shuffle0, shuffle1);
+
+					_mm_stream_si128(reinterpret_cast<__m128i*>(dst_row + x), final_avg);
+
+					src_row0 += 8;
+					src_row1 += 8;
+				}
 			}
-#endif
+
+			for (; x < dst_width; ++x) {
+				dst_row[x] = comp_avg(src_row0, src_row1);
+
+				src_row0 += 2;
+				src_row1 += 2;
+			}
 		}
+
+		_mm_sfence();
 	}
 
 	auto downsample_avg_parallel(
@@ -613,6 +651,7 @@ namespace edge::gfx {
 				upload_info.src_copy_offsets[mip] = image_offset;
 
 #if USE_SIMD_MIP_GENERATOR
+#if 0
 				downsample_avg_parallel(
 					byte_range.data() + upload_info.src_copy_offsets[mip - 1u],
 					src_stride,
@@ -620,6 +659,14 @@ namespace edge::gfx {
 					mip_width, mip_height, dst_stride,
 					thread_pool_
 				);
+#else
+				downsample_avg(
+					byte_range.data() + upload_info.src_copy_offsets[mip - 1u],
+					src_stride,
+					byte_range.data() + image_offset,
+					mip_width, 0, mip_height, dst_stride
+				);
+#endif
 #else
 				stbir_resize_uint8_linear(
 					byte_range.data() + upload_info.src_copy_offsets[mip - 1u],
