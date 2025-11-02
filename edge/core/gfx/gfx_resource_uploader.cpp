@@ -3,8 +3,22 @@
 #include "../filesystem/filesystem.h"
 
 #include <stb_image.h>
+#include <stb_image_resize2.h>
+
 #include <ktx.h>
 #include <ktxvulkan.h>
+
+#define __AVX2__
+
+#if defined(__AVX2__)
+#include <immintrin.h>
+#define USE_AVX2 1
+#elif defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#include <emmintrin.h>
+#define USE_SSE2 1
+#endif
+
+#define USE_SIMD_MIP_GENERATOR (USE_AVX2 || USE_SSE2)
 
 #define EDGE_LOGGER_SCOPE "gfx::ResourceUploader"
 
@@ -34,6 +48,58 @@ namespace {
 			}
 			return 0u;
 			}, task.import_info);
+	}
+
+	auto downsample_avg(
+		const uint8_t* src, int32_t src_stride,
+		uint8_t* dst, int32_t dst_width, int32_t dst_height, int32_t dst_stride) -> void {
+
+		for (int32_t y = 0; y < dst_height; ++y) {
+			auto const* src_row0 = reinterpret_cast<const uint32_t*>(src + (y * 2) * src_stride);
+			auto const* src_row1 = reinterpret_cast<const uint32_t*>(src + (y * 2 + 1) * src_stride);
+			auto* dst_row = reinterpret_cast<uint32_t*>(dst + y * dst_stride);
+
+#if defined(USE_AVX2)
+			for (int32_t x = dst_width; x > 0; x -= 8, dst_row += 8, src_row0 += 16, src_row1 += 16) {
+				__m256i p00 = _mm256_loadu_si256((__m256i const*)(src_row0));
+				__m256i p01 = _mm256_loadu_si256((__m256i const*)(src_row0 + 8));
+				__m256i p10 = _mm256_loadu_si256((__m256i const*)(src_row1));
+				__m256i p11 = _mm256_loadu_si256((__m256i const*)(src_row1 + 8));
+
+				__m256i avg02 = _mm256_avg_epu8(p00, p10);
+				__m256i avg13 = _mm256_avg_epu8(p01, p11);
+
+				__m256i t0 = _mm256_unpacklo_epi32(avg02, avg13);
+				__m256i t1 = _mm256_unpackhi_epi32(avg02, avg13);
+
+				__m256i shuffle0 = _mm256_unpacklo_epi32(t0, t1);
+				__m256i shuffle1 = _mm256_unpackhi_epi32(t0, t1);
+
+				__m256i final_avg = _mm256_avg_epu8(shuffle0, shuffle1);
+				final_avg = _mm256_permute4x64_epi64(final_avg, 0xD8);
+				_mm256_storeu_si256((__m256i*)dst_row, final_avg);
+			}
+#elif defined(USE_SSE2)
+			for (int32_t x = dst_width; x > 0; x -= 4, dst_row += 4, src_row0 += 8, src_row1 += 8) {
+				__m128i p00 = _mm_loadu_si128((__m128i const*)(src_row0));
+				__m128i p01 = _mm_loadu_si128((__m128i const*)(src_row0 + 4));
+				__m128i p10 = _mm_loadu_si128((__m128i const*)(src_row1));
+				__m128i p11 = _mm_loadu_si128((__m128i const*)(src_row1 + 4));
+
+				__m128i avg02 = _mm_avg_epu8(p00, p10);
+				__m128i avg13 = _mm_avg_epu8(p01, p11);
+
+				__m128i t0 = _mm_unpacklo_epi32(avg02, avg13);
+				__m128i t1 = _mm_unpackhi_epi32(avg02, avg13);
+
+				__m128i shuffle0 = _mm_unpacklo_epi32(t0, t1);
+				__m128i shuffle1 = _mm_unpackhi_epi32(t0, t1);
+
+				__m128i final_avg = _mm_avg_epu8(shuffle0, shuffle1);
+				_mm_store_si128((__m128i*)dst_row, final_avg);
+			}
+#endif
+		}
 	}
 }
 
@@ -482,6 +548,70 @@ namespace edge::gfx {
 		auto* data = stbi_load_from_memory(image_raw_data.data(), static_cast<int32_t>(image_raw_data.size()), &width, &height, &channel_count, STBI_rgb_alpha);
 		if (!data) {
 			return std::unexpected(ImageLoadStatus::eInvalidHeader);
+		}
+
+		// This one works too slow, better do it on gpu
+		bool generate_mips{ true };
+		if (generate_mips) {
+			auto begin = std::chrono::high_resolution_clock::now();
+
+			ImageUploadInfo upload_info{};
+			upload_info.width = static_cast<uint32_t>(width);
+			upload_info.height = static_cast<uint32_t>(height);
+			upload_info.depth = 1u;
+			upload_info.layer_count = 1u;
+			upload_info.face_count = 1u;
+			upload_info.level_count = static_cast<uint32_t>(std::floor(std::log2((std::max)(width, height)))) + 1u;
+			upload_info.format = format;
+
+			auto total_image_size = util::calculate_mipchain_size(format, width, height, 1u, upload_info.level_count);
+			uint64_t image_offset{ 0ull };
+
+			upload_info.src_copy_offsets.resize(upload_info.level_count);
+			upload_info.memory_range = get_or_allocate_staging_memory(resource_set, total_image_size, 4ull);
+			auto byte_range = upload_info.memory_range.get_range();
+
+			upload_info.src_copy_offsets[0] = image_offset;
+			auto mip0_size = util::calculate_mipchain_size(format, width, height, 1u, 1u);
+			std::memcpy(byte_range.data(), data, mip0_size);
+			image_offset += mip0_size;
+
+			stbi_image_free(data);
+			
+			for (int32_t mip = 1; mip < static_cast<int32_t>(upload_info.level_count); ++mip) {
+				auto mip_width = std::max(1, width >> mip);
+				auto mip_height = std::max(1, height >> mip);
+				auto prev_mip_width = std::max(1, width >> (mip - 1));
+				auto prev_mip_height = std::max(1, height >> (mip - 1));
+				int32_t src_stride = prev_mip_width * 4;
+				int32_t dst_stride = mip_width * 4;
+
+				upload_info.src_copy_offsets[mip] = image_offset;
+
+#if USE_SIMD_MIP_GENERATOR
+				downsample_avg(
+					byte_range.data() + upload_info.src_copy_offsets[mip - 1u],
+					src_stride,
+					byte_range.data() + image_offset,
+					mip_width, mip_height, dst_stride
+				);
+#else
+				stbir_resize_uint8_linear(
+					byte_range.data() + upload_info.src_copy_offsets[mip - 1u],
+					prev_mip_width, prev_mip_height, src_stride,
+					byte_range.data() + image_offset,
+					mip_width, mip_height, dst_stride,
+					STBIR_RGBA);
+#endif
+
+				
+				image_offset += util::calculate_mipchain_size(format, mip_width, mip_height, 1u, 1u);
+			}
+
+			auto end = std::chrono::high_resolution_clock::now();
+			EDGE_SLOGI("Generated mip chain for {}x{} image for: {} ms", width, height, std::chrono::duration_cast<std::chrono::milliseconds>(end - begin).count());
+
+			return upload_info;
 		}
 
 		auto result = _load_image_raw(resource_set, { data, static_cast<size_t>(width * height * 4) }, width, height, format);
