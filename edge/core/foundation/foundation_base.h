@@ -10,6 +10,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
+#include <queue>
 #include <source_location>
 
 #if EDGE_PLATFORM_ANDROID
@@ -96,6 +97,12 @@ namespace edge::mi {
 
 	template<typename K, typename Hasher = std::hash<K>, typename KeyEq = std::equal_to<K>, typename Alloc = mi_stl_allocator<K>>
 	using HashSet = std::unordered_set<K, Hasher, KeyEq, Alloc>;
+
+    template<typename T>
+    using Deque = std::deque<T, mi_stl_allocator<T>>;
+
+    template<typename T>
+    using Queue = std::queue<T, Deque<T>>;
 
     template<std::integral T = uint32_t>
     class FreeList {
