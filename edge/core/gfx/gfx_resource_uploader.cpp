@@ -651,7 +651,7 @@ namespace edge::gfx {
 				upload_info.src_copy_offsets[mip] = image_offset;
 
 #if USE_SIMD_MIP_GENERATOR
-#if 0
+#if 1
 				downsample_avg_parallel(
 					byte_range.data() + upload_info.src_copy_offsets[mip - 1u],
 					src_stride,
