@@ -19,6 +19,7 @@
 #include <future>
 #include <condition_variable>
 #include <mutex>
+#include <latch>
 
 #ifndef EDGE_PLATFORM_ANDROID
 #if defined(_MSC_VER)
