@@ -14,6 +14,12 @@
 
 #include <fstream>
 
+// For thread pool
+#include <thread>
+#include <future>
+#include <condition_variable>
+#include <mutex>
+
 namespace edge {
     inline constexpr uint64_t aligned_size(uint64_t size, uint64_t alignment) {
         return (size + alignment - 1ull) & ~(alignment - 1ull);
@@ -610,169 +616,171 @@ namespace edge {
     template<typename _Ty>
     concept Arithmetic = std::is_arithmetic_v<_Ty>;
 
-	template<typename T, size_t Capacity = 16>
-	class FixedVector {
-	public:
-		using value_type = T;
-		using size_type = size_t;
-		using reference = T&;
-		using const_reference = const T&;
-		using iterator = T*;
-		using const_iterator = const T*;
+    class ThreadPool {
+    public:
+        explicit ThreadPool(size_t num_threads = std::thread::hardware_concurrency())
+            : stop(false), active_tasks(0) {
 
-        FixedVector() noexcept : size_(0) {}
+            workers.reserve(num_threads);
+            worker_queues.resize(num_threads);
 
-        FixedVector(std::initializer_list<T> init) : size_(0) {
-            if (init.size() > Capacity) throw std::length_error("FixedVector: too many initializers");
-            for (const auto& v : init) emplace_back(v);
-        }
+            for (size_t i = 0; i < num_threads; ++i) {
+                worker_mutexes.emplace_back(std::make_unique<std::mutex>());
+            }
 
-        ~FixedVector() { clear(); }
+            for (size_t i = 0; i < num_threads; ++i) {
+                workers.emplace_back([this, i, num_threads] {
+                    while (true) {
+                        std::function<void()> task;
 
-        FixedVector(const FixedVector& other) : size_(0) {
-            for (size_type i = 0; i < other.size_; ++i) {
-                emplace_back(other[i]);
+                        // Try to get task from own queue first
+                        {
+                            std::unique_lock<std::mutex> lock(*worker_mutexes[i]);
+                            if (!worker_queues[i].empty()) {
+                                task = std::move(worker_queues[i].front());
+                                worker_queues[i].pop_front();
+                            }
+                        }
+
+                        // If own queue is empty, try work stealing
+                        if (!task) {
+                            for (size_t j = 0; j < num_threads; ++j) {
+                                if (j == i) continue;
+
+                                std::unique_lock<std::mutex> lock(*worker_mutexes[j], std::try_to_lock);
+                                if (lock.owns_lock() && !worker_queues[j].empty()) {
+                                    // Steal from back (opposite end) for better cache locality
+                                    task = std::move(worker_queues[j].back());
+                                    worker_queues[j].pop_back();
+                                    break;
+                                }
+                            }
+                        }
+
+                        // If still no task, wait on global queue
+                        if (!task) {
+                            std::unique_lock<std::mutex> lock(global_mutex);
+                            global_cv.wait(lock, [this] {
+                                return stop || !global_queue.empty();
+                                });
+
+                            if (stop && global_queue.empty()) {
+                                return;
+                            }
+
+                            if (!global_queue.empty()) {
+                                task = std::move(global_queue.front());
+                                global_queue.pop_front();
+                            }
+                        }
+
+                        if (task) {
+                            task();
+                            --active_tasks;
+                            completion_cv.notify_all();
+                        }
+                    }
+                    });
             }
         }
 
-        auto operator=(const FixedVector& other) -> FixedVector& {
-            if (this != &other) {
-                clear();
-                for (size_type i = 0; i < other.size_; ++i) {
-                    emplace_back(other[i]);
+        template<class F>
+        void enqueue(F&& f) {
+            ++active_tasks;
+            {
+                std::unique_lock<std::mutex> lock(global_mutex);
+                global_queue.emplace_back(std::forward<F>(f));
+            }
+            global_cv.notify_one();
+        }
+
+        template<class F, class... Args>
+        auto submit(F&& f, Args&&... args) -> std::future<typename std::invoke_result<F(Args...)>::type> {
+            using return_type = typename std::invoke_result<F(Args...)>::type;
+
+            auto task = std::make_shared<std::packaged_task<return_type()>>(
+                std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+            );
+
+            std::future<return_type> result = task->get_future();
+
+            ++active_tasks;
+            {
+                std::unique_lock<std::mutex> lock(global_mutex);
+                global_queue.emplace_back([task]() { (*task)(); });
+            }
+            global_cv.notify_one();
+
+            return result;
+        }
+
+        template<class F>
+        void parallel_for(int32_t start, int32_t end, F&& func, int32_t min_per_thread = 1) {
+            if (end <= start) return;
+
+            int32_t range = end - start;
+            int32_t num_workers = static_cast<int32_t>(workers.size());
+            int32_t chunk_size = std::max(min_per_thread, (range + num_workers - 1) / num_workers);
+
+            std::atomic<int32_t> tasks_remaining{ 0 };
+            std::mutex completion_mutex;
+            std::condition_variable local_cv;
+
+            for (int32_t i = start; i < end; i += chunk_size) {
+                int32_t chunk_end = std::min(i + chunk_size, end);
+                ++tasks_remaining;
+
+                enqueue([i, chunk_end, &func, &tasks_remaining, &local_cv]() {
+                    func(i, chunk_end);
+
+                    if (--tasks_remaining == 0) {
+                        local_cv.notify_one();
+                    }
+                    });
+            }
+
+            std::unique_lock<std::mutex> lock(completion_mutex);
+            local_cv.wait(lock, [&tasks_remaining] { return tasks_remaining == 0; });
+        }
+
+        void wait() {
+            std::unique_lock<std::mutex> lock(global_mutex);
+            completion_cv.wait(lock, [this] {
+                return active_tasks == 0;
+                });
+        }
+
+        size_t num_threads() const {
+            return workers.size();
+        }
+
+        ~ThreadPool() {
+            {
+                std::unique_lock<std::mutex> lock(global_mutex);
+                stop = true;
+            }
+            global_cv.notify_all();
+
+            for (std::thread& worker : workers) {
+                if (worker.joinable()) {
+                    worker.join();
                 }
             }
-            return *this;
         }
-
-        FixedVector(FixedVector&& other) noexcept : size_(0) {
-            for (size_type i = 0; i < other.size_; ++i) {
-                emplace_back(std::move(other[i]));
-            }
-            other.clear();
-        }
-
-        auto operator=(FixedVector&& other) noexcept -> FixedVector& {
-            if (this != &other) {
-                clear();
-                for (size_type i = 0; i < other.size_; ++i) {
-                    emplace_back(std::move(other[i]));
-                }
-                other.clear();
-            }
-            return *this;
-        }
-	
-        // Capacity
-        constexpr auto capacity() const noexcept -> size_type { return Capacity; }
-        constexpr auto size() const noexcept -> size_type { return size_; }
-        constexpr auto empty() const noexcept -> bool { return size_ == 0; }
-        constexpr auto full() const noexcept -> bool { return size_ == Capacity; }
-
-        // Access
-        auto operator[](size_type i) noexcept -> reference { return *std::launder(reinterpret_cast<T*>(&data_[i])); }
-        auto operator[](size_type i) const noexcept -> const_reference { return *std::launder(reinterpret_cast<const T*>(&data_[i])); }
-
-        auto at(size_type i) -> reference {
-            if (i >= size_) throw std::out_of_range("FixedVector: out of range");
-            return (*this)[i];
-        }
-
-        auto at(size_type i) const -> const_reference {
-            if (i >= size_) throw std::out_of_range("FixedVector: out of range");
-            return (*this)[i];
-        }
-
-        auto front() noexcept -> reference { return (*this)[0]; }
-        auto front() const noexcept -> const_reference { return (*this)[0]; }
-        auto back() noexcept -> reference { return (*this)[size_ - 1]; }
-        auto back() const noexcept -> const_reference { return (*this)[size_ - 1]; }
-
-        // Iterators
-        auto begin() noexcept -> iterator { return &(*this)[0]; }
-        auto begin() const noexcept -> const_iterator { return &(*this)[0]; }
-        auto end() noexcept -> iterator { return &(*this)[size_]; }
-        auto end() const noexcept -> const_iterator { return &(*this)[size_]; }
-
-        auto data() noexcept -> T* { return reinterpret_cast<T*>(data_.data()); }
-
-        template<typename... _Args>
-        auto emplace(const_iterator pos, _Args&&... args) -> iterator {
-            size_type index = pos - begin();
-            if (size_ >= Capacity)
-                throw std::length_error("FixedVector: capacity exceeded");
-            if (index > size_)
-                throw std::out_of_range("FixedVector: insert position out of range");
-
-            if (size_ > 0) {
-                ::new (&data_[size_]) T(std::move((*this)[size_ - 1]));
-                for (size_type i = size_ - 1; i > index; --i) {
-                    (*this)[i] = std::move((*this)[i - 1]);
-                }
-                (*this)[index].~T();
-            }
-
-            ::new (&data_[index]) T(std::forward<_Args>(args)...);
-            ++size_;
-            return begin() + index;
-        }
-
-        auto insert(const_iterator pos, const T& value) -> iterator {
-            return emplace(pos, value);
-        }
-
-        auto insert(const_iterator pos, T&& value) -> iterator {
-            return emplace(pos, std::move(value));
-        }
-
-        // Modifiers
-        auto push_back(const T& value) -> void {
-            emplace_back(value);
-        }
-
-        auto push_back(T&& value) -> void {
-            emplace_back(std::move(value));
-        }
-
-        template <typename... Args>
-        auto emplace_back(Args&&... args) -> reference {
-            if (size_ >= Capacity)
-                throw std::length_error("FixedVector: capacity exceeded");
-            ::new (&data_[size_]) T(std::forward<Args>(args)...);
-            ++size_;
-            return back();
-        }
-
-        auto pop_back() -> void {
-            if (size_ == 0)
-                throw std::out_of_range("FixedVector: pop_back on empty");
-            --size_;
-            (*this)[size_].~T();
-        }
-
-        auto clear() noexcept -> void {
-            while (size_ > 0) {
-                pop_back();
-            }
-        }
-
-        constexpr auto as_span() noexcept -> Span<T> {
-            return Span<T>(begin(), size());
-        }
-
-        constexpr auto as_span() const noexcept -> Span<const T> {
-            return Span<const T>(begin(), size());
-        }
-
-        constexpr operator Span<T>() noexcept { return as_span(); }
-        constexpr operator Span<const T>() const noexcept { return as_span(); }
 
     private:
-        using storage_type = std::aligned_storage_t<sizeof(T), alignof(T)>;
-        std::array<storage_type, Capacity> data_;
-        size_type size_;
+        edge::mi::Vector<std::thread> workers;
+        edge::mi::Vector<edge::mi::Deque<std::function<void()>>> worker_queues;
+        edge::mi::Vector<std::unique_ptr<std::mutex>> worker_mutexes;
+        edge::mi::Deque<std::function<void()>> global_queue;
 
-	};
+        std::mutex global_mutex;
+        std::condition_variable global_cv;
+        std::condition_variable completion_cv;
+
+        std::atomic<bool> stop;
+        std::atomic<int32_t> active_tasks;
+    };
 
     class NonCopyable {
     protected:
