@@ -20,6 +20,12 @@
 #include <condition_variable>
 #include <mutex>
 
+#if defined(_MSC_VER)
+#include <intrin.h>
+#elif defined(__GNUC__) || defined(__clang__)
+#include <cpuid.h>
+#endif
+
 namespace edge {
     inline constexpr uint64_t aligned_size(uint64_t size, uint64_t alignment) {
         return (size + alignment - 1ull) & ~(alignment - 1ull);
@@ -615,6 +621,41 @@ namespace edge {
 
     template<typename _Ty>
     concept Arithmetic = std::is_arithmetic_v<_Ty>;
+
+    struct CPUFeatures {
+        bool has_sse2 = false;
+        bool has_avx = false;
+        bool has_avx2 = false;
+
+        static auto detect() -> CPUFeatures {
+            CPUFeatures features;
+
+#if defined(_MSC_VER)
+            int cpu_info[4];
+            __cpuid(cpu_info, 1);
+            features.has_sse2 = (cpu_info[3] & (1 << 26)) != 0;
+            features.has_avx = (cpu_info[2] & (1 << 28)) != 0;
+
+            __cpuidex(cpu_info, 7, 0);
+            features.has_avx2 = (cpu_info[1] & (1 << 5)) != 0;
+#elif defined(__GNUC__) || defined(__clang__)
+            unsigned int eax, ebx, ecx, edx;
+
+            if (__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
+                features.has_sse2 = (edx & bit_SSE2) != 0;
+                features.has_avx = (ecx & bit_AVX) != 0;
+            }
+
+            if (__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) {
+                features.has_avx2 = (ebx & bit_AVX2) != 0;
+            }
+#endif
+
+            return features;
+        }
+    };
+
+    extern CPUFeatures g_cpu_features;
 
     class ThreadPool {
     public:
