@@ -8,8 +8,6 @@
 #include <ktx.h>
 #include <ktxvulkan.h>
 
-#include <latch>
-
 #ifndef EDGE_PLATFORM_ANDROID
 #define __AVX2__
 #if defined(__AVX2__)
@@ -346,7 +344,8 @@ namespace edge::gfx {
 			mi::Vector<UploadTask> tasks_to_process;
 			{
 				std::unique_lock lock(pending_tasks_mutex_);
-				pending_tasks_cv_.wait(lock, [&] { return !pending_tasks_.empty() || should_stop_.load(std::memory_order_acquire); });
+				pending_tasks_cv_.wait_for(lock, std::chrono::milliseconds(10), 
+					[&] { return !pending_tasks_.empty() || should_stop_.load(std::memory_order_acquire); });
 
 				if (should_stop_.load(std::memory_order_acquire)) {
 					break;
@@ -363,7 +362,7 @@ namespace edge::gfx {
 
 				auto& resource_set = resource_sets_[current_resource_set_.load(std::memory_order_relaxed)];
 
-				begin_commands(resource_set);
+				
 
 				// Process resources
 				for (auto const& task : tasks_to_process) {
@@ -380,10 +379,10 @@ namespace edge::gfx {
 					token_completion_cv_.notify_all();
 				}
 
-				end_commands(resource_set);
+				// Submit commands only if needed
+				if (resource_set.recording) {
+					end_commands(resource_set);
 
-				// Submit commands
-				{
 					std::lock_guard lock(semaphore_mutex_);
 
 					uint64_t wait_value = resource_set.counter.fetch_add(1, std::memory_order_relaxed);
@@ -449,20 +448,12 @@ namespace edge::gfx {
 
 		if (std::holds_alternative<ImportImageFromFile>(task.import_info)) {
 			auto& import_info = std::get<ImportImageFromFile>(task.import_info);
-			fs::InputFileStream file(import_info.path, std::ios_base::binary);
-			if (!file.is_open()) {
+
+			mi::Vector<uint8_t> file_data;
+			if (!fs::read_whole_file(import_info.path, std::ios_base::binary, file_data)) {
 				EDGE_SLOGW("Failed to open file: {}", reinterpret_cast<const char*>(import_info.path.c_str()));
 				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotFound, {} };
 			}
-
-			file.seekg(0, std::ios::end);
-			auto file_size = file.tellg();
-			file.seekg(0, std::ios::beg);
-
-			mi::Vector<uint8_t> file_data;
-			file_data.resize(file_size);
-
-			file.read(reinterpret_cast<char*>(file_data.data()), file_size);
 
 			if (file_data.empty()) {
 				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
@@ -502,8 +493,6 @@ namespace edge::gfx {
 			upload_info = std::move(result.value());
 		}
 
-		resource_set.command_buffer.begin_marker(reinterpret_cast<const char*>(zone_name.c_str()));
-
 		ImageCreateInfo create_info{};
 		create_info.extent.width = upload_info.width;
 		create_info.extent.height = upload_info.height;
@@ -515,6 +504,12 @@ namespace edge::gfx {
 		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
 
 		auto image = Image::create(create_info);
+
+		if (!resource_set.recording) {
+			begin_commands(resource_set);
+		}
+
+		resource_set.command_buffer.begin_marker(reinterpret_cast<const char*>(zone_name.c_str()));
 
 		ImageBarrier image_barrier{};
 		image_barrier.image = &image;
