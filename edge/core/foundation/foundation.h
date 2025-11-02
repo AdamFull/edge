@@ -657,172 +657,6 @@ namespace edge {
 
     extern CPUFeatures g_cpu_features;
 
-    class ThreadPool {
-    public:
-        explicit ThreadPool(size_t num_threads = std::thread::hardware_concurrency())
-            : stop(false), active_tasks(0) {
-
-            workers.reserve(num_threads);
-            worker_queues.resize(num_threads);
-
-            for (size_t i = 0; i < num_threads; ++i) {
-                worker_mutexes.emplace_back(std::make_unique<std::mutex>());
-            }
-
-            for (size_t i = 0; i < num_threads; ++i) {
-                workers.emplace_back([this, i, num_threads] {
-                    while (true) {
-                        std::function<void()> task;
-
-                        // Try to get task from own queue first
-                        {
-                            std::unique_lock<std::mutex> lock(*worker_mutexes[i]);
-                            if (!worker_queues[i].empty()) {
-                                task = std::move(worker_queues[i].front());
-                                worker_queues[i].pop_front();
-                            }
-                        }
-
-                        // If own queue is empty, try work stealing
-                        if (!task) {
-                            for (size_t j = 0; j < num_threads; ++j) {
-                                if (j == i) continue;
-
-                                std::unique_lock<std::mutex> lock(*worker_mutexes[j], std::try_to_lock);
-                                if (lock.owns_lock() && !worker_queues[j].empty()) {
-                                    // Steal from back (opposite end) for better cache locality
-                                    task = std::move(worker_queues[j].back());
-                                    worker_queues[j].pop_back();
-                                    break;
-                                }
-                            }
-                        }
-
-                        // If still no task, wait on global queue
-                        if (!task) {
-                            std::unique_lock<std::mutex> lock(global_mutex);
-                            global_cv.wait(lock, [this] {
-                                return stop || !global_queue.empty();
-                                });
-
-                            if (stop && global_queue.empty()) {
-                                return;
-                            }
-
-                            if (!global_queue.empty()) {
-                                task = std::move(global_queue.front());
-                                global_queue.pop_front();
-                            }
-                        }
-
-                        if (task) {
-                            task();
-                            --active_tasks;
-                            completion_cv.notify_all();
-                        }
-                    }
-                    });
-            }
-        }
-
-        template<class F>
-        void enqueue(F&& f) {
-            ++active_tasks;
-            {
-                std::unique_lock<std::mutex> lock(global_mutex);
-                global_queue.emplace_back(std::forward<F>(f));
-            }
-            global_cv.notify_one();
-        }
-
-        template<class F, class... Args>
-        auto submit(F&& f, Args&&... args) -> std::future<typename std::invoke_result<F(Args...)>::type> {
-            using return_type = typename std::invoke_result<F(Args...)>::type;
-
-            auto task = std::make_shared<std::packaged_task<return_type()>>(
-                std::bind(std::forward<F>(f), std::forward<Args>(args)...)
-            );
-
-            std::future<return_type> result = task->get_future();
-
-            ++active_tasks;
-            {
-                std::unique_lock<std::mutex> lock(global_mutex);
-                global_queue.emplace_back([task]() { (*task)(); });
-            }
-            global_cv.notify_one();
-
-            return result;
-        }
-
-        template<class F>
-        void parallel_for(int32_t start, int32_t end, F&& func, int32_t min_per_thread = 1) {
-            if (end <= start) return;
-
-            int32_t range = end - start;
-            int32_t num_workers = static_cast<int32_t>(workers.size());
-            int32_t chunk_size = std::max(min_per_thread, (range + num_workers - 1) / num_workers);
-
-            std::atomic<int32_t> tasks_remaining{ 0 };
-            std::mutex completion_mutex;
-            std::condition_variable local_cv;
-
-            for (int32_t i = start; i < end; i += chunk_size) {
-                int32_t chunk_end = std::min(i + chunk_size, end);
-                ++tasks_remaining;
-
-                enqueue([i, chunk_end, &func, &tasks_remaining, &local_cv]() {
-                    func(i, chunk_end);
-
-                    if (--tasks_remaining == 0) {
-                        local_cv.notify_one();
-                    }
-                    });
-            }
-
-            std::unique_lock<std::mutex> lock(completion_mutex);
-            local_cv.wait(lock, [&tasks_remaining] { return tasks_remaining == 0; });
-        }
-
-        void wait() {
-            std::unique_lock<std::mutex> lock(global_mutex);
-            completion_cv.wait(lock, [this] {
-                return active_tasks == 0;
-                });
-        }
-
-        size_t num_threads() const {
-            return workers.size();
-        }
-
-        ~ThreadPool() {
-            {
-                std::unique_lock<std::mutex> lock(global_mutex);
-                stop = true;
-            }
-            global_cv.notify_all();
-
-            for (std::thread& worker : workers) {
-                if (worker.joinable()) {
-                    worker.join();
-                }
-            }
-        }
-
-    private:
-        edge::mi::Vector<std::thread> workers;
-        edge::mi::Vector<edge::mi::Deque<std::function<void()>>> worker_queues;
-        edge::mi::Vector<std::unique_ptr<std::mutex>> worker_mutexes;
-        edge::mi::Deque<std::function<void()>> global_queue;
-
-        std::mutex global_mutex;
-        std::condition_variable global_cv;
-        std::condition_variable completion_cv;
-
-        std::atomic<bool> stop;
-        std::atomic<int32_t> active_tasks;
-    };
-
     class NonCopyable {
     protected:
         NonCopyable() = default;
@@ -1101,5 +935,188 @@ namespace edge {
 
     private:
         std::istream& stream_;
+    };
+
+    class ThreadPool : public NonCopyMovable {
+    public:
+        explicit ThreadPool(size_t num_threads = std::thread::hardware_concurrency())
+            : stop_(false), active_tasks_(0) {
+
+            if (num_threads == 0) {
+                num_threads = 1;
+            }
+
+            workers_.reserve(num_threads);
+            worker_queues_.resize(num_threads);
+
+            // Create mutexes for each worker queue
+            for (size_t i = 0; i < num_threads; ++i) {
+                worker_mutexes_.emplace_back(std::make_unique<std::mutex>());
+            }
+
+            // Create worker threads
+            for (size_t i = 0; i < num_threads; ++i) {
+                workers_.emplace_back([this, i, num_threads] {
+                    worker_thread(i, num_threads);
+                    });
+            }
+        }
+
+        ~ThreadPool() {
+            shutdown();
+        }
+
+        template<class F>
+        void enqueue(F&& f) {
+            ++active_tasks_;
+            {
+                std::unique_lock<std::mutex> lock(global_mutex_);
+                global_queue_.emplace_back(std::forward<F>(f));
+            }
+            global_cv_.notify_one();
+        }
+
+        template<class F, class... Args>
+        auto submit(F&& f, Args&&... args) -> std::future<typename std::invoke_result<F(Args...)>::type> {
+            using return_type = typename std::invoke_result<F(Args...)>::type;
+
+            auto task = std::make_shared<std::packaged_task<return_type()>>(
+                std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+            );
+
+            std::future<return_type> result = task->get_future();
+
+            ++active_tasks_;
+            {
+                std::unique_lock<std::mutex> lock(global_mutex_);
+                global_queue_.emplace_back([task]() { (*task)(); });
+            }
+            global_cv_.notify_one();
+
+            return result;
+        }
+
+        template<class F>
+        void parallel_for(int32_t start, int32_t end, F&& func, int32_t min_per_thread = 1) {
+            if (end <= start) return;
+
+            int32_t range = end - start;
+            int32_t num_workers = static_cast<int32_t>(workers_.size());
+            int32_t chunk_size = std::max(min_per_thread, (range + num_workers - 1) / num_workers);
+
+            std::atomic<int32_t> tasks_remaining{ 0 };
+            std::mutex completion_mutex;
+            std::condition_variable local_cv;
+
+            for (int32_t i = start; i < end; i += chunk_size) {
+                int32_t chunk_end = std::min(i + chunk_size, end);
+                ++tasks_remaining;
+
+                enqueue([i, chunk_end, &func, &tasks_remaining, &local_cv]() {
+                    func(i, chunk_end);
+
+                    if (--tasks_remaining == 0) {
+                        local_cv.notify_one();
+                    }
+                    });
+            }
+
+            std::unique_lock<std::mutex> lock(completion_mutex);
+            local_cv.wait(lock, [&tasks_remaining] { return tasks_remaining == 0; });
+        }
+
+        void wait() {
+            std::unique_lock<std::mutex> lock(global_mutex_);
+            completion_cv_.wait(lock, [this] {
+                return active_tasks_ == 0;
+                });
+        }
+
+        size_t num_threads() const {
+            return workers_.size();
+        }
+
+    private:
+        void worker_thread(size_t thread_id, size_t num_threads) {
+            while (true) {
+                std::function<void()> task;
+
+                {
+                    std::unique_lock<std::mutex> lock(*worker_mutexes_[thread_id]);
+                    if (!worker_queues_[thread_id].empty()) {
+                        task = std::move(worker_queues_[thread_id].front());
+                        worker_queues_[thread_id].pop_front();
+                    }
+                }
+
+                // If own queue is empty, try work stealing
+                if (!task) {
+                    for (size_t j = 0; j < num_threads; ++j) {
+                        if (j == thread_id) continue;
+
+                        std::unique_lock<std::mutex> lock(*worker_mutexes_[j], std::try_to_lock);
+                        if (lock.owns_lock() && !worker_queues_[j].empty()) {
+                            // Steal from back (opposite end) for better cache locality
+                            task = std::move(worker_queues_[j].back());
+                            worker_queues_[j].pop_back();
+                            break;
+                        }
+                    }
+                }
+
+                // If still no task, wait on global queue
+                if (!task) {
+                    std::unique_lock<std::mutex> lock(global_mutex_);
+                    global_cv_.wait(lock, [this] {
+                        return stop_ || !global_queue_.empty();
+                        });
+
+                    if (stop_ && global_queue_.empty()) {
+                        return;
+                    }
+
+                    if (!global_queue_.empty()) {
+                        task = std::move(global_queue_.front());
+                        global_queue_.pop_front();
+                    }
+                }
+
+                if (task) {
+                    task();
+                    --active_tasks_;
+                    completion_cv_.notify_all();
+                }
+            }
+        }
+
+        void shutdown() {
+            if (workers_.empty()) return;
+
+            {
+                std::unique_lock<std::mutex> lock(global_mutex_);
+                stop_.store(true, std::memory_order_release);
+            }
+            global_cv_.notify_all();
+
+            for (auto& worker : workers_) {
+                if (worker.joinable()) {
+                    worker.join();
+                }
+            }
+
+            workers_.clear();
+        }
+
+        mi::Vector<std::thread> workers_;
+        mi::Vector<edge::mi::Deque<std::function<void()>>> worker_queues_;
+        mi::Vector<std::unique_ptr<std::mutex>> worker_mutexes_;
+        mi::Deque<std::function<void()>> global_queue_;
+
+        std::mutex global_mutex_;
+        std::condition_variable global_cv_;
+        std::condition_variable completion_cv_;
+
+        std::atomic<bool> stop_;
+        std::atomic<int32_t> active_tasks_;
     };
 }
