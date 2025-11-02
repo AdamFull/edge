@@ -503,7 +503,7 @@ namespace edge::gfx {
 #define EDGE_LOGGER_SCOPE "gfx::Surface"
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
-	auto Surface::create(const vk::AndroidSurfaceCreateInfoKHR& create_info) -> Result<Surface> {
+	auto Surface::create(const vk::AndroidSurfaceCreateInfoKHR& create_info) -> Surface {
 		vk::SurfaceKHR surface;
 		auto result = instance_->createAndroidSurfaceKHR(&create_info, allocator_, &surface);
 		EDGE_FATAL_VK_ERROR(result, "createAndroidSurfaceKHR");

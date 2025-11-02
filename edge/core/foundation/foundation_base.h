@@ -175,7 +175,11 @@ namespace edge::foundation {
                 oss << "===============================================================\n";
                 oss << "  FATAL ERROR OCCURRED\n";
                 oss << "===============================================================\n";
-                oss << std::put_time(&tm, "  Time:       %Y-%m-%d %H:%M:%S\n");
+
+                char buffer[64];
+                std::strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", &tm);
+
+                oss << "  Time:       " << buffer << "\n";
 
                 oss << "  Thread ID:  " << thread_id << "\n";
                 

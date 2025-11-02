@@ -20,10 +20,12 @@
 #include <condition_variable>
 #include <mutex>
 
+#ifndef EDGE_PLATFORM_ANDROID
 #if defined(_MSC_VER)
 #include <intrin.h>
 #elif defined(__GNUC__) || defined(__clang__)
 #include <cpuid.h>
+#endif
 #endif
 
 namespace edge {
@@ -630,6 +632,7 @@ namespace edge {
         static auto detect() -> CPUFeatures {
             CPUFeatures features;
 
+#ifndef EDGE_PLATFORM_ANDROID
 #if defined(_MSC_VER)
             int cpu_info[4];
             __cpuid(cpu_info, 1);
@@ -649,6 +652,7 @@ namespace edge {
             if (__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) {
                 features.has_avx2 = (ebx & bit_AVX2) != 0;
             }
+#endif
 #endif
 
             return features;
