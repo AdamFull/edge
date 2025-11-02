@@ -224,7 +224,7 @@ namespace edge::gfx {
 			barrier.subresourceRange.baseMipLevel = 0u;
 			barrier.subresourceRange.levelCount = handle.get_level_count();
 			barrier.subresourceRange.baseArrayLayer = 0u;
-			barrier.subresourceRange.layerCount = handle.get_level_count();
+			barrier.subresourceRange.layerCount = handle.get_layer_count();
 			out_barrier = barrier;
 		}
 
