@@ -1009,25 +1009,19 @@ namespace edge {
             int32_t num_workers = static_cast<int32_t>(workers_.size());
             int32_t chunk_size = std::max(min_per_thread, (range + num_workers - 1) / num_workers);
 
-            std::atomic<int32_t> tasks_remaining{ 0 };
-            std::mutex completion_mutex;
-            std::condition_variable local_cv;
+            int32_t num_tasks = (range + chunk_size - 1) / chunk_size;
+            std::latch completion_latch(num_tasks);
 
             for (int32_t i = start; i < end; i += chunk_size) {
                 int32_t chunk_end = std::min(i + chunk_size, end);
-                ++tasks_remaining;
 
-                enqueue([i, chunk_end, &func, &tasks_remaining, &local_cv]() {
+                enqueue([i, chunk_end, &func, &completion_latch]() {
                     func(i, chunk_end);
-
-                    if (--tasks_remaining == 0) {
-                        local_cv.notify_one();
-                    }
+                    completion_latch.count_down();
                     });
             }
 
-            std::unique_lock<std::mutex> lock(completion_mutex);
-            local_cv.wait(lock, [&tasks_remaining] { return tasks_remaining == 0; });
+            completion_latch.wait();
         }
 
         void wait() {
