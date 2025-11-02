@@ -6,6 +6,10 @@
 
 #include <spdlog/spdlog.h>
 
+namespace edge {
+	CPUFeatures g_cpu_features = CPUFeatures::detect();
+}
+
 auto platform_main(edge::platform::PlatformContext& platform_context) -> int {
 	
 
