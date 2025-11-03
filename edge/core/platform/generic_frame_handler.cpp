@@ -1,4 +1,4 @@
-#include "../frame_handler.h"
+#include "frame_handler.h"
 
 namespace edge {
 	auto GenericFrameHandler::sleep_(double seconds) -> void {

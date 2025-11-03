@@ -1,8 +1,12 @@
-#include "../entry_point.h"
+#include "entry_point.h"
 
-#include <spdlog/spdlog.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
+
+#include "desktop_input.h"
+#include "desktop_window.h"
+
+#define EDGE_LOGGER_SCOPE "platform::WindowsPlatformContext"
 
 namespace edge::platform {
 	auto WindowsPlatformContext::construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow)
@@ -56,13 +60,13 @@ namespace edge::platform {
 
 		window_ = DesktopPlatformWindow::construct(this);
 		if (!window_) {
-			spdlog::error("[Windows Runtime Context]: Window construction failed");
+			EDGE_SLOGE("Window construction failed");
 			return false;
 		}
 
 		input_ = DesktopPlatformInput::construct(static_cast<DesktopPlatformWindow*>(window_.get()));
 		if (!input_) {
-			spdlog::error("[Windows Runtime Context]: Input construction failed");
+			EDGE_SLOGE("Input construction failed");
 			return false;
 		}
 
@@ -84,3 +88,5 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLin
 	auto context = edge::platform::PlatformContext::construct(hInstance, hPrevInstance, lpCmdLine, nCmdShow);
 	return platform_main(*context);
 }
+
+#undef EDGE_LOGGER_SCOPE

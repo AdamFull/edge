@@ -8,6 +8,7 @@
 #include "../events.h"
 
 namespace edge::platform {
+	class IPlatformFilesystem;
 	class IPlatformWindow;
 	class IPlatformContext;
 }
@@ -43,6 +44,50 @@ namespace edge::platform::window {
 namespace edge::platform {
 	struct PlatformCreateInfo {
 		window::Properties window_props;
+	};
+
+	class IPlatformFile {
+	public:
+		virtual ~IPlatformFile() = default;
+
+		[[nodiscard]] virtual auto is_open() -> bool = 0;
+		virtual auto close() -> void = 0;
+
+		[[nodiscard]] virtual auto size() -> uint64_t = 0;
+		virtual auto seek(uint64_t offset, std::ios_base::seekdir origin) -> int64_t = 0;
+		[[nodiscard]] virtual auto tell() -> int64_t = 0;
+		virtual auto read(void* buffer, uint64_t size) -> int64_t = 0;
+		virtual auto write(const void* buffer, uint64_t size) -> int64_t = 0;
+	};
+
+	struct DirEntry {
+		mi::U8String path;
+		bool is_directory;
+		uint64_t size;
+	};
+
+	class IPlatformDirectoryIterator {
+	public:
+		virtual ~IPlatformDirectoryIterator() = default;
+
+		virtual auto end() const noexcept -> bool = 0;
+		virtual auto next() -> void = 0;
+		virtual auto value() const noexcept -> const DirEntry & = 0;
+	};
+
+	class IPlatformFilesystem {
+	public:
+		virtual ~IPlatformFilesystem() = default;
+
+		[[nodiscard]] virtual auto open_file(std::u8string_view path, std::ios_base::openmode mode) -> Shared<IPlatformFile> = 0;
+		virtual auto create_directory(std::u8string_view path) -> bool = 0;
+		virtual auto remove(std::u8string_view path) -> bool = 0;
+
+		virtual auto exists(std::u8string_view path) -> bool = 0;
+		virtual auto is_directory(std::u8string_view path) -> bool = 0;
+		virtual auto is_file(std::u8string_view path) -> bool = 0;
+
+		[[nodiscard]] virtual auto walk(std::u8string_view path, bool recursive = false) -> Shared<IPlatformDirectoryIterator> = 0;
 	};
 
     class IPlatformInput {
@@ -87,7 +132,7 @@ namespace edge::platform {
 		/**
 		 * @brief Handles the processing of all underlying window events
 		 */
-		virtual auto poll_events() -> void = 0;
+		virtual auto poll_events(float delta_time) -> void = 0;
 
 		/**
 		 * @return The dot-per-inch scale factor

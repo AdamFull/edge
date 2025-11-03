@@ -4,23 +4,9 @@
 #include <istream>
 #include <ostream>
 
-#include "../foundation/foundation.h"
+#include "../platform/platform.h"
 
 namespace edge::fs {
-	class IFile {
-	public:
-		virtual ~IFile() = default;
-
-		[[nodiscard]] virtual auto is_open() -> bool = 0;
-		virtual auto close() -> void = 0;
-
-		[[nodiscard]] virtual auto size() -> uint64_t = 0;
-		virtual auto seek(uint64_t offset, std::ios_base::seekdir origin) -> int64_t = 0;
-		[[nodiscard]] virtual auto tell() -> int64_t = 0;
-		virtual auto read(void* buffer, uint64_t size) -> int64_t = 0;
-		virtual auto write(const void* buffer, uint64_t size) -> int64_t = 0;
-	};
-
 	class FileStreamBuf final : public NonCopyable, public std::streambuf {
 	public:
 		FileStreamBuf(size_t input_buffer_size = 1024, size_t output_buffer_size = 1024) 
@@ -31,7 +17,7 @@ namespace edge::fs {
 			setp(out_begin, out_begin + output_buffer_.size());
 		}
 
-		explicit FileStreamBuf(Shared<IFile>&& file, size_t input_buffer_size = 1024, size_t output_buffer_size = 1024)
+		explicit FileStreamBuf(Shared<platform::IPlatformFile>&& file, size_t input_buffer_size = 1024, size_t output_buffer_size = 1024)
 			: file_(std::move(file))
 			, input_buffer_(input_buffer_size)
 			, output_buffer_(output_buffer_size) {
@@ -76,7 +62,7 @@ namespace edge::fs {
 		pos_type seekpos(pos_type pos, std::ios_base::openmode which) override;
 		std::streamsize showmanyc() override;
 	private:
-		Shared<IFile> file_;
+		Shared<platform::IPlatformFile> file_;
 		mi::Vector<char> input_buffer_;
 		mi::Vector<char> output_buffer_;
 	};
@@ -90,7 +76,7 @@ namespace edge::fs {
 			T::rdbuf(&file_buf_);
 		}
 
-		explicit FileStreamBase(Shared<IFile>&& file)
+		explicit FileStreamBase(Shared<platform::IPlatformFile>&& file)
 			: T(nullptr)
 			, file_buf_(std::move(file), BufIn, BufOut) {
 			T::rdbuf(&file_buf_);
@@ -178,39 +164,9 @@ namespace edge::fs {
 	template<size_t InBufferSize = 1024, size_t OutBufferSize = 1024>
 	using FileStream = FileStreamBase<std::iostream, std::ios_base::in | std::ios_base::out, InBufferSize, OutBufferSize>;
 
-	struct DirEntry {
-		mi::U8String path;
-		bool is_directory;
-		uint64_t size;
-	};
-
-	class IDirectoryIterator {
-	public:
-		virtual ~IDirectoryIterator() = default;
-
-		virtual auto end() const noexcept -> bool = 0;
-		virtual auto next() -> void = 0;
-		virtual auto value() const noexcept -> const DirEntry& = 0;
-	};
-
-	class IFilesystem {
-	public:
-		virtual ~IFilesystem() = default;
-
-		[[nodiscard]] virtual auto open_file(std::u8string_view path, std::ios_base::openmode mode) -> Shared<IFile> = 0;
-		virtual auto create_directory(std::u8string_view path) -> bool = 0;
-		virtual auto remove(std::u8string_view path) -> bool = 0;
-
-		virtual auto exists(std::u8string_view path) -> bool = 0;
-		virtual auto is_directory(std::u8string_view path) -> bool = 0;
-		virtual auto is_file(std::u8string_view path) -> bool = 0;
-
-		[[nodiscard]] virtual auto walk(std::u8string_view path, bool recursive = false) -> Shared<IDirectoryIterator> = 0;
-	};
-
 	class DirectoryIterator {
 	public:
-		DirectoryIterator(Shared<IDirectoryIterator>&& iterator_impl) noexcept :
+		DirectoryIterator(Shared<platform::IPlatformDirectoryIterator>&& iterator_impl) noexcept :
 			impl_{ std::move(iterator_impl) } {
 		}
 
@@ -232,7 +188,7 @@ namespace edge::fs {
 			return *this;
 		}
 
-		auto operator*() const noexcept -> const DirEntry& {
+		auto operator*() const noexcept -> const platform::DirEntry& {
 			return impl_->value();
 		}
 
@@ -244,20 +200,20 @@ namespace edge::fs {
 			return impl_ && !impl_->end();
 		}
 	private:
-		Shared<IDirectoryIterator> impl_;
+		Shared<platform::IPlatformDirectoryIterator> impl_;
 	};
 
 	struct MountPoint {
 		mi::U8String path;
-		Shared<IFilesystem> filesystem;
+		Shared<platform::IPlatformFilesystem> filesystem;
 	};
 
 	auto initialize_filesystem() -> void;
 	auto shutdown_filesystem() -> void;
 
-	auto create_native_filesystem(std::u8string_view root_path) -> Shared<IFilesystem>;
+	auto create_native_filesystem(std::u8string_view root_path) -> Shared<platform::IPlatformFilesystem>;
 
-	auto mount_filesystem(std::u8string_view mount_point, Shared<IFilesystem>&& filesystem) -> void;
+	auto mount_filesystem(std::u8string_view mount_point, Shared<platform::IPlatformFilesystem>&& filesystem) -> void;
 	auto unmount_filesystem(std::u8string_view mount_point) -> bool;
 
 	auto exists(std::u8string_view path) -> bool;

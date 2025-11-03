@@ -1,9 +1,9 @@
 #pragma once
 
 #if EDGE_PLATFORM_WINDOWS
-#include "windows/platform.h"
+#include "windows_context.h"
 #elif EDGE_PLATFORM_ANDROID
-#include "android/platform.h"
+#include "android_context.h"
 #endif
 
 auto platform_main(edge::platform::PlatformContext& platform_context) -> int;

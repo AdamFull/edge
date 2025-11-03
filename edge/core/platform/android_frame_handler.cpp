@@ -1,4 +1,4 @@
-#include "../frame_handler.h"
+#include "frame_handler.h"
 
 namespace edge {
 	auto AndroidFrameHandler::sleep_(double seconds) -> void {

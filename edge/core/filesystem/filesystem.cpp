@@ -1,16 +1,24 @@
 #include "filesystem.h"
 
+#if EDGE_PLATFORM_ANDROID
+#include "../platform/unix_filesystem.h"
+#elif EDGE_PLATFORM_WINDOWS
+#include "../platform/windows_filesystem.h"
+#endif
+
+namespace edge::platform {
+	extern auto get_system_cwd() -> mi::U8String;
+	extern auto get_system_temp_dir() -> mi::U8String;
+	extern auto get_system_cache_dir() -> mi::U8String;
+}
+
 namespace edge::fs {
 	mi::Vector<MountPoint> mounts_;
 	mi::U8String current_workdir_;
 	mi::U8String temp_directory_;
 	mi::U8String cache_directory_;
 
-	extern auto get_system_cwd() -> mi::U8String;
-	extern auto get_system_temp_dir() -> mi::U8String;
-	extern auto get_system_cache_dir() -> mi::U8String;
-
-	static auto resolve_path(std::u8string_view path) -> std::tuple<Shared<IFilesystem>, std::u8string_view> {
+	static auto resolve_path(std::u8string_view path) -> std::tuple<Shared<platform::IPlatformFilesystem>, std::u8string_view> {
 		size_t best_index{ ~0ull };
 		size_t best_match_length{ 0ull };
 
@@ -34,9 +42,9 @@ namespace edge::fs {
 
 	auto initialize_filesystem() -> void {
 		mounts_ = {};
-		current_workdir_ = get_system_cwd();
-		temp_directory_ = get_system_temp_dir();
-		cache_directory_ = get_system_cache_dir();
+		current_workdir_ = platform::get_system_cwd();
+		temp_directory_ = platform::get_system_temp_dir();
+		cache_directory_ = platform::get_system_cache_dir();
 		mount_filesystem(u8"/", create_native_filesystem(current_workdir_));
 	}
 
@@ -44,7 +52,11 @@ namespace edge::fs {
 		mounts_.clear();
 	}
 
-	auto mount_filesystem(std::u8string_view mount_point, Shared<IFilesystem>&& filesystem) -> void {
+	auto create_native_filesystem(std::u8string_view root_path) -> Shared<platform::IPlatformFilesystem> {
+		return std::make_unique<platform::NativeFilesystem>(root_path);
+	}
+
+	auto mount_filesystem(std::u8string_view mount_point, Shared<platform::IPlatformFilesystem>&& filesystem) -> void {
 		if (!filesystem) {
 			return;
 		}

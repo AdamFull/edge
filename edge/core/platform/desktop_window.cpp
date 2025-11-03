@@ -1,16 +1,15 @@
-#include "platform.h"
+#include "desktop_window.h"
 
-#include <unordered_map>
-
-#include <spdlog/spdlog.h>
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
+
+#define EDGE_LOGGER_SCOPE "platform::DesktopPlatformWindow"
 
 namespace edge::platform {
 	static int32_t g_glfw_context_init_counter{ 0 };
 
 	auto glfw_error_callback(int error, const char* description) -> void {
-		spdlog::error("[GLFW Window]: (code {}): {}", error, description);
+		EDGE_SLOGE("Error: (code {}): {}", error, description);
 	}
 
 	auto DesktopPlatformWindow::window_close_callback(GLFWwindow* window) -> void {
@@ -20,8 +19,8 @@ namespace edge::platform {
 		}
 
 		auto& dispatcher = platform_context->get_event_dispatcher();
-		dispatcher.emit(events::WindowShouldCloseEvent{ 
-			.window_id = (uint64_t)window 
+		dispatcher.emit(events::WindowShouldCloseEvent{
+			.window_id = (uint64_t)window
 			});
 		glfwSetWindowShouldClose(window, GLFW_TRUE);
 	}
@@ -32,13 +31,13 @@ namespace edge::platform {
 			return;
 		}
 
-		spdlog::debug("[Desktop Window]: Window[{}] size changed[{}, {}]", (uint64_t)window, width, height);
+		EDGE_SLOGD("Window[{}] size changed[{}, {}]", (uint64_t)window, width, height);
 
 		auto& dispatcher = platform_context->get_event_dispatcher();
-		dispatcher.emit(events::WindowSizeChangedEvent{ 
-			.width = width, 
-			.height = height, 
-			.window_id = (uint64_t)window 
+		dispatcher.emit(events::WindowSizeChangedEvent{
+			.width = width,
+			.height = height,
+			.window_id = (uint64_t)window
 			});
 	}
 
@@ -48,11 +47,11 @@ namespace edge::platform {
 			return;
 		}
 
-		spdlog::debug("[Desktop Window]: Window[{}] {}.", (uint64_t)window, focused == 1 ? "focused" : "unfocused");
+		EDGE_SLOGD("Window[{}] {}.", (uint64_t)window, focused == 1 ? "focused" : "unfocused");
 
 		auto& dispatcher = platform_context->get_event_dispatcher();
-		dispatcher.emit(events::WindowFocusChangedEvent{ 
-			.focused = focused == 1, 
+		dispatcher.emit(events::WindowFocusChangedEvent{
+			.focused = focused == 1,
 			.window_id = (uint64_t)window
 			});
 	}
@@ -61,7 +60,7 @@ namespace edge::platform {
 		// NOTE: In case where we can have multiple windows, we need to init glfw context only one tile
 		if (g_glfw_context_init_counter <= 0) {
 			if (!glfwInit()) {
-				spdlog::error("[Desktop Window]: Failed to init glfw context.");
+				EDGE_SLOGE("Failed to init glfw context.");
 				return;
 			}
 
@@ -79,7 +78,7 @@ namespace edge::platform {
 		}
 
 		if (--g_glfw_context_init_counter <= 0) {
-			spdlog::debug("[Desktop Window]: GLFW context terminated.");
+			EDGE_SLOGD("GLFW context terminated.");
 			glfwTerminate();
 		}
 
@@ -115,7 +114,7 @@ namespace edge::platform {
 		}
 
 		case window::Mode::eFullscreenStretch: {
-			spdlog::error("[Desktop Window]: Cannot support stretch mode on this platform.");
+			EDGE_SLOGE("Cannot support stretch mode on this platform.");
 			break;
 		}
 
@@ -125,7 +124,7 @@ namespace edge::platform {
 		}
 
 		if (!handle_) {
-			spdlog::error("[Desktop Window]: Couldn't create glfw window.");
+			EDGE_SLOGE("Couldn't create glfw window.");
 			return false;
 		}
 
@@ -161,13 +160,16 @@ namespace edge::platform {
 		return true;
 	}
 
-	auto DesktopPlatformWindow::poll_events() -> void {
-		// TODO: Handle here to poll only when glfw is initialized
+	auto DesktopPlatformWindow::poll_events(float delta_time) -> void {
+		if (!handle_) {
+			return;
+		}
+
 		glfwPollEvents();
 		requested_close_ = glfwWindowShouldClose(handle_);
 
 		auto& input = platform_context_->get_input();
-		input.update(0.16f);
+		input.update(delta_time);
 	}
 
 	auto DesktopPlatformWindow::get_dpi_factor() const noexcept -> float {
@@ -211,3 +213,5 @@ namespace edge::platform {
 		return glfwGetWin32Window(handle_);
 	}
 }
+
+#undef EDGE_LOGGER_SCOPE

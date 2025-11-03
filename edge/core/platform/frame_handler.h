@@ -130,13 +130,9 @@ namespace edge {
 }
 
 #ifdef EDGE_PLATFORM_WINDOWS
-#include "windows/frame_handler.h"
-#elif defined(EDGE_PLATFORM_LINUX)
-#include "linux/frame_handler.h"
+#include "windows_frame_handler.h"
 #elif defined(EDGE_PLATFORM_ANDROID)
-#include "android/frame_handler.h"
-#elif defined(EDGE_PLATFORM_APPLE)
-#include "apple/frame_handler.h"
+#include "android_frame_handler.h"
 #else
-#include "generic/frame_handler.h"
+#include "generic_frame_handler.h"
 #endif

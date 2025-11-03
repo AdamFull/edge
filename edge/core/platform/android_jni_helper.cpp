@@ -1,4 +1,4 @@
-#include "jni_helper.h"
+#include "android_jni_helper.h"
 
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 

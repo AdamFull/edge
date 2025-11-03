@@ -1,7 +1,9 @@
-#include "platform.h"
+#include "desktop_input.h"
+#include "desktop_window.h"
 
-#include <spdlog/spdlog.h>
 #include <GLFW/glfw3.h>
+
+#define EDGE_LOGGER_SCOPE "platform::DesktopPlatformInput"
 
 namespace edge::platform {
 	static std::array<GLFWgamepadstate, GLFW_JOYSTICK_LAST> last_gamepad_state{};
@@ -242,7 +244,7 @@ namespace edge::platform {
 
 	void DesktopPlatformInput::character_input_callback(GLFWwindow* window, uint32_t codepoint) {
 		if (platform_context_) {
-			spdlog::debug("[Desktop Window]: Window[{}] character input: {}", (uint64_t)window, codepoint);
+			EDGE_SLOGD("Window[{}] character input: {}", (uint64_t)window, codepoint);
 
 			auto& dispatcher = platform_context_->get_event_dispatcher();
 			dispatcher.emit(events::CharacterInputEvent{
@@ -360,8 +362,8 @@ namespace edge::platform {
 		}
 	}
 
-	auto DesktopPlatformInput::begin_text_input_capture(std::string_view initial_text) -> bool { 
-		return true; 
+	auto DesktopPlatformInput::begin_text_input_capture(std::string_view initial_text) -> bool {
+		return true;
 	}
 
 	auto DesktopPlatformInput::end_text_input_capture() -> void {
@@ -372,3 +374,5 @@ namespace edge::platform {
 		return true;
 	}
 }
+
+#undef EDGE_LOGGER_SCOPE

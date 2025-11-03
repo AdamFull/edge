@@ -30,7 +30,7 @@ namespace edge::platform {
 		}
 
         do {
-            window_->poll_events();
+            window_->poll_events(0.33f);
         } while (!window_->is_visible());
 
         if(!input_->create()) {
@@ -76,7 +76,7 @@ namespace edge::platform {
 		auto new_windows_name = std::format("{} [cpu {} fps; {:.2f} ms]", "Application", frame_handler_.get_fps(), frame_handler_.get_mean_frame_time());
 		window_->set_title(new_windows_name);
 
-		window_->poll_events();
+		window_->poll_events(delta_time);
 		event_dispatcher_->process_events();
 
 		if (window_focused_) {

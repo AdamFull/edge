@@ -1,6 +1,8 @@
-#include "../entry_point.h"
+#include "entry_point.h"
 
-#include <spdlog/spdlog.h>
+#include "android_input.h"
+#include "android_window.h"
+
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/android_sink.h>
 
@@ -8,7 +10,9 @@
 
 #include <cassert>
 
-#include "jni_helper.h"
+#include "android_jni_helper.h"
+
+#define EDGE_LOGGER_SCOPE "platform::AndroidPlatformContext"
 
 namespace edge::platform {
     auto get_package_code_path(android_app* app) -> mi::String {
@@ -22,28 +26,28 @@ namespace edge::platform {
         return mi::String(apk_path_chars ? apk_path_chars : "");
     }
 
-	auto AndroidPlatformContext::construct(android_app* app)
-		-> std::unique_ptr<AndroidPlatformContext> {
+    auto AndroidPlatformContext::construct(android_app* app)
+        -> std::unique_ptr<AndroidPlatformContext> {
         auto ctx = std::make_unique<AndroidPlatformContext>();
         ctx->_construct(app);
 
         return ctx;
     }
 
-	auto AndroidPlatformContext::shutdown() -> void {
-	}
+    auto AndroidPlatformContext::shutdown() -> void {
+    }
 
     auto AndroidPlatformContext::get_platform_name() const -> std::string_view {
         return "Android";
     }
 
-	auto AndroidPlatformContext::get_android_app() -> android_app* {
-		return android_app_;
-	}
+    auto AndroidPlatformContext::get_android_app() -> android_app* {
+        return android_app_;
+    }
 
-	auto AndroidPlatformContext::get_android_app() const -> const android_app* {
-		return android_app_;
-	}
+    auto AndroidPlatformContext::get_android_app() const -> const android_app* {
+        return android_app_;
+    }
 
     auto AndroidPlatformContext::_construct(android_app* app) -> bool {
         android_app_ = app;
@@ -59,13 +63,13 @@ namespace edge::platform {
 
         window_ = AndroidPlatformWindow::construct(this);
         if (!window_) {
-            spdlog::error("[Android Runtime Context]: Window construction failed");
+            EDGE_SLOGE("Window construction failed");
             return false;
         }
 
         input_ = AndroidPlatformInput::construct(this);
         if (!input_) {
-            spdlog::error("[Android Runtime Context]: Input construction failed");
+            EDGE_SLOGE("[Android Runtime Context]: Input construction failed");
             return false;
         }
 
@@ -74,6 +78,8 @@ namespace edge::platform {
 }
 
 extern "C" void android_main(android_app* state) {
-	auto context = edge::platform::AndroidPlatformContext::construct(state);
-	platform_main(*context);
+    auto context = edge::platform::AndroidPlatformContext::construct(state);
+    platform_main(*context);
 }
+
+#undef EDGE_LOGGER_SCOPE

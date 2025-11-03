@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../desktop/platform.h"
+#include "platform.h"
 
 #include <Windows.h>
 
@@ -11,7 +11,7 @@ namespace edge::platform {
 		static auto construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) -> std::unique_ptr<WindowsPlatformContext>;
 
 		auto shutdown() -> void override;
-		auto get_platform_name() const->std::string_view override;
+		auto get_platform_name() const -> std::string_view override;
 	private:
 		auto _construct(HINSTANCE hInstance, HINSTANCE hPrevInstance, PSTR lpCmdLine, INT nCmdShow) -> bool;
 

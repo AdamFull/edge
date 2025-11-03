@@ -59,16 +59,17 @@ if(WIN32 OR (UNIX AND NOT ANDROID AND NOT IOS))
     
     # Desktop window implementation
     target_sources(${PROJECT_NAME} PRIVATE 
-        "desktop/platform_input.cpp"
-        "desktop/platform_window.cpp"
+        "desktop_input.cpp"
+        "desktop_window.cpp"
     )
 endif()
 
 if(WIN32)
     # Windows-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
-        "windows/frame_handler.cpp"
-        "windows/platform_context.cpp"
+        "windows_context.cpp"
+        "windows_frame_handler.cpp"
+        "windows_filesystem.cpp"
     )
 elseif(ANDROID)
     find_package(games-controller REQUIRED CONFIG)
@@ -80,11 +81,12 @@ elseif(ANDROID)
     # Android-specific sources
     target_sources(${PROJECT_NAME} PRIVATE
         #"${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c"
-        "android/frame_handler.cpp"
-        "android/jni_helper.cpp"
-        "android/platform_context.cpp"
-        "android/platform_input.cpp"
-        "android/platform_window.cpp"
+        "android_frame_handler.cpp"
+        "android_jni_helper.cpp"
+        "android_context.cpp"
+        "android_input.cpp"
+        "android_window.cpp"
+        "unix_filesystem.cpp"
     )
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux-specific sources
@@ -98,6 +100,6 @@ elseif(APPLE AND NOT IOS)
     )
 else()
     target_sources(${PROJECT_NAME} PRIVATE 
-        "generic/frame_handler.cpp"
+        "generic_frame_handler.cpp"
     )
 endif()
