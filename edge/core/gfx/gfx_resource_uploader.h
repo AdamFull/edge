@@ -7,6 +7,9 @@
 namespace edge::gfx {
 	enum class UploadingStatus {
 		eDone,
+		eNotReady,
+		eTimeout,
+		eChildTaskCreated,
 		eNotFound,
 		eNotSupported,
 		eFailed
@@ -23,17 +26,38 @@ namespace edge::gfx {
 		eSingleChannel
 	};
 
+	enum class ImageLoadStatus {
+		eDone,
+		eInvalidHeader,
+		eOutOfMemory
+	};
+
+	struct ImageUploadInfo {
+		uint32_t width{ 1u }, height{ 1u }, depth{ 1u };
+		uint32_t layer_count{ 1u }, level_count{ 1u }, face_count{ 1u };
+		bool generate_mipmap{ false };
+		vk::Format format;
+		mi::Vector<uint64_t> src_copy_offsets;
+		BufferRange memory_range;
+	};
+
+	using ImageLoadResult = std::expected<ImageUploadInfo, ImageLoadStatus>;
+
 	struct ImportImageCommon {
 		uint32_t priority{ 0u };
 		ImageImportType import_type{ ImageImportType::eDefault };
 	};
 
-	struct ImportImageFromFile : ImportImageCommon {
-		mi::U8String path{};
+	struct ImportImageFromFileAsync : ImportImageCommon {
+		std::shared_future<mi::Vector<uint8_t>> promise{};
 	};
 
 	struct ImportImageFromMemory : ImportImageCommon {
 		Span<const uint8_t> data{};
+	};
+
+	struct ImportImageFromMemoryAsync : ImportImageCommon {
+		std::shared_future<ImageUploadInfo> promise{};
 	};
 
 	struct ImportImageRaw : ImportImageCommon {
@@ -45,7 +69,7 @@ namespace edge::gfx {
 		uint32_t layer_count{ 1u };
 	};
 
-	using ImportInfo = std::variant<ImportImageFromFile, ImportImageFromMemory, ImportImageRaw>;
+	using ImportInfo = std::variant<ImportImageFromFileAsync, ImportImageFromMemory, ImportImageRaw>;
 
 	struct UploadTask {
 		UploadType type;
@@ -114,6 +138,8 @@ namespace edge::gfx {
 
 		auto start_streamer() -> void;
 		auto stop_streamer() -> void;
+
+		[[nodiscard]] auto load_image(std::u8string_view path, uint32_t priority = 0u) -> uint64_t;
 		[[nodiscard]] auto load_image(ImportInfo&& import_info) -> uint64_t;
 
 		auto is_task_done(uint64_t task_id) const -> bool;
@@ -127,22 +153,7 @@ namespace edge::gfx {
 	private:
 		auto _construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> void;
 
-		enum class ImageLoadStatus {
-			eDone,
-			eInvalidHeader,
-			eOutOfMemory
-		};
-
-		struct ImageUploadInfo {
-			uint32_t width{ 1u }, height{ 1u }, depth{ 1u };
-			uint32_t layer_count{ 1u }, level_count{ 1u }, face_count{ 1u };
-			bool generate_mipmap{ false };
-			vk::Format format;
-			mi::Vector<uint64_t> src_copy_offsets;
-			BufferRange memory_range;
-		};
-
-		using ImageLoadResult = std::expected<ImageUploadInfo, ImageLoadStatus>;
+		auto async_read_file(std::u8string_view path) -> std::shared_future<mi::Vector<uint8_t>>;
 
 		auto worker_loop() -> void;
 		auto process_task(ResourceSet& resource_set, UploadTask const& task) -> UploadResult;

@@ -230,6 +230,28 @@ namespace edge::gfx {
 		}
 	}
 
+	auto ResourceUploader::load_image(std::u8string_view path, uint32_t priority) -> uint64_t {
+		auto next_token = task_counter_.fetch_add(1ull, std::memory_order_relaxed);
+
+		{
+			std::unique_lock lock(pending_tasks_mutex_);
+
+			ImportImageFromFileAsync async_file_load{};
+			async_file_load.priority = priority;
+			async_file_load.promise = async_read_file(path);
+
+			pending_tasks_.emplace_back(
+				UploadTask{
+				.type = UploadType::eImage,
+				.sync_token = next_token,
+				.import_info = std::move(async_file_load)
+				});
+		}
+		pending_tasks_cv_.notify_one();
+
+		return next_token;
+	}
+
 	auto ResourceUploader::load_image(ImportInfo&& import_info) -> uint64_t {
 		auto next_token = task_counter_.fetch_add(1ull, std::memory_order_relaxed); 
 
@@ -337,6 +359,27 @@ namespace edge::gfx {
 		finished_tasks_.reserve(100);
 	}
 
+	auto ResourceUploader::async_read_file(std::u8string_view path) -> std::shared_future<mi::Vector<uint8_t>> {
+		auto promise = std::make_shared<std::promise<mi::Vector<uint8_t>>>();
+		auto future = promise->get_future().share();
+
+		thread_pool_.enqueue([promise, path]() {
+			try {
+				mi::Vector<uint8_t> file_data{};
+				if (!fs::read_whole_file(path, std::ios_base::binary, file_data)) {
+					promise->set_exception(std::make_exception_ptr(std::runtime_error{ "Failed load file." }));
+				}
+
+				promise->set_value(std::move(file_data));
+			}
+			catch (...) {
+				promise->set_exception(std::current_exception());
+			}
+			});
+
+		return future;
+	}
+
 	auto ResourceUploader::worker_loop() -> void {
 		while (!should_stop_.load(std::memory_order_acquire)) {
 
@@ -365,8 +408,24 @@ namespace edge::gfx {
 				
 
 				// Process resources
-				for (auto const& task : tasks_to_process) {
+				for (auto&& task : tasks_to_process) {
 					auto result = process_task(resource_set, task);
+					if (result.status == UploadingStatus::eNotReady) {
+						{
+							std::unique_lock lock(pending_tasks_mutex_);
+							pending_tasks_.emplace_back(UploadTask{
+								.type = UploadType::eImage,
+								.sync_token = task.sync_token,
+								.import_info = std::move(task.import_info)
+								});
+						}
+						pending_tasks_cv_.notify_one();
+						continue;
+					}
+					else if (result.status == UploadingStatus::eChildTaskCreated) {
+						continue;
+					}
+
 					{
 						std::lock_guard lock(finished_tasks_mutex_);
 						finished_tasks_.push_back(std::move(result));
@@ -446,26 +505,28 @@ namespace edge::gfx {
 
 		mi::U8String zone_name{ u8"Unknown" };
 
-		if (std::holds_alternative<ImportImageFromFile>(task.import_info)) {
-			auto& import_info = std::get<ImportImageFromFile>(task.import_info);
+		if (std::holds_alternative<ImportImageFromFileAsync>(task.import_info)) {
+			auto& import_info = std::get<ImportImageFromFileAsync>(task.import_info);
 
-			mi::Vector<uint8_t> file_data;
-			if (!fs::read_whole_file(import_info.path, std::ios_base::binary, file_data)) {
-				EDGE_SLOGW("Failed to open file: {}", reinterpret_cast<const char*>(import_info.path.c_str()));
-				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotFound, {} };
+			auto status = import_info.promise.wait_for(std::chrono::seconds(0));
+			if (status == std::future_status::ready) {
+				// TODO: Create new task for load from memory ImportImageFromMemoryAsync
+				// ImportImageFromMemory from_memory{};
+				// from_memory.priority = import_info.priority;
+				// from_memory.import_type = import_info.import_type;
+				// from_memory.data = import_info.promise.get();
+
+
+				auto const& file_data = import_info.promise.get();
+				auto result = load_image_from_memory(resource_set, file_data, import_info.import_type);
+				if (!result) {
+					return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
+				}
+				upload_info = std::move(result.value());
 			}
-
-			if (file_data.empty()) {
-				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
+			else {
+				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eNotReady, {} };
 			}
-
-			auto result = load_image_from_memory(resource_set, file_data, import_info.import_type);
-			if (!result) {
-				return UploadResult{ task.sync_token, UploadType::eImage, UploadingStatus::eFailed, {} };
-			}
-			upload_info = std::move(result.value());
-
-			zone_name = import_info.path;
 		}
 		else if (std::holds_alternative<ImportImageFromMemory>(task.import_info)) {
 			auto& import_info = std::get<ImportImageFromMemory>(task.import_info);
