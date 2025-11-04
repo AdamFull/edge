@@ -2,7 +2,6 @@
 
 #include <mimalloc.h>
 #include <spdlog/spdlog.h>
-#include <vulkan/vulkan.hpp>
 
 #include <chrono>
 #include <vector>
@@ -231,11 +230,6 @@ namespace edge::foundation {
                 return *this;
             }
 
-            auto add_context(const mi::String& key, vk::Result result) -> ErrorContextBuilder& {
-                context_.additional_data[key] = vk::to_string(result);
-                return *this;
-            }
-
             template<typename T>
             auto add_context(const mi::String& key, T value) -> ErrorContextBuilder& {
                 context_.additional_data[key] = std::format("{}", value);
@@ -427,58 +421,6 @@ namespace edge::foundation {
 
         std::abort();
     }
-
-    inline auto make_vulkan_error(const char* scope, const char* condition,
-        const std::source_location& location, vk::Result result, const mi::String& operation)
-        -> detail::ErrorContextBuilder {
-        return detail::ErrorContextBuilder(scope, condition, location)
-            .with_message("Vulkan operation failed: {}", operation)
-            .add_context("Result", result)
-            .add_context("Result Code", static_cast<int32_t>(result));
-    }
-
-    inline auto make_resource_error(const char* scope, const char* condition,
-        const std::source_location& location, const mi::String& resource_type, uint32_t resource_id)
-        -> detail::ErrorContextBuilder {
-        return detail::ErrorContextBuilder(scope, condition, location)
-            .with_message("Invalid resource access")
-            .add_context("Resource Type", resource_type)
-            .add_context("Resource ID", resource_id);
-    }
-
-    inline auto make_memory_error(const char* scope, const char* condition,
-        const std::source_location& location, vk::DeviceSize requested, vk::DeviceSize available)
-        -> detail::ErrorContextBuilder {
-        return detail::ErrorContextBuilder(scope, condition, location)
-            .with_message("Memory allocation or access error")
-            .add_context("Requested Size", std::format("{} bytes", requested))
-            .add_context("Available Size", std::format("{} bytes", available));
-    }
-
-    inline auto make_buffer_error(const char* scope, const char* condition,
-        const std::source_location& location, const mi::String& operation,
-        vk::DeviceSize buffer_size, vk::DeviceSize offset, vk::DeviceSize size)
-        -> detail::ErrorContextBuilder {
-        return detail::ErrorContextBuilder(scope, condition, location)
-            .with_message("Buffer operation error: {}", operation)
-            .add_context("Buffer Size", std::format("{} bytes", buffer_size))
-            .add_context("Offset", std::format("{} bytes", offset))
-            .add_context("Operation Size", std::format("{} bytes", size))
-            .add_context("End Position", std::format("{} bytes", offset + size))
-            .add_context("Overflow", std::format("{} bytes", (offset + size) - buffer_size));
-    }
-
-    inline auto make_image_error(const char* scope, const char* condition,
-        const std::source_location& location, const mi::String& operation,
-        vk::Extent3D extent, vk::Format format, uint32_t mip_levels, uint32_t array_layers)
-        -> detail::ErrorContextBuilder {
-        return detail::ErrorContextBuilder(scope, condition, location)
-            .with_message("Image operation error: {}", operation)
-            .add_context("Extent", std::format("{}x{}x{}", extent.width, extent.height, extent.depth))
-            .add_context("Format", vk::to_string(format))
-            .add_context("Mip Levels", mip_levels)
-            .add_context("Array Layers", array_layers);
-    }
 }
 
 #define EDGE_FATAL_ERROR_CTX(condition, builder) \
@@ -490,6 +432,3 @@ namespace edge::foundation {
     } while(0)
 
 #define EDGE_FATAL_ERROR(condition, ...) EDGE_FATAL_ERROR_CTX(condition, ::edge::foundation::detail::ErrorContextBuilder(EDGE_LOGGER_SCOPE, #condition, std::source_location::current()).with_message(__VA_ARGS__))
-#define EDGE_FATAL_VK_ERROR(result, operation) EDGE_FATAL_ERROR_CTX(result == vk::Result::eSuccess, ::edge::foundation::make_vulkan_error(EDGE_LOGGER_SCOPE, "result == vk::Result::eSuccess", std::source_location::current(), result, operation))
-#define EDGE_FATAL_VK_BUFFER_ERROR(condition, operation, buffer_size, offset, size) EDGE_FATAL_ERROR_CTX(condition, ::edge::foundation::make_buffer_error(EDGE_LOGGER_SCOPE, #condition, std::source_location::current(), operation, buffer_size, offset, size))
-#define EDGE_FATAL_VK_IMAGE_ERROR(condition, operation, extent, format, mip_levels, array_layers) EDGE_FATAL_ERROR_CTX(condition, ::edge::foundation::make_image_error(EDGE_LOGGER_SCOPE, #condition, std::source_location::current(), operation, extent, format, mip_levels, array_layers))
