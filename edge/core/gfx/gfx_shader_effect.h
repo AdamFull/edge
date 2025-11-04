@@ -226,9 +226,9 @@ namespace edge::gfx {
 
 		void serialize(BinaryWriter& writer) const {
 			writer.write(header);
-			writer.write_string(name);
+			writer.write(name);
 			writer.write(static_cast<uint32_t>(bind_point));
-			writer.write_vector(stages);
+			writer.write(stages);
 			if (bind_point == vk::PipelineBindPoint::eGraphics) {
 				writer.write(pipeline_state);
 
@@ -236,48 +236,48 @@ namespace edge::gfx {
 				writer.write(static_cast<uint32_t>(stencil_format));
 
 				if (!color_attachments.empty()) {
-					writer.write_vector(color_attachments);
-					writer.write_vector(attachment_formats);
+					writer.write(color_attachments);
+					writer.write(attachment_formats);
 				}
 				if (!multisample_sample_masks.empty()) {
-					writer.write_vector(multisample_sample_masks);
+					writer.write(multisample_sample_masks);
 				}
 				if (!vertex_input_attributes.empty()) {
-					writer.write_vector(vertex_input_attributes);
+					writer.write(vertex_input_attributes);
 				}
 				if (!vertex_input_bindings.empty()) {
-					writer.write_vector(vertex_input_bindings);
+					writer.write(vertex_input_bindings);
 				}
 			}
 		}
 
 		void deserialize(BinaryReader& reader) {
 			reader.read(header);
-			name = reader.read_string();
+			reader.read(name);
 			reader.read(bind_point);
-			stages = reader.read_vector<TechniqueStage>();
+			reader.read(stages);
 
 			if (bind_point == vk::PipelineBindPoint::eGraphics) {
 				reader.read(pipeline_state);
 
-				depth_format = static_cast<vk::Format>(reader.read<uint32_t>());
-				stencil_format = static_cast<vk::Format>(reader.read<uint32_t>());
+				reader.read(depth_format);
+				reader.read(stencil_format);
 
 				if (pipeline_state.color_blending_state_has_attachments) {
-					color_attachments = reader.read_vector<ColorAttachment>();
-					attachment_formats = reader.read_vector<vk::Format>();
+					reader.read(color_attachments);
+					reader.read(attachment_formats);
 				}
 
 				if (pipeline_state.multisample_state_sample_count > 1) {
-					multisample_sample_masks = reader.read_vector<uint32_t>();
+					reader.read(multisample_sample_masks);
 				}
 
 				if (pipeline_state.vertex_input_state_has_attributes) {
-					vertex_input_attributes = reader.read_vector<VertexInputAttribute>();
+					reader.read(vertex_input_attributes);
 				}
 
 				if (pipeline_state.vertex_input_state_has_bindings) {
-					vertex_input_bindings = reader.read_vector<VertexInputBinding>();
+					reader.read(vertex_input_bindings);
 				}
 			}
 		}

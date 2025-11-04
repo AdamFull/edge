@@ -42,7 +42,7 @@ using namespace edge;
 namespace edge::gfx {
 	void TechniqueStage::serialize(BinaryWriter& writer) const {
 		writer.write(static_cast<uint32_t>(stage));
-		writer.write_string(entry_point_name);
+		writer.write(entry_point_name);
 
 		if (g_session.compress) {
 			const auto max_compressed_size = ZSTD_compressBound(code.size());
@@ -51,10 +51,10 @@ namespace edge::gfx {
 			const auto compressed_size = ZSTD_compress(compressed_code.data(), max_compressed_size, code.data(), code.size(), 15);
 			compressed_code.resize(compressed_size);
 
-			writer.write_vector(compressed_code);
+			writer.write(compressed_code);
 		}
 		else {
-			writer.write_vector(code);
+			writer.write(code);
 		}
 	}
 }

@@ -10,9 +10,10 @@
 namespace edge::gfx {
 	void TechniqueStage::deserialize(BinaryReader& reader) {
 		stage = reader.read<vk::ShaderStageFlagBits>();
-		entry_point_name = reader.read_string();
+		reader.read(entry_point_name);
 
-		auto compressed_code = reader.read_vector<uint8_t>();
+		mi::Vector<uint8_t> compressed_code;
+		reader.read(compressed_code);
 
 		auto const required_size = ZSTD_getFrameContentSize(compressed_code.data(), compressed_code.size());
 		code.resize(required_size);
