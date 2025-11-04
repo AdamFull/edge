@@ -216,4 +216,184 @@ namespace edge {
     private:
         std::istream& stream_;
     };
+
+    template<typename ByteType = uint8_t, typename Allocator = std::allocator<ByteType>>
+    class MemoryStreamBuf : public std::streambuf {
+    public:
+        explicit MemoryStreamBuf(std::vector<ByteType, Allocator>& buffer)
+            : buffer_(buffer), read_pos_(0) {
+            update_put_area();
+        }
+
+        auto tell_read() const -> std::streampos { return read_pos_; }
+        auto tell_write() const -> std::streampos { return pptr() - pbase(); }
+        auto data() const -> std::span<const uint8_t> { return std::span<const uint8_t>(buffer_.data(), buffer_.size()); }
+        auto get_buffer() -> std::vector<ByteType, Allocator>& { return buffer_; }
+    protected:
+        int_type underflow() override {
+            if (read_pos_ >= buffer_.size()) {
+                return traits_type::eof();
+            }
+
+            return traits_type::to_int_type(buffer_[read_pos_]);
+        }
+
+        int_type uflow() override {
+            if (read_pos_ >= buffer_.size()) {
+                return traits_type::eof();
+            }
+
+            return traits_type::to_int_type(buffer_[read_pos_++]);
+        }
+
+        std::streamsize xsgetn(char* s, std::streamsize count) override {
+            std::streamsize available = buffer_.size() - read_pos_;
+            std::streamsize to_read = std::min(count, available);
+            if (to_read > 0) {
+                std::memcpy(s, buffer_.data() + read_pos_, to_read);
+                read_pos_ += to_read;
+            }
+            return to_read;
+        }
+
+        int_type overflow(int_type ch) override {
+            if (ch != traits_type::eof()) {
+                size_t write_pos = pptr() - pbase();
+                if (write_pos >= buffer_.size()) {
+                    buffer_.resize(write_pos + 1);
+                    update_put_area();
+                }
+                buffer_[write_pos] = static_cast<uint8_t>(ch);
+                pbump(1);
+                return ch;
+            }
+            return traits_type::eof();
+        }
+
+        std::streamsize xsputn(const char* s, std::streamsize count) override {
+            if (count <= 0) {
+                return 0;
+            }
+
+            size_t write_pos = pptr() - pbase();
+            size_t new_size = write_pos + count;
+            if (new_size > buffer_.size()) {
+                buffer_.resize(new_size);
+                update_put_area();
+            }
+            std::memcpy(buffer_.data() + write_pos, s, count);
+            pbump(static_cast<int>(count));
+            return count;
+        }
+
+        std::streampos seekoff(std::streamoff off, std::ios_base::seekdir dir, std::ios_base::openmode which) override {
+            std::streampos new_pos;
+
+            if (which & std::ios_base::in) {
+                switch (dir) {
+                case std::ios_base::beg: new_pos = off; break;
+                case std::ios_base::cur: new_pos = read_pos_ + off; break;
+                case std::ios_base::end: new_pos = buffer_.size() + off; break;
+                default: return std::streampos(std::streamoff(-1));
+                }
+                if (new_pos < 0 || new_pos > static_cast<std::streampos>(buffer_.size())) {
+                    return std::streampos(std::streamoff(-1));
+                }
+                read_pos_ = new_pos;
+            }
+
+            if (which & std::ios_base::out) {
+                switch (dir) {
+                case std::ios_base::beg: new_pos = off; break;
+                case std::ios_base::cur: new_pos = (pptr() - pbase()) + off; break;
+                case std::ios_base::end: new_pos = buffer_.size() + off; break;
+                default: return std::streampos(std::streamoff(-1));
+                }
+                if (new_pos < 0) {
+                    return std::streampos(std::streamoff(-1));
+                }
+
+                size_t pos = static_cast<size_t>(new_pos);
+                if (pos > buffer_.size()) {
+                    buffer_.resize(pos);
+                }
+                update_put_area();
+                pbump(static_cast<int>(pos));
+            }
+            return new_pos;
+        }
+
+        std::streampos seekpos(std::streampos pos, std::ios_base::openmode which) override {
+            return seekoff(std::streamoff(pos), std::ios_base::beg, which);
+        }
+    private:
+        auto update_put_area() -> void {
+            if (buffer_.empty()) {
+                buffer_.resize(256);
+            }
+
+            char* base = reinterpret_cast<char*>(buffer_.data());
+            setp(base, base + buffer_.size());
+        }
+
+        std::vector<ByteType, Allocator>& buffer_;
+        size_t read_pos_;
+    };
+
+    template<typename ByteType = uint8_t, typename Allocator = std::allocator<ByteType>>
+    class MemoryStream : public std::iostream {
+    public:
+        MemoryStream() 
+            : std::iostream(nullptr)
+            , buffer_()
+            , streambuf_(buffer_) { 
+            rdbuf(&streambuf_); 
+        }
+
+        explicit MemoryStream(size_t capacity) 
+            : std::iostream(nullptr)
+            , buffer_()
+            , streambuf_(buffer_) {
+            buffer_.reserve(capacity);
+            rdbuf(&streambuf_);
+        }
+
+        explicit MemoryStream(std::vector<ByteType, Allocator>&& buffer)
+            : std::iostream(nullptr)
+            , buffer_(std::move(buffer))
+            , streambuf_(buffer_) { 
+            rdbuf(&streambuf_); 
+        }
+
+        explicit MemoryStream(std::span<const ByteType> data)
+            : std::iostream(nullptr)
+            , buffer_(data.begin(), data.end())
+            , streambuf_(buffer_) { 
+            rdbuf(&streambuf_); 
+        }
+
+        auto get_buffer() -> std::vector<ByteType, Allocator>& { return buffer_; }
+        auto get_buffer() const -> std::vector<ByteType, Allocator> const& { return buffer_; }
+        auto data() const -> std::span<const ByteType> { return streambuf_.data(); }
+        auto length() const -> size_t { return buffer_.size(); }
+        auto position() const -> std::streampos { return const_cast<MemoryStream*>(this)->tellg(); }
+        auto position(std::streampos pos) -> void { seekg(pos); seekp(pos); }
+        auto capacity() const -> size_t { return buffer_.capacity(); }
+        auto set_capacity(size_t capacity) -> void { buffer_.reserve(capacity); }
+
+        void write_bytes(std::span<const ByteType> bytes) {
+            write(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+        }
+
+        auto read_bytes(size_t count) -> std::vector<ByteType, Allocator> {
+            std::vector<ByteType, Allocator> result(count);
+            auto actual = read(reinterpret_cast<char*>(result.data()), count).gcount();
+            result.resize(actual);
+            return result;
+        }
+
+    private:
+        std::vector<ByteType, Allocator> buffer_;
+        MemoryStreamBuf<ByteType, Allocator> streambuf_;
+    };
 }
