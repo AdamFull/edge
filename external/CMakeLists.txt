@@ -131,6 +131,61 @@ target_include_directories(zstd SYSTEM INTERFACE ${ZSTD_INCLUDE_DIR})
 add_library(ZSTD::ZSTD ALIAS zstd)
 set(ZSTD_LIBRARY ZSTD::ZSTD)
 
+# zlib
+if(ANDROID)
+find_package(ZLIB REQUIRED)
+else()
+set(ZLIB_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib")
+set(ZLIB_INCLUDE_DIR ${ZLIB_SOURCE_DIR})
+
+set(ZLIB_SOURCES
+    "${ZLIB_SOURCE_DIR}/adler32.c"
+    "${ZLIB_SOURCE_DIR}/compress.c"
+    "${ZLIB_SOURCE_DIR}/crc32.c"
+    "${ZLIB_SOURCE_DIR}/crc32.h"
+    "${ZLIB_SOURCE_DIR}/deflate.c"
+    "${ZLIB_SOURCE_DIR}/deflate.h"
+    "${ZLIB_SOURCE_DIR}/gzclose.c"
+    "${ZLIB_SOURCE_DIR}/gzguts.h"
+    "${ZLIB_SOURCE_DIR}/gzlib.c"
+    "${ZLIB_SOURCE_DIR}/gzread.c"
+    "${ZLIB_SOURCE_DIR}/gzwrite.c"
+    "${ZLIB_SOURCE_DIR}/infback.c"
+    "${ZLIB_SOURCE_DIR}/inffast.c"
+    "${ZLIB_SOURCE_DIR}/inffast.h"
+    "${ZLIB_SOURCE_DIR}/inffixed.h"
+    "${ZLIB_SOURCE_DIR}/inflate.c"
+    "${ZLIB_SOURCE_DIR}/inflate.h"
+    "${ZLIB_SOURCE_DIR}/inftrees.c"
+    "${ZLIB_SOURCE_DIR}/inftrees.h"
+    "${ZLIB_SOURCE_DIR}/trees.c"
+    "${ZLIB_SOURCE_DIR}/trees.h"
+    "${ZLIB_SOURCE_DIR}/uncompr.c"
+    "${ZLIB_SOURCE_DIR}/zlib.h"
+    "${ZLIB_SOURCE_DIR}/zutil.c"
+    "${ZLIB_SOURCE_DIR}/zutil.h"
+)
+
+add_library(zlib STATIC ${ZLIB_SOURCES})
+target_include_directories(zlib SYSTEM PUBLIC ${ZLIB_SOURCE_DIR})
+
+if(WIN32)
+    target_compile_definitions(zlib PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
+add_library(ZLIB::ZLIB ALIAS zlib)
+set(ZLIB_LIBRARY ZLIB::ZLIB)
+endif()
+
+# libzip
+set(BUILD_TOOLS OFF CACHE BOOL "")
+set(BUILD_REGRESS OFF CACHE BOOL "")
+set(BUILD_OSSFUZZ OFF CACHE BOOL "")
+set(BUILD_EXAMPLES OFF CACHE BOOL "")
+set(BUILD_DOC OFF CACHE BOOL "")
+
+add_subdirectory(libzip)
+
 # KTX-Software
 set(KTX_SOFTWARE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/KTX-Software")
 
@@ -319,6 +374,8 @@ target_link_libraries(imgui PRIVATE freetype)
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
     INTERFACE
+
+    libzip::zip 
 
     mimalloc-static
 
