@@ -2,8 +2,10 @@
 
 #if EDGE_PLATFORM_ANDROID
 #include "../platform/unix_filesystem.h"
+#include "../platform/zip_filesystem.h"
 #elif EDGE_PLATFORM_WINDOWS
 #include "../platform/windows_filesystem.h"
+#include "../platform/zip_filesystem.h"
 #endif
 
 namespace edge::platform {

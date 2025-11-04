@@ -70,6 +70,7 @@ if(WIN32)
         "windows_context.cpp"
         "windows_frame_handler.cpp"
         "windows_filesystem.cpp"
+        "zip_filesystem.cpp"
     )
 elseif(ANDROID)
     find_package(games-controller REQUIRED CONFIG)
@@ -87,16 +88,12 @@ elseif(ANDROID)
         "android_input.cpp"
         "android_window.cpp"
         "unix_filesystem.cpp"
+        "zip_filesystem.cpp"
     )
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
-        "linux/frame_handler.cpp"
-    )
-elseif(APPLE AND NOT IOS)
-    # macOS-specific sources
-    target_sources(${PROJECT_NAME} PRIVATE 
-        "apple/frame_handler.cpp"
+        "unix_filesystem.cpp"
     )
 else()
     target_sources(${PROJECT_NAME} PRIVATE 
