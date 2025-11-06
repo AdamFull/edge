@@ -17,6 +17,8 @@ extern "C" {
 #include <stddef.h>
 #include <curl/curl.h>
 
+    typedef struct edge_http_context edge_http_context_t;
+
 typedef enum {
     EDGE_HTTP_WS_FRAME_TEXT = 0x01,  /* Text frame */
     EDGE_HTTP_WS_FRAME_BINARY = 0x02,  /* Binary frame */
@@ -52,14 +54,14 @@ typedef void (*edge_http_ws_connect_callback)(
  * @param url WebSocket URL (ws:// or wss://)
  * @return WebSocket object, or NULL on failure
  */
-edge_http_websocket_t* edge_http_websocket_create(const char* url);
+edge_http_websocket_t* edge_http_websocket_create(edge_http_context_t* ctx, const char* url);
 
 /**
  * Free WebSocket and all associated resources
  *
  * @param ws WebSocket to free
  */
-void edge_http_websocket_free(edge_http_websocket_t* ws);
+void edge_http_websocket_free(edge_http_context_t* ctx, edge_http_websocket_t* ws);
 
 /**
  * Set custom headers for the WebSocket handshake
@@ -84,7 +86,7 @@ void edge_http_websocket_set_timeout(edge_http_websocket_t* ws, long timeout_sec
  * @param ws WebSocket object
  * @param user_agent User agent string
  */
-void edge_http_websocket_set_user_agent(edge_http_websocket_t* ws, const char* user_agent);
+void edge_http_websocket_set_user_agent(edge_http_context_t* ctx, edge_http_websocket_t* ws, const char* user_agent);
 
 /**
  * Enable or disable verbose output
@@ -100,7 +102,7 @@ void edge_http_websocket_set_verbose(edge_http_websocket_t* ws, int verbose);
  * @param ws WebSocket object
  * @param protocols Comma-separated list of protocols (e.g., "chat, superchat")
  */
-void edge_http_websocket_set_protocols(edge_http_websocket_t* ws, const char* protocols);
+void edge_http_websocket_set_protocols(edge_http_context_t* ctx, edge_http_websocket_t* ws, const char* protocols);
 
 /**
  * Set user data pointer
@@ -157,7 +159,7 @@ void edge_http_websocket_set_error_callback(edge_http_websocket_t* ws, edge_http
  * @param ws WebSocket object
  * @return 0 on success, -1 on error
  */
-int edge_http_websocket_connect(edge_http_websocket_t* ws);
+int edge_http_websocket_connect(edge_http_context_t* ctx, edge_http_websocket_t* ws);
 
 /**
  * Poll for WebSocket events (non-blocking)
@@ -224,7 +226,7 @@ int edge_http_websocket_send_pong(edge_http_websocket_t* ws, const void* payload
  * @param reason Optional close reason
  * @return 0 on success, -1 on error
  */
-int edge_http_websocket_send_close(edge_http_websocket_t* ws, int status_code, const char* reason);
+int edge_http_websocket_send_close(edge_http_context_t* ctx, edge_http_websocket_t* ws, int status_code, const char* reason);
 
 #define EDGE_HTTP_WS_CLOSE_NORMAL           1000  /* Normal closure */
 #define EDGE_HTTP_WS_CLOSE_GOING_AWAY       1001  /* Endpoint going away */
@@ -248,7 +250,7 @@ int edge_http_websocket_send_close(edge_http_websocket_t* ws, int status_code, c
  * @param userdata User data for callbacks
  * @return 0 on success, -1 on error
  */
-int edge_http_websocket_run(const char* url, edge_http_ws_message_callback on_message, void* userdata);
+int edge_http_websocket_run(edge_http_context_t* ctx, const char* url, edge_http_ws_message_callback on_message, void* userdata);
 
 #ifdef __cplusplus
 }
