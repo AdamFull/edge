@@ -1,21 +1,6 @@
 # libedgehttp - Http wrapper for edge engine
 
-A lightweight, efficient HTTP client library for C with support for synchronous, concurrent, and truly asynchronous requests. Features custom memory allocator support and clean API design.
-
-## Features
-
-- ✅ **Pure C Library** - Standard C11, no C++ dependencies
-- ✅ **All HTTP Methods** - GET, POST, PUT, DELETE, PATCH, HEAD
-- ✅ **Three Modes**:
-  - Synchronous (blocking, sequential)
-  - Concurrent (parallel, blocking until all complete)
-  - Truly Async (non-blocking, main thread continues)
-- ✅ **Custom Memory Allocators** - Use your own malloc/free
-- ✅ **Clean API** - Simple, intuitive function naming
-- ✅ **Automatic Resource Management** - Single free call cleans everything
-- ✅ **Header Management** - Easy header addition with `edge_http_request_add_header()`
-- ✅ **CMake Build System** - Modern, cross-platform builds
-- ✅ **Shared and Static Libraries** - Choose your linking preference
+A lightweight, efficient HTTP client library for C with support for synchronous and asynchronous requests. 
 
 ## Dependencies
 
