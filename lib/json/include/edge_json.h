@@ -28,11 +28,7 @@ typedef void* (*edge_json_malloc_func)(size_t size);
 typedef void (*edge_json_free_func)(void* ptr);
 typedef void* (*edge_json_realloc_func)(void* ptr, size_t size);
 
-typedef struct edge_json_allocator {
-    edge_json_malloc_func  malloc_fn;
-    edge_json_free_func    free_fn;
-    edge_json_realloc_func realloc_fn;
-} edge_json_allocator_t;
+typedef struct edge_json_context edge_json_context_t;
 
 typedef enum {
     EDGE_JSON_TYPE_NULL,
@@ -48,22 +44,21 @@ typedef struct edge_json_value edge_json_value_t;
 /**
  * Initialize library with default allocator (malloc/free)
  *
- * @return 1 on success, 0 on failure
+ * @return edge_json_context_t
  */
-int edge_json_global_init(void);
+edge_json_context_t* edge_json_create_default(void);
 
 /**
  * Initialize library with custom allocator
  *
- * @param allocator Custom allocator
- * @return 1 on success, 0 on failure
+ * @return edge_json_context_t
  */
-int edge_json_global_init_allocator(const edge_json_allocator_t* allocator);
+edge_json_context_t* edge_json_create_context(edge_json_malloc_func pfn_malloc, edge_json_free_func pfn_free, edge_json_realloc_func pfn_realloc);
 
 /**
  * Cleanup library
  */
-void edge_json_global_cleanup(void);
+void edge_json_destroy_context(edge_json_context_t* pctx);
 
 /**
  * Get library version
@@ -77,7 +72,7 @@ const char* edge_json_version(void);
  *
  * @return JSON value
  */
-edge_json_value_t* edge_json_null(void);
+edge_json_value_t* edge_json_null(edge_json_context_t* ctx);
 
 /**
  * Create a boolean value
@@ -85,7 +80,7 @@ edge_json_value_t* edge_json_null(void);
  * @param value Boolean value (0 = false, non-zero = true)
  * @return JSON value
  */
-edge_json_value_t* edge_json_bool(int value);
+edge_json_value_t* edge_json_bool(edge_json_context_t* ctx, int value);
 
 /**
  * Create a number value
@@ -93,7 +88,7 @@ edge_json_value_t* edge_json_bool(int value);
  * @param value Number value
  * @return JSON value
  */
-edge_json_value_t* edge_json_number(double value);
+edge_json_value_t* edge_json_number(edge_json_context_t* ctx, double value);
 
 /**
  * Create an integer number value
@@ -101,7 +96,7 @@ edge_json_value_t* edge_json_number(double value);
  * @param value Integer value
  * @return JSON value
  */
-edge_json_value_t* edge_json_int(int64_t value);
+edge_json_value_t* edge_json_int(edge_json_context_t* ctx, int64_t value);
 
 /**
  * Create a string value
@@ -110,7 +105,7 @@ edge_json_value_t* edge_json_int(int64_t value);
  * @param value String value (null-terminated)
  * @return JSON value
  */
-edge_json_value_t* edge_json_string(const char* value);
+edge_json_value_t* edge_json_string(edge_json_context_t* ctx, const char* value);
 
 /**
  * Create a string value with length
@@ -119,28 +114,28 @@ edge_json_value_t* edge_json_string(const char* value);
  * @param length String length
  * @return JSON value
  */
-edge_json_value_t* edge_json_string_len(const char* value, size_t length);
+edge_json_value_t* edge_json_string_len(edge_json_context_t* ctx, const char* value, size_t length);
 
 /**
  * Create an empty array
  *
  * @return JSON array
  */
-edge_json_value_t* edge_json_array(void);
+edge_json_value_t* edge_json_array(edge_json_context_t* ctx);
 
 /**
  * Create an empty object
  *
  * @return JSON object
  */
-edge_json_value_t* edge_json_object(void);
+edge_json_value_t* edge_json_object(edge_json_context_t* ctx);
 
 /**
  * Free a JSON value and all its children
  *
  * @param value JSON value to free
  */
-void edge_json_free_value(edge_json_value_t* value);
+void edge_json_free_value(edge_json_context_t* ctx, edge_json_value_t* value);
 
 /**
  * Get the type of a JSON value
@@ -249,7 +244,7 @@ edge_json_value_t* edge_json_array_get(const edge_json_value_t* array, size_t in
  * @param value Value to append
  * @return 1 on success, 0 on failure
  */
-int edge_json_array_append(edge_json_value_t* array, edge_json_value_t* value);
+int edge_json_array_append(edge_json_context_t* ctx, edge_json_value_t* array, edge_json_value_t* value);
 
 /**
  * Insert element at index
@@ -259,7 +254,7 @@ int edge_json_array_append(edge_json_value_t* array, edge_json_value_t* value);
  * @param value Value to insert
  * @return 1 on success, 0 on failure
  */
-int edge_json_array_insert(edge_json_value_t* array, size_t index, edge_json_value_t* value);
+int edge_json_array_insert(edge_json_context_t* ctx, edge_json_value_t* array, size_t index, edge_json_value_t* value);
 
 /**
  * Remove element at index
@@ -268,14 +263,14 @@ int edge_json_array_insert(edge_json_value_t* array, size_t index, edge_json_val
  * @param index Element index
  * @return 1 on success, 0 on failure
  */
-int edge_json_array_remove(edge_json_value_t* array, size_t index);
+int edge_json_array_remove(edge_json_context_t* ctx, edge_json_value_t* array, size_t index);
 
 /**
  * Clear all elements from array
  *
  * @param array JSON array
  */
-void edge_json_array_clear(edge_json_value_t* array);
+void edge_json_array_clear(edge_json_context_t* ctx, edge_json_value_t* array);
 
 /**
  * Get number of keys in object
@@ -304,7 +299,7 @@ edge_json_value_t* edge_json_object_get(const edge_json_value_t* object, const c
  * @param value Value to set
  * @return 1 on success, 0 on failure
  */
-int edge_json_object_set(edge_json_value_t* object, const char* key, edge_json_value_t* value);
+int edge_json_object_set(edge_json_context_t* ctx, edge_json_value_t* object, const char* key, edge_json_value_t* value);
 
 /**
  * Remove key from object
@@ -313,7 +308,7 @@ int edge_json_object_set(edge_json_value_t* object, const char* key, edge_json_v
  * @param key Key name
  * @return 1 on success, 0 if key not found
  */
-int edge_json_object_remove(edge_json_value_t* object, const char* key);
+int edge_json_object_remove(edge_json_context_t* ctx, edge_json_value_t* object, const char* key);
 
 /**
  * Check if object has key
@@ -329,7 +324,7 @@ int edge_json_object_has(const edge_json_value_t* object, const char* key);
  *
  * @param object JSON object
  */
-void edge_json_object_clear(edge_json_value_t* object);
+void edge_json_object_clear(edge_json_context_t* ctx, edge_json_value_t* object);
 
 /**
  * Get key at index
@@ -355,7 +350,7 @@ edge_json_value_t* edge_json_object_get_value_at(const edge_json_value_t* object
  * @param json JSON string
  * @return JSON value, or NULL on error
  */
-edge_json_value_t* edge_json_parse(const char* json);
+edge_json_value_t* edge_json_parse(edge_json_context_t* ctx, const char* json);
 
 /**
  * Parse JSON from string with length
@@ -364,14 +359,14 @@ edge_json_value_t* edge_json_parse(const char* json);
  * @param length String length
  * @return JSON value, or NULL on error
  */
-edge_json_value_t* edge_json_parse_len(const char* json, size_t length);
+edge_json_value_t* edge_json_parse_len(edge_json_context_t* ctx, const char* json, size_t length);
 
 /**
  * Get last parse error message
  *
  * @return Error message, or NULL if no error
  */
-const char* edge_json_get_error(void);
+const char* edge_json_get_error(edge_json_context_t* ctx);
 
 /**
  * Serialize JSON to string
@@ -380,7 +375,7 @@ const char* edge_json_get_error(void);
  * @param value JSON value
  * @return JSON string, or NULL on error
  */
-char* edge_json_stringify(const edge_json_value_t* value);
+char* edge_json_stringify(edge_json_context_t* ctx, const edge_json_value_t* value);
 
 /**
  * Serialize JSON to string with formatting
@@ -389,14 +384,14 @@ char* edge_json_stringify(const edge_json_value_t* value);
  * @param indent Indentation string (e.g., "  " or "\t")
  * @return JSON string, or NULL on error
  */
-char* edge_json_stringify_pretty(const edge_json_value_t* value, const char* indent);
+char* edge_json_stringify_pretty(edge_json_context_t* ctx, const edge_json_value_t* value, const char* indent);
 
 /**
  * Free string returned by edge_json_stringify
  *
  * @param str String to free
  */
-void edge_json_free_string(char* str);
+void edge_json_free_string(edge_json_context_t* ctx, char* str);
 
 /**
  * Clone a JSON value (deep copy)
@@ -404,7 +399,7 @@ void edge_json_free_string(char* str);
  * @param value JSON value to clone
  * @return Cloned value, or NULL on error
  */
-edge_json_value_t* edge_json_clone(const edge_json_value_t* value);
+edge_json_value_t* edge_json_clone(edge_json_context_t* ctx, const edge_json_value_t* value);
 
 /**
  * Compare two JSON values for equality
@@ -424,21 +419,21 @@ int edge_json_equals(const edge_json_value_t* a, const edge_json_value_t* b);
  * @param source Source object
  * @return 1 on success, 0 on failure
  */
-int edge_json_object_merge(edge_json_value_t* dest, const edge_json_value_t* source);
+int edge_json_object_merge(edge_json_context_t* ctx, edge_json_value_t* dest, const edge_json_value_t* source);
 
 /**
  * Create object and set values in one call
  * Usage: edge_json_build_object("name", edge_json_string("John"), "age", edge_json_int(30), NULL)
  * Must be terminated with NULL
  */
-edge_json_value_t* edge_json_build_object(const char* key, ...);
+edge_json_value_t* edge_json_build_object(edge_json_context_t* ctx, const char* key, ...);
 
 /**
  * Create array from values
  * Usage: edge_json_build_array(edge_json_int(1), edge_json_int(2), edge_json_int(3), NULL)
  * Must be terminated with NULL
  */
-edge_json_value_t* edge_json_build_array(edge_json_value_t* value, ...);
+edge_json_value_t* edge_json_build_array(edge_json_context_t* ctx, edge_json_value_t* value, ...);
 
 #ifdef __cplusplus
 }
