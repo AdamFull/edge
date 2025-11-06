@@ -16,6 +16,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(spdlog)
 
+# Fetch nlohmann json
+FetchContent_Declare(
+    json 
+    GIT_REPOSITORY https://github.com/nlohmann/json
+    GIT_TAG v3.12.0
+)
+FetchContent_MakeAvailable(json)
+
 # tiny_imageformat
 set(TINY_IMAGEFORMAT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tiny_imageformat)
 
@@ -374,6 +382,8 @@ target_link_libraries(imgui PRIVATE freetype)
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
     INTERFACE
+
+    nlohmann_json::nlohmann_json
 
     libzip::zip 
 
