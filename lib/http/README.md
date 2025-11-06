@@ -1,41 +1,12 @@
 # libedgehttp - Http wrapper for edge engine
 
-A lightweight, efficient HTTP client library for C with support for synchronous, concurrent, and truly asynchronous requests. Features custom memory allocator support and clean API design.
-
-## Features
-
-- ✅ **Pure C Library** - Standard C11, no C++ dependencies
-- ✅ **All HTTP Methods** - GET, POST, PUT, DELETE, PATCH, HEAD
-- ✅ **Three Modes**:
-  - Synchronous (blocking, sequential)
-  - Concurrent (parallel, blocking until all complete)
-  - Truly Async (non-blocking, main thread continues)
-- ✅ **Custom Memory Allocators** - Use your own malloc/free
-- ✅ **Clean API** - Simple, intuitive function naming
-- ✅ **Automatic Resource Management** - Single free call cleans everything
-- ✅ **Header Management** - Easy header addition with `edge_http_request_add_header()`
-- ✅ **CMake Build System** - Modern, cross-platform builds
-- ✅ **Shared and Static Libraries** - Choose your linking preference
+A lightweight, efficient HTTP client library for C with support for synchronous and asynchronous requests. 
 
 ## Dependencies
 
 - **libcurl** (required) - For HTTP operations
-- **mimalloc** (optional) - For custom memory allocation example
 
 ## Quick Start
-
-### Installation
-
-```bash
-# Clone or extract the library
-cd libedgehttp
-
-# Build with CMake
-mkdir build && cd build
-cmake ..
-make
-sudo make install
-```
 
 ### Basic Usage
 
@@ -212,17 +183,14 @@ edge_http_global_cleanup();
 CMake options:
 
 ```bash
-# Build shared library (default: ON)
-cmake -DHTTPC_BUILD_SHARED=ON ..
+# Build shared library (default: OFF)
+cmake -DEDGE_HTTP_BUILD_SHARED=ON ..
 
 # Build static library (default: ON)
-cmake -DHTTPC_BUILD_STATIC=ON ..
+cmake -DEDGE_HTTP_BUILD_STATIC=ON ..
 
-# Build examples (default: ON)
-cmake -DHTTPC_BUILD_EXAMPLES=ON ..
-
-# Use mimalloc (default: OFF)
-cmake -DHTTPC_USE_MIMALLOC=ON ..
+# Build examples (default: OFF)
+cmake -DEDGE_HTTP_BUILD_EXAMPLES=ON ..
 
 # Set install prefix
 cmake -DCMAKE_INSTALL_PREFIX=/usr/local ..
@@ -235,10 +203,9 @@ mkdir build && cd build
 
 cmake .. \
     -DCMAKE_BUILD_TYPE=Release \
-    -DHTTPC_BUILD_SHARED=ON \
-    -DHTTPC_BUILD_STATIC=ON \
-    -DHTTPC_BUILD_EXAMPLES=ON \
-    -DHTTPC_USE_MIMALLOC=OFF
+    -DEDGE_HTTP_BUILD_SHARED=ON \
+    -DEDGE_HTTP_BUILD_STATIC=ON \
+    -DEDGE_HTTP_BUILD_EXAMPLES=ON
 
 make -j$(nproc)
 sudo make install
@@ -265,15 +232,6 @@ gcc myapp.c $(pkg-config --cflags --libs edge_http) -o myapp
 gcc myapp.c -I/usr/local/include -L/usr/local/lib -ledge_http -lcurl -o myapp
 ```
 
-## Memory Management
-
-### Key Features
-
-- ✅ **Automatic cleanup** - Single free call cleans everything
-- ✅ **No manual header management** - Headers freed with request
-- ✅ **No memory leaks** - Proper resource tracking
-- ✅ **Custom allocators** - Use your own malloc/free
-
 ### Example
 
 ```c
@@ -299,17 +257,7 @@ Time: 3 seconds
 Use: Simple scripts, one-off requests
 ```
 
-### 2. Concurrent (Parallel, Blocking)
-```
-Request 1 [====]
-Request 2 [====]
-Request 3 [====]
-Time: 1 second (all parallel)
-Main thread: BLOCKED until all done
-Use: Batch processing, CLI tools
-```
-
-### 3. Truly Async (Non-Blocking)
+### 2. Async (Non-Blocking)
 ```
 Request 1 [====]
 Request 2 [====]
@@ -319,16 +267,6 @@ Time: 1 second
 Main thread: NEVER blocked
 Use: GUI apps, games, servers
 ```
-
-## Performance
-
-**Scenario: 10 requests, 1 second each**
-
-| Mode | Time | Main Thread Blocked |
-|------|------|---------------------|
-| Synchronous | ~10s | 100% |
-| Concurrent | ~1s | 100% (but shorter) |
-| Truly Async | ~1s | 0% |
 
 ## Thread Safety
 
@@ -404,40 +342,16 @@ edge_http_request_free(request);
 The library includes several examples:
 
 - `example.c` - Basic usage of all features
-- `custom_allocator.c` - Using mimalloc as custom allocator
 
 Run examples:
 ```bash
 cd build/examples
 ./example
-./custom_allocator
 ```
 
 ## License
 
 MIT License - See LICENSE file for details
-
-## Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
-
-## Support
-
-- **Issues**: Report bugs on GitHub
-- **Documentation**: See header file for full API
-- **Examples**: Check examples/ directory
-
-## Roadmap
-
-- [ ] HTTP/2 support
-- [ ] WebSocket support
-- [ ] Connection pooling
-- [ ] DNS caching
-- [ ] Retry policies
-- [ ] Rate limiting
 
 ## Version
 
