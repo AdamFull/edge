@@ -20,7 +20,6 @@ A lightweight, efficient HTTP client library for C with support for synchronous,
 ## Dependencies
 
 - **libcurl** (required) - For HTTP operations
-- **mimalloc** (optional) - For custom memory allocation example
 
 ## Quick Start
 
@@ -404,7 +403,6 @@ edge_http_request_free(request);
 The library includes several examples:
 
 - `example.c` - Basic usage of all features
-- `custom_allocator.c` - Using mimalloc as custom allocator
 
 Run examples:
 ```bash
@@ -417,27 +415,11 @@ cd build/examples
 
 MIT License - See LICENSE file for details
 
-## Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
-
 ## Support
 
 - **Issues**: Report bugs on GitHub
 - **Documentation**: See header file for full API
 - **Examples**: Check examples/ directory
-
-## Roadmap
-
-- [ ] HTTP/2 support
-- [ ] WebSocket support
-- [ ] Connection pooling
-- [ ] DNS caching
-- [ ] Retry policies
-- [ ] Rate limiting
 
 ## Version
 
