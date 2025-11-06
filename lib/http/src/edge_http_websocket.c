@@ -21,6 +21,7 @@ extern void edge_http_free(void* ptr);
 extern void* edge_http_realloc(void* ptr, size_t size);
 extern void* edge_http_calloc(size_t nmemb, size_t size);
 extern char* edge_http_strdup(const char* str);
+extern void edge_http_set_error(const char* format, ...);
 
 struct edge_http_websocket {
     char* url;
@@ -73,7 +74,7 @@ edge_http_websocket_t* edge_http_websocket_create(const char* url) {
 
     /* Check URL scheme */
     if (strncmp(url, "ws://", 5) != 0 && strncmp(url, "wss://", 6) != 0) {
-        fprintf(stderr, "WebSocket URL must start with ws:// or wss://\n");
+        edge_http_set_error("WebSocket URL must start with ws:// or wss://\n");
         return NULL;
     }
 
@@ -217,7 +218,7 @@ static int edge_http_websocket_setup_curl(edge_http_websocket_t* ws) {
     if (ws->protocols) {
         char* protocol_header = (char*)edge_http_malloc(strlen(ws->protocols) + 32);
         if (protocol_header) {
-            sprintf(protocol_header, "Sec-WebSocket-Protocol: %s", ws->protocols);
+            edge_http_set_error(protocol_header, "Sec-WebSocket-Protocol: %s", ws->protocols);
             ws->headers = curl_slist_append(ws->headers, protocol_header);
             curl_easy_setopt(ws->curl, CURLOPT_HTTPHEADER, ws->headers);
             edge_http_free(protocol_header);

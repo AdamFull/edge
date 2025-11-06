@@ -17,6 +17,7 @@ static struct edge_http_allocator g_allocator = {
 };
 
 static int g_initialized = 0;
+static char g_error_message[256] = { 0 };
 
 struct edge_http_request {
     char* url;
@@ -50,6 +51,21 @@ struct edge_http_async_manager {
     int capacity;
     int started;
 };
+
+static void edge_http_set_error(const char* format, ...) {
+    va_list args;
+    va_start(args, format);
+    vsnprintf(g_error_message, sizeof(g_error_message), format, args);
+    va_end(args);
+}
+
+static void edge_http_clear_error(void) {
+    g_error_message[0] = '\0';
+}
+
+const char* edge_http_get_error(void) {
+    return g_error_message[0] ? g_error_message : NULL;
+}
 
 static void* edge_http_malloc(size_t size) {
     return g_allocator.malloc_fn(size);

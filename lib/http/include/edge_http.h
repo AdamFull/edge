@@ -18,13 +18,13 @@ typedef void* (*edge_http_realloc_func)(void* ptr, size_t size);
 typedef void* (*edge_http_calloc_func)(size_t nmemb, size_t size);
 typedef char* (*edge_http_strdup_func)(const char* str);
 
-struct edge_http_allocator {
+typedef struct edge_http_allocator {
     edge_http_malloc_func  malloc_fn;
     edge_http_free_func    free_fn;
     edge_http_realloc_func realloc_fn;
     edge_http_calloc_func  calloc_fn;
     edge_http_strdup_func  strdup_fn;
-};
+} edge_http_allocator_t;
 
 typedef struct edge_http_response {
     char* body;
@@ -281,6 +281,13 @@ int edge_http_async_manager_is_done(edge_http_async_manager_t* manager);
  * @param manager Async manager
  */
 void edge_http_async_manager_wait(edge_http_async_manager_t* manager);
+
+/**
+ * Get last error message
+ *
+ * @return Error message, or NULL if no error
+ */
+const char* edge_http_get_error(void);
 
 #ifdef __cplusplus
 }
