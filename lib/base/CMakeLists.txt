@@ -1,0 +1,53 @@
+cmake_minimum_required(VERSION 3.10)
+project(libedgebase VERSION 1.0.0 LANGUAGES C)
+
+# Set C standard
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+set(EDGE_BASE_SOURCES
+    "src/edge_allocator.c"
+)
+
+set(EDGE_BASE_HEADERS
+    "include/edge_allocator.h"
+)
+
+# Library
+add_library(edge_base STATIC
+    ${EDGE_BASE_SOURCES}
+)
+
+# Include directories
+target_include_directories(edge_base PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+)
+
+# Compiler flags
+if(MSVC)
+    target_compile_options(edge_base PRIVATE /W4)
+else()
+    target_compile_options(edge_base PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+# Installation
+include(GNUInstallDirs)
+
+install(TARGETS edge_base
+    EXPORT edgeBaseTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
+
+install(FILES ${EDGE_BASE_HEADERS}
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Export targets
+install(EXPORT edgeBaseTargets
+    FILE edgeBaseTargets.cmake
+    NAMESPACE edge::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/edge_base
+)
