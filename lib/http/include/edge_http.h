@@ -10,15 +10,9 @@ extern "C" {
 
 #define EDGE_HTTP_VERSION_MAJOR 1
 #define EDGE_HTTP_VERSION_MINOR 0
-#define EDGE_HTTP_VERSION_PATCH 0
+#define EDGE_HTTP_VERSION_PATCH 1
 
-typedef void* (*edge_http_malloc_func)(size_t size);
-typedef void (*edge_http_free_func)(void* ptr);
-typedef void* (*edge_http_realloc_func)(void* ptr, size_t size);
-typedef void* (*edge_http_calloc_func)(size_t nmemb, size_t size);
-typedef char* (*edge_http_strdup_func)(const char* str);
-
-typedef struct edge_http_context edge_http_context_t;
+typedef struct edge_allocator edge_allocator_t;
 
 typedef struct edge_http_response {
     char* body;
@@ -31,7 +25,7 @@ typedef struct edge_http_response {
     CURLcode curl_code;
     char error_message[256];
 
-    edge_http_context_t* ctx;
+    const edge_allocator_t* allocator;
 } edge_http_response_t;
 
 typedef struct edge_http_request edge_http_request_t;
@@ -44,24 +38,24 @@ typedef void (*edge_http_callback_func)(edge_http_response_t* response, void* us
  * Initialize the library with default allocator (system malloc/free)
  * Must be called before any other library functions
  *
- * @return edge_http_context_t pointer
+ * @return context_initialization result
  */
-edge_http_context_t* edge_http_create_context_default(void);
+int edge_http_initialize_global_context_default(void);
 
 /**
- * Initialize the library with custom allocator
+ * Initialize the library with default allocator (system malloc/free)
  * Must be called before any other library functions
  *
- * @return edge_http_context_t pointer
+ * @return context_initialization result
  */
-edge_http_context_t* edge_http_create_context(edge_http_malloc_func pfn_malloc, edge_http_free_func pfn_free, edge_http_realloc_func pfn_realloc, 
-    edge_http_calloc_func pfn_calloc, edge_http_strdup_func pfn_strdup);
+int edge_http_initialize_global_context(edge_allocator_t const* allocator);
 
 /**
  * Cleanup the library
  * Should be called when done using the library
+ * @return context_initialization result
  */
-void edge_http_destroy_context(edge_http_context_t* ctx);
+void edge_http_gleanup_global(void);
 
 /**
  * Get library version string
@@ -77,14 +71,14 @@ const char* edge_http_version(void);
  * @param url Request URL
  * @return Pointer to request object, or NULL on failure
  */
-edge_http_request_t* edge_http_request_create(edge_http_context_t* ctx, const char* method, const char* url);
+edge_http_request_t* edge_http_request_create(const char* method, const char* url, const edge_allocator_t* allocator);
 
 /**
  * Free a request and all associated resources
  *
  * @param request Request to free
  */
-void edge_http_request_free(edge_http_context_t* ctx, edge_http_request_t* request);
+void edge_http_request_free(edge_http_request_t* request);
 
 /**
  * Set request URL
@@ -92,7 +86,7 @@ void edge_http_request_free(edge_http_context_t* ctx, edge_http_request_t* reque
  * @param request Request object
  * @param url New URL
  */
-void edge_http_request_set_url(edge_http_context_t* ctx, edge_http_request_t* request, const char* url);
+void edge_http_request_set_url(edge_http_request_t* request, const char* url);
 
 /**
  * Set request method
@@ -100,7 +94,7 @@ void edge_http_request_set_url(edge_http_context_t* ctx, edge_http_request_t* re
  * @param request Request object
  * @param method HTTP method
  */
-void edge_http_request_set_method(edge_http_context_t* ctx, edge_http_request_t* request, const char* method);
+void edge_http_request_set_method(edge_http_request_t* request, const char* method);
 
 /**
  * Set request body
@@ -109,7 +103,7 @@ void edge_http_request_set_method(edge_http_context_t* ctx, edge_http_request_t*
  * @param body Body data
  * @param body_size Size of body data
  */
-void edge_http_request_set_body(edge_http_context_t* ctx, edge_http_request_t* request, const char* body, size_t body_size);
+void edge_http_request_set_body(edge_http_request_t* request, const char* body, size_t body_size);
 
 /**
  * Add a header to the request
@@ -142,7 +136,7 @@ void edge_http_request_set_connect_timeout(edge_http_request_t* request, long ti
  * @param request Request object
  * @param user_agent User agent string
  */
-void edge_http_request_set_user_agent(edge_http_context_t* ctx, edge_http_request_t* request, const char* user_agent);
+void edge_http_request_set_user_agent(edge_http_request_t* request, const char* user_agent);
 
 /**
  * Enable or disable verbose output
@@ -175,7 +169,7 @@ void edge_http_request_set_callback(edge_http_request_t* request, edge_http_call
  *
  * @param response Response to free
  */
-void edge_http_response_free(edge_http_context_t* ctx, edge_http_response_t* response);
+void edge_http_response_free(edge_http_response_t* response);
 
 /**
  * Perform a synchronous HTTP request (blocking)
@@ -183,7 +177,7 @@ void edge_http_response_free(edge_http_context_t* ctx, edge_http_response_t* res
  * @param request Request to perform
  * @return Response object, or NULL on failure. Must be freed with edge_http_response_free()
  */
-edge_http_response_t* edge_http_request_perform(edge_http_context_t* ctx, edge_http_request_t* request);
+edge_http_response_t* edge_http_request_perform(edge_http_request_t* request);
 
 /**
  * Convenience function for GET request
@@ -191,7 +185,7 @@ edge_http_response_t* edge_http_request_perform(edge_http_context_t* ctx, edge_h
  * @param url URL to request
  * @return Response object, or NULL on failure. Must be freed with edge_http_response_free()
  */
-edge_http_response_t* edge_http_get(edge_http_context_t* ctx, const char* url);
+edge_http_response_t* edge_http_get(const char* url, const edge_allocator_t* allocator);
 
 /**
  * Convenience function for POST request
@@ -201,7 +195,7 @@ edge_http_response_t* edge_http_get(edge_http_context_t* ctx, const char* url);
  * @param body_size Size of request body
  * @return Response object, or NULL on failure. Must be freed with edge_http_response_free()
  */
-edge_http_response_t* edge_http_post(edge_http_context_t* ctx, const char* url, const char* body, size_t body_size);
+edge_http_response_t* edge_http_post(const char* url, const char* body, size_t body_size, const edge_allocator_t* allocator);
 
 /**
  * Convenience function for PUT request
@@ -211,7 +205,7 @@ edge_http_response_t* edge_http_post(edge_http_context_t* ctx, const char* url, 
  * @param body_size Size of request body
  * @return Response object, or NULL on failure. Must be freed with edge_http_response_free()
  */
-edge_http_response_t* edge_http_put(edge_http_context_t* ctx, const char* url, const char* body, size_t body_size);
+edge_http_response_t* edge_http_put(const char* url, const char* body, size_t body_size, const edge_allocator_t* allocator);
 
 /**
  * Convenience function for DELETE request
@@ -219,7 +213,7 @@ edge_http_response_t* edge_http_put(edge_http_context_t* ctx, const char* url, c
  * @param url URL to request
  * @return Response object, or NULL on failure. Must be freed with edge_http_response_free()
  */
-edge_http_response_t* edge_http_delete(edge_http_context_t* ctx, const char* url);
+edge_http_response_t* edge_http_delete(const char* url, const edge_allocator_t* allocator);
 
 
 /**
@@ -227,14 +221,14 @@ edge_http_response_t* edge_http_delete(edge_http_context_t* ctx, const char* url
  *
  * @return Manager object, or NULL on failure
  */
-edge_http_async_manager_t* edge_http_async_manager_create(edge_http_context_t* ctx);
+edge_http_async_manager_t* edge_http_async_manager_create(const edge_allocator_t* allocator);
 
 /**
  * Free async manager and all associated requests
  *
  * @param manager Manager to free
  */
-void edge_http_async_manager_free(edge_http_context_t* ctx, edge_http_async_manager_t* manager);
+void edge_http_async_manager_free(edge_http_async_manager_t* manager);
 
 /**
  * Add a request to the async manager
@@ -244,7 +238,7 @@ void edge_http_async_manager_free(edge_http_context_t* ctx, edge_http_async_mana
  * @param request Request to add
  * @return 1 on success, 0 on failure
  */
-int edge_http_async_manager_add_request(edge_http_context_t* ctx, edge_http_async_manager_t* manager, edge_http_request_t* request);
+int edge_http_async_manager_add_request(edge_http_async_manager_t* manager, edge_http_request_t* request);
 
 
 /**
@@ -283,7 +277,7 @@ void edge_http_async_manager_wait(edge_http_async_manager_t* manager);
  *
  * @return Error message, or NULL if no error
  */
-const char* edge_http_get_error(edge_http_context_t* ctx);
+const char* edge_http_get_error();
 
 #ifdef __cplusplus
 }

@@ -7,16 +7,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <edge_allocator.h>
 
-struct edge_http_context {
-    edge_http_malloc_func  malloc_fn;
-    edge_http_free_func    free_fn;
-    edge_http_realloc_func realloc_fn;
-    edge_http_calloc_func  calloc_fn;
-    edge_http_strdup_func  strdup_fn;
-
-    char error_message[256];
-};
+static int g_default_allocator_initialized = 0;
+static char g_error_message[256];
 
 struct edge_http_request {
     char* url;
@@ -41,6 +35,8 @@ struct edge_http_request {
 
     /* Completion flag */
     int completed;
+
+    const edge_allocator_t* allocator;
 };
 
 struct edge_http_async_manager {
@@ -49,88 +45,50 @@ struct edge_http_async_manager {
     int num_requests;
     int capacity;
     int started;
+
+    const edge_allocator_t* allocator;
 };
 
-static void* edge_http_malloc(edge_http_context_t* ctx, size_t size) {
-    if (!ctx) return NULL;
-    return ctx->malloc_fn(size);
+static const edge_allocator_t* edge_http_pick_allocator(const edge_allocator_t* allocator) {
+    static edge_allocator_t default_allocator;
+    if (g_default_allocator_initialized == 0) {
+        default_allocator = edge_allocator_create_default();
+        g_default_allocator_initialized = 1;
+    }
+    return allocator ? allocator : &default_allocator;
 }
 
-static void edge_http_free(edge_http_context_t* ctx, void* ptr) {
-    if (!ctx || !ptr) return;
-    ctx->free_fn(ptr);
-}
-
-static void* edge_http_realloc(edge_http_context_t* ctx, void* ptr, size_t size) {
-    if (!ctx) return NULL;
-    return ctx->realloc_fn(ptr, size);
-}
-
-static void* edge_http_calloc(edge_http_context_t* ctx, size_t nmemb, size_t size) {
-    if (!ctx) return NULL;
-    return ctx->calloc_fn(nmemb, size);
-}
-
-static char* edge_http_strdup(edge_http_context_t* ctx, const char* str) {
-    if (!ctx) return NULL;
-    return ctx->strdup_fn(str);
-}
-
-static void edge_http_set_error(edge_http_context_t* ctx, const char* format, ...) {
-    if (!ctx) return;
-
+static void edge_http_set_error(const char* format, ...) {
     va_list args;
     va_start(args, format);
-    vsnprintf(ctx->error_message, sizeof(ctx->error_message), format, args);
+    vsnprintf(g_error_message, sizeof(g_error_message), format, args);
     va_end(args);
 }
 
-static void edge_http_clear_error(edge_http_context_t* ctx) {
-    if (!ctx) return;
-    ctx->error_message[0] = '\0';
+static void edge_http_clear_error() {
+    g_error_message[0] = '\0';
 }
 
-const char* edge_http_get_error(edge_http_context_t* ctx) {
-    return ctx->error_message[0] ? ctx->error_message : NULL;
+const char* edge_http_get_error() {
+    return g_error_message[0] ? g_error_message : NULL;
 }
 
-edge_http_context_t* edge_http_create_context_default(void) {
-    return edge_http_create_context(malloc, free, realloc, calloc, strdup);
+int edge_http_initialize_global_context_default(void) {
+    return edge_http_initialize_global_context(edge_http_pick_allocator(NULL));
 }
 
-edge_http_context_t* edge_http_create_context(edge_http_malloc_func pfn_malloc, edge_http_free_func pfn_free, edge_http_realloc_func pfn_realloc,
-    edge_http_calloc_func pfn_calloc, edge_http_strdup_func pfn_strdup) {
-    if (!pfn_malloc || !pfn_free || !pfn_realloc || !pfn_calloc || !pfn_strdup) return NULL;
+int edge_http_initialize_global_context(const edge_allocator_t* allocator) {
+    g_error_message[0] = '\0';
 
-    CURLcode res = curl_global_init_mem(
+    return curl_global_init_mem(
         CURL_GLOBAL_ALL,
-        pfn_malloc,
-        pfn_free,
-        pfn_realloc,
-        pfn_strdup,
-        pfn_calloc
+        allocator->malloc_fn, allocator->free_fn,
+        allocator->realloc_fn, allocator->strdup_fn,
+        allocator->calloc_fn
     );
-
-    if (res != CURLE_OK) {
-        return NULL;
-    }
-
-    struct edge_http_context* ctx = (struct edge_http_context*)pfn_malloc(sizeof(struct edge_http_context));
-    if (!ctx) return NULL;
-
-    ctx->malloc_fn = pfn_malloc;
-    ctx->free_fn = pfn_free;
-    ctx->realloc_fn = pfn_realloc;
-    ctx->calloc_fn = pfn_calloc;
-    ctx->strdup_fn = pfn_strdup;
-    ctx->error_message[0] = '\0';
-
-    return ctx;
 }
 
-void edge_http_destroy_context(edge_http_context_t* ctx) {
-    if (!ctx) return;
-    edge_http_free(ctx, ctx);
+void edge_http_gleanup_global(void) {
     curl_global_cleanup();
 }
 
@@ -140,18 +98,20 @@ const char* edge_http_version(void) {
     return version;
 }
 
-static edge_http_response_t* edge_http_response_create(edge_http_context_t* ctx) {
-    edge_http_response_t* response = (edge_http_response_t*)edge_http_calloc(ctx, 1, sizeof(edge_http_response_t));
-    if (!ctx || !response) {
+static edge_http_response_t* edge_http_response_create(const edge_allocator_t* allocator) {
+    const edge_allocator_t* allocator_callbacks = edge_http_pick_allocator(allocator);
+
+    edge_http_response_t* response = (edge_http_response_t*)edge_allocator_calloc(allocator_callbacks, 1, sizeof(edge_http_response_t));
+    if (!response) {
         return NULL;
     }
 
-    response->body = (char*)edge_http_malloc(ctx, 1);
-    response->headers = (char*)edge_http_malloc(ctx, 1);
+    response->body = (char*)edge_allocator_malloc(allocator_callbacks, 1);
+    response->headers = (char*)edge_allocator_malloc(allocator_callbacks, 1);
     if (!response->body || !response->headers) {
-        edge_http_free(ctx, response->body);
-        edge_http_free(ctx, response->headers);
-        edge_http_free(ctx, response);
+        edge_allocator_free(allocator_callbacks, response->body);
+        edge_allocator_free(allocator_callbacks, response->headers);
+        edge_allocator_free(allocator_callbacks, response);
         return NULL;
     }
 
@@ -165,23 +125,23 @@ static edge_http_response_t* edge_http_response_create(edge_http_context_t* ctx)
     response->curl_code = CURLE_OK;
     response->error_message[0] = '\0';
 
-    response->ctx = ctx;
+    response->allocator = allocator_callbacks;
 
     return response;
 }
 
-void edge_http_response_free(edge_http_context_t* ctx, edge_http_response_t* response) {
-    if (!ctx || !response) return;
-    edge_http_free(ctx, response->body);
-    edge_http_free(ctx, response->headers);
-    edge_http_free(ctx, response);
+void edge_http_response_free(edge_http_response_t* response) {
+    if (!response) return;
+    edge_allocator_free(response->allocator, response->body);
+    edge_allocator_free(response->allocator, response->headers);
+    edge_allocator_free(response->allocator, response);
 }
 
 static size_t write_body_callback(void* contents, size_t size, size_t nmemb, void* userp) {
     size_t realsize = size * nmemb;
     edge_http_response_t* response = (edge_http_response_t*)userp;
 
-    char* ptr = (char*)edge_http_realloc(response->ctx, response->body, response->body_size + realsize + 1);
+    char* ptr = (char*)edge_allocator_realloc(response->allocator, response->body, response->body_size + realsize + 1);
     if (!ptr) return 0;
 
     response->body = ptr;
@@ -196,7 +156,7 @@ static size_t write_header_callback(void* contents, size_t size, size_t nmemb, v
     size_t realsize = size * nmemb;
     edge_http_response_t* response = (edge_http_response_t*)userp;
 
-    char* ptr = (char*)edge_http_realloc(response->ctx, response->headers, response->headers_size + realsize + 1);
+    char* ptr = (char*)edge_allocator_realloc(response->allocator, response->headers, response->headers_size + realsize + 1);
     if (!ptr) return 0;
 
     response->headers = ptr;
@@ -221,12 +181,14 @@ static size_t read_body_callback(char* buffer, size_t size, size_t nitems, void*
     return to_copy;
 }
 
-edge_http_request_t* edge_http_request_create(edge_http_context_t* ctx, const char* method, const char* url) {
-    edge_http_request_t* request = (edge_http_request_t*)edge_http_calloc(ctx, 1, sizeof(edge_http_request_t));
+edge_http_request_t* edge_http_request_create(const char* method, const char* url, const edge_allocator_t* allocator) {
+    const edge_allocator_t* allocator_callbacks = edge_http_pick_allocator(allocator);
+
+    edge_http_request_t* request = (edge_http_request_t*)edge_allocator_calloc(allocator_callbacks, 1, sizeof(edge_http_request_t));
     if (!request) return NULL;
 
-    request->url = url ? edge_http_strdup(ctx, url) : NULL;
-    request->method = method ? edge_http_strdup(ctx, method) : edge_http_strdup(ctx, "GET");
+    request->url = url ? edge_allocator_strdup(allocator_callbacks, url) : NULL;
+    request->method = method ? edge_allocator_strdup(allocator_callbacks, method) : edge_allocator_strdup(allocator_callbacks, "GET");
     request->body = NULL;
     request->body_size = 0;
     request->headers = NULL;
@@ -234,7 +196,7 @@ edge_http_request_t* edge_http_request_create(edge_http_context_t* ctx, const ch
     request->connect_timeout = 10L;
     request->follow_redirects = 1;
     request->verbose = 0;
-    request->user_agent = edge_http_strdup(ctx, "libedgehttp/1.0");
+    request->user_agent = edge_allocator_strdup(allocator_callbacks, "libedgehttp/1.0");
 
     request->easy_handle = NULL;
     request->response = NULL;
@@ -243,16 +205,18 @@ edge_http_request_t* edge_http_request_create(edge_http_context_t* ctx, const ch
     request->userdata = NULL;
     request->completed = 0;
 
+    request->allocator = allocator_callbacks;
+
     return request;
 }
 
-void edge_http_request_free(edge_http_context_t* ctx, edge_http_request_t* request) {
-    if (!ctx || !request) return;
+void edge_http_request_free(edge_http_request_t* request) {
+    if (!request) return;
 
-    edge_http_free(ctx, request->url);
-    edge_http_free(ctx, request->method);
-    edge_http_free(ctx, request->body);
-    edge_http_free(ctx, request->user_agent);
+    edge_allocator_free(request->allocator, request->url);
+    edge_allocator_free(request->allocator, request->method);
+    edge_allocator_free(request->allocator, request->body);
+    edge_allocator_free(request->allocator, request->user_agent);
 
     if (request->headers) {
         curl_slist_free_all(request->headers);
@@ -263,33 +227,33 @@ void edge_http_request_free(edge_http_context_t* ctx, edge_http_request_t* reque
     }
 
     if (request->response) {
-        edge_http_response_free(ctx, request->response);
+        edge_http_response_free(request->response);
     }
 
-    edge_http_free(ctx, request);
+    edge_allocator_free(request->allocator, request);
 }
 
-void edge_http_request_set_url(edge_http_context_t* ctx, edge_http_request_t* request, const char* url) {
-    if (!ctx || !request || !url) return;
-    edge_http_free(ctx, request->url);
-    request->url = edge_http_strdup(ctx, url);
+void edge_http_request_set_url(edge_http_request_t* request, const char* url) {
+    if (!request || !url) return;
+    edge_allocator_free(request->allocator, request->url);
+    request->url = edge_allocator_strdup(request->allocator, url);
 }
 
-void edge_http_request_set_method(edge_http_context_t* ctx, edge_http_request_t* request, const char* method) {
-    if (!ctx || !request || !method) return;
-    edge_http_free(ctx, request->method);
-    request->method = edge_http_strdup(ctx, method);
+void edge_http_request_set_method(edge_http_request_t* request, const char* method) {
+    if (!request || !method) return;
+    edge_allocator_free(request->allocator, request->method);
+    request->method = edge_allocator_strdup(request->allocator, method);
 }
 
-void edge_http_request_set_body(edge_http_context_t* ctx, edge_http_request_t* request, const char* body, size_t body_size) {
-    if (!ctx || !request) return;
+void edge_http_request_set_body(edge_http_request_t* request, const char* body, size_t body_size) {
+    if (!request) return;
 
-    edge_http_free(ctx, request->body);
+    edge_allocator_free(request->allocator, request->body);
     request->body = NULL;
     request->body_size = 0;
 
     if (body && body_size > 0) {
-        request->body = (char*)edge_http_malloc(ctx, body_size);
+        request->body = (char*)edge_allocator_malloc(request->allocator, body_size);
         if (request->body) {
             memcpy(request->body, body, body_size);
             request->body_size = body_size;
@@ -312,10 +276,10 @@ void edge_http_request_set_connect_timeout(edge_http_request_t* request, long ti
     request->connect_timeout = timeout_seconds;
 }
 
-void edge_http_request_set_user_agent(edge_http_context_t* ctx, edge_http_request_t* request, const char* user_agent) {
-    if (!ctx || !request || !user_agent) return;
-    edge_http_free(ctx, request->user_agent);
-    request->user_agent = edge_http_strdup(ctx, user_agent);
+void edge_http_request_set_user_agent(edge_http_request_t* request, const char* user_agent) {
+    if (!request || !user_agent) return;
+    edge_allocator_free(request->allocator, request->user_agent);
+    request->user_agent = edge_allocator_strdup(request->allocator, user_agent);
 }
 
 void edge_http_request_set_verbose(edge_http_request_t* request, int verbose) {
@@ -334,11 +298,11 @@ void edge_http_request_set_callback(edge_http_request_t* request, edge_http_call
     request->userdata = userdata;
 }
 
-static int edge_http_request_setup_handle(edge_http_context_t* ctx, edge_http_request_t* request) {
-    if (!ctx || !request || !request->url) return 0;
+static int edge_http_request_setup_handle(edge_http_request_t* request) {
+    if (!request || !request->url) return 0;
 
     if (!request->response) {
-        request->response = edge_http_response_create(ctx);
+        request->response = edge_http_response_create(request->allocator);
         if (!request->response) return 0;
     }
 
@@ -411,10 +375,8 @@ static int edge_http_request_setup_handle(edge_http_context_t* ctx, edge_http_re
     return 1;
 }
 
-edge_http_response_t* edge_http_request_perform(edge_http_context_t* ctx, edge_http_request_t* request) {
-    if (!ctx) return NULL;
-
-    if (!edge_http_request_setup_handle(ctx, request)) {
+edge_http_response_t* edge_http_request_perform(edge_http_request_t* request) {
+    if (!edge_http_request_setup_handle(request)) {
         return NULL;
     }
 
@@ -426,13 +388,13 @@ edge_http_response_t* edge_http_request_perform(edge_http_context_t* ctx, edge_h
         curl_easy_getinfo(request->easy_handle, CURLINFO_SPEED_DOWNLOAD, &request->response->download_speed);
     }
 
-    edge_http_response_t* response_copy = edge_http_response_create(ctx);
+    edge_http_response_t* response_copy = edge_http_response_create(request->allocator);
     if (response_copy && request->response) {
-        edge_http_free(ctx, response_copy->body);
-        edge_http_free(ctx, response_copy->headers);
+        edge_allocator_free(request->allocator, response_copy->body);
+        edge_allocator_free(request->allocator, response_copy->headers);
 
-        response_copy->body = (char*)edge_http_malloc(ctx, request->response->body_size + 1);
-        response_copy->headers = (char*)edge_http_malloc(ctx, request->response->headers_size + 1);
+        response_copy->body = (char*)edge_allocator_malloc(request->allocator, request->response->body_size + 1);
+        response_copy->headers = (char*)edge_allocator_malloc(request->allocator, request->response->headers_size + 1);
 
         if (response_copy->body && response_copy->headers) {
             memcpy(response_copy->body, request->response->body, request->response->body_size + 1);
@@ -450,96 +412,98 @@ edge_http_response_t* edge_http_request_perform(edge_http_context_t* ctx, edge_h
     return response_copy;
 }
 
-edge_http_response_t* edge_http_get(edge_http_context_t* ctx, const char* url) {
-    if (!ctx) return NULL;
+edge_http_response_t* edge_http_get(const char* url, const edge_allocator_t* allocator) {
+    const edge_allocator_t* allocator_callbacks = edge_http_pick_allocator(allocator);
 
-    edge_http_request_t* request = edge_http_request_create(ctx, "GET", url);
+    edge_http_request_t* request = edge_http_request_create("GET", url, allocator_callbacks);
     if (!request) return NULL;
 
-    edge_http_response_t* response = edge_http_request_perform(ctx, request);
-    edge_http_request_free(ctx, request);
+    edge_http_response_t* response = edge_http_request_perform(request);
+    edge_http_request_free(request);
 
     return response;
 }
 
-edge_http_response_t* edge_http_post(edge_http_context_t* ctx, const char* url, const char* body, size_t body_size) {
-    if (!ctx) return NULL;
+edge_http_response_t* edge_http_post(const char* url, const char* body, size_t body_size, const edge_allocator_t* allocator) {
+    const edge_allocator_t* allocator_callbacks = edge_http_pick_allocator(allocator);
 
-    edge_http_request_t* request = edge_http_request_create(ctx, "POST", url);
+    edge_http_request_t* request = edge_http_request_create("POST", url, allocator_callbacks);
     if (!request) return NULL;
 
-    edge_http_request_set_body(ctx, request, body, body_size);
-    edge_http_response_t* response = edge_http_request_perform(ctx, request);
-    edge_http_request_free(ctx, request);
+    edge_http_request_set_body(request, body, body_size);
+    edge_http_response_t* response = edge_http_request_perform(request);
+    edge_http_request_free(request);
 
     return response;
 }
 
-edge_http_response_t* edge_http_put(edge_http_context_t* ctx, const char* url, const char* body, size_t body_size) {
-    if (!ctx) return NULL;
+edge_http_response_t* edge_http_put(const char* url, const char* body, size_t body_size, const edge_allocator_t* allocator) {
+    const edge_allocator_t* allocator_callbacks = edge_http_pick_allocator(allocator);
 
-    edge_http_request_t* request = edge_http_request_create(ctx, "PUT", url);
+    edge_http_request_t* request = edge_http_request_create("PUT", url, allocator_callbacks);
     if (!request) return NULL;
 
-    edge_http_request_set_body(ctx, request, body, body_size);
-    edge_http_response_t* response = edge_http_request_perform(ctx, request);
-    edge_http_request_free(ctx, request);
+    edge_http_request_set_body(request, body, body_size);
+    edge_http_response_t* response = edge_http_request_perform(request);
+    edge_http_request_free(request);
 
     return response;
 }
 
-edge_http_response_t* edge_http_delete(edge_http_context_t* ctx, const char* url) {
-    if (!ctx) return NULL;
+edge_http_response_t* edge_http_delete(const char* url, const edge_allocator_t* allocator) {
+    const edge_allocator_t* allocator_callbacks = edge_http_pick_allocator(allocator);
 
-    edge_http_request_t* request = edge_http_request_create(ctx, "DELETE", url);
+    edge_http_request_t* request = edge_http_request_create("DELETE", url, allocator_callbacks);
     if (!request) return NULL;
 
-    edge_http_response_t* response = edge_http_request_perform(ctx, request);
-    edge_http_request_free(ctx, request);
+    edge_http_response_t* response = edge_http_request_perform(request);
+    edge_http_request_free(request);
 
     return response;
 }
 
-edge_http_async_manager_t* edge_http_async_manager_create(edge_http_context_t* ctx) {
-    if (!ctx) return NULL;
+edge_http_async_manager_t* edge_http_async_manager_create(const edge_allocator_t* allocator) {
+    const edge_allocator_t* allocator_callbacks = edge_http_pick_allocator(allocator);
 
-    edge_http_async_manager_t* manager = (edge_http_async_manager_t*)edge_http_calloc(ctx, 1, sizeof(edge_http_async_manager_t));
+    edge_http_async_manager_t* manager = (edge_http_async_manager_t*)edge_allocator_calloc(allocator_callbacks, 1, sizeof(edge_http_async_manager_t));
     if (!manager) return NULL;
 
     manager->multi_handle = curl_multi_init();
     if (!manager->multi_handle) {
-        edge_http_free(ctx, manager);
+        edge_allocator_free(allocator_callbacks, manager);
         return NULL;
     }
 
     manager->capacity = 10;
-    manager->requests = (edge_http_request_t**)edge_http_calloc(ctx, manager->capacity, sizeof(edge_http_request_t*));
+    manager->requests = (edge_http_request_t**)edge_allocator_calloc(allocator_callbacks, manager->capacity, sizeof(edge_http_request_t*));
     if (!manager->requests) {
         curl_multi_cleanup(manager->multi_handle);
-        edge_http_free(ctx, manager);
+        edge_allocator_free(allocator_callbacks, manager);
         return NULL;
     }
 
     manager->num_requests = 0;
     manager->started = 0;
 
+    manager->allocator = allocator_callbacks;
+
     return manager;
 }
 
-void edge_http_async_manager_free(edge_http_context_t* ctx, edge_http_async_manager_t* manager) {
-    if (!ctx || !manager) return;
+void edge_http_async_manager_free(edge_http_async_manager_t* manager) {
+    if (!manager) return;
 
     for (int i = 0; i < manager->num_requests; i++) {
-        edge_http_request_free(ctx, manager->requests[i]);
+        edge_http_request_free(manager->requests[i]);
     }
 
-    edge_http_free(ctx, manager->requests);
+    edge_allocator_free(manager->allocator, manager->requests);
     curl_multi_cleanup(manager->multi_handle);
-    edge_http_free(ctx, manager);
+    edge_allocator_free(manager->allocator, manager);
 }
 
-int edge_http_async_manager_add_request(edge_http_context_t* ctx, edge_http_async_manager_t* manager, edge_http_request_t* request) {
-    if (!ctx || !manager || !request) return 0;
+int edge_http_async_manager_add_request(edge_http_async_manager_t* manager, edge_http_request_t* request) {
+    if (!manager || !request) return 0;
 
     if (manager->started) {
         return 0;
@@ -547,7 +511,7 @@ int edge_http_async_manager_add_request(edge_http_context_t* ctx, edge_http_asyn
 
     if (manager->num_requests >= manager->capacity) {
         int new_capacity = manager->capacity * 2;
-        edge_http_request_t** new_requests = (edge_http_request_t**)edge_http_realloc(ctx, 
+        edge_http_request_t** new_requests = (edge_http_request_t**)edge_allocator_realloc(manager->allocator,
             manager->requests, new_capacity * sizeof(edge_http_request_t*));
         if (!new_requests) return 0;
 
@@ -555,7 +519,7 @@ int edge_http_async_manager_add_request(edge_http_context_t* ctx, edge_http_asyn
         manager->capacity = new_capacity;
     }
 
-    if (!edge_http_request_setup_handle(ctx, request)) {
+    if (!edge_http_request_setup_handle(request)) {
         return 0;
     }
 

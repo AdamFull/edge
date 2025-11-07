@@ -8,15 +8,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include <edge_allocator.h>
+
  /* Check if libcurl has WebSocket support */
 #if LIBCURL_VERSION_NUM < 0x075600
 #error "libcurl 7.86.0 or later is required for WebSocket support"
 #endif
 
-extern void* edge_http_malloc(edge_http_context_t* ctx, size_t size);
-extern void edge_http_free(edge_http_context_t* ctx, void* ptr);
-extern void* edge_http_calloc(edge_http_context_t* ctx, size_t nmemb, size_t size);
-extern char* edge_http_strdup(edge_http_context_t* ctx, const char* str);
+extern const edge_allocator_t* edge_http_pick_allocator(const edge_allocator_t* allocator);
 
 struct edge_http_websocket {
     char* url;
@@ -43,6 +42,8 @@ struct edge_http_websocket {
 
     /* Error message */
     char error_buffer[CURL_ERROR_SIZE];
+
+    const edge_allocator_t* allocator;
 };
 
 static void edge_http_websocket_handle_error(edge_http_websocket_t* ws, const char* error) {
@@ -64,8 +65,10 @@ static void edge_http_websocket_handle_message(edge_http_websocket_t* ws, const 
     }
 }
 
-edge_http_websocket_t* edge_http_websocket_create(edge_http_context_t* ctx, const char* url) {
-    if (!ctx || !url) return NULL;
+edge_http_websocket_t* edge_http_websocket_create(const char* url, const edge_allocator_t* allocator) {
+    if (!url) return NULL;
+
+    const edge_allocator_t* allocator_callbacks = edge_http_pick_allocator(allocator);
 
     /* Check URL scheme */
     if (strncmp(url, "ws://", 5) != 0 && strncmp(url, "wss://", 6) != 0) {
@@ -73,13 +76,13 @@ edge_http_websocket_t* edge_http_websocket_create(edge_http_context_t* ctx, cons
         return NULL;
     }
 
-    edge_http_websocket_t* ws = (edge_http_websocket_t*)edge_http_calloc(ctx, 1, sizeof(edge_http_websocket_t));
+    edge_http_websocket_t* ws = (edge_http_websocket_t*)edge_allocator_calloc(allocator_callbacks, 1, sizeof(edge_http_websocket_t));
     if (!ws) return NULL;
 
-    ws->url = edge_http_strdup(ctx, url);
+    ws->url = edge_allocator_strdup(allocator_callbacks, url);
     ws->headers = NULL;
     ws->protocols = NULL;
-    ws->user_agent = edge_http_strdup(ctx, "libedgehttp-websocket/1.0");
+    ws->user_agent = edge_allocator_strdup(allocator_callbacks, "libedgehttp-websocket/1.0");
     ws->timeout = 30L;
     ws->verbose = 0;
     ws->connected = 0;
@@ -92,37 +95,39 @@ edge_http_websocket_t* edge_http_websocket_create(edge_http_context_t* ctx, cons
     ws->userdata = NULL;
 
     ws->recv_buffer_capacity = 8192;
-    ws->recv_buffer = (unsigned char*)edge_http_malloc(ctx, ws->recv_buffer_capacity);
+    ws->recv_buffer = (unsigned char*)edge_allocator_malloc(allocator_callbacks, ws->recv_buffer_capacity);
     ws->recv_buffer_size = 0;
 
     ws->curl = NULL;
     ws->error_buffer[0] = '\0';
 
+    ws->allocator = allocator_callbacks;
+
     if (!ws->url || !ws->user_agent || !ws->recv_buffer) {
-        edge_http_websocket_free(ctx, ws);
+        edge_http_websocket_free(ws);
         return NULL;
     }
 
     return ws;
 }
 
-void edge_http_websocket_free(edge_http_context_t* ctx, edge_http_websocket_t* ws) {
-    if (!ctx ||!ws) return;
+void edge_http_websocket_free(edge_http_websocket_t* ws) {
+    if (!ws) return;
 
     if (ws->curl) {
         curl_easy_cleanup(ws->curl);
     }
 
-    edge_http_free(ctx, ws->url);
-    edge_http_free(ctx, ws->protocols);
-    edge_http_free(ctx, ws->user_agent);
-    edge_http_free(ctx, ws->recv_buffer);
+    edge_allocator_free(ws->allocator, ws->url);
+    edge_allocator_free(ws->allocator, ws->protocols);
+    edge_allocator_free(ws->allocator, ws->user_agent);
+    edge_allocator_free(ws->allocator, ws->recv_buffer);
 
     if (ws->headers) {
         curl_slist_free_all(ws->headers);
     }
 
-    edge_http_free(ctx, ws);
+    edge_allocator_free(ws->allocator, ws);
 }
 
 void edge_http_websocket_add_header(edge_http_websocket_t* ws, const char* header) {
@@ -135,10 +140,10 @@ void edge_http_websocket_set_timeout(edge_http_websocket_t* ws, long timeout_sec
     ws->timeout = timeout_seconds;
 }
 
-void edge_http_websocket_set_user_agent(edge_http_context_t* ctx, edge_http_websocket_t* ws, const char* user_agent) {
+void edge_http_websocket_set_user_agent(edge_http_websocket_t* ws, const char* user_agent) {
     if (!ws || !user_agent) return;
-    edge_http_free(ctx, ws->user_agent);
-    ws->user_agent = edge_http_strdup(ctx, user_agent);
+    edge_allocator_free(ws->allocator, ws->user_agent);
+    ws->user_agent = edge_allocator_strdup(ws->allocator, user_agent);
 }
 
 void edge_http_websocket_set_verbose(edge_http_websocket_t* ws, int verbose) {
@@ -146,10 +151,10 @@ void edge_http_websocket_set_verbose(edge_http_websocket_t* ws, int verbose) {
     ws->verbose = verbose;
 }
 
-void edge_http_websocket_set_protocols(edge_http_context_t* ctx, edge_http_websocket_t* ws, const char* protocols) {
+void edge_http_websocket_set_protocols(edge_http_websocket_t* ws, const char* protocols) {
     if (!ws || !protocols) return;
-    edge_http_free(ctx, ws->protocols);
-    ws->protocols = edge_http_strdup(ctx, protocols);
+    edge_allocator_free(ws->allocator, ws->protocols);
+    ws->protocols = edge_allocator_strdup(ws->allocator, protocols);
 }
 
 void edge_http_websocket_set_userdata(edge_http_websocket_t* ws, void* userdata) {
@@ -185,7 +190,7 @@ void edge_http_websocket_set_error_callback(edge_http_websocket_t* ws,
     ws->error_callback = callback;
 }
 
-static int edge_http_websocket_setup_curl(edge_http_context_t* ctx, edge_http_websocket_t* ws) {
+static int edge_http_websocket_setup_curl(edge_http_websocket_t* ws) {
     if (!ws) return -1;
 
     if (ws->curl) {
@@ -211,12 +216,12 @@ static int edge_http_websocket_setup_curl(edge_http_context_t* ctx, edge_http_we
 
     /* Set protocols if specified */
     if (ws->protocols) {
-        char* protocol_header = (char*)edge_http_malloc(ctx, strlen(ws->protocols) + 32);
+        char* protocol_header = (char*)edge_allocator_malloc(ws->allocator, strlen(ws->protocols) + 32);
         if (protocol_header) {
             edge_http_set_error(protocol_header, "Sec-WebSocket-Protocol: %s", ws->protocols);
             ws->headers = curl_slist_append(ws->headers, protocol_header);
             curl_easy_setopt(ws->curl, CURLOPT_HTTPHEADER, ws->headers);
-            edge_http_free(ctx, protocol_header);
+            edge_allocator_free(ws->allocator, protocol_header);
         }
     }
 
@@ -233,10 +238,10 @@ static int edge_http_websocket_setup_curl(edge_http_context_t* ctx, edge_http_we
     return 0;
 }
 
-int edge_http_websocket_connect(edge_http_context_t* ctx, edge_http_websocket_t* ws) {
+int edge_http_websocket_connect(edge_http_websocket_t* ws) {
     if (!ws) return -1;
 
-    if (edge_http_websocket_setup_curl(ctx, ws) != 0) {
+    if (edge_http_websocket_setup_curl(ws) != 0) {
         return -1;
     }
 
@@ -384,13 +389,13 @@ int edge_http_websocket_send_pong(edge_http_websocket_t* ws, const void* payload
     return 0;
 }
 
-int edge_http_websocket_send_close(edge_http_context_t* ctx, edge_http_websocket_t* ws, int status_code, const char* reason) {
+int edge_http_websocket_send_close(edge_http_websocket_t* ws, int status_code, const char* reason) {
     if (!ws || !ws->curl) return -1;
 
     /* Prepare close frame payload */
     size_t reason_len = reason ? strlen(reason) : 0;
     size_t payload_size = 2 + reason_len;
-    unsigned char* payload = (unsigned char*)edge_http_malloc(ctx, payload_size);
+    unsigned char* payload = (unsigned char*)edge_allocator_malloc(ws->allocator, payload_size);
 
     if (!payload) return -1;
 
@@ -406,7 +411,7 @@ int edge_http_websocket_send_close(edge_http_context_t* ctx, edge_http_websocket
     size_t sent;
     CURLcode res = curl_ws_send(ws->curl, payload, payload_size, &sent, 0, CURLWS_CLOSE);
 
-    edge_http_free(ctx, payload);
+    edge_allocator_free(ws->allocator, payload);
 
     if (res != CURLE_OK) {
         return -1;
@@ -418,15 +423,17 @@ int edge_http_websocket_send_close(edge_http_context_t* ctx, edge_http_websocket
     return 0;
 }
 
-int edge_http_websocket_run(edge_http_context_t* ctx, const char* url, edge_http_ws_message_callback on_message, void* userdata) {
-    edge_http_websocket_t* ws = edge_http_websocket_create(ctx, url);
+int edge_http_websocket_run(const char* url, edge_http_ws_message_callback on_message, void* userdata, const edge_allocator_t* allocator) {
+    const edge_allocator_t* allocator_callbacks = edge_http_pick_allocator(allocator);
+
+    edge_http_websocket_t* ws = edge_http_websocket_create(url, allocator_callbacks);
     if (!ws) return -1;
 
     edge_http_websocket_set_message_callback(ws, on_message);
     edge_http_websocket_set_userdata(ws, userdata);
 
     /* Connect */
-    if (edge_http_websocket_connect(ctx, ws) != 0) {
+    if (edge_http_websocket_connect(ws) != 0) {
         return -1;
     }
 
@@ -447,10 +454,10 @@ int edge_http_websocket_run(edge_http_context_t* ctx, const char* url, edge_http
 
     /* Send close if we're initiating the close */
     if (ws->should_close && ws->connected) {
-        edge_http_websocket_send_close(ctx, ws, EDGE_HTTP_WS_CLOSE_NORMAL, "Client closing");
+        edge_http_websocket_send_close(ws, EDGE_HTTP_WS_CLOSE_NORMAL, "Client closing");
     }
 
-    edge_http_websocket_free(ctx, ws);
+    edge_http_websocket_free(ws);
 
     return 0;
 }

@@ -64,6 +64,7 @@ if(EDGE_HTTP_BUILD_SHARED)
     target_link_libraries(edge_http
         PUBLIC 
         CURL::libcurl 
+        edge_base
     )
     
     set_target_properties(edge_http PROPERTIES
@@ -83,7 +84,8 @@ if(EDGE_HTTP_BUILD_STATIC)
     )
     target_link_libraries(edge_http_static
         PUBLIC
-        CURL::libcurl 
+        CURL::libcurl
+        edge_base
     )
     
     set_target_properties(edge_http_static PROPERTIES
