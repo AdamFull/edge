@@ -19,6 +19,8 @@ option(EDGE_JSON_BUILD_TESTS "Build tests" OFF)
 # Library sources
 set(EDGE_JSON_SOURCES
     "src/edge_json.c"
+    "src/edge_json_parser.c"
+    "src/edge_json_serializer.c"
 )
 
 set(EDGE_JSON_HEADERS
@@ -40,7 +42,7 @@ if(EDGE_JSON_BUILD_SHARED)
         PUBLIC_HEADER "${EDGE_JSON_HEADERS}"
     )
     
-    #target_link_libraries(edge_json PRIVATE m)
+    target_link_libraries(edge_json PRIVATE edge_base)
 endif()
 
 # Static library
@@ -57,7 +59,7 @@ if(EDGE_JSON_BUILD_STATIC)
         PUBLIC_HEADER "${EDGE_JSON_HEADERS}"
     )
     
-    #target_link_libraries(edge_json_static PRIVATE m)
+    target_link_libraries(edge_json_static PRIVATE edge_base)
 endif()
 
 # Examples
