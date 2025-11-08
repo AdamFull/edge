@@ -14,7 +14,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 option(EDGE_JSON_BUILD_SHARED "Build shared library" OFF)
 option(EDGE_JSON_BUILD_STATIC "Build static library" ON)
 option(EDGE_JSON_BUILD_EXAMPLES "Build examples" OFF)
-option(EDGE_JSON_BUILD_TESTS "Build tests" OFF)
+option(EDGE_JSON_BUILD_TESTS "Build tests" ON)
 
 # Library sources
 set(EDGE_JSON_SOURCES
@@ -69,8 +69,8 @@ endif()
 
 # Tests
 if(EDGE_JSON_BUILD_TESTS)
-    #enable_testing()
-    #add_subdirectory(tests)
+   enable_testing()
+   add_subdirectory(tests)
 endif()
 
 # Installation

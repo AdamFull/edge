@@ -1,0 +1,36 @@
+cmake_minimum_required(VERSION 3.12)
+
+# Test executable
+add_executable(edge_json_test test_edge_json.c)
+
+# Include directories
+target_include_directories(edge_json_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/include
+)
+
+# Link with JSON library
+if(EDGE_JSON_BUILD_SHARED)
+    target_link_libraries(edge_json_test PRIVATE edge_json edge_base)
+else()
+    target_link_libraries(edge_json_test PRIVATE edge_json_static edge_base)
+endif()
+
+# Link with math library
+#target_link_libraries(edge_json_test PRIVATE m)
+
+# Compiler flags
+target_compile_options(edge_json_test PRIVATE -Wall)
+
+# Add test
+enable_testing()
+add_test(NAME edge_json_test COMMAND edge_json_test)
+
+# Valgrind target
+find_program(VALGRIND valgrind)
+if(VALGRIND)
+    add_custom_target(valgrind
+        COMMAND ${VALGRIND} --leak-check=full --show-leak-kinds=all --error-exitcode=1 $<TARGET_FILE:edge_json_test>
+        DEPENDS edge_json_test
+    )
+endif()
