@@ -23,7 +23,6 @@ endif()
 target_compile_options(edge_json_test PRIVATE -Wall)
 
 # Add test
-enable_testing()
 add_test(NAME edge_json_test COMMAND edge_json_test)
 
 # Valgrind target
