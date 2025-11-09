@@ -30,6 +30,10 @@ if(ANDROID)
     )
 elseif(WIN32)
     add_executable(${PROJECT_NAME} WIN32 ${APP_SOURCES})
+
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(${PROJECT_NAME} PRIVATE -mavx2)
+    endif()
 else()
     add_executable(${PROJECT_NAME} ${APP_SOURCES})
 endif()
@@ -42,10 +46,12 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC
 add_subdirectory("external")
 add_subdirectory("edge/core")
 #add_subdirectory("edge/graphics")
+add_subdirectory("lib")
 
 target_link_libraries(${PROJECT_NAME} 
         PUBLIC
         edge_externals
+        edge_foundation
     )
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

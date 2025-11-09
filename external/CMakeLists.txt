@@ -126,6 +126,10 @@ add_library(vma STATIC ${VMA_IMPL_C})
 target_include_directories(vma PUBLIC ${VMA_DIR})
 target_link_libraries(vma PUBLIC vulkan)
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(vma PRIVATE -Wno-nullability-completeness)
+endif()
+
 add_library(GPUOpen::VulkanMemoryAllocator ALIAS vma)
 
 add_library(argparse INTERFACE)
