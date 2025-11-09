@@ -6,6 +6,12 @@
 #include "edge_zip_internal.h"
 #include <string.h>
 
+#ifdef _WIN32
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
+
 int edge_zip_get_entry_by_index(edge_zip_archive_t* archive, int index, edge_zip_entry_t** entry) {
     if (!archive || !entry) {
         return EDGE_ZIP_ERROR_INVALID_ARGUMENT;
@@ -197,7 +203,15 @@ int edge_zip_entry_extract(edge_zip_entry_t* entry, const char* output_path) {
     }
 
     if (entry->is_directory) {
-        /* TODO: Create directory on disk */
+        int res;
+#ifdef _WIN32
+        res = _mkdir(output_path);
+#else
+        res = mkdir(output_path, S_IWUSR);
+#endif
+        if (res != 0) {
+            /* Ignore error if directory already exists */
+        }
         return EDGE_ZIP_OK;
     }
 
