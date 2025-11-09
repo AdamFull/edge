@@ -1,6 +1,10 @@
 #include "edge_json_internal.h"
 #include <edge_allocator.h>
 
+#include <ctype.h>
+#include <string.h>
+#include <stdlib.h>
+
 /* Parser state */
 typedef struct {
     const char* json;

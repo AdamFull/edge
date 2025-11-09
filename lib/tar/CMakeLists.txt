@@ -50,10 +50,11 @@ if(EDGE_TAR_BUILD_SHARED)
     # Compiler warnings
     if(MSVC)
         target_compile_options(edge_tar PRIVATE /W4)
-        target_compile_definitions(edge_tar PRIVATE _CRT_SECURE_NO_WARNINGS)
     else()
         target_compile_options(edge_tar PRIVATE -Wall -pedantic)
     endif()
+
+    target_compile_definitions(edge_tar PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
 # Static library

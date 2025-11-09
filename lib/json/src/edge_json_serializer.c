@@ -1,6 +1,10 @@
 #include "edge_json_internal.h"
 #include <edge_allocator.h>
 
+#include <math.h>
+#include <string.h>
+#include <stdio.h>
+
 typedef struct {
     char* data;
     size_t length;

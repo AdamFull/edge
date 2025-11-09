@@ -40,6 +40,7 @@ FetchContent_MakeAvailable(curl)
 # Build options
 option(EDGE_HTTP_BUILD_SHARED "Build shared library" OFF)
 option(EDGE_HTTP_BUILD_STATIC "Build static library" ON)
+option(EDGE_HTTP_BUILD_EXAMPLES "Build examples" ON)
 
 # Library sources
 set(EDGE_HTTP_SOURCES
@@ -91,6 +92,10 @@ if(EDGE_HTTP_BUILD_STATIC)
         OUTPUT_NAME edge_http
         PUBLIC_HEADER "${EDGE_HTTP_HEADERS}"
     )
+endif()
+
+if(EDGE_HTTP_BUILD_EXAMPLES)
+add_subdirectory(examples)
 endif()
 
 # Installation

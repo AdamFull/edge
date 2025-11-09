@@ -3,12 +3,47 @@
  */
 
 #include "edge_http_websocket.h"
+#include <edge_allocator.h>
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
-#include <edge_allocator.h>
+#if _WIN32
+#include <Windows.h>
+
+int nanosleep(const struct timespec* ts, struct timespec* rem) {
+    HANDLE hTimer = NULL;
+    LARGE_INTEGER liDueTime;
+
+    // Calculate the total time in 100-nanosecond intervals
+    // Negative value indicates relative time
+    liDueTime.QuadPart = -(ts->tv_sec * 10000000 + ts->tv_nsec / 100);
+
+    // Create a waitable timer
+    hTimer = CreateWaitableTimerEx(NULL, NULL, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_ALL_ACCESS);
+    if (hTimer == NULL) {
+        fprintf(stderr, "Error creating waitable timer: %lu\n", GetLastError());
+        return -1;
+    }
+
+    // Set the timer
+    if (!SetWaitableTimer(hTimer, &liDueTime, 0, NULL, NULL, FALSE)) {
+        fprintf(stderr, "Error setting waitable timer: %lu\n", GetLastError());
+        CloseHandle(hTimer);
+        return -1;
+    }
+
+    // Wait for the timer to expire
+    WaitForSingleObject(hTimer, INFINITE);
+
+    // Close the timer handle
+    CloseHandle(hTimer);
+
+    return 0;
+}
+#endif
 
  /* Check if libcurl has WebSocket support */
 #if LIBCURL_VERSION_NUM < 0x075600
@@ -16,6 +51,7 @@
 #endif
 
 extern const edge_allocator_t* edge_http_pick_allocator(const edge_allocator_t* allocator);
+extern void edge_http_set_error(const char* format, ...);
 
 struct edge_http_websocket {
     char* url;
