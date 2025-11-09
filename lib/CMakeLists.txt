@@ -1,4 +1,5 @@
 add_subdirectory("base")
 add_subdirectory("http")
 add_subdirectory("json")
+add_subdirectory("tar")
 add_subdirectory("zip")
