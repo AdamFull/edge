@@ -22,6 +22,13 @@ typedef struct edge_allocator {
     edge_strdup_func  strdup_fn;
 } edge_allocator_t;
 
+typedef enum edge_allocator_memprotect_flags {
+    EDGE_ALLOCATOR_PROTECT_NONE = 0,
+    EDGE_ALLOCATOR_PROTECT_READ = 1,
+    EDGE_ALLOCATOR_PROTECT_WRITE = 2,
+    EDGE_ALLOCATOR_PROTECT_READ_WRITE = 3
+} edge_allocator_memprotect_flags_t;
+
 /**
  * Create an allocator with custom functions
  *
@@ -70,6 +77,11 @@ char* edge_allocator_strdup(const edge_allocator_t* allocator, const char* str);
  * Duplicate a string with length limit using the allocator
  */
 char* edge_allocator_strndup(const edge_allocator_t* allocator, const char* str, size_t n);
+
+/**
+ * Protect memory range
+ */
+void edge_allocator_protect(void* ptr, size_t size, edge_allocator_memprotect_flags_t flags);
 
 #ifdef __cplusplus
 }

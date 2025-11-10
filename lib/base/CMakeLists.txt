@@ -24,6 +24,8 @@ target_include_directories(edge_base PUBLIC
     $<INSTALL_INTERFACE:include>
 )
 
+target_compile_definitions(edge_base PRIVATE _CRT_SECURE_NO_WARNINGS)
+
 # Compiler flags
 if(MSVC)
     target_compile_options(edge_base PRIVATE /W4)
