@@ -41,11 +41,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 
 # Desktop platforms (Windows, Linux, macOS)
 if(WIN32 OR (UNIX AND NOT ANDROID AND NOT IOS))
-    # GLFW setup for desktop platforms
-    set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-    set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-    
+    # GLFW setup for desktop platforms    
     include(FetchContent)
     FetchContent_Declare(
         glfw
@@ -70,7 +66,7 @@ if(WIN32)
         "windows_context.cpp"
         "windows_frame_handler.cpp"
         "windows_filesystem.cpp"
-        "zip_filesystem.cpp"
+        #"zip_filesystem.cpp"
     )
 elseif(ANDROID)
     find_package(games-controller REQUIRED CONFIG)
@@ -88,7 +84,7 @@ elseif(ANDROID)
         "android_input.cpp"
         "android_window.cpp"
         "unix_filesystem.cpp"
-        "zip_filesystem.cpp"
+        #"zip_filesystem.cpp"
     )
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux-specific sources

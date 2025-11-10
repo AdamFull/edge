@@ -2,13 +2,32 @@ project(edge_externals LANGUAGES C CXX)
 
 include(FetchContent)
 
-# Fetch spdlog
-if(NOT WIN32)
-    set(SPDLOG_BUILD_SHARED ON CACHE BOOL "Build shared library")
+find_package(ZLIB QUIET)
+
+if(NOT ZLIB_FOUND)
+    # Fetch zlib
+    FetchContent_Declare(
+        zlib
+        GIT_REPOSITORY https://github.com/madler/zlib.git
+        GIT_TAG        v1.3.1
+    )
+    FetchContent_MakeAvailable(zlib)
 endif()
 
-set(SPDLOG_USE_STD_FORMAT ON CACHE BOOL "Use std::format instead of fmt")
+find_package(zstd QUIET)
 
+if(NOT zstd_FOUND)
+  FetchContent_Declare(
+    zstd
+    GIT_REPOSITORY https://github.com/facebook/zstd.git
+    GIT_TAG        v1.5.6
+    SOURCE_SUBDIR  build/cmake
+  )
+  
+  FetchContent_MakeAvailable(zstd)
+endif()
+
+# Fetch spdlog
 FetchContent_Declare(
     spdlog
     GIT_REPOSITORY https://github.com/gabime/spdlog.git
@@ -58,22 +77,23 @@ elseif(WIN32)
 elseif(APPLE)
 	target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_METAL_EXT)
 elseif(UNIX)
+    set(EDGE_VK_WSI_SELECTION D2D)
     # Choose WSI based on EDGE_VK_WSI_SELECTION
     if (VKB_WSI_SELECTION STREQUAL XCB OR EDGE_VK_WSI_SELECTION STREQUAL XLIB OR EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
         find_package(PkgConfig REQUIRED)
     endif()
     if (EDGE_VK_WSI_SELECTION STREQUAL XCB)
-        pkg_check_modules(XCB xcb REQUIRED)
+        #pkg_check_modules(XCB xcb REQUIRED)
         if (XCB_FOUND)
             target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_XCB_KHR)
         endif()
     elseif (EDGE_VK_WSI_SELECTION STREQUAL XLIB)
-        pkg_check_modules(X11 x11 REQUIRED)
+        #pkg_check_modules(X11 x11 REQUIRED)
         if (X11_FOUND)
             target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_XLIB_KHR)
         endif()
     elseif (EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
-        pkg_check_modules(WAYLAND wayland-client REQUIRED)
+        #pkg_check_modules(WAYLAND wayland-client REQUIRED)
         if (WAYLAND_FOUND)
             target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_WAYLAND_KHR)
         endif()
@@ -135,68 +155,6 @@ add_library(GPUOpen::VulkanMemoryAllocator ALIAS vma)
 add_library(argparse INTERFACE)
 set(ARGPARSE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/argparse")
 target_include_directories(argparse SYSTEM INTERFACE "${ARGPARSE_DIR}/include")
-
-# zstd
-set(ZSTD_INCLUDE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/KTX-Software/external/basisu/zstd")
-add_library(zstd STATIC "${ZSTD_INCLUDE_DIR}/zstd.c")
-target_include_directories(zstd SYSTEM INTERFACE ${ZSTD_INCLUDE_DIR})
-add_library(ZSTD::ZSTD ALIAS zstd)
-set(ZSTD_LIBRARY ZSTD::ZSTD)
-
-# zlib
-if(ANDROID)
-find_package(ZLIB REQUIRED)
-else()
-set(ZLIB_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/zlib")
-set(ZLIB_INCLUDE_DIR ${ZLIB_SOURCE_DIR})
-
-set(ZLIB_SOURCES
-    "${ZLIB_SOURCE_DIR}/adler32.c"
-    "${ZLIB_SOURCE_DIR}/compress.c"
-    "${ZLIB_SOURCE_DIR}/crc32.c"
-    "${ZLIB_SOURCE_DIR}/crc32.h"
-    "${ZLIB_SOURCE_DIR}/deflate.c"
-    "${ZLIB_SOURCE_DIR}/deflate.h"
-    "${ZLIB_SOURCE_DIR}/gzclose.c"
-    "${ZLIB_SOURCE_DIR}/gzguts.h"
-    "${ZLIB_SOURCE_DIR}/gzlib.c"
-    "${ZLIB_SOURCE_DIR}/gzread.c"
-    "${ZLIB_SOURCE_DIR}/gzwrite.c"
-    "${ZLIB_SOURCE_DIR}/infback.c"
-    "${ZLIB_SOURCE_DIR}/inffast.c"
-    "${ZLIB_SOURCE_DIR}/inffast.h"
-    "${ZLIB_SOURCE_DIR}/inffixed.h"
-    "${ZLIB_SOURCE_DIR}/inflate.c"
-    "${ZLIB_SOURCE_DIR}/inflate.h"
-    "${ZLIB_SOURCE_DIR}/inftrees.c"
-    "${ZLIB_SOURCE_DIR}/inftrees.h"
-    "${ZLIB_SOURCE_DIR}/trees.c"
-    "${ZLIB_SOURCE_DIR}/trees.h"
-    "${ZLIB_SOURCE_DIR}/uncompr.c"
-    "${ZLIB_SOURCE_DIR}/zlib.h"
-    "${ZLIB_SOURCE_DIR}/zutil.c"
-    "${ZLIB_SOURCE_DIR}/zutil.h"
-)
-
-add_library(zlib STATIC ${ZLIB_SOURCES})
-target_include_directories(zlib SYSTEM PUBLIC ${ZLIB_SOURCE_DIR})
-
-if(WIN32)
-    target_compile_definitions(zlib PRIVATE _CRT_SECURE_NO_WARNINGS)
-endif()
-
-add_library(ZLIB::ZLIB ALIAS zlib)
-set(ZLIB_LIBRARY ZLIB::ZLIB)
-endif()
-
-# libzip
-set(BUILD_TOOLS OFF CACHE BOOL "")
-set(BUILD_REGRESS OFF CACHE BOOL "")
-set(BUILD_OSSFUZZ OFF CACHE BOOL "")
-set(BUILD_EXAMPLES OFF CACHE BOOL "")
-set(BUILD_DOC OFF CACHE BOOL "")
-
-add_subdirectory(libzip)
 
 # KTX-Software
 set(KTX_SOFTWARE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/KTX-Software")
@@ -350,16 +308,9 @@ add_library(glm::glm ALIAS glm)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/rapidyaml")
 
 # mimalloc
-set(MI_OVERRIDE OFF CACHE BOOL "Override the standard malloc interface (i.e. define entry points for 'malloc', 'free', etc)" FORCE)
-set(MI_WIN_REDIRECT OFF CACHE BOOL "Use redirection module ('mimalloc-redirect') on Windows if compiling mimalloc as a DLL" FORCE)
-set(MI_BUILD_SHARED OFF CACHE BOOL "Build shared library" FORCE)
-set(MI_BUILD_TESTS OFF CACHE BOOL "Build test executables" FORCE)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/mimalloc")
 
 # freetype
-set(FT_DISABLE_TESTS ON CACHE BOOL "" FORCE)
-set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
-
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/freetype")
 
 # imgui
@@ -386,10 +337,6 @@ target_link_libraries(imgui PRIVATE freetype)
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
     INTERFACE
-
-    nlohmann_json::nlohmann_json
-
-    libzip::zip 
 
     mimalloc-static
 

@@ -1,0 +1,122 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/out/build/${presetName}",
+      "installDir": "${sourceDir}/out/install/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "BUILD_TOOLS": "OFF",
+        "BUILD_REGRESS": "OFF",
+        "BUILD_OSSFUZZ": "OFF",
+        "BUILD_EXAMPLES": "OFF",
+        "BUILD_DOC": "OFF",
+        "SPDLOG_INSTALL": "ON",
+        "BUILD_SHARED_LIBS": "OFF",
+        "LIBZIP_DO_INSTALL": "OFF",
+        "MI_OVERRIDE": "OFF",
+        "MI_BUILD_SHARED": "OFF",
+        "MI_BUILD_TESTS": "OFF",
+        "FT_DISABLE_TESTS": "ON",
+        "SKIP_INSTALL_ALL": "ON",
+        "SPDLOG_USE_STD_FORMAT": "ON",
+        "GLFW_BUILD_EXAMPLES": "OFF",
+        "GLFW_BUILD_TESTS": "OFF",
+        "GLFW_BUILD_DOCS": "OFF",
+        "BUILD_CURL_EXE": "OFF",
+        "CURL_STATICLIB": "ON",
+        "BUILD_TESTING": "OFF",
+        "CURL_DISABLE_LDAP": "ON",
+        "CURL_DISABLE_LDAPS": "ON",
+        "CURL_USE_LIBPSL": "OFF",
+        "CURL_USE_LIBSSH2": "OFF",
+        "CURL_ENABLE_SSL": "ON",
+        "HTTP_ONLY": "ON",
+        "CURL_DISABLE_COOKIES": "OFF",
+        "ZLIB_BUILD_TESTING": "OFF",
+        "ZSTD_BUILD_PROGRAMS": "OFF"
+      }
+    },
+    {
+      "name": "win64-base",
+      "hidden": true,
+      "displayName": "Windows x64 clang base",
+      "inherits": "base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "hostOS": [ "Windows" ],
+          "intelliSenseMode": "windows-clang-x64"
+        }
+      },
+      "cacheVariables": {
+        "MI_WIN_REDIRECT": "OFF",
+        "SPDLOG_BUILD_SHARED": "OFF",
+        "ZLIB_BUILD_SHARED": "OFF",
+        "CMAKE_C_COMPILER": "clang-cl",
+        "CMAKE_CXX_COMPILER": "clang-cl"
+      }
+    },
+    {
+      "name": "Win64-Debug",
+      "displayName": "Win64-Debug",
+      "inherits": "win64-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "Win64-Release",
+      "displayName": "Win64-Release",
+      "inherits": "win64-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "linux-base",
+      "hidden": true,
+      "displayName": "WSL (Ubuntu) Base",
+      "inherits": "base",
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/projects/${sourceDir}",
+          "hostOS": [ "Linux" ],
+          "remoteMachineName": "WSL:Ubuntu",
+          "intelliSenseMode": "linux-gcc-x64"
+        }
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/usr/bin/gcc",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++"
+      }
+    },
+    {
+      "name": "Linux-Debug",
+      "displayName": "Linux-Debug",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "Linux-Release",
+      "displayName": "Linux-Release",
+      "inherits": "linux-base",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    }
+  ]
+}
