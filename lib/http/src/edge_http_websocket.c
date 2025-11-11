@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 #include <time.h>
 
 #if _WIN32
@@ -482,10 +483,12 @@ int edge_http_websocket_run(const char* url, edge_http_ws_message_callback on_me
         }
 
         /* Small sleep to avoid busy-waiting */
+#if _WIN32
         struct timespec ts;
         ts.tv_sec = 0;
         ts.tv_nsec = 10000000; /* 10ms */
         nanosleep(&ts, NULL);
+#endif
     }
 
     /* Send close if we're initiating the close */
