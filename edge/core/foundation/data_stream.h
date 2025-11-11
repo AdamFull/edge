@@ -6,6 +6,7 @@
 #include <type_traits>
 #include <vector>
 #include <span>
+#include <cstring>
 #include <string_view>
 
 #include <streambuf>
@@ -93,7 +94,7 @@ namespace edge {
         }
 
         auto write(const char* str) -> void {
-            stream_.write(str, std::strlen(str) + 1);
+            stream_.write(str, strlen(str) + 1);
         }
 
         auto write(const void* data, size_t size) -> void {

@@ -18,7 +18,10 @@ elseif(ANDROID)
 elseif(EMSCRIPTEN)
     target_compile_definitions(${PROJECT_NAME} PRIVATE EDGE_PLATFORM_EMSCRIPTEN=1)
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
-    target_compile_definitions(${PROJECT_NAME} PRIVATE EDGE_PLATFORM_LINUX=1)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+        EDGE_PLATFORM_LINUX=1
+        GLFW_EXPOSE_NATIVE_X11
+    )
 elseif(APPLE)
     target_compile_definitions(${PROJECT_NAME} PRIVATE EDGE_PLATFORM_APPLE=1)
     if(IOS)
@@ -64,7 +67,6 @@ if(WIN32)
     # Windows-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
         "windows_context.cpp"
-        "windows_frame_handler.cpp"
         "windows_filesystem.cpp"
         #"zip_filesystem.cpp"
     )
@@ -78,7 +80,6 @@ elseif(ANDROID)
     # Android-specific sources
     target_sources(${PROJECT_NAME} PRIVATE
         #"${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c"
-        "android_frame_handler.cpp"
         "android_jni_helper.cpp"
         "android_context.cpp"
         "android_input.cpp"
@@ -89,10 +90,8 @@ elseif(ANDROID)
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
+        "linux_context.cpp"
         "unix_filesystem.cpp"
     )
 else()
-    target_sources(${PROJECT_NAME} PRIVATE 
-        "generic_frame_handler.cpp"
-    )
 endif()

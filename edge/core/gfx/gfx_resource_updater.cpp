@@ -66,7 +66,7 @@ namespace edge::gfx {
 		submitted_ = true;
 
 		auto src_state = util::get_resource_state(initial_state_);
-		auto dst_state = util::get_resource_state(ResourceStateFlag::eCopyDst);
+		auto dst_state = util::get_resource_state(EDGE_GFX_RESOURCE_STATE_COPY_DST);
 
 		vk::BufferMemoryBarrier2KHR pre_barrier{};
 		pre_barrier.srcStageMask = src_state.stage_flags;
@@ -91,7 +91,7 @@ namespace edge::gfx {
 
 		cmd->copyBuffer2KHR(&copy_info);
 
-		src_state = util::get_resource_state(ResourceStateFlag::eCopyDst);
+		src_state = util::get_resource_state(EDGE_GFX_RESOURCE_STATE_COPY_DST);
 		dst_state = util::get_resource_state(final_state_);
 
 		vk::BufferMemoryBarrier2KHR post_barrier{};
@@ -189,7 +189,7 @@ namespace edge::gfx {
 		submitted_ = true;
 
 		auto src_state = util::get_resource_state(initial_state_);
-		auto dst_state = util::get_resource_state(ResourceStateFlag::eCopyDst);
+		auto dst_state = util::get_resource_state(EDGE_GFX_RESOURCE_STATE_COPY_DST);
 
 		vk::ImageMemoryBarrier2KHR pre_barrier{};
 		pre_barrier.srcStageMask = src_state.stage_flags;
@@ -197,7 +197,7 @@ namespace edge::gfx {
 		pre_barrier.dstStageMask = dst_state.stage_flags;
 		pre_barrier.dstAccessMask = dst_state.access_flags;
 		pre_barrier.oldLayout = util::get_image_layout(initial_state_);
-		pre_barrier.newLayout = util::get_image_layout(ResourceStateFlag::eCopyDst);
+		pre_barrier.newLayout = util::get_image_layout(EDGE_GFX_RESOURCE_STATE_COPY_DST);
 		pre_barrier.image = dst_image_->get_handle();
 		pre_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
 		pre_barrier.subresourceRange.baseMipLevel = 0u;
@@ -220,7 +220,7 @@ namespace edge::gfx {
 
 		cmd->copyBufferToImage2KHR(&copy_info);
 
-		src_state = util::get_resource_state(ResourceStateFlag::eCopyDst);
+		src_state = util::get_resource_state(EDGE_GFX_RESOURCE_STATE_COPY_DST);
 		dst_state = util::get_resource_state(final_state_);
 
 		vk::ImageMemoryBarrier2KHR post_barrier{};
@@ -228,7 +228,7 @@ namespace edge::gfx {
 		post_barrier.srcAccessMask = src_state.access_flags;
 		post_barrier.dstStageMask = dst_state.stage_flags;
 		post_barrier.dstAccessMask = dst_state.access_flags;
-		post_barrier.oldLayout = util::get_image_layout(ResourceStateFlag::eCopyDst); 
+		post_barrier.oldLayout = util::get_image_layout(EDGE_GFX_RESOURCE_STATE_COPY_DST);
 		post_barrier.newLayout = util::get_image_layout(final_state_);
 		post_barrier.image = dst_image_->get_handle();
 		post_barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
@@ -360,7 +360,7 @@ namespace edge::gfx {
 	auto ResourceUpdater::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> void {
 		auto queue_result = device_.get_queue({
 				.required_caps = QueuePresets::kGraphics,
-				.strategy = QueueSelectionStrategy::ePreferDedicated
+				.strategy = EDGE_GFX_QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED
 			});
 		if (queue_result) {
 			EDGE_SLOGD("Found dedicated graphics queue for resource uploader.");
@@ -371,7 +371,7 @@ namespace edge::gfx {
 		command_pool_ = queue_->create_command_pool();
 
 		BufferCreateInfo buffer_create_info{};
-		buffer_create_info.flags = BufferFlag::eStaging;
+		buffer_create_info.flags = EDGE_GFX_BUFFER_FLAG_STAGING;
 		buffer_create_info.size = std::max(vk::DeviceSize{4096ull}, arena_size);
 		buffer_create_info.count = 1u;
 		buffer_create_info.minimal_alignment = 16u;

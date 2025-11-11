@@ -64,7 +64,7 @@ namespace edge::gfx {
 		auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
 
 		auto backbuffer_id = renderer_->get_backbuffer_resource_id();
-		push_image_barrier(backbuffer_id, ResourceStateFlag::eRenderTarget);
+		push_image_barrier(backbuffer_id, EDGE_GFX_RESOURCE_STATE_RENDER_TARGET);
 
 		vk::DependencyInfoKHR dependency_info{};
 		dependency_info.bufferMemoryBarrierCount = static_cast<uint32_t>(buffer_barriers_.size());
@@ -230,7 +230,7 @@ namespace edge::gfx {
 				total_size += region_pitch * update_region.h;
 			}
 
-			auto image_updater = updater_->update_image(image, render_resource.get_state(), ResourceStateFlag::eGraphicsShader, total_size);
+			auto image_updater = updater_->update_image(image, render_resource.get_state(), EDGE_GFX_RESOURCE_STATE_GRAPHICS_SHADER, total_size);
 
 			mi::Vector<uint8_t> packed_data(total_size);
 
@@ -256,7 +256,7 @@ namespace edge::gfx {
 			}
 
 			image_updater.submit();
-			render_resource.set_state(ResourceStateFlag::eGraphicsShader);
+			render_resource.set_state(EDGE_GFX_RESOURCE_STATE_GRAPHICS_SHADER);
 
 			tex->SetStatus(ImTextureStatus_OK);
 		}
@@ -283,7 +283,7 @@ namespace edge::gfx {
 					continue;
 				}
 
-				push_image_barrier(render_resource_id, ResourceStateFlag::eShaderResource);
+				push_image_barrier(render_resource_id, EDGE_GFX_RESOURCE_STATE_SHADER_RESOURCE);
 			}
 		}
 	}
@@ -309,8 +309,8 @@ namespace edge::gfx {
 		auto& index_buffer_resource = renderer_->get_render_resource(index_buffer_render_resource_id_);
 		auto& index_buffer = index_buffer_resource.get_handle<gfx::Buffer>();
 
-		auto vertex_buffer_updater = updater_->update_buffer(vertex_buffer, vertex_buffer_resource.get_state(), ResourceStateFlag::eGraphicsShader, draw_data->TotalVtxCount * sizeof(ImDrawVert));
-		auto index_buffer_updater = updater_->update_buffer(index_buffer, index_buffer_resource.get_state(), ResourceStateFlag::eIndexRead, draw_data->TotalIdxCount * sizeof(ImDrawIdx));
+		auto vertex_buffer_updater = updater_->update_buffer(vertex_buffer, vertex_buffer_resource.get_state(), EDGE_GFX_RESOURCE_STATE_GRAPHICS_SHADER, draw_data->TotalVtxCount * sizeof(ImDrawVert));
+		auto index_buffer_updater = updater_->update_buffer(index_buffer, index_buffer_resource.get_state(), EDGE_GFX_RESOURCE_STATE_INDEX_READ, draw_data->TotalIdxCount * sizeof(ImDrawIdx));
 		
 		vk::DeviceSize vtx_offset{ 0 };
 		vk::DeviceSize idx_offset{ 0 };
@@ -329,9 +329,9 @@ namespace edge::gfx {
 		}
 		
 		vertex_buffer_updater.submit();
-		vertex_buffer_resource.set_state(ResourceStateFlag::eGraphicsShader);
+		vertex_buffer_resource.set_state(EDGE_GFX_RESOURCE_STATE_GRAPHICS_SHADER);
 		index_buffer_updater.submit();
-		index_buffer_resource.set_state(ResourceStateFlag::eIndexRead);
+		index_buffer_resource.set_state(EDGE_GFX_RESOURCE_STATE_INDEX_READ);
 	}
 
 	auto ImGuiPass::update_buffer_resource(uint32_t resource_id, vk::DeviceSize element_count, vk::DeviceSize element_size, BufferFlags usage) -> void {
@@ -342,7 +342,7 @@ namespace edge::gfx {
 		buffer_create_info.minimal_alignment = element_size;
 
 		auto& render_resource = renderer_->get_render_resource(resource_id);
-		render_resource.update(gfx::Buffer::create(buffer_create_info), gfx::ResourceStateFlag::eUndefined);
+		render_resource.update(gfx::Buffer::create(buffer_create_info), EDGE_GFX_RESOURCE_STATE_UNDEFINED);
 	}
 }
 

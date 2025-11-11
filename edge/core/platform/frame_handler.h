@@ -2,14 +2,17 @@
 
 #include <chrono>
 #include <numeric>
+#include <cmath>
 
-#ifdef EDGE_PLATFORM_APPLE
-#include <dispatch/dispatch.h>
-#include <mach/mach_time.h>
+#if EDGE_PLATFORM_ANDROID
+#include <time.h>
+#include <unistd.h>
+#elif EDGE_PALTFORM_WINDOWS
+#elif EDGE_PLATFORM_LINUX
 #endif
 
 namespace edge {
-	class FrameHandlerBase {
+	class FrameHandler {
 	public:
 		using handler_t = int32_t(*)(float delta_time, void* user_data);
 		using duration_t = std::chrono::high_resolution_clock::duration;
@@ -32,7 +35,31 @@ namespace edge {
 				double to_wait = seconds - self.estimate_;
 
 				auto start = std::chrono::high_resolution_clock::now();
-				self.sleep_(to_wait);
+
+#if EDGE_PLATFORM_ANDROID
+				// Android nanosleep implementation
+				// Use nanosleep for better precision on mobile devices
+				struct timespec req, rem;
+				req.tv_sec = static_cast<time_t>(to_wait);
+				req.tv_nsec = static_cast<long>((to_wait - req.tv_sec) * 1e9);
+
+				// Handle potential interruptions
+				while (nanosleep(&req, &rem) == -1) {
+					req = rem;
+				}
+#elif EDGE_PLATFORM_WINDOWS
+				HANDLE waitable_timer = CreateWaitableTimer(NULL, FALSE, NULL);
+
+				LARGE_INTEGER due;
+				due.QuadPart = -int64_t(to_wait * 1e7);  // Convert to 100ns units
+				SetWaitableTimerEx(waitable_timer, &due, 0, NULL, NULL, NULL, 0);
+				WaitForSingleObject(waitable_timer, INFINITE);
+
+				CloseHandle(waitable_timer);
+#else
+				// TODO: Linux
+				std::this_thread::sleep_for(std::chrono::duration<double>(to_wait));
+#endif
 				auto end = std::chrono::high_resolution_clock::now();
 
 				double observed = std::chrono::duration<double>(end - start).count();
@@ -44,7 +71,7 @@ namespace edge {
 				double delta = error - self.mean_;
 				self.mean_ += delta / self.count_;
 				self.m2_ += delta * (error - self.mean_);
-				double stddev = self.count_ > 1 ? std::sqrt(self.m2_ / (self.count_ - 1)) : 0.0;
+				double stddev = self.count_ > 1 ? sqrt(self.m2_ / (self.count_ - 1)) : 0.0;
 				self.estimate_ = self.mean_ + stddev;
 			}
 
@@ -128,11 +155,3 @@ namespace edge {
 		} callback_;
 	};
 }
-
-#ifdef EDGE_PLATFORM_WINDOWS
-#include "windows_frame_handler.h"
-#elif defined(EDGE_PLATFORM_ANDROID)
-#include "android_frame_handler.h"
-#else
-#include "generic_frame_handler.h"
-#endif

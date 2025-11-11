@@ -281,59 +281,60 @@ namespace edge::foundation {
 }
 
 #define EDGE_MAKE_ENUM_FLAGS(FlagsType, EnumType) \
-    using FlagsType = ::edge::foundation::Flags<EnumType>; \
-    static_assert(::edge::foundation::EnumFlag<EnumType>, "EnumType must satisfy EnumFlag concept"); \
+    static_assert(edge::foundation::EnumFlag<EnumType>, "EnumType must satisfy EnumFlag concept"); \
     \
     /* Free function operators in the same namespace as the enum for ADL */ \
-    constexpr ::edge::foundation::Flags<EnumType> operator|(EnumType lhs, EnumType rhs) noexcept { \
-        return ::edge::foundation::Flags<EnumType>(lhs) | rhs; \
+    constexpr edge::foundation::Flags<EnumType> operator|(EnumType lhs, EnumType rhs) noexcept { \
+        return edge::foundation::Flags<EnumType>(lhs) | rhs; \
     } \
     \
-    constexpr ::edge::foundation::Flags<EnumType> operator|(EnumType lhs, ::edge::foundation::Flags<EnumType> rhs) noexcept { \
-        return ::edge::foundation::Flags<EnumType>(lhs) | rhs; \
+    constexpr edge::foundation::Flags<EnumType> operator|(EnumType lhs, edge::foundation::Flags<EnumType> rhs) noexcept { \
+        return edge::foundation::Flags<EnumType>(lhs) | rhs; \
     } \
     \
-    constexpr ::edge::foundation::Flags<EnumType> operator&(EnumType lhs, EnumType rhs) noexcept { \
-        return ::edge::foundation::Flags<EnumType>(lhs) & rhs; \
+    constexpr edge::foundation::Flags<EnumType> operator&(EnumType lhs, EnumType rhs) noexcept { \
+        return edge::foundation::Flags<EnumType>(lhs) & rhs; \
     } \
     \
-    constexpr ::edge::foundation::Flags<EnumType> operator&(EnumType lhs, ::edge::foundation::Flags<EnumType> rhs) noexcept { \
-        return ::edge::foundation::Flags<EnumType>(lhs) & rhs; \
+    constexpr edge::foundation::Flags<EnumType> operator&(EnumType lhs, edge::foundation::Flags<EnumType> rhs) noexcept { \
+        return edge::foundation::Flags<EnumType>(lhs) & rhs; \
     } \
     \
-    constexpr ::edge::foundation::Flags<EnumType> operator^(EnumType lhs, EnumType rhs) noexcept { \
-        return ::edge::foundation::Flags<EnumType>(lhs) ^ rhs; \
+    constexpr edge::foundation::Flags<EnumType> operator^(EnumType lhs, EnumType rhs) noexcept { \
+        return edge::foundation::Flags<EnumType>(lhs) ^ rhs; \
     } \
     \
-    constexpr ::edge::foundation::Flags<EnumType> operator^(EnumType lhs, ::edge::foundation::Flags<EnumType> rhs) noexcept { \
-        return ::edge::foundation::Flags<EnumType>(lhs) ^ rhs; \
+    constexpr edge::foundation::Flags<EnumType> operator^(EnumType lhs, edge::foundation::Flags<EnumType> rhs) noexcept { \
+        return edge::foundation::Flags<EnumType>(lhs) ^ rhs; \
     } \
     \
-    constexpr ::edge::foundation::Flags<EnumType> operator~(EnumType flag) noexcept { \
-        return ~::edge::foundation::Flags<EnumType>(flag); \
+    constexpr edge::foundation::Flags<EnumType> operator~(EnumType flag) noexcept { \
+        return ~edge::foundation::Flags<EnumType>(flag); \
     }
 
 
 // Macro to define flag names for string conversion
 #define EDGE_DEFINE_FLAG_NAMES(EnumType, ...) \
+namespace edge::foundation { \
     template<> \
-    struct ::edge::foundation::flag_traits<EnumType> { \
+    struct flag_traits<EnumType> { \
         static constexpr std::array flag_entries = { __VA_ARGS__ }; \
         static constexpr std::span<const flag_name_entry<EnumType>> names() { \
             return flag_entries; \
         } \
-    };
+    }; \
+}
 
 #define EDGE_FLAG_ENTRY(Type, Name) flag_name_entry{Type, Name}
 
 // std::format support
-/*template<::edge::foundation::EnumFlag E>
-struct std::formatter<::edge::foundation::Flags<E>> {
+/*template<edge::foundation::EnumFlag E>
+struct std::formatter<edge::foundation::Flags<E>> {
     constexpr auto parse(format_parse_context& ctx) {
         return ctx.begin();
     }
 
-    auto format(const ::edge::foundation::Flags<E>& flags, format_context& ctx) const {
+    auto format(const edge::foundation::Flags<E>& flags, format_context& ctx) const {
         return format_to(ctx.out(), "{}", flags.to_string());
     }
 };*/

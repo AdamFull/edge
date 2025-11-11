@@ -157,7 +157,7 @@ namespace edge::gfx {
 			current_frame->enqueue_resource_deletion(std::move(std::get<Image>(resource_handle_)));
 		}
 
-		state_ = ResourceStateFlag::eUndefined;
+		state_ = EDGE_GFX_RESOURCE_STATE_UNDEFINED;
 
 		if (srv_resource_index_ != ~0u) {
 			srv_free_list_.deallocate(srv_resource_index_);
@@ -349,10 +349,10 @@ namespace edge::gfx {
 		auto is_color_attachment = (image_usage & vk::ImageUsageFlagBits::eColorAttachment) == vk::ImageUsageFlagBits::eColorAttachment;
 		auto is_depth_attachment = (image_usage & vk::ImageUsageFlagBits::eDepthStencilAttachment) == vk::ImageUsageFlagBits::eDepthStencilAttachment;
 		auto is_attachment = is_color_attachment || is_depth_attachment;
-		if (!is_attachment && initial_state != ResourceStateFlag::eShaderResource) {
+		if (!is_attachment && initial_state != EDGE_GFX_RESOURCE_STATE_SHADER_RESOURCE) {
 			GFX_ASSERT_MSG(active_frame_, "This call should be between begin_frame and end_frame.");
 			auto& cmdbuf = active_frame_->get_command_buffer();
-			render_resource.transfer_state(cmdbuf, ResourceStateFlag::eShaderResource);
+			render_resource.transfer_state(cmdbuf, EDGE_GFX_RESOURCE_STATE_SHADER_RESOURCE);
 		}
 
 		// Write resource descriptors to descriptor table
@@ -484,8 +484,8 @@ namespace edge::gfx {
 		auto const& cmdbuf = active_frame_->get_command_buffer();
 
 		auto& backbuffer_resource = get_backbuffer_resource();
-		if (backbuffer_resource.get_state() != ResourceStateFlag::ePresent) {
-			backbuffer_resource.transfer_state(cmdbuf, ResourceStateFlag::ePresent);
+		if (backbuffer_resource.get_state() != EDGE_GFX_RESOURCE_STATE_PRESENT) {
+			backbuffer_resource.transfer_state(cmdbuf, EDGE_GFX_RESOURCE_STATE_PRESENT);
 		}
 
 		if (!write_descriptor_sets_.empty()) {
@@ -706,14 +706,14 @@ namespace edge::gfx {
 		if (swapchain_targets_.empty()) {
 			for (auto&& image : swapchain_images) {
 				auto new_resource = create_render_resource();
-				setup_render_resource(new_resource, std::move(image), ResourceStateFlag::eUndefined);
+				setup_render_resource(new_resource, std::move(image), EDGE_GFX_RESOURCE_STATE_UNDEFINED);
 				swapchain_targets_.push_back(new_resource);
 			}
 		}
 		else {
 			for (int32_t i = 0; i < static_cast<int32_t>(swapchain_images.size()); ++i) {
 				auto& render_resource = render_resources_[swapchain_targets_[i]];
-				render_resource.update(std::move(swapchain_images[i]), ResourceStateFlag::eUndefined);
+				render_resource.update(std::move(swapchain_images[i]), EDGE_GFX_RESOURCE_STATE_UNDEFINED);
 			}
 		}
 	}

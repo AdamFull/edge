@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project(edge LANGUAGES C CXX)
+project(edge_engine LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -30,12 +30,12 @@ if(ANDROID)
     )
 elseif(WIN32)
     add_executable(${PROJECT_NAME} WIN32 ${APP_SOURCES})
-
-    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        target_compile_options(${PROJECT_NAME} PRIVATE -mavx2)
-    endif()
 else()
     add_executable(${PROJECT_NAME} ${APP_SOURCES})
+endif()
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+target_compile_options(${PROJECT_NAME} PRIVATE -mavx2)
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC

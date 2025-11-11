@@ -8,15 +8,12 @@
 #include <ktx.h>
 #include <ktxvulkan.h>
 
-#ifndef EDGE_PLATFORM_ANDROID
-#define __AVX2__
 #if defined(__AVX2__)
 #include <immintrin.h>
 #define USE_AVX2 1
 #elif defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
 #include <emmintrin.h>
 #define USE_SSE2 1
-#endif
 #endif
 
 #define USE_SIMD_MIP_GENERATOR (USE_AVX2 || USE_SSE2)
@@ -318,7 +315,7 @@ namespace edge::gfx {
 	auto ResourceUploader::_construct(vk::DeviceSize arena_size, uint32_t uploader_count) -> void {
 		auto queue_result = device_.get_queue({
 				.required_caps = QueuePresets::kDedicatedTransfer,
-				.strategy = QueueSelectionStrategy::ePreferDedicated
+				.strategy = EDGE_GFX_QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED
 			});
 
 		// Try to get dedicated transfer queue
@@ -330,7 +327,7 @@ namespace edge::gfx {
 		else {
 			queue_result = device_.get_queue({
 				.required_caps = QueuePresets::kGraphics,
-				.strategy = QueueSelectionStrategy::ePreferDedicated
+				.strategy = EDGE_GFX_QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED
 				});
 			if (queue_result) {
 				EDGE_SLOGD("Found dedicated graphics queue for resource uploader.");
@@ -342,7 +339,7 @@ namespace edge::gfx {
 		command_pool_ = queue_->create_command_pool();
 
 		BufferCreateInfo buffer_create_info{};
-		buffer_create_info.flags = BufferFlag::eStaging;
+		buffer_create_info.flags = EDGE_GFX_BUFFER_FLAG_STAGING;
 		buffer_create_info.size = std::max(vk::DeviceSize{4096ull}, arena_size);
 		buffer_create_info.count = 1u;
 		buffer_create_info.minimal_alignment = 256u;
@@ -562,7 +559,7 @@ namespace edge::gfx {
 		create_info.layer_count = upload_info.layer_count;
 		create_info.level_count = upload_info.level_count;
 		create_info.format = upload_info.format;
-		create_info.flags = ImageFlag::eSample | ImageFlag::eCopyTarget;
+		create_info.flags = EDGE_GFX_IMAGE_FLAG_SAMPLE | EDGE_GFX_IMAGE_FLAG_COPY_TARGET;
 
 		auto image = Image::create(create_info);
 
@@ -574,8 +571,8 @@ namespace edge::gfx {
 
 		ImageBarrier image_barrier{};
 		image_barrier.image = &image;
-		image_barrier.src_state = ResourceStateFlag::eUndefined;
-		image_barrier.dst_state = ResourceStateFlag::eCopyDst;
+		image_barrier.src_state = EDGE_GFX_RESOURCE_STATE_UNDEFINED;
+		image_barrier.dst_state = EDGE_GFX_RESOURCE_STATE_COPY_DST;
 		image_barrier.subresource_range.aspectMask = vk::ImageAspectFlagBits::eColor;
 		image_barrier.subresource_range.baseArrayLayer = 0u;
 		image_barrier.subresource_range.baseMipLevel = 0u;

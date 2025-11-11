@@ -2,8 +2,6 @@
 
 #include "../platform/platform.h"
 
-#include <tiny_imageformat/tinyimageformat.h>
-
 #include <vk_mem_alloc.h>
 
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
@@ -289,13 +287,13 @@ namespace edge::gfx {
 		}
 
 		inline auto is_depth_format(vk::Format format) noexcept -> bool {
-			auto tinyimageformat = TinyImageFormat_FromVkFormat(static_cast<TinyImageFormat_VkFormat>(format));
-			return TinyImageFormat_IsDepthOnly(tinyimageformat);
+			return format == vk::Format::eD16Unorm || format == vk::Format::eD32Sfloat;
 		}
 
 		inline auto is_depth_stencil_format(vk::Format format) noexcept -> bool {
-			auto tinyimageformat = TinyImageFormat_FromVkFormat(static_cast<TinyImageFormat_VkFormat>(format));
-			return TinyImageFormat_IsDepthAndStencil(tinyimageformat);
+			return format == vk::Format::eD32SfloatS8Uint || 
+				format == vk::Format::eD16UnormS8Uint || 
+				format == vk::Format::eD24UnormS8Uint;
 		}
 	}
 
@@ -516,6 +514,13 @@ namespace edge::gfx {
 		EDGE_FATAL_VK_ERROR(result, "createWin32SurfaceKHR");
 		return Surface{ surface };
 	}
+#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+	auto Surface::create(const vk::XlibSurfaceCreateInfoKHR& create_info) -> Surface {
+		vk::SurfaceKHR surface;
+		auto result = instance_->createXlibSurfaceKHR(&create_info, allocator_, &surface);
+		EDGE_FATAL_VK_ERROR(result, "createXlibSurfaceKHR");
+		return Surface{ surface };
+	}
 #endif
 
 #undef EDGE_LOGGER_SCOPE // Surface
@@ -659,7 +664,7 @@ namespace edge::gfx {
 	}
 
 	auto Device::QueueFamilyInfo::calculate_score(const QueueRequest& request) const -> int32_t {
-		if (request.strategy == QueueSelectionStrategy::eExact) {
+		if (request.strategy == EDGE_GFX_QUEUE_SELECTION_STRATEGY_EXACT) {
 			return (capabilities == request.required_caps) ? 1000 : -1;
 		}
 
@@ -670,7 +675,7 @@ namespace edge::gfx {
 		int32_t score = 100;
 
 		switch (request.strategy) {
-		case QueueSelectionStrategy::ePreferDedicated: {
+		case EDGE_GFX_QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED: {
 			// Prefer queues with fewer extra capabilities
 			// Count bits in (capabilities - required_caps)
 			auto extra_caps = static_cast<uint32_t>(capabilities & ~request.required_caps);
@@ -679,7 +684,7 @@ namespace edge::gfx {
 			break;
 		}
 
-		case QueueSelectionStrategy::ePreferShared: {
+		case EDGE_GFX_QUEUE_SELECTION_STRATEGY_PREFER_SHARED: {
 			// Prefer queues with more capabilities
 			auto all_caps = static_cast<uint32_t>(capabilities);
 			int32_t cap_count = std::popcount(all_caps);
@@ -687,13 +692,13 @@ namespace edge::gfx {
 			break;
 		}
 
-		case QueueSelectionStrategy::eMinimal:
+		case EDGE_GFX_QUEUE_SELECTION_STRATEGY_MINIMAL:
 		default:
 			// No special preference, just meets requirements
 			break;
 		}
 
-		if (request.preferred_caps != QueueCapability::eNone) {
+		if (request.preferred_caps != EDGE_GFX_QUEUE_CAPABILITY_NONE) {
 			if ((capabilities & request.preferred_caps) == request.preferred_caps) {
 				score += 30;
 			}
@@ -705,7 +710,7 @@ namespace edge::gfx {
 
 		score += std::min<int32_t>(static_cast<int32_t>(available_queue_indices.size()), 10);
 
-		if (capabilities & QueueCapability::ePresent) {
+		if (capabilities & EDGE_GFX_QUEUE_CAPABILITY_PRESENT) {
 			score += 2;
 		}
 
@@ -733,11 +738,11 @@ namespace edge::gfx {
 		}
 
 		if (!best_family || best_score < 0) {
-			EDGE_LOGW("No suitable queue family found for request (required caps: {})", request.required_caps.to_string());
+			EDGE_LOGW("No suitable queue family found for request (required caps: {})", request.required_caps);
 
 			EDGE_LOGD("Available queue families:");
 			for (const auto& family : queue_families_) {
-				EDGE_LOGD("  Family {}: caps={}, available={}", family.family_index, family.capabilities.to_string(), family.available_queue_indices.size());
+				EDGE_LOGD("  Family {}: caps={}, available={}", family.family_index, family.capabilities, family.available_queue_indices.size());
 			}
 
 			return std::unexpected(vk::Result::eErrorFeatureNotPresent);
@@ -753,7 +758,7 @@ namespace edge::gfx {
 
 #ifndef NDEBUG
 		EDGE_SLOGD("Allocated queue: family={}, index={}, caps={}, score={}",
-			best_family->family_index, queue_index, best_family->capabilities.to_string(), best_score);
+			best_family->family_index, queue_index, best_family->capabilities, best_score);
 #endif
 
 		return Queue(queue, best_family->family_index, queue_index);
@@ -996,40 +1001,40 @@ namespace edge::gfx {
 			family_info.min_image_transfer_granularity = props.minImageTransferGranularity;
 			family_info.supports_present = false;
 
-			QueueCapabilities caps = QueueCapability::eNone;
+			QueueCapabilityFlags caps = EDGE_GFX_QUEUE_CAPABILITY_NONE;
 
 			if (props.queueFlags & vk::QueueFlagBits::eGraphics) {
-				caps |= QueueCapability::eGraphics;
+				caps |= EDGE_GFX_QUEUE_CAPABILITY_GRAPHICS;
 			}
 			if (props.queueFlags & vk::QueueFlagBits::eCompute) {
-				caps |= QueueCapability::eCompute;
+				caps |= EDGE_GFX_QUEUE_CAPABILITY_COMPUTE;
 			}
 			if (props.queueFlags & vk::QueueFlagBits::eTransfer) {
-				caps |= QueueCapability::eTransfer;
+				caps |= EDGE_GFX_QUEUE_CAPABILITY_TRANSFER;
 			}
 			if (props.queueFlags & vk::QueueFlagBits::eSparseBinding) {
-				caps |= QueueCapability::eSparseBinding;
+				caps |= EDGE_GFX_QUEUE_CAPABILITY_SPARSE_BINDING;
 			}
 			if (props.queueFlags & vk::QueueFlagBits::eProtected) {
-				caps |= QueueCapability::eProtected;
+				caps |= EDGE_GFX_QUEUE_CAPABILITY_PROTECTED;
 			}
 
 			if (props.queueFlags & vk::QueueFlagBits::eVideoDecodeKHR) {
-				caps |= QueueCapability::eVideoDecodeKHR;
+				caps |= EDGE_GFX_QUEUE_CAPABILITY_VIDEO_DECODE;
 			}
 			if (props.queueFlags & vk::QueueFlagBits::eVideoEncodeKHR) {
-				caps |= QueueCapability::eVideoEncodeKHR;
+				caps |= EDGE_GFX_QUEUE_CAPABILITY_VIDEO_ENCODE;
 			}
 
 			if (props.queueFlags & vk::QueueFlagBits::eOpticalFlowNV) {
-				caps |= QueueCapability::eOpticalFlowNV;
+				caps |= EDGE_GFX_QUEUE_CAPABILITY_OPTICAL_FLOW;
 			}
 
 			if (surface) {
 				vk::Bool32 supported;
 				if (auto result = adapter.getSurfaceSupportKHR(index, surface, &supported);
 					result == vk::Result::eSuccess && supported == VK_TRUE) {
-					caps |= QueueCapability::ePresent;
+					caps |= EDGE_GFX_QUEUE_CAPABILITY_PRESENT;
 					family_info.supports_present = true;
 				}
 			}
@@ -1042,7 +1047,7 @@ namespace edge::gfx {
 			queue_families.push_back(std::move(family_info));
 
 #ifndef NDEBUG
-			EDGE_SLOGD("Discovered Queue Family {}: count={}, caps={}", index, props.queueCount, caps.to_string());
+			EDGE_SLOGD("Discovered Queue Family {}: count={}, caps={}", index, props.queueCount, caps);
 #endif
 		}
 
@@ -1117,23 +1122,23 @@ namespace edge::gfx {
 		image_create_info.imageType = (create_info.extent.depth > 1u) ? vk::ImageType::e3D : (create_info.extent.height > 1u) ? vk::ImageType::e2D : vk::ImageType::e1D;
 		image_create_info.sharingMode = vk::SharingMode::eExclusive;
 
-		if (create_info.flags & ImageFlag::eSample) {
+		if (create_info.flags & EDGE_GFX_IMAGE_FLAG_SAMPLE) {
 			image_create_info.usage |= vk::ImageUsageFlagBits::eSampled;
 		}
 
-		if (create_info.flags & ImageFlag::eStorage) {
+		if (create_info.flags & EDGE_GFX_IMAGE_FLAG_SAMPLE) {
 			image_create_info.usage |= vk::ImageUsageFlagBits::eStorage;
 		}
 
-		if (create_info.flags & ImageFlag::eCopySource) {
+		if (create_info.flags & EDGE_GFX_IMAGE_FLAG_COPY_SOURCE) {
 			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferSrc;
 		}
 
-		if (create_info.flags & ImageFlag::eCopyTarget) {
+		if (create_info.flags & EDGE_GFX_IMAGE_FLAG_COPY_TARGET) {
 			image_create_info.usage |= vk::ImageUsageFlagBits::eTransferDst;
 		}
 
-		if (create_info.flags & ImageFlag::eWriteColor) {
+		if (create_info.flags & EDGE_GFX_IMAGE_FLAG_WRITE_COLOR) {
 			image_create_info.usage |= ((util::is_depth_stencil_format(create_info.format) || util::is_depth_format(create_info.format)) ? vk::ImageUsageFlagBits::eDepthStencilAttachment : vk::ImageUsageFlagBits::eColorAttachment);
 			allocation_create_info.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 			allocation_create_info.priority = 1.0f;
@@ -1198,48 +1203,48 @@ namespace edge::gfx {
 		VmaAllocationCreateInfo allocation_create_info{};
 		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
 
-		if (create_info.flags & BufferFlag::eDynamic) {
+		if (create_info.flags & EDGE_GFX_BUFFER_FLAG_DYNAMIC) {
 			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
 			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
 				VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT |
 				VMA_ALLOCATION_CREATE_MAPPED_BIT;
 		}
-		else if (create_info.flags & BufferFlag::eReadback) {
+		else if (create_info.flags & EDGE_GFX_BUFFER_FLAG_READBACK) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eTransferDst;
 			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 		}
-		else if (create_info.flags & BufferFlag::eStaging) {
+		else if (create_info.flags & EDGE_GFX_BUFFER_FLAG_STAGING) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eTransferSrc;
 			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
 			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 		}
 
-		if (create_info.flags & BufferFlag::eUniform) {
+		if (create_info.flags & EDGE_GFX_BUFFER_FLAG_UNIFORM) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eUniformBuffer | vk::BufferUsageFlagBits::eTransferDst;
 			minimal_alignment = std::lcm(properties.limits.minUniformBufferOffsetAlignment, properties.limits.nonCoherentAtomSize);
 		}
-		else if (create_info.flags & BufferFlag::eStorage) {
+		else if (create_info.flags & EDGE_GFX_BUFFER_FLAG_STORAGE) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eStorageBuffer | vk::BufferUsageFlagBits::eTransferDst;
 			minimal_alignment = std::max(minimal_alignment, properties.limits.minStorageBufferOffsetAlignment);
 		}
-		else if (create_info.flags & BufferFlag::eVertex) {
+		else if (create_info.flags & EDGE_GFX_BUFFER_FLAG_VERTEX) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eVertexBuffer | vk::BufferUsageFlagBits::eTransferDst;
 			minimal_alignment = std::max<uint64_t>(minimal_alignment, 4ull);
 		}
-		else if (create_info.flags & BufferFlag::eIndex) {
+		else if (create_info.flags & EDGE_GFX_BUFFER_FLAG_INDEX) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eIndexBuffer | vk::BufferUsageFlagBits::eTransferDst;
 			minimal_alignment = std::max<uint64_t>(minimal_alignment, 1ull);
 		}
-		else if (create_info.flags & BufferFlag::eIndirect) {
+		else if (create_info.flags & EDGE_GFX_BUFFER_FLAG_INDIRECT) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eIndirectBuffer | vk::BufferUsageFlagBits::eTransferDst;
 		}
-		else if (create_info.flags & BufferFlag::eAccelerationBuild) {
+		else if (create_info.flags & EDGE_GFX_BUFFER_FLAG_ACCELERATION_BUILD) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR | vk::BufferUsageFlagBits::eTransferSrc | vk::BufferUsageFlagBits::eTransferDst;
 		}
-		else if (create_info.flags & BufferFlag::eAccelerationStore) {
+		else if (create_info.flags & EDGE_GFX_BUFFER_FLAG_ACCELERATION_STORE) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR | vk::BufferUsageFlagBits::eTransferDst;
 		}
-		else if (create_info.flags & BufferFlag::eShaderBindingTable) {
+		else if (create_info.flags & EDGE_GFX_BUFFER_FLAG_SHADER_BINDING_TABLE) {
 			buffer_create_info.usage |= vk::BufferUsageFlagBits::eShaderBindingTableKHR | vk::BufferUsageFlagBits::eTransferDst;
 		}
 
@@ -2010,12 +2015,9 @@ namespace edge::gfx {
 		vk::AndroidSurfaceCreateInfoKHR surface_create_info{};
 		surface_create_info.window = static_cast<ANativeWindow*>(info.window->get_native_handle());
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
-		auto hWnd = static_cast<HWND>(info.window->get_native_handle());
-		HINSTANCE hInstance = (HINSTANCE)GetWindowLongPtr(hWnd, GWLP_HINSTANCE);
-
-		vk::Win32SurfaceCreateInfoKHR surface_create_info{};
-		surface_create_info.hwnd = hWnd;
-		surface_create_info.hinstance = hInstance;
+		auto surface_create_info = *static_cast<vk::Win32SurfaceCreateInfoKHR*>(info.window->get_native_handle());
+#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+		auto surface_create_info = *static_cast<vk::XlibSurfaceCreateInfoKHR*>(info.window->get_native_handle());
 #endif
 
 		surface_ = Surface::create(surface_create_info);

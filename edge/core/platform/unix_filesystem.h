@@ -2,7 +2,7 @@
 
 #include "platform.h"
 
-typedef struct DIR DIR;
+#include <dirent.h>
 
 namespace edge::platform {
     class NativeDirectoryIterator final : public IPlatformDirectoryIterator {

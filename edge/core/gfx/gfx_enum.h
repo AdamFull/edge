@@ -1,143 +1,127 @@
 #pragma once
 
-#include "../foundation/enum_flags.h"
-
 namespace edge::gfx {
-	enum class QueueCapability : uint32_t {
-		eNone = 0,
-		eGraphics = 1 << 0,  // Graphics operations
-		eCompute = 1 << 1,  // Compute shader dispatch
-		eTransfer = 1 << 2,  // Transfer/copy operations (implicit in Graphics/Compute)
-		ePresent = 1 << 3,  // Surface presentation support
-		eSparseBinding = 1 << 4,  // Sparse memory binding
-		eProtected = 1 << 5,  // Protected memory operations
-		eVideoDecodeKHR = 1 << 6,  // Video decode operations
-		eVideoEncodeKHR = 1 << 7,  // Video encode operations
-		eOpticalFlowNV = 1 << 8,  // NVIDIA optical flow
+	enum QueueCapabilityFlag {
+		EDGE_GFX_QUEUE_CAPABILITY_NONE				= 0,
+		EDGE_GFX_QUEUE_CAPABILITY_GRAPHICS			= 0x01,	// Graphics operations
+		EDGE_GFX_QUEUE_CAPABILITY_COMPUTE			= 0x02,	// Compute shader dispatch
+		EDGE_GFX_QUEUE_CAPABILITY_TRANSFER			= 0x04,	// Transfer/copy operations (implicit in Graphics/Compute)
+		EDGE_GFX_QUEUE_CAPABILITY_PRESENT			= 0x08,	// Surface presentation support
+		EDGE_GFX_QUEUE_CAPABILITY_SPARSE_BINDING	= 0x10,	// Sparse memory binding
+		EDGE_GFX_QUEUE_CAPABILITY_PROTECTED			= 0x20,	// Protected memory operations
+		EDGE_GFX_QUEUE_CAPABILITY_VIDEO_DECODE		= 0x40,	// Video decode operations
+		EDGE_GFX_QUEUE_CAPABILITY_VIDEO_ENCODE		= 0x80,	// Video encode operations
+		EDGE_GFX_QUEUE_CAPABILITY_OPTICAL_FLOW		= 0x40,	// NVIDIA optical flow
 	};
 
-	EDGE_MAKE_ENUM_FLAGS(QueueCapabilities, QueueCapability);
+	using QueueCapabilityFlags = uint16_t;
 
 	namespace QueuePresets {
 		// Universal graphics queue (Graphics + Compute + Transfer)
-		static constexpr QueueCapabilities kGraphics =
-			QueueCapability::eGraphics |
-			QueueCapability::eCompute |
-			QueueCapability::eTransfer;
+		static constexpr QueueCapabilityFlags kGraphics =
+			EDGE_GFX_QUEUE_CAPABILITY_GRAPHICS |
+			EDGE_GFX_QUEUE_CAPABILITY_COMPUTE |
+			EDGE_GFX_QUEUE_CAPABILITY_TRANSFER;
 
 		// Async compute queue (Compute + Transfer, no Graphics)
-		static constexpr QueueCapabilities kAsyncCompute =
-			QueueCapability::eCompute |
-			QueueCapability::eTransfer;
+		static constexpr QueueCapabilityFlags kAsyncCompute =
+			EDGE_GFX_QUEUE_CAPABILITY_COMPUTE |
+			EDGE_GFX_QUEUE_CAPABILITY_TRANSFER;
 
 		// Dedicated transfer queue (Transfer only, optimal for DMA)
-		static constexpr QueueCapabilities kDedicatedTransfer =
-			QueueCapability::eTransfer;
+		static constexpr QueueCapabilityFlags kDedicatedTransfer =
+			EDGE_GFX_QUEUE_CAPABILITY_TRANSFER;
 
 		// Graphics with present support
-		static constexpr QueueCapabilities kPresentGraphics =
-			QueueCapability::eGraphics |
-			QueueCapability::eCompute |
-			QueueCapability::eTransfer |
-			QueueCapability::ePresent;
+		static constexpr QueueCapabilityFlags kPresentGraphics =
+			EDGE_GFX_QUEUE_CAPABILITY_GRAPHICS |
+			EDGE_GFX_QUEUE_CAPABILITY_COMPUTE |
+			EDGE_GFX_QUEUE_CAPABILITY_TRANSFER |
+			EDGE_GFX_QUEUE_CAPABILITY_PRESENT;
 
 		// Compute async with present support
-		static constexpr QueueCapabilities kPresentCompute =
-			QueueCapability::eCompute |
-			QueueCapability::eTransfer |
-			QueueCapability::ePresent;
+		static constexpr QueueCapabilityFlags kPresentCompute =
+			EDGE_GFX_QUEUE_CAPABILITY_COMPUTE |
+			EDGE_GFX_QUEUE_CAPABILITY_TRANSFER |
+			EDGE_GFX_QUEUE_CAPABILITY_PRESENT;
 	}
 
-	enum class QueueSelectionStrategy {
-		eExact,           // Must match exactly the requested capabilities
-		eMinimal,         // Must have at least these capabilities
-		ePreferDedicated, // Prefer queues with only requested capabilities
-		ePreferShared     // Prefer queues with additional capabilities
+	enum QueueSelectionStrategy {
+		EDGE_GFX_QUEUE_SELECTION_STRATEGY_EXACT,				// Must match exactly the requested capabilities
+		EDGE_GFX_QUEUE_SELECTION_STRATEGY_MINIMAL,				// Must have at least these capabilities
+		EDGE_GFX_QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED,		// Prefer queues with only requested capabilities
+		EDGE_GFX_QUEUE_SELECTION_STRATEGY_PREFER_SHARED			// Prefer queues with additional capabilities
 	};
 
-	enum class BufferFlag {
-		eReadback = 1 << 0,
-		eStaging = 1 << 1,
-		eDynamic = 1 << 2,
-		eVertex = 1 << 3,
-		eIndex = 1 << 4,
-		eUniform = 1 << 5,
-		eStorage = 1 << 6,
-		eIndirect = 1 << 7,
-		eAccelerationBuild = 1 << 8,
-		eAccelerationStore = 1 << 9,
-		eShaderBindingTable = 1 << 10,
+	enum BufferFlag {
+		EDGE_GFX_BUFFER_FLAG_NONE = 0,
+		EDGE_GFX_BUFFER_FLAG_READBACK = 0x01,
+		EDGE_GFX_BUFFER_FLAG_STAGING = 0x02,
+		EDGE_GFX_BUFFER_FLAG_DYNAMIC = 0x04,
+		EDGE_GFX_BUFFER_FLAG_VERTEX = 0x08,
+		EDGE_GFX_BUFFER_FLAG_INDEX = 0x10,
+		EDGE_GFX_BUFFER_FLAG_UNIFORM = 0x20,
+		EDGE_GFX_BUFFER_FLAG_STORAGE = 0x40,
+		EDGE_GFX_BUFFER_FLAG_INDIRECT = 0x80,
+		EDGE_GFX_BUFFER_FLAG_ACCELERATION_BUILD = 0x100,
+		EDGE_GFX_BUFFER_FLAG_ACCELERATION_STORE = 0x200,
+		EDGE_GFX_BUFFER_FLAG_SHADER_BINDING_TABLE = 0x400,
 	};
 
-	EDGE_MAKE_ENUM_FLAGS(BufferFlags, BufferFlag);
+	using BufferFlags = uint16_t;
 
-	static constexpr BufferFlags kReadbackBuffer{ BufferFlag::eReadback };
-	static constexpr BufferFlags kStagingBuffer{ BufferFlag::eStaging };
-	static constexpr BufferFlags kVertexBuffer{ BufferFlag::eVertex };
-	static constexpr BufferFlags kDynamicVertexBuffer{ BufferFlag::eVertex | BufferFlag::eDynamic };
-	static constexpr BufferFlags kIndexBuffer{ BufferFlag::eIndex };
-	static constexpr BufferFlags kDynamicIndexBuffer{ BufferFlag::eIndex | BufferFlag::eDynamic };
-	static constexpr BufferFlags kUniformBuffer{ BufferFlag::eUniform };
-	static constexpr BufferFlags kDynamicUniformBuffer{ BufferFlag::eUniform | BufferFlag::eDynamic };
-	static constexpr BufferFlags kStorageBuffer{ BufferFlag::eStorage };
-	static constexpr BufferFlags kDynamicStorageBuffer{ BufferFlag::eStorage | BufferFlag::eDynamic };
-	static constexpr BufferFlags kIndirectBuffer{ BufferFlag::eIndirect };
-	static constexpr BufferFlags kDynamicIndirectBuffer{ BufferFlag::eIndirect | BufferFlag::eDynamic };
+	static constexpr BufferFlags kReadbackBuffer{ EDGE_GFX_BUFFER_FLAG_READBACK };
+	static constexpr BufferFlags kStagingBuffer{ EDGE_GFX_BUFFER_FLAG_STAGING };
+	static constexpr BufferFlags kVertexBuffer{ EDGE_GFX_BUFFER_FLAG_VERTEX };
+	static constexpr BufferFlags kDynamicVertexBuffer{ EDGE_GFX_BUFFER_FLAG_VERTEX | EDGE_GFX_BUFFER_FLAG_DYNAMIC };
+	static constexpr BufferFlags kIndexBuffer{ EDGE_GFX_BUFFER_FLAG_INDEX };
+	static constexpr BufferFlags kDynamicIndexBuffer{ EDGE_GFX_BUFFER_FLAG_INDEX | EDGE_GFX_BUFFER_FLAG_DYNAMIC };
+	static constexpr BufferFlags kUniformBuffer{ EDGE_GFX_BUFFER_FLAG_UNIFORM };
+	static constexpr BufferFlags kDynamicUniformBuffer{ EDGE_GFX_BUFFER_FLAG_UNIFORM | EDGE_GFX_BUFFER_FLAG_DYNAMIC };
+	static constexpr BufferFlags kStorageBuffer{ EDGE_GFX_BUFFER_FLAG_STORAGE };
+	static constexpr BufferFlags kDynamicStorageBuffer{ EDGE_GFX_BUFFER_FLAG_STORAGE | EDGE_GFX_BUFFER_FLAG_DYNAMIC };
+	static constexpr BufferFlags kIndirectBuffer{ EDGE_GFX_BUFFER_FLAG_INDIRECT };
+	static constexpr BufferFlags kDynamicIndirectBuffer{ EDGE_GFX_BUFFER_FLAG_INDIRECT | EDGE_GFX_BUFFER_FLAG_DYNAMIC };
 
-	enum class ImageFlag : uint16_t {
-		eSample = 1 << 0,
-		eCopySource = 1 << 1,
-		eCopyTarget = 1 << 2,
-		eStorage = 1 << 3,
-		eWriteColor = 1 << 4
+	enum ImageFlag {
+		EDGE_GFX_IMAGE_FLAG_NONE = 0,
+		EDGE_GFX_IMAGE_FLAG_SAMPLE = 0x01,
+		EDGE_GFX_IMAGE_FLAG_COPY_SOURCE = 0x02,
+		EDGE_GFX_IMAGE_FLAG_COPY_TARGET = 0x04,
+		EDGE_GFX_IMAGE_FLAG_COPY_STORAGE = 0x08,
+		EDGE_GFX_IMAGE_FLAG_WRITE_COLOR = 0x10,
+	};
+	using ImageFlags = uint16_t;
+
+	enum ResourceStateFlag {
+		EDGE_GFX_RESOURCE_STATE_UNDEFINED = 0,
+
+		EDGE_GFX_RESOURCE_STATE_VERTEX_READ = 0x01,
+		EDGE_GFX_RESOURCE_STATE_INDEX_READ = 0x02,
+
+		EDGE_GFX_RESOURCE_STATE_RENDER_TARGET = 0x04,
+		EDGE_GFX_RESOURCE_STATE_UNORDERED_ACCESS = 0x08,
+
+		EDGE_GFX_RESOURCE_STATE_DEPTH_WRITE = 0x10,
+		EDGE_GFX_RESOURCE_STATE_DEPTH_READ = 0x20,
+		EDGE_GFX_RESOURCE_STATE_STENCIL_WRITE = 0x40,
+		EDGE_GFX_RESOURCE_STATE_STENCIL_READ = 0x80,
+
+		EDGE_GFX_RESOURCE_STATE_DEPTH_STENCIL_WRITE = EDGE_GFX_RESOURCE_STATE_DEPTH_WRITE | EDGE_GFX_RESOURCE_STATE_STENCIL_WRITE,
+		EDGE_GFX_RESOURCE_STATE_DEPTH_STENCIL_READ = EDGE_GFX_RESOURCE_STATE_DEPTH_READ | EDGE_GFX_RESOURCE_STATE_STENCIL_READ,
+
+		EDGE_GFX_RESOURCE_STATE_NON_GRAPHICS_SHADER = 0x100,
+		EDGE_GFX_RESOURCE_STATE_GRAPHICS_SHADER = 0x200,
+		EDGE_GFX_RESOURCE_STATE_SHADER_RESOURCE = EDGE_GFX_RESOURCE_STATE_NON_GRAPHICS_SHADER | EDGE_GFX_RESOURCE_STATE_GRAPHICS_SHADER,
+
+		EDGE_GFX_RESOURCE_STATE_INDIRECT_ARGUMENT = 0x400,
+		EDGE_GFX_RESOURCE_STATE_COPY_DST = 0x800,
+		EDGE_GFX_RESOURCE_STATE_COPY_SRC = 0x1000,
+		EDGE_GFX_RESOURCE_STATE_PRESENT = 0x2000,
+
+		EDGE_GFX_RESOURCE_STATE_ACCELERATION_READ = 0x4000,
+		EDGE_GFX_RESOURCE_STATE_ACCELERATION_WRITE = 0x8000,
 	};
 
-	EDGE_MAKE_ENUM_FLAGS(ImageFlags, ImageFlag);
-
-	enum class ResourceStateFlag : uint16_t {
-		eUndefined = 0,
-
-		eVertexRead = 1 << 0,
-		eIndexRead = 1 << 1,
-		eRenderTarget = 1 << 2,
-		eUnorderedAccess = 1 << 3,
-		eDepthWrite = 1 << 4,
-		eDepthRead = 1 << 5,
-		eStencilWrite = 1 << 6,
-		eStencilRead = 1 << 7,
-		eDepthStencilWrite = eDepthWrite | eStencilWrite,
-		eDepthStencilRead = eDepthRead | eStencilRead,
-		eNonGraphicsShader = 1 << 8,
-		eGraphicsShader = 1 << 9,
-		eShaderResource = eNonGraphicsShader | eGraphicsShader,
-		eIndirectArgument = 1 << 10,
-		eCopyDst = 1 << 11,
-		eCopySrc = 1 << 12,
-		ePresent = 1 << 13,
-		eAccelerationStructureRead = 1 << 14,
-		eAccelerationStructureWrite = 1 << 15
-	};
-
-	EDGE_MAKE_ENUM_FLAGS(ResourceStateFlags, ResourceStateFlag);
+	using ResourceStateFlags = uint32_t;
 }
-
-EDGE_DEFINE_FLAG_NAMES(edge::gfx::QueueCapability,
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eNone, "None"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eGraphics, "Graphics"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eCompute, "Compute"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eTransfer, "Transfer"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::ePresent, "Present"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eSparseBinding, "SparseBinding"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eProtected, "Protected"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eVideoDecodeKHR, "VideoDecodeKHR"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eVideoEncodeKHR, "VideoEncodeKHR"),
-	EDGE_FLAG_ENTRY(edge::gfx::QueueCapability::eOpticalFlowNV, "OpticalFlowNV")
-);
-
-EDGE_DEFINE_FLAG_NAMES(edge::gfx::ImageFlag,
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eSample, "Sample"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eCopySource, "CopySource"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eCopyTarget, "CopyTarget"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eStorage, "Storage"),
-	EDGE_FLAG_ENTRY(edge::gfx::ImageFlag::eWriteColor, "WriteColor")
-);

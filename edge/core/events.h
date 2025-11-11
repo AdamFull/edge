@@ -10,7 +10,7 @@ namespace edge::events {
 		eRawInput = 1 << 1
 	};
 
-	EDGE_MAKE_ENUM_FLAGS(EventTags, EventTag);
+	using EventTags = foundation::Flags<EventTag>;
 
 	struct WindowShouldCloseEvent {
 		static constexpr EventTags tag_flags = EventTag::eWindow;
@@ -99,3 +99,5 @@ namespace edge::events {
 		GamepadButtonEvent,
 		GamepadAxisEvent>;
 }
+
+EDGE_MAKE_ENUM_FLAGS(edge::events::EventTags, edge::events::EventTag);

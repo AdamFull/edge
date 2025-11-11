@@ -19,9 +19,9 @@ namespace edge::gfx {
 		image_create_info.face_count = 1u;
 		image_create_info.layer_count = 1u;
 		image_create_info.level_count = 1u;
-		image_create_info.flags = ImageFlag::eWriteColor | ImageFlag::eSample;
+		image_create_info.flags = EDGE_GFX_IMAGE_FLAG_WRITE_COLOR | EDGE_GFX_IMAGE_FLAG_SAMPLE;
 		image_create_info.format = vk::Format::eR8G8B8A8Unorm;
-		renderer.setup_render_resource(self->render_target_, Image::create(image_create_info), ResourceStateFlag::eUndefined);
+		renderer.setup_render_resource(self->render_target_, Image::create(image_create_info), EDGE_GFX_RESOURCE_STATE_UNDEFINED);
 
 		return self;
 	}
@@ -33,7 +33,7 @@ namespace edge::gfx {
 		auto target_extent = target_image.get_extent();
 
 		auto target_state = target_resource.get_state();
-		auto required_state = ResourceStateFlag::eRenderTarget;
+		auto required_state = EDGE_GFX_RESOURCE_STATE_RENDER_TARGET;
 		if (target_state != required_state) {
 			auto src_state = util::get_resource_state(target_state);
 			auto dst_state = util::get_resource_state(required_state);

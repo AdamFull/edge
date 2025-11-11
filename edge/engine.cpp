@@ -19,10 +19,10 @@ namespace edge {
 				.preferred_device_type = vk::PhysicalDeviceType::eDiscreteGpu,
 				.window = &context.get_window()
 			});
-
+		
 		auto queue_result = gfx::device_.get_queue({
 				.required_caps = gfx::QueuePresets::kPresentGraphics,
-				.strategy = gfx::QueueSelectionStrategy::ePreferDedicated
+				.strategy = gfx::EDGE_GFX_QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED
 			});
 		EDGE_FATAL_ERROR(queue_result.has_value(), "Failed to request graphics queue for renderer.");
 		main_queue_ = std::move(queue_result.value());

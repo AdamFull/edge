@@ -3,6 +3,8 @@
 #include <GLFW/glfw3.h>
 #include <GLFW/glfw3native.h>
 
+#include <vulkan/vulkan.hpp>
+
 #define EDGE_LOGGER_SCOPE "platform::DesktopPlatformWindow"
 
 namespace edge::platform {
@@ -210,7 +212,16 @@ namespace edge::platform {
 	}
 
 	auto DesktopPlatformWindow::get_native_handle() -> void* {
-		return glfwGetWin32Window(handle_);
+#if EDGE_PLATFORM_WINDOWS
+		vk::Win32SurfaceCreateInfoKHR surface_create_info{};
+		surface_create_info.hwnd = glfwGetWin32Window(handle_);
+		surface_create_info.hinstance = (HINSTANCE)GetWindowLongPtr(hWnd, GWLP_HINSTANCE);
+#elif EDGE_PLATFORM_LINUX
+		static vk::XlibSurfaceCreateInfoKHR surface_create_info{};
+		surface_create_info.dpy = glfwGetX11Display();
+		surface_create_info.window = glfwGetX11Window(handle_);
+#endif
+		return &surface_create_info;
 	}
 }
 
