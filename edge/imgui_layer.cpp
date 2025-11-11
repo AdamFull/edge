@@ -5,6 +5,8 @@
 #include "../assets/fonts/IconsMaterialDesignIcons.h"
 #include "../assets/shaders/imgui.h"
 
+#include <cstring>
+
 #include <imgui.h>
 #include <misc/freetype/imgui_freetype.h>
 
@@ -259,7 +261,7 @@ namespace edge {
 		ImWchar range[] = { ICON_MIN_MDI, ICON_MAX_MDI, 0 };
 
 		ImFontConfig icons_config{};
-		std::strcpy(icons_config.Name, FONT_ICON_FILE_NAME_MDI);
+		strcpy(icons_config.Name, FONT_ICON_FILE_NAME_MDI);
 		icons_config.MergeMode = true;
 		icons_config.GlyphRanges = range;
 		icons_config.FontDataOwnedByAtlas = false;
