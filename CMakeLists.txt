@@ -56,8 +56,6 @@ target_link_libraries(${PROJECT_NAME}
         edge_foundation
     )
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
 # tools
 if(WIN32)
 add_subdirectory("tools/shader_compiler")
