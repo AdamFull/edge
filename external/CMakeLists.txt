@@ -43,22 +43,6 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-# tiny_imageformat
-set(TINY_IMAGEFORMAT_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tiny_imageformat)
-
-add_library(tiny_imageformat INTERFACE)
-target_sources(tiny_imageformat INTERFACE
-    "${TINY_IMAGEFORMAT_DIR}/include/tiny_imageformat/tinyimageformat_base.h"
-	"${TINY_IMAGEFORMAT_DIR}/include/tiny_imageformat/tinyimageformat_apis.h"
-	"${TINY_IMAGEFORMAT_DIR}/include/tiny_imageformat/tinyimageformat_bits.h"
-	"${TINY_IMAGEFORMAT_DIR}/include/tiny_imageformat/tinyimageformat_decode.h"
-	"${TINY_IMAGEFORMAT_DIR}/include/tiny_imageformat/tinyimageformat_encode.h"
-	"${TINY_IMAGEFORMAT_DIR}/include/tiny_imageformat/tinyimageformat_query.h"
-)
-target_include_directories(tiny_imageformat SYSTEM INTERFACE ${TINY_IMAGEFORMAT_DIR}/include)
-
-
-
 # vulkan
 add_library(vulkan INTERFACE)
 set(VULKAN_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/include)
@@ -77,23 +61,23 @@ elseif(WIN32)
 elseif(APPLE)
 	target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_METAL_EXT)
 elseif(UNIX)
-    set(EDGE_VK_WSI_SELECTION D2D)
+    set(EDGE_VK_WSI_SELECTION XLIB)
     # Choose WSI based on EDGE_VK_WSI_SELECTION
     if (VKB_WSI_SELECTION STREQUAL XCB OR EDGE_VK_WSI_SELECTION STREQUAL XLIB OR EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
         find_package(PkgConfig REQUIRED)
     endif()
     if (EDGE_VK_WSI_SELECTION STREQUAL XCB)
-        #pkg_check_modules(XCB xcb REQUIRED)
+        pkg_check_modules(XCB xcb REQUIRED)
         if (XCB_FOUND)
             target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_XCB_KHR)
         endif()
     elseif (EDGE_VK_WSI_SELECTION STREQUAL XLIB)
-        #pkg_check_modules(X11 x11 REQUIRED)
+        pkg_check_modules(X11 x11 REQUIRED)
         if (X11_FOUND)
             target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_XLIB_KHR)
         endif()
     elseif (EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
-        #pkg_check_modules(WAYLAND wayland-client REQUIRED)
+        pkg_check_modules(WAYLAND wayland-client REQUIRED)
         if (WAYLAND_FOUND)
             target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_WAYLAND_KHR)
         endif()
@@ -224,7 +208,6 @@ set(KTX_INCLUDE_DIRS
     "${KTX_SOFTWARE_DIR}/lib"
     "${KTX_SOFTWARE_DIR}/utils"
     "${KTX_SOFTWARE_DIR}/external"
-    "${KTX_SOFTWARE_DIR}/external/basisu/zstd"
     "${KTX_SOFTWARE_DIR}/external/basisu/transcoder"
     "${KTX_SOFTWARE_DIR}/other_include"
 )
@@ -242,7 +225,7 @@ target_compile_definitions(ktx PUBLIC BASISU_NO_ITERATOR_DEBUG_LEVEL)
 target_include_directories(ktx SYSTEM PUBLIC ${KTX_INCLUDE_DIRS})
 
 target_link_libraries(ktx PUBLIC 
-    zstd
+    libzstd
     vulkan
 )
 
@@ -342,7 +325,6 @@ target_link_libraries(${PROJECT_NAME}
 
     argparse
     spdlog::spdlog
-    tiny_imageformat
 
     KTX::ktx
     stb

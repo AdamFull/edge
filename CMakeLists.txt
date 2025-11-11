@@ -34,6 +34,8 @@ else()
     add_executable(${PROJECT_NAME} ${APP_SOURCES})
 endif()
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_SECURE_NO_WARNINGS)
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
 target_compile_options(${PROJECT_NAME} PRIVATE -mavx2)
 endif()
@@ -59,13 +61,13 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # tools
 if(WIN32)
 add_subdirectory("tools/shader_compiler")
-add_dependencies(edge shader_compiler)
+add_dependencies(edge_engine shader_compiler)
 
 set(SHADER_OUTPUT_DIR "${CMAKE_BINARY_DIR}/assets/shaders")
 file(MAKE_DIRECTORY ${SHADER_OUTPUT_DIR})
 
-add_shader_compilation(edge "assets/shaders/imgui.technique.yaml" "${SHADER_OUTPUT_DIR}/imgui.shfx")
-add_shader_compilation(edge "assets/shaders/fullscreen.technique.yaml" "${SHADER_OUTPUT_DIR}/fullscreen.shfx")
+add_shader_compilation(edge_engine "assets/shaders/imgui.technique.yaml" "${SHADER_OUTPUT_DIR}/imgui.shfx")
+add_shader_compilation(edge_engine "assets/shaders/fullscreen.technique.yaml" "${SHADER_OUTPUT_DIR}/fullscreen.shfx")
 endif(WIN32)
 
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/assets/fonts DESTINATION ${CMAKE_BINARY_DIR}/assets)

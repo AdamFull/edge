@@ -2012,8 +2012,7 @@ namespace edge::gfx {
 			.build();
 
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
-		vk::AndroidSurfaceCreateInfoKHR surface_create_info{};
-		surface_create_info.window = static_cast<ANativeWindow*>(info.window->get_native_handle());
+		auto surface_create_info = static_cast<vk::AndroidSurfaceCreateInfoKHR*>(info.window->get_native_handle());
 #elif defined(VK_USE_PLATFORM_WIN32_KHR)
 		auto surface_create_info = *static_cast<vk::Win32SurfaceCreateInfoKHR*>(info.window->get_native_handle());
 #elif defined(VK_USE_PLATFORM_XLIB_KHR)

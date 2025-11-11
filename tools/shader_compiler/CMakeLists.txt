@@ -17,7 +17,7 @@ target_link_libraries(${PROJECT_NAME}
 	Vulkan::Headers
 	spdlog::spdlog
 	slang::slang
-	ZSTD::ZSTD
+	libzstd
 )
 
 function(add_shader_compilation TARGET SHADER_SOURCE OUTPUT_FILE)

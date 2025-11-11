@@ -5,6 +5,8 @@
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 #include <cassert>
 
+#include <vulkan/vulkan.hpp>
+
 #include "android_jni_helper.h"
 
 #define EDGE_LOGGER_SCOPE "platform::AndroidPlatformWindow"
@@ -68,7 +70,9 @@ namespace edge::platform {
     }
 
     auto AndroidPlatformWindow::get_native_handle() -> void* {
-        return android_app_->window;
+        static vk::AndroidSurfaceCreateInfoKHR surface_create_info{};
+        surface_create_info.window = android_app_->window;
+        return &surface_create_info;
     }
 
     auto AndroidPlatformWindow::on_app_cmd(android_app* app, int32_t cmd) -> void {

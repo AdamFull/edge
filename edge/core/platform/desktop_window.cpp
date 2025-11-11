@@ -213,9 +213,9 @@ namespace edge::platform {
 
 	auto DesktopPlatformWindow::get_native_handle() -> void* {
 #if EDGE_PLATFORM_WINDOWS
-		vk::Win32SurfaceCreateInfoKHR surface_create_info{};
+		static vk::Win32SurfaceCreateInfoKHR surface_create_info{};
 		surface_create_info.hwnd = glfwGetWin32Window(handle_);
-		surface_create_info.hinstance = (HINSTANCE)GetWindowLongPtr(hWnd, GWLP_HINSTANCE);
+		surface_create_info.hinstance = (HINSTANCE)GetWindowLongPtr(surface_create_info.hwnd, GWLP_HINSTANCE);
 #elif EDGE_PLATFORM_LINUX
 		static vk::XlibSurfaceCreateInfoKHR surface_create_info{};
 		surface_create_info.dpy = glfwGetX11Display();
