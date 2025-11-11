@@ -9,7 +9,7 @@
 #ifdef _WIN32
 #include <direct.h>
 #else
-#include <unistd.h>
+#include <sys/stat.h>
 #endif
 
 int edge_zip_get_entry_by_index(edge_zip_archive_t* archive, int index, edge_zip_entry_t** entry) {
