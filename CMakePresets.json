@@ -87,33 +87,71 @@
     {
       "name": "linux-base",
       "hidden": true,
-      "displayName": "WSL (Ubuntu) Base",
+      "displayName": "Linux Base",
       "inherits": "base",
-      "vendor": {
-        "microsoft.com/VisualStudioSettings/CMake/1.0": {
-          "sourceDir": "$env{HOME}/projects/${sourceDir}",
-          "hostOS": [ "Linux" ],
-          "remoteMachineName": "WSL:Ubuntu",
-          "intelliSenseMode": "linux-gcc-x64"
-        }
-      },
       "cacheVariables": {
         "CMAKE_C_COMPILER": "/usr/bin/gcc",
         "CMAKE_CXX_COMPILER": "/usr/bin/g++"
       }
     },
     {
-      "name": "Linux-Debug",
-      "displayName": "Linux-Debug",
+      "name": "linux-x86_64",
+      "hidden": true,
+      "displayName": "Linux x86_64",
       "inherits": "linux-base",
+      "architecture": {
+        "value": "x64",
+        "strategy": "external"
+      },
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/projects/${sourceDir}",
+          "hostOS": [ "Linux" ],
+          "intelliSenseMode": "linux-gcc-x64"
+        }
+      }
+    },
+    {
+      "name": "linux-arm64",
+      "hidden": true,
+      "displayName": "Linux arm64",
+      "inherits": "linux-base",
+      "vendor": {
+        "microsoft.com/VisualStudioSettings/CMake/1.0": {
+          "sourceDir": "$env{HOME}/projects/${sourceDir}",
+          "hostOS": [ "Linux" ],
+          "intelliSenseMode": "linux-gcc-arm"
+        }
+      }
+    },
+    {
+      "name": "Linux-x86_64-Debug",
+      "displayName": "Linux-x86_64-Debug",
+      "inherits": "linux-x86_64",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
     },
     {
-      "name": "Linux-Release",
-      "displayName": "Linux-Release",
-      "inherits": "linux-base",
+      "name": "Linux-x86_64-Release",
+      "displayName": "Linux-x86_64-Release",
+      "inherits": "linux-x86_64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
+    },
+    {
+      "name": "Linux-arm64-Debug",
+      "displayName": "Linux-arm64-Debug",
+      "inherits": "linux-arm64",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "Linux-arm64-Release",
+      "displayName": "Linux-arm64-Release",
+      "inherits": "linux-arm64",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
