@@ -50,8 +50,8 @@
       "hidden": true,
       "displayName": "Windows x64 clang base",
       "inherits": "base",
-      "architecture": {
-        "value": "x64",
+      "toolset": {
+        "value": "ClangCL",
         "strategy": "external"
       },
       "vendor": {
@@ -99,13 +99,8 @@
       "hidden": true,
       "displayName": "Linux x86_64",
       "inherits": "linux-base",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
-      },
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
-          "sourceDir": "$env{HOME}/projects/${sourceDir}",
           "hostOS": [ "Linux" ],
           "intelliSenseMode": "linux-gcc-x64"
         }
@@ -118,7 +113,6 @@
       "inherits": "linux-base",
       "vendor": {
         "microsoft.com/VisualStudioSettings/CMake/1.0": {
-          "sourceDir": "$env{HOME}/projects/${sourceDir}",
           "hostOS": [ "Linux" ],
           "intelliSenseMode": "linux-gcc-arm"
         }
