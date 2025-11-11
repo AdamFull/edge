@@ -26,7 +26,9 @@
 #if defined(_MSC_VER)
 #include <intrin.h>
 #elif defined(__GNUC__) || defined(__clang__)
+#if !defined(__aarch64__)
 #include <cpuid.h>
+#endif // __aarch64__
 #endif
 #endif
 
@@ -646,6 +648,7 @@ namespace edge {
 #elif defined(__GNUC__) || defined(__clang__)
             unsigned int eax, ebx, ecx, edx;
 
+#if !defined(__aarch64__)
             if (__get_cpuid(1, &eax, &ebx, &ecx, &edx)) {
                 features.has_sse2 = (edx & bit_SSE2) != 0;
                 features.has_avx = (ecx & bit_AVX) != 0;
@@ -654,6 +657,7 @@ namespace edge {
             if (__get_cpuid_count(7, 0, &eax, &ebx, &ecx, &edx)) {
                 features.has_avx2 = (ebx & bit_AVX2) != 0;
             }
+#endif // __aarch64__
 #endif
 #endif
 
