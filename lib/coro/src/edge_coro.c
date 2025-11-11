@@ -19,7 +19,7 @@ static struct edge_coro_thread_context* edge_coro_get_current_thread_context(voi
     static _Thread_local struct edge_coro_thread_context context = { 0 };
 
     /* Initialize main coroutine on first use */
-    if (!context.main_coro.status == 0) {
+    if (context.main_coro.status == 0) {
         context.main_coro.status = EDGE_CORO_STATE_RUNNING;
         context.main_coro.context = &context.main_context;
         context.current_coro = &context.main_coro;
