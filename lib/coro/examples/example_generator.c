@@ -55,11 +55,12 @@ int main(void) {
     printf("=== Generator Example ===\n\n");
 
     edge_allocator_t allocator = edge_allocator_create_default();
+    edge_coro_init_thread_context(&allocator);
 
     /* Example 1: Fibonacci generator */
     printf("Fibonacci sequence (first 20 numbers):\n");
     generator_state_t fib_state = { 0 };
-    edge_coro_t* fib_coro = edge_coro_create(&allocator, fibonacci_generator, &fib_state, 0);
+    edge_coro_t* fib_coro = edge_coro_create(fibonacci_generator, &fib_state);
 
     if (!fib_coro) {
         fprintf(stderr, "Failed to create Fibonacci coroutine\n");
@@ -81,7 +82,7 @@ int main(void) {
     generator_state_t range_state = { 0 };
     int range_start = 0, range_end = 100, range_step = 7;
     void* range_params[] = { &range_start, &range_end, &range_step, &range_state };
-    edge_coro_t* range_coro = edge_coro_create(&allocator, range_generator, range_params, 0);
+    edge_coro_t* range_coro = edge_coro_create(range_generator, range_params);
 
     if (!range_coro) {
         fprintf(stderr, "Failed to create range coroutine\n");
@@ -97,6 +98,8 @@ int main(void) {
     printf("\n\n");
 
     edge_coro_destroy(range_coro);
+
+    edge_coro_shutdown_thread_context();
 
     printf("Generators completed!\n");
     return 0;

@@ -5,33 +5,53 @@
 #include <assert.h>
 
 #include <edge_allocator.h>
+#include <edge_arena.h>
 
 #define EDGE_CORO_DEFAULT_STACK_SIZE (1024 * 1024)
 #define EDGE_CORO_STACK_ALIGN 16
 
+// TODO: Make this better in future
+typedef struct free_node {
+    void* ptr;
+    struct free_node* next;
+} free_node_t;
+
+typedef struct free_list {
+    free_node_t* head;
+    size_t count;
+} free_list_t;
+
 struct edge_coro_thread_context {
+    edge_allocator_t allocator;
+
+    edge_arena_t* stack_arena;
+    free_list_t free_stacks;
+
     edge_coro_t* current_coro;
     edge_coro_t main_coro;
     struct edge_coro_context main_context;
 };
 
-static struct edge_coro_thread_context* edge_coro_get_current_thread_context(void) {
-    static _Thread_local struct edge_coro_thread_context context = { 0 };
+static _Thread_local struct edge_coro_thread_context g_coro_thread_context = { 0 };
 
-    /* Initialize main coroutine on first use */
-    if (context.main_coro.status == 0) {
-        context.main_coro.status = EDGE_CORO_STATE_RUNNING;
-        context.main_coro.context = &context.main_context;
-        context.current_coro = &context.main_coro;
+static void* edge_coro_malloc(size_t size) {
+    if (g_coro_thread_context.main_coro.status == 0) {
+        return NULL;
     }
 
-    return &context;
+    return edge_allocator_malloc(&g_coro_thread_context.allocator, size);
+}
+
+static void edge_coro_free(void* ptr) {
+    if(!ptr || g_coro_thread_context.main_coro.status == 0) {
+        return;
+    }
+
+    return edge_allocator_free(&g_coro_thread_context.allocator, ptr);
 }
 
 static void edge_coro_main(void) {
-    struct edge_coro_thread_context* thread_context = edge_coro_get_current_thread_context();
-
-    edge_coro_t* coro = thread_context->current_coro;
+    edge_coro_t* coro = g_coro_thread_context.current_coro;
     /* Run the coroutine function */
     if (coro && coro->func) {
         coro->status = EDGE_CORO_STATE_RUNNING;
@@ -50,13 +70,68 @@ static void edge_coro_main(void) {
     assert(0 && "Coroutine returned without caller");
 }
 
-edge_coro_t* edge_coro_create(edge_allocator_t* allocator, edge_coro_fn function, void* arg, size_t stack_size) {
-    if (!allocator || !function) {
+static void* edge_coro_alloc_stack_pointer() {
+    free_node_t* free_node = g_coro_thread_context.free_stacks.head;
+    if (free_node) {
+        void* stack_pointer = free_node->ptr;
+        g_coro_thread_context.free_stacks.head = free_node->next;
+        edge_coro_free(free_node);
+        g_coro_thread_context.free_stacks.count--;
+        return stack_pointer;
+    }
+
+    return edge_arena_alloc_ex(g_coro_thread_context.stack_arena, EDGE_CORO_DEFAULT_STACK_SIZE, EDGE_CORO_STACK_ALIGN);
+}
+
+static void edge_coro_free_stack_pointer(void* ptr) {
+    if (!ptr) {
+        return;
+    }
+
+    free_node_t* free_node = (free_node_t*)edge_coro_malloc(sizeof(free_node_t));
+    if (!free_node) {
+        return;
+    }
+
+    free_node->ptr = ptr;
+    free_node->next = g_coro_thread_context.free_stacks.head;
+    g_coro_thread_context.free_stacks.head = free_node;
+    g_coro_thread_context.free_stacks.count++;
+}
+
+void edge_coro_init_thread_context(edge_allocator_t* allocator) {
+    if (g_coro_thread_context.main_coro.status == 0) {
+        g_coro_thread_context.stack_arena = edge_arena_create(allocator, 0, true);
+        g_coro_thread_context.free_stacks.head = NULL;
+        g_coro_thread_context.free_stacks.count = 0;
+
+        g_coro_thread_context.allocator = *allocator;
+        g_coro_thread_context.main_coro.status = EDGE_CORO_STATE_RUNNING;
+        g_coro_thread_context.main_coro.context = &g_coro_thread_context.main_context;
+        g_coro_thread_context.current_coro = &g_coro_thread_context.main_coro;
+    }
+}
+
+void edge_coro_shutdown_thread_context(void) {
+    if (g_coro_thread_context.main_coro.status != 0) {
+        free_node_t* free_node = g_coro_thread_context.free_stacks.head;
+        while (free_node) {
+            free_node_t* next = free_node->next;
+            edge_coro_free(free_node);
+            free_node = next;
+        }
+
+        edge_arena_destroy(g_coro_thread_context.stack_arena);
+    }
+}
+
+edge_coro_t* edge_coro_create(edge_coro_fn function, void* arg) {
+    if (!function) {
         return NULL;
     }
 
     /* Allocate coroutine structure */
-    edge_coro_t* coro = (edge_coro_t*)edge_allocator_malloc(allocator, sizeof(edge_coro_t));// , _Alignof(edge_coro_t));
+    edge_coro_t* coro = (edge_coro_t*)edge_coro_malloc(sizeof(edge_coro_t));
     if (!coro) {
         return NULL;
     }
@@ -64,34 +139,29 @@ edge_coro_t* edge_coro_create(edge_allocator_t* allocator, edge_coro_fn function
     memset(coro, 0, sizeof(edge_coro_t));
 
     /* Allocate context */
-    coro->context = (struct edge_coro_context*)edge_allocator_malloc(allocator, sizeof(struct edge_coro_context));// , _Alignof(edge_coro_context_t));
+    coro->context = (struct edge_coro_context*)edge_coro_malloc(sizeof(struct edge_coro_context));
     if (!coro->context) {
-        edge_allocator_free(allocator, coro);
+        edge_coro_free(coro);
         return NULL;
     }
 
     memset(coro->context, 0, sizeof(struct edge_coro_context));
 
-    coro->stack_size = stack_size > 0 ? stack_size : EDGE_CORO_DEFAULT_STACK_SIZE;
-    coro->allocator = allocator;
     coro->status = EDGE_CORO_STATE_READY;
     coro->caller = NULL;
     coro->func = function;
     coro->user_data = arg;
 
     /* Allocate stack */
-    size_t alloc_size = coro->stack_size + EDGE_CORO_STACK_ALIGN;
-    coro->stack = edge_allocator_malloc(allocator, alloc_size);//, 16);
+    coro->stack = edge_coro_alloc_stack_pointer();
     if (!coro->stack) {
-        edge_allocator_free(allocator, coro->context);
-        edge_allocator_free(allocator, coro);
+        edge_coro_free(coro->context);
+        edge_coro_free(coro);
         return NULL;
     }
 
-    edge_allocator_protect(coro->stack, alloc_size, EDGE_ALLOCATOR_PROTECT_READ_WRITE);
-
     /* Align stack (grows downward, so align the top) */
-    void* stack_top = (char*)coro->stack + alloc_size;
+    void* stack_top = (char*)coro->stack + EDGE_CORO_DEFAULT_STACK_SIZE;
     stack_top = (void*)((uintptr_t)stack_top & ~(EDGE_CORO_STACK_ALIGN - 1));
 
 #if defined(__x86_64__)
@@ -116,17 +186,15 @@ void edge_coro_destroy(edge_coro_t* coro) {
         return;
     }
 
-    edge_allocator_t* allocator = coro->allocator;
-
     if (coro->stack) {
-        edge_allocator_free(allocator, coro->stack);
+        edge_coro_free_stack_pointer(coro->stack);
     }
 
     if (coro->context) {
-        edge_allocator_free(allocator, coro->context);
+        edge_coro_free(coro->context);
     }
 
-    edge_allocator_free(allocator, coro);
+    edge_coro_free(coro);
 }
 
 bool edge_coro_resume(edge_coro_t* coro) {
@@ -134,13 +202,12 @@ bool edge_coro_resume(edge_coro_t* coro) {
         return false;
     }
 
-    struct edge_coro_thread_context* ctx = edge_coro_get_current_thread_context();
-    edge_coro_t* caller = ctx->current_coro;
+    edge_coro_t* caller = edge_coro_current();
     coro->caller = caller;
 
     caller->status = EDGE_CORO_STATE_SUSPENDED;
     coro->status = EDGE_CORO_STATE_RUNNING;
-    ctx->current_coro = coro;
+    g_coro_thread_context.current_coro = coro;
 
     /* Swap to coroutine */
     atomic_signal_fence(memory_order_release);
@@ -148,14 +215,14 @@ bool edge_coro_resume(edge_coro_t* coro) {
     atomic_signal_fence(memory_order_acquire);
 
     /* When we return here, coroutine has yielded or finished */
-    ctx->current_coro = caller;
+    g_coro_thread_context.current_coro = caller;
     caller->status = EDGE_CORO_STATE_RUNNING;
 
     return coro->status != EDGE_CORO_STATE_FINISHED;
 }
 
 void edge_coro_yield(void) {
-    struct edge_coro_thread_context* ctx = edge_coro_get_current_thread_context();
+    struct edge_coro_thread_context* ctx = &g_coro_thread_context;
 
     edge_coro_t* coro = ctx->current_coro;
     if (!coro || coro == &ctx->main_coro || coro->status == EDGE_CORO_STATE_FINISHED) {
@@ -180,8 +247,7 @@ void edge_coro_yield(void) {
 }
 
 edge_coro_t* edge_coro_current(void) {
-    struct edge_coro_thread_context* ctx = edge_coro_get_current_thread_context();
-    return ctx->current_coro;
+    return g_coro_thread_context.current_coro;
 }
 
 edge_coro_status_t edge_coro_status(edge_coro_t* coro) {

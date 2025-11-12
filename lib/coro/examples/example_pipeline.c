@@ -39,11 +39,13 @@ int main(void) {
 
     edge_allocator_t allocator = edge_allocator_create_default();
 
+    edge_coro_init_thread_context(&allocator);
+
     /* Create data pipe */
     pipe_data_t data = { 0 };
 
     /* Create source coroutine */
-    edge_coro_t* source = edge_coro_create(&allocator, number_source, &data, 0);
+    edge_coro_t* source = edge_coro_create(number_source, &data);
     if (!source) {
         fprintf(stderr, "Failed to create source coroutine\n");
         return 1;
@@ -72,5 +74,8 @@ int main(void) {
     printf("\n--- Pipeline Complete ---\n");
 
     edge_coro_destroy(source);
+
+    edge_coro_shutdown_thread_context();
+
     return 0;
 }

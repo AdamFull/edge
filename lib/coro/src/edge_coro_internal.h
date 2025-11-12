@@ -71,9 +71,7 @@ extern "C" {
         struct edge_coro_context* context;
         edge_coro_fn func;
         void* user_data;
-        struct edge_allocator* allocator;
         void* stack;
-        size_t stack_size;
         edge_coro_status_t status;
         struct edge_coro* caller;
     };

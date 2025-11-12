@@ -24,8 +24,12 @@ extern "C" {
 		EDGE_CORO_STATE_FINISHED   /* Execution completed */
 	} edge_coro_status_t;
 
+	void edge_coro_init_thread_context(edge_allocator_t* allocator);
+
+	void edge_coro_shutdown_thread_context(void);
+
 	/* Create a new coroutine */
-	edge_coro_t* edge_coro_create(edge_allocator_t* allocator, edge_coro_fn function, void* arg, size_t stack_size);
+	edge_coro_t* edge_coro_create(edge_coro_fn function, void* arg);
 
 	/* Destroy a coroutine */
 	void edge_coro_destroy(edge_coro_t* coro);
