@@ -7,10 +7,12 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 set(EDGE_BASE_SOURCES
     "src/edge_allocator.c"
+    "src/edge_arena.c"
 )
 
 set(EDGE_BASE_HEADERS
     "include/edge_allocator.h"
+    "include/edge_arena.h"
 )
 
 # Library
@@ -31,6 +33,12 @@ if(MSVC)
     target_compile_options(edge_base PRIVATE /W4)
 else()
     target_compile_options(edge_base PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
+if (UNIX)
+    find_package(Threads REQUIRED)
+    target_link_libraries(edge_base PRIVATE Threads::Threads)
+    target_compile_definitions(edge_base PRIVATE _GNU_SOURCE)
 endif()
 
 # Installation
