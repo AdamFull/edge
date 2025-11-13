@@ -6,6 +6,13 @@
 /* void edge_coro_swap_context(edge_coro_context_t* from, edge_coro_context_t* to) */
 /* System V ABI: rdi = from, rsi = to */
 edge_coro_swap_context:
+    /* Save return address */
+    movq (%rsp), %rax
+    movq %rax, 0(%rdi)       /* Save RIP */
+    
+    leaq 8(%rsp), %rax
+    movq %rax, 8(%rdi)       /* Save RSP */
+    
     /* Save current context to 'from' */
     movq %rbx, 24(%rdi)      /* Save RBX */
     movq %rbp, 16(%rdi)      /* Save RBP */
@@ -13,13 +20,6 @@ edge_coro_swap_context:
     movq %r13, 40(%rdi)      /* Save R13 */
     movq %r14, 48(%rdi)      /* Save R14 */
     movq %r15, 56(%rdi)      /* Save R15 */
-    
-    /* Save stack pointer */
-    movq %rsp, 8(%rdi)       /* Save RSP */
-    
-    /* Save return address (where we'll return when resumed) */
-    movq (%rsp), %rax
-    movq %rax, 0(%rdi)       /* Save RIP */
     
     /* Restore context from 'to' */
     movq 24(%rsi), %rbx      /* Restore RBX */

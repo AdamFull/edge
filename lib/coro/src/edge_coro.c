@@ -58,9 +58,7 @@ static void edge_coro_main(void) {
 
     /* Return to caller */
     if (coro->caller) {
-        atomic_signal_fence(memory_order_release);
         edge_coro_swap_context(coro->context, coro->caller->context);
-        atomic_signal_fence(memory_order_acquire);
     }
 
     /* Should never reach here */
@@ -166,6 +164,8 @@ edge_coro_t* edge_coro_create(edge_coro_fn function, void* arg) {
 #ifdef _WIN32
     /* Windows x64 ABI: Reserve 32 bytes shadow space + 8 bytes for alignment */
     stack_top = (char*)stack_top - 40;
+#else
+    stack_top = (void*)(((uintptr_t)stack_top - 8) & ~15UL);
 #endif
 
     coro->context->rip = edge_coro_main;
@@ -204,7 +204,9 @@ bool edge_coro_resume(edge_coro_t* coro) {
 
     caller->state = EDGE_CORO_STATE_SUSPENDED;
     coro->state = EDGE_CORO_STATE_RUNNING;
-    g_coro_thread_context.current_coro = coro;
+
+    edge_coro_t* volatile target_coro = coro;
+    g_coro_thread_context.current_coro = target_coro;
 
     /* Swap to coroutine */
     atomic_signal_fence(memory_order_release);
