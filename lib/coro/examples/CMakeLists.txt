@@ -6,3 +6,4 @@ endfunction()
 
 add_coro_example(example_generator)
 add_coro_example(example_pipeline)
+add_coro_example(example_scheduler)
