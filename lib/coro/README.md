@@ -78,7 +78,7 @@ Coroutine entry point function signature.
 typedef void (*edge_coro_fn)(void* arg);
 ```
 
-#### `edge_coro_status_t`
+#### `edge_coro_state_t`
 Coroutine execution status.
 
 ```c
@@ -87,7 +87,7 @@ typedef enum {
 	EDGE_CORO_STATE_RUNNING,    /* Currently executing */
 	EDGE_CORO_STATE_SUSPENDED,  /* Suspended, waiting to resume */
 	EDGE_CORO_STATE_FINISHED   /* Execution completed */
-} edge_coro_status_t;
+} edge_coro_state_t;
 ```
 
 ### Functions
@@ -134,9 +134,9 @@ edge_coro_t* edge_coro_current(void);
 ```
 Get the currently running coroutine.
 
-#### `edge_coro_status`
+#### `edge_coro_state`
 ```c
-edge_coro_status_t edge_coro_status(edge_coro_t* coro);
+edge_coro_state_t edge_coro_state(edge_coro_t* coro);
 ```
 Get the status of a coroutine.
 
