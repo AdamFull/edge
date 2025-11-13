@@ -5,6 +5,14 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifndef EDGE_CORO_STACK_SIZE
+#define EDGE_CORO_STACK_SIZE (1024 * 1024)
+#endif
+
+#ifndef EDGE_CORO_STACK_ALIGN
+#define EDGE_CORO_STACK_ALIGN 16
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,31 +30,63 @@ extern "C" {
 		EDGE_CORO_STATE_RUNNING,    /* Currently executing */
 		EDGE_CORO_STATE_SUSPENDED,  /* Suspended, waiting to resume */
 		EDGE_CORO_STATE_FINISHED   /* Execution completed */
-	} edge_coro_status_t;
+	} edge_coro_state_t;
 
+	/**
+	 * @brief Create a global context for the current execution thread
+	 * @param allocator Memory allocator
+	 */
 	void edge_coro_init_thread_context(edge_allocator_t* allocator);
 
+	/**
+	 * @brief Clear the global context for the current execution thread
+	 */
 	void edge_coro_shutdown_thread_context(void);
 
-	/* Create a new coroutine */
-	edge_coro_t* edge_coro_create(edge_coro_fn function, void* arg);
+	/**
+	 * @brief Create a new coroutine
+	 * @param function coroutine callback
+	 * @param payload pointer to data passed in to coroutine
+	 * @return Coroutine handle
+	 */
+	edge_coro_t* edge_coro_create(edge_coro_fn function, void* payload);
 
-	/* Destroy a coroutine */
+	/**
+	 * @brief Destroy a coroutine
+	 * @param coro coroutine handle
+	 */
 	void edge_coro_destroy(edge_coro_t* coro);
 
-	/* Resume a suspended coroutine */
+	/**
+	 * @brief Resume a suspended coroutine
+	 * @param coro coroutine handle
+	 * @return Resume result
+	 */
 	bool edge_coro_resume(edge_coro_t* coro);
 
-	/* Yield from current coroutine back to caller */
+	/**
+	 * @brief Yield from current coroutine back to caller
+	 */
 	void edge_coro_yield(void);
 
-	/* Get current running coroutine */
+	/**
+	 * @brief Get current running coroutine
+	 * @return Coroutine handle
+	 */
 	edge_coro_t* edge_coro_current(void);
 
-	/* Get coroutine status */
-	edge_coro_status_t edge_coro_status(edge_coro_t* coro);
+	/**
+	 * @brief Get coroutine state
+	 * @param coro coroutine handle
+	 * @return Coroutine state
+	 */
+	edge_coro_state_t edge_coro_state(edge_coro_t* coro);
 
-	/* Check if coroutine is alive (can be resumed) */
+	/**
+	 * @brief Check if coroutine is alive (can be resumed)
+	 * @param coro coroutine handle
+	 * @return Is alive
+	 */
 	bool edge_coro_alive(edge_coro_t* coro);
 
 #ifdef __cplusplus

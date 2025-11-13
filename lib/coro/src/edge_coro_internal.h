@@ -72,7 +72,7 @@ extern "C" {
         edge_coro_fn func;
         void* user_data;
         void* stack;
-        edge_coro_status_t status;
+        edge_coro_state_t state;
         struct edge_coro* caller;
     };
 
