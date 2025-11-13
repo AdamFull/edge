@@ -15,10 +15,12 @@ option(EDGE_CORO_BUILD_EXAMPLES "Build examples" ON)
 # Library source files
 set(EDGE_COROUTINE_SOURCES
     "src/edge_coro.c"
+    "src/edge_scheduler.c"
 )
 
 set(EDGE_COROUTINE_HEADERS
     "include/edge_coro.h"
+    "include/edge_scheduler.h"
     "src/edge_coro_internal.h"
 )
 
