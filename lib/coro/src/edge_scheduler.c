@@ -29,6 +29,8 @@ edge_scheduler_t* edge_scheduler_create(edge_allocator_t* allocator) {
 	sched->head = NULL;
 	sched->tail = NULL;
 	sched->count = 0;
+
+	return sched;
 }
 
 void edge_scheduler_destroy(edge_scheduler_t* sched) {
