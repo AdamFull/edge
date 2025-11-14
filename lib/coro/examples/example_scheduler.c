@@ -34,9 +34,9 @@ int main(void) {
     edge_scheduler_t* sched = edge_scheduler_create(&allocator);
 
     /* Create jobs */
-    edge_job_t* job_a = edge_scheduler_create_job(sched, task_a, NULL);
-    edge_job_t* job_b = edge_scheduler_create_job(sched, task_b, NULL);
-    edge_job_t* job_c = edge_scheduler_create_job(sched, task_c, NULL);
+    edge_job_t* job_a = edge_scheduler_create_job(sched, task_a, NULL, EDGE_PRIORITY_LOW);
+    edge_job_t* job_b = edge_scheduler_create_job(sched, task_b, NULL, EDGE_PRIORITY_LOW);
+    edge_job_t* job_c = edge_scheduler_create_job(sched, task_c, NULL, EDGE_PRIORITY_CRITICAL);
 
     /* Add to scheduler (order doesn't matter with dependencies) */
     edge_scheduler_add_job(sched, job_c);

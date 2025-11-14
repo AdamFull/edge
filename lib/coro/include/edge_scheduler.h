@@ -10,6 +10,14 @@ extern "C" {
 	typedef struct edge_job edge_job_t;
 	typedef struct edge_scheduler edge_scheduler_t;
 
+	typedef enum {
+		EDGE_PRIORITY_LOW = 0,
+		EDGE_PRIORITY_NORMAL = 1,
+		EDGE_PRIORITY_HIGH = 2,
+		EDGE_PRIORITY_CRITICAL = 3,
+		EDGE_PRIORITY_COUNT
+	} edge_priority_t;
+
 	/**
 	 * @brief Create a new scheduler
 	 * @param allocator Memory allocator
@@ -30,7 +38,7 @@ extern "C" {
 	 * @param payload Payload pointer
 	 * @return Job handle
 	 */
-	edge_job_t* edge_scheduler_create_job(edge_scheduler_t* sched, edge_coro_fn func, void* payload);
+	edge_job_t* edge_scheduler_create_job(edge_scheduler_t* sched, edge_coro_fn func, void* payload, edge_priority_t priority);
 
 	/**
 	 * @brief Destroy a job handle
