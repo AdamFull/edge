@@ -96,7 +96,7 @@ static void edge_coro_free_stack_pointer(void* ptr) {
 
 void edge_coro_init_thread_context(edge_allocator_t* allocator) {
     if (g_coro_thread_context.main_coro.state == 0) {
-        g_coro_thread_context.stack_arena = edge_arena_create(allocator, 0, true);
+        g_coro_thread_context.stack_arena = edge_arena_create(allocator, 0, false);
         g_coro_thread_context.free_stacks.head = NULL;
         g_coro_thread_context.free_stacks.count = 0;
 
