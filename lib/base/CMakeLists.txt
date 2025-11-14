@@ -5,14 +5,18 @@ project(libedgebase VERSION 1.0.0 LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+option(EDGE_BASE_BUILD_EXAMPLES "Build examples" OFF)
+
 set(EDGE_BASE_SOURCES
     "src/edge_allocator.c"
     "src/edge_arena.c"
+    "src/edge_threads_ext.c"
 )
 
 set(EDGE_BASE_HEADERS
     "include/edge_allocator.h"
     "include/edge_arena.h"
+    "include/edge_threads_ext.h"
 )
 
 # Library
@@ -39,6 +43,10 @@ if (UNIX)
     find_package(Threads REQUIRED)
     target_link_libraries(edge_base PRIVATE Threads::Threads)
     target_compile_definitions(edge_base PRIVATE _GNU_SOURCE)
+endif()
+
+if(EDGE_BASE_BUILD_EXAMPLES)
+    add_subdirectory(examples)
 endif()
 
 # Installation
