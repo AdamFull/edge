@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <threads.h>
 
 struct edge_arena {
 	struct edge_allocator* allocator;
@@ -29,11 +30,7 @@ struct edge_arena {
 	size_t page_size;
 	bool has_guard;
 
-#if _WIN32
-	CRITICAL_SECTION cs;
-#else
-	pthread_mutex_t cs;
-#endif
+	mtx_t mtx;
 };
 
 static size_t align_up(size_t size, size_t alignment) {
@@ -84,6 +81,7 @@ static bool virt_reserve(void** out_base, size_t reserve_bytes) {
 
 static bool virt_release(void* base, size_t reserve_bytes) {
 #ifdef _WIN32
+	(void)reserve_bytes;
 	return VirtualFree(base, 0, MEM_RELEASE) != 0;
 #else
 	return munmap(base, reserve_bytes) == 0;
@@ -171,22 +169,6 @@ static bool virt_protect(void* addr, size_t size, edge_arena_prot_t prot) {
 	return true;
 }
 
-static void edge_arena_lock(edge_arena_t* arena) {
-#ifdef _WIN32
-	EnterCriticalSection(&arena->cs);
-#else
-	pthread_mutex_lock(&arena->cs);
-#endif
-}
-
-static void edge_arena_unlock(edge_arena_t* arena) {
-#ifdef _WIN32
-	LeaveCriticalSection(&arena->cs);
-#else
-	pthread_mutex_unlock(&arena->cs);
-#endif
-}
-
 edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size, bool guard_page) {
 	if (!allocator) {
 		return NULL;
@@ -222,20 +204,7 @@ edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size, bool g
 	arena->page_size = page_size;
 	arena->has_guard = guard_page;
 
-#ifdef _WIN32
-	InitializeCriticalSection(&arena->cs);
-#else
-	pthread_mutexattr_t attr;
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
-	int err = pthread_mutex_init(&arena->cs, &attr);
-	pthread_mutexattr_destroy(&attr);
-	if (err != 0) {
-		virt_release(base, size);
-		edge_allocator_free(allocator, arena);
-		return NULL;
-	}
-#endif
+	mtx_init(&arena->mtx, mtx_recursive);
 
 	if (guard_page) {
 		void* guard_addr = ptr_add(arena->base, arena->reserved - arena->page_size);
@@ -278,11 +247,7 @@ void edge_arena_destroy(edge_arena_t* arena) {
 		virt_release(arena->base, arena->reserved);
 	}
 
-#ifdef _WIN32
-	DeleteCriticalSection(&arena->cs);
-#else
-	pthread_mutex_destroy(&arena->cs);
-#endif
+	mtx_destroy(&arena->mtx);
 
 	edge_allocator_t* alloc = arena->allocator;
 	edge_allocator_free(alloc, arena);
@@ -331,13 +296,13 @@ void* edge_arena_alloc_ex(edge_arena_t* arena, size_t size, size_t alignment) {
 		return NULL;
 	}
 
-	edge_arena_lock(arena);
+	mtx_lock(&arena->mtx);
 
 	size_t offset = arena->offset;
 	size_t aligned_offset = align_up(offset, alignment);
 
 	if (aligned_offset > SIZE_MAX - size) {
-		edge_arena_unlock(arena);
+		mtx_unlock(&arena->mtx);
 		return NULL; 
 	}
 
@@ -348,17 +313,17 @@ void* edge_arena_alloc_ex(edge_arena_t* arena, size_t size, size_t alignment) {
 
 	size_t new_offset = aligned_offset + size;
 	if (new_offset > max_size) {
-		edge_arena_unlock(arena);
+		mtx_unlock(&arena->mtx);
 		return NULL;
 	}
 
 	if (!arena_ensure_committed_locked(arena, new_offset)) {
-		edge_arena_unlock(arena);
+		mtx_unlock(&arena->mtx);
 		return NULL;
 	}
 	void* result = ptr_add(arena->base, aligned_offset);
 	arena->offset = new_offset;
-	edge_arena_unlock(arena);
+	mtx_unlock(&arena->mtx);
 
 	return result;
 }
@@ -372,10 +337,10 @@ void edge_arena_reset(edge_arena_t* arena, bool zero_memory) {
 		return;
 	}
 
-	edge_arena_lock(arena);
+	mtx_lock(&arena->mtx);
 	if (zero_memory && arena->committed > 0) {
 		memset(arena->base, 0, arena->committed);
 	}
 	arena->offset = 0;
-	edge_arena_unlock(arena);
+	mtx_unlock(&arena->mtx);
 }
