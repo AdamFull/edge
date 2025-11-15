@@ -1,286 +1,611 @@
 #include "edge_scheduler.h"
-
-#include <edge_allocator.h>
+#include "edge_coro_internal.h"
+#include "edge_threads_ext.h"
 
 #include <stdatomic.h>
-#include <string.h>
+#include <stdio.h>
+#include <assert.h>
 
-/* Priority queue for each priority level */
-typedef struct job_queue {
-	edge_job_t* head;
-	edge_job_t* tail;
-	size_t count;
-} job_queue_t;
+#include <edge_allocator.h>
+#include <edge_arena.h>
+#include <edge_list.h>
+#include <edge_queue.h>
+#include <edge_vector.h>
 
 struct edge_job {
-	edge_coro_t* coro;
-	edge_priority_t priority;
-	struct edge_job* next;
-	bool in_queue;
+    struct edge_coro_context* context;
+    edge_coro_fn func;
+    void* user_data;
+    void* stack;
+    _Atomic(edge_coro_state_t) state;
+    edge_job_t* caller;
+
+    edge_sched_priority_t priority;
+    atomic_bool in_queue;
 };
 
-struct edge_scheduler {
-	edge_allocator_t* allocator;
+typedef struct worker_thread {
+    thrd_t thread;
+    edge_sched_t* scheduler;
+    size_t thread_id;
+    atomic_bool should_exit;
+} worker_thread_t;
 
-	job_queue_t queues[EDGE_PRIORITY_COUNT];
+struct edge_sched {
+    edge_allocator_t* allocator;
 
-	atomic_size_t active_jobs;
+    // For stack memory allocation
+    edge_arena_t* protected_arena;
+    edge_list_t* free_stacks;
+    mtx_t stack_mutex;
+
+    // Global work queue
+    edge_queue_t* queues[EDGE_SCHED_PRIORITY_COUNT];
+    mtx_t queue_mutex;
+    cnd_t queue_cond;
+
+    edge_vector_t* worker_threads;
+
+    atomic_size_t active_jobs;
+    atomic_size_t queued_jobs;
+    atomic_bool shutdown;
+
+    // For statistics
+    atomic_size_t jobs_completed;
+    atomic_size_t jobs_failed;
 };
 
-static void job_queue_init(job_queue_t* queue) {
-	queue->head = NULL;
-	queue->tail = NULL;
-	queue->count = 0;
+struct edge_sched_thread_context {
+    edge_sched_t* scheduler;
+
+    edge_job_t* current_job;
+    edge_job_t main_job;
+    struct edge_coro_context main_context;
+
+    int thread_id;
+};
+
+static thread_local struct edge_sched_thread_context thread_context = { 0 };
+
+static void edge_sched_init_thread_context(worker_thread_t* worker) {
+    if (atomic_load(&thread_context.main_job.state) == 0) {
+        thread_context.scheduler = worker->scheduler;
+        atomic_init(&thread_context.main_job.state, EDGE_CORO_STATE_RUNNING);
+        thread_context.main_job.context = &thread_context.main_context;
+        thread_context.current_job = &thread_context.main_job;
+        thread_context.thread_id = worker->thread_id;
+    }
 }
 
-static void job_queue_push(job_queue_t* queue, edge_job_t* job) {
-	job->next = NULL;
-	if (!queue->head) {
-		queue->head = job;
-		queue->tail = job;
-	}
-	else {
-		queue->tail->next = job;
-		queue->tail = job;
-	}
-	queue->count++;
+static void* edge_sched_alloc_stack_ptr(edge_sched_t* sched) {
+    if (!sched) {
+        return NULL;
+    }
+
+    mtx_lock(&sched->stack_mutex);
+
+    uintptr_t ptr_addr = 0;
+    if (!edge_list_pop_back(sched->free_stacks, &ptr_addr)) {
+        mtx_unlock(&sched->stack_mutex);
+        return edge_arena_alloc_ex(sched->protected_arena, EDGE_CORO_STACK_SIZE, EDGE_CORO_STACK_ALIGN);
+    }
+    mtx_unlock(&sched->stack_mutex);
+
+    return (void*)ptr_addr;
 }
 
-static edge_job_t* job_queue_pop(job_queue_t* queue) {
-	if (!queue->head) {
-		return NULL;
-	}
+static void edge_sched_free_stack_ptr(edge_sched_t* sched, void* ptr) {
+    if (!sched || !ptr) {
+        return;
+    }
 
-	edge_job_t* job = queue->head;
-	queue->head = job->next;
-	if (!queue->head) {
-		queue->tail = NULL;
-	}
-	queue->count--;
-	job->next = NULL;
-	return job;
+    mtx_lock(&sched->stack_mutex);
+
+    uintptr_t ptr_addr = (uintptr_t)ptr;
+    (void)edge_list_push_back(sched->free_stacks, &ptr_addr);
+
+    mtx_unlock(&sched->stack_mutex);
 }
 
-static edge_job_t* job_queue_remove(job_queue_t* queue, edge_job_t* job) {
-	edge_job_t* prev = NULL;
-	edge_job_t* current = queue->head;
+static void edge_job_main(void) {
+    edge_job_t* job = edge_sched_current_job();
 
-	while (current) {
-		if (current == job) {
-			if (prev) {
-				prev->next = current->next;
-			}
-			else {
-				queue->head = current->next;
-			}
+    /* Run the job function */
+    if (job && job->func) {
+        atomic_store_explicit(&job->state, EDGE_CORO_STATE_RUNNING, memory_order_release);
+        job->func(job->user_data);
+        atomic_store_explicit(&job->state, EDGE_CORO_STATE_FINISHED, memory_order_release);
+    }
 
-			if (current == queue->tail) {
-				queue->tail = prev;
-			}
+    /* Return to caller */
+    if (job && job->caller) {
+        edge_coro_swap_context(job->context, job->caller->context);
+    }
 
-			queue->count--;
-			current->next = NULL;
-			return current;
-		}
-
-		prev = current;
-		current = current->next;
-	}
-
-	return NULL;
+    /* Should never reach here */
+    assert(0 && "Job returned without caller");
 }
 
-static edge_job_t* scheduler_pick_job(edge_scheduler_t* sched) {
-	/* Pick highest priority job */
-	for (int i = EDGE_PRIORITY_COUNT - 1; i >= 0; i--) {
-		edge_job_t* job = job_queue_pop(&sched->queues[i]);
-		if (job) {
-			job->in_queue = false;
-			return job;
-		}
-	}
+static edge_job_t* edge_job_create(edge_sched_t* sched, edge_coro_fn func, void* payload) {
+    if (!sched || !func) {
+        return NULL;
+    }
 
-	return NULL;
+    edge_job_t* job = (edge_job_t*)edge_allocator_calloc(sched->allocator, 1, sizeof(edge_job_t));
+    if (!job) {
+        return NULL;
+    }
+
+    job->context = (struct edge_coro_context*)edge_allocator_calloc(sched->allocator, 1, sizeof(struct edge_coro_context));
+    if (!job->context) {
+        goto failed;
+    }
+
+    atomic_init(&job->state, EDGE_CORO_STATE_READY);
+    job->caller = NULL;
+    job->func = func;
+    job->user_data = payload;
+
+    job->priority = EDGE_SCHED_PRIORITY_LOW;
+    atomic_init(&job->in_queue, false);
+
+    job->stack = edge_sched_alloc_stack_ptr(sched);
+    if (!job->stack) {
+        goto failed;
+    }
+
+    /* Align stack (grows downward, so align the top) */
+    void* stack_top = (char*)job->stack + EDGE_CORO_STACK_SIZE;
+    stack_top = (void*)((uintptr_t)stack_top & ~(EDGE_CORO_STACK_ALIGN - 1));
+
+#if defined(__x86_64__)
+
+#ifdef _WIN32
+    /* Windows x64 ABI: Reserve 32 bytes shadow space + 8 bytes for alignment */
+    stack_top = (char*)stack_top - 40;
+#else
+    stack_top = (void*)(((uintptr_t)stack_top - 8) & ~15UL);
+#endif
+
+    job->context->rip = edge_job_main;
+    job->context->rsp = stack_top;
+#elif defined(__aarch64__)
+    coro->context->lr = edge_job_main;
+    coro->context->sp = stack_top;
+#endif
+
+    return job;
+
+failed:
+    if (job) {
+        if (job->context) {
+            edge_allocator_free(sched->allocator, job->context);
+        }
+
+        edge_allocator_free(sched->allocator, job);
+    }
+
+    return NULL;
 }
 
-static void scheduler_enqueue_job(edge_scheduler_t* sched, edge_job_t* job) {
-	if (!job->in_queue) {
-		job_queue_push(&sched->queues[job->priority], job);
-		job->in_queue = true;
-	}
+static void edge_job_destroy(edge_sched_t* sched, edge_job_t* job) {
+    if (!sched || !job) {
+        return;
+    }
+
+    if (job->stack) {
+        edge_sched_free_stack_ptr(sched, job->stack);
+    }
+
+    if (job->context) {
+        edge_allocator_free(sched->allocator, job->context);
+    }
+
+    edge_allocator_free(sched->allocator, job);
 }
 
-edge_scheduler_t* edge_scheduler_create(edge_allocator_t* allocator) {
-	if (!allocator) {
-		return NULL;
-	}
+static edge_job_t* edge_sched_pick_job(edge_sched_t* sched) {
+    if (!sched) {
+        return NULL;
+    }
 
-	edge_scheduler_t* sched = (edge_scheduler_t*)edge_allocator_malloc(allocator, sizeof(edge_scheduler_t));
-	if (!sched) {
-		return NULL;
-	}
+    mtx_lock(&sched->queue_mutex);
 
-	sched->allocator = allocator;
+    /* Pick highest priority job */
+    for (int i = EDGE_SCHED_PRIORITY_COUNT - 1; i >= 0; i--) {
+        uintptr_t job_addr;
+        if (edge_queue_dequeue(sched->queues[i], &job_addr)) {
+            edge_job_t* job = (edge_job_t*)job_addr;
+            atomic_store_explicit(&job->in_queue, false, memory_order_release);
+            atomic_fetch_sub_explicit(&sched->queued_jobs, 1, memory_order_relaxed);
+            mtx_unlock(&sched->queue_mutex);
+            return job;
+        }
+    }
 
-	for (int i = 0; i < EDGE_PRIORITY_COUNT; i++) {
-		job_queue_init(&sched->queues[i]);
-	}
-
-	atomic_init(&sched->active_jobs, 0);
-
-	return sched;
+    mtx_unlock(&sched->queue_mutex);
+    return NULL;
 }
 
-void edge_scheduler_destroy(edge_scheduler_t* sched) {
-	if (!sched) {
-		return;
-	}
+static void edge_sched_enqueue_job(edge_sched_t* sched, edge_job_t* job) {
+    if (!sched || !job) {
+        return;
+    }
 
-	/* Destroy all remaining jobs */
-	for (int i = 0; i < EDGE_PRIORITY_COUNT; i++) {
-		edge_job_t* current = sched->queues[i].head;
-		while (current) {
-			edge_job_t* next = current->next;
-			edge_scheduler_destroy_job(sched, current);
-			current = next;
-		}
-	}
+    mtx_lock(&sched->queue_mutex);
 
-	edge_allocator_t* alloc = sched->allocator;
-	edge_allocator_free(alloc, sched);
+    bool already_queued = atomic_load(&job->in_queue);
+    if (!already_queued) {
+        uintptr_t job_addr = (uintptr_t)job;
+        bool enqueued = edge_queue_enqueue(sched->queues[job->priority], &job_addr);
+
+        if (enqueued) {
+            atomic_store_explicit(&job->in_queue, true, memory_order_release);
+            atomic_fetch_add_explicit(&sched->queued_jobs, 1, memory_order_relaxed);
+            cnd_broadcast(&sched->queue_cond);
+        }
+    }
+
+    mtx_unlock(&sched->queue_mutex);
 }
 
-edge_job_t* edge_scheduler_create_job(edge_scheduler_t* sched, edge_coro_fn func, void* payload, edge_priority_t priority) {
-	if (!sched || !func) {
-		return NULL;
-	}
+static int sched_worker_thread(void* payload) {
+    worker_thread_t* worker = (worker_thread_t*)payload;
+    edge_sched_t* sched = worker->scheduler;
 
-	edge_job_t* job = (edge_job_t*)edge_allocator_malloc(sched->allocator, sizeof(edge_job_t));
-	if (!job) {
-		return NULL;
-	}
+    edge_sched_init_thread_context(worker);
 
-	memset(job, 0, sizeof(edge_job_t));
+    while (!atomic_load_explicit(&worker->should_exit, memory_order_acquire)) {
+        edge_job_t* job = edge_sched_pick_job(sched);
+        if (!job) {
+            if (atomic_load_explicit(&sched->shutdown, memory_order_acquire)) {
+                break;
+            }
 
-	job->coro = edge_coro_create(func, payload);
-	if (!job->coro) {
-		edge_allocator_free(sched->allocator, job);
-		return NULL;
-	}
+            /* Wait for work */
+            mtx_lock(&sched->queue_mutex);
 
-	job->priority = priority;
-	job->next = NULL;
-	job->in_queue = false;
+            if (atomic_load_explicit(&sched->queued_jobs, memory_order_relaxed) == 0) {
+                struct timespec ts;
+                timespec_get(&ts, TIME_UTC);
+                ts.tv_nsec += 10000000; /* 10ms */
+                if (ts.tv_nsec >= 1000000000) {
+                    ts.tv_sec++;
+                    ts.tv_nsec -= 1000000000;
+                }
+                cnd_timedwait(&sched->queue_cond, &sched->queue_mutex, &ts);
+            }
 
-	return job;
+            mtx_unlock(&sched->queue_mutex);
+            continue;
+        }
+
+        edge_coro_state_t expected = EDGE_CORO_STATE_READY;
+        bool claimed = atomic_compare_exchange_strong_explicit(
+            &job->state, &expected, EDGE_CORO_STATE_RUNNING,
+            memory_order_acq_rel, memory_order_acquire
+        );
+
+        if (!claimed) {
+            expected = EDGE_CORO_STATE_SUSPENDED;
+            claimed = atomic_compare_exchange_strong_explicit(
+                &job->state, &expected, EDGE_CORO_STATE_RUNNING,
+                memory_order_acq_rel, memory_order_acquire
+            );
+        }
+
+        if (!claimed) {
+            // Job is in an invalid state or already being processed
+            fprintf(stderr, "Warning: Could not claim job (state=%d)\n", expected);
+            edge_job_destroy(sched, job);
+
+            size_t prev_active = atomic_fetch_sub_explicit(&sched->active_jobs, 1, memory_order_acq_rel);
+            atomic_fetch_add_explicit(&sched->jobs_failed, 1, memory_order_relaxed);
+
+            if (prev_active == 1) {
+                mtx_lock(&sched->queue_mutex);
+                cnd_broadcast(&sched->queue_cond);
+                mtx_unlock(&sched->queue_mutex);
+            }
+            continue;
+        }
+
+        edge_job_t* caller = edge_sched_current_job();
+        job->caller = caller;
+
+        atomic_store_explicit(&caller->state, EDGE_CORO_STATE_SUSPENDED, memory_order_release);
+
+        edge_job_t* volatile target_job = job;
+        thread_context.current_job = target_job;
+
+        /* Swap to job */
+        atomic_signal_fence(memory_order_release);
+        edge_coro_swap_context(caller->context, job->context);
+        atomic_signal_fence(memory_order_acquire);
+
+        /* When we return here, job has yielded or finished */
+        thread_context.current_job = caller;
+        atomic_store_explicit(&caller->state, EDGE_CORO_STATE_RUNNING, memory_order_release);
+
+        edge_coro_state_t job_state = atomic_load_explicit(&job->state, memory_order_acquire);
+        if (job_state == EDGE_CORO_STATE_FINISHED) {
+            edge_job_destroy(sched, job);
+
+            size_t prev_active = atomic_fetch_sub_explicit(&sched->active_jobs, 1, memory_order_acq_rel);
+            atomic_fetch_add_explicit(&sched->jobs_completed, 1, memory_order_relaxed);
+
+            if (prev_active == 1) {
+                mtx_lock(&sched->queue_mutex);
+                cnd_broadcast(&sched->queue_cond);
+                mtx_unlock(&sched->queue_mutex);
+            }
+        }
+        else if (job_state == EDGE_CORO_STATE_SUSPENDED) {
+            /* Re-queue for later */
+            edge_sched_enqueue_job(sched, job);
+        }
+    }
+
+    return 0;
 }
 
-void edge_scheduler_destroy_job(edge_scheduler_t* sched, edge_job_t* job) {
-	if (!sched || !job) {
-		return;
-	}
+edge_sched_t* edge_sched_create(edge_allocator_t* allocator) {
+    if (!allocator) {
+        return NULL;
+    }
 
-	if (job->coro) {
-		edge_coro_destroy(job->coro);
-	}
+    edge_sched_t* sched = (edge_sched_t*)edge_allocator_calloc(allocator, 1, sizeof(edge_sched_t));
+    if (!sched) {
+        return NULL;
+    }
 
-	edge_allocator_free(sched->allocator, job);
+    sched->allocator = allocator;
+
+    sched->protected_arena = edge_arena_create(allocator, 0, false);
+    if (!sched->protected_arena) {
+        goto failed;
+    }
+
+    sched->free_stacks = edge_list_create(allocator, sizeof(uintptr_t));
+    if (!sched->free_stacks) {
+        goto failed;
+    }
+
+    if (mtx_init(&sched->stack_mutex, mtx_plain) != thrd_success) {
+        goto failed;
+    }
+
+    for (int i = 0; i < EDGE_SCHED_PRIORITY_COUNT; ++i) {
+        edge_queue_t* queue = edge_queue_create(allocator, sizeof(uintptr_t), 16);
+        if (!queue) {
+            goto failed;
+        }
+        sched->queues[i] = queue;
+    }
+
+    if (mtx_init(&sched->queue_mutex, mtx_plain) != thrd_success) {
+        goto failed;
+    }
+
+    if (cnd_init(&sched->queue_cond) != thrd_success) {
+        goto failed;
+    }
+
+    int num_cores = thrd_get_cpu_count();
+    if (num_cores <= 0) {
+        num_cores = 4;
+    }
+
+    sched->worker_threads = edge_vector_create(allocator, sizeof(worker_thread_t), num_cores);
+    if (!sched->worker_threads) {
+        goto failed;
+    }
+
+    if (!edge_vector_resize(sched->worker_threads, num_cores)) {
+        goto failed;
+    }
+
+    atomic_init(&sched->shutdown, false);
+    atomic_init(&sched->active_jobs, 0);
+    atomic_init(&sched->queued_jobs, 0);
+    atomic_init(&sched->jobs_completed, 0);
+    atomic_init(&sched->jobs_failed, 0);
+
+    for (int i = 0; i < num_cores; ++i) {
+        worker_thread_t* worker = (worker_thread_t*)edge_vector_at(sched->worker_threads, i);
+        worker->scheduler = sched;
+        worker->thread_id = i;
+        atomic_init(&worker->should_exit, false);
+
+        if (thrd_create(&worker->thread, sched_worker_thread, worker) != thrd_success) {
+            edge_vector_resize(sched->worker_threads, i);
+            goto failed;
+        }
+
+        thrd_set_affinity(worker->thread, i);
+
+        char buffer[32] = { 0 };
+        snprintf(buffer, sizeof(buffer), "worker-%d", i);
+        thrd_set_name(worker->thread, buffer);
+    }
+
+    return sched;
+
+failed:
+    if (sched) {
+        if (sched->worker_threads) {
+            for (int i = 0; i < edge_vector_size(sched->worker_threads); ++i) {
+                worker_thread_t* worker = (worker_thread_t*)edge_vector_at(sched->worker_threads, i);
+                atomic_store_explicit(&worker->should_exit, true, memory_order_release);
+            }
+
+            atomic_store_explicit(&sched->shutdown, true, memory_order_release);
+            cnd_broadcast(&sched->queue_cond);
+
+            for (size_t i = 0; i < edge_vector_size(sched->worker_threads); ++i) {
+                worker_thread_t* worker = (worker_thread_t*)edge_vector_at(sched->worker_threads, i);
+                thrd_join(worker->thread, NULL);
+            }
+
+            edge_vector_destroy(sched->worker_threads);
+        }
+
+        cnd_destroy(&sched->queue_cond);
+        mtx_destroy(&sched->queue_mutex);
+
+        for (int i = 0; i < EDGE_SCHED_PRIORITY_COUNT; ++i) {
+            edge_queue_t* queue = sched->queues[i];
+            if (queue) {
+                edge_queue_destroy(queue);
+            }
+        }
+
+        mtx_destroy(&sched->stack_mutex);
+
+        if (sched->free_stacks) {
+            edge_list_destroy(sched->free_stacks);
+        }
+
+        if (sched->protected_arena) {
+            edge_arena_destroy(sched->protected_arena);
+        }
+
+        edge_allocator_free(allocator, sched);
+    }
+
+    return NULL;
 }
 
-int edge_scheduler_add_job(edge_scheduler_t* sched, edge_job_t* job) {
-	if (!sched || !job) {
-		return -1;
-	}
+void edge_sched_destroy(edge_sched_t* sched) {
+    if (!sched) {
+        return;
+    }
 
-	atomic_fetch_add(&sched->active_jobs, 1);
-	scheduler_enqueue_job(sched, job);
+    atomic_store_explicit(&sched->shutdown, true, memory_order_release);
+    cnd_broadcast(&sched->queue_cond);
 
-	return 0;
+    if (sched->worker_threads) {
+        for (int i = 0; i < edge_vector_size(sched->worker_threads); ++i) {
+            worker_thread_t* worker = (worker_thread_t*)edge_vector_at(sched->worker_threads, i);
+            atomic_store_explicit(&worker->should_exit, true, memory_order_release);
+            thrd_join(worker->thread, NULL);
+        }
+
+        edge_vector_destroy(sched->worker_threads);
+    }
+
+    cnd_destroy(&sched->queue_cond);
+    mtx_destroy(&sched->queue_mutex);
+
+    for (int i = 0; i < EDGE_SCHED_PRIORITY_COUNT; ++i) {
+        edge_queue_t* queue = sched->queues[i];
+        if (queue) {
+            while (true) {
+                uintptr_t job_addr;
+                if (!edge_queue_dequeue(queue, &job_addr)) {
+                    break;
+                }
+
+                edge_job_t* job = (edge_job_t*)job_addr;
+                edge_job_destroy(sched, job);
+            }
+
+            edge_queue_destroy(queue);
+        }
+    }
+
+    mtx_destroy(&sched->stack_mutex);
+
+    if (sched->free_stacks) {
+        edge_list_destroy(sched->free_stacks);
+    }
+
+    if (sched->protected_arena) {
+        edge_arena_destroy(sched->protected_arena);
+    }
+
+    edge_allocator_t* alloc = sched->allocator;
+    edge_allocator_free(alloc, sched);
 }
 
-int edge_scheduler_remove_job(edge_scheduler_t* sched, edge_job_t* job) {
-	if (!sched || !job) {
-		return -1;
-	}
+void edge_sched_schedule_job(edge_sched_t* sched, edge_coro_fn func, void* payload, edge_sched_priority_t priority) {
+    if (!sched || !func) {
+        return;
+    }
 
-	edge_job_t* removed = job_queue_remove(&sched->queues[job->priority], job);
-	if (removed) {
-		removed->in_queue = false;
-	}
+    edge_job_t* job = edge_job_create(sched, func, payload);
+    if (!job) {
+        return;
+    }
 
-	return removed ? 0 : -1;
+    job->priority = priority;
+
+    atomic_fetch_add_explicit(&sched->active_jobs, 1, memory_order_relaxed);
+    edge_sched_enqueue_job(sched, job);
 }
 
-int edge_scheduler_step(edge_scheduler_t* sched) {
-	if (!sched) {
-		return 0;
-	}
+edge_job_t* edge_sched_current_job(void) {
+    if (atomic_load(&thread_context.main_job.state) == 0) {
+        return NULL;
+    }
 
-	edge_job_t* job = scheduler_pick_job(sched);
-	if (!job) {
-		return 0;
-	}
-
-	edge_coro_t* coro = job->coro;
-	if (!coro) {
-		return 0;
-	}
-
-	edge_coro_state_t state = edge_coro_state(coro);
-	if (state == EDGE_CORO_STATE_READY || state == EDGE_CORO_STATE_SUSPENDED) {
-		int result = edge_coro_resume(job->coro);
-		if (result < 0) {
-			return -1;
-		}
-
-		state = edge_coro_state(job->coro);
-		if (state == EDGE_CORO_STATE_FINISHED) {
-			/* Clean up */
-			edge_scheduler_destroy_job(sched, job);
-			atomic_fetch_sub(&sched->active_jobs, 1);
-		}
-		else if (state == EDGE_CORO_STATE_SUSPENDED) {
-			/* Re-queue for later */
-			scheduler_enqueue_job(sched, job);
-		}
-		return 1;
-	}
-
-	return 0;
+    return thread_context.current_job;
 }
 
-int edge_scheduler_run(edge_scheduler_t* sched) {
-	if (!sched) {
-		return -1;
-	}
+int edge_sched_current_thread_id(void) {
+    if (atomic_load(&thread_context.main_job.state) == 0) {
+        return -1;
+    }
 
-	while (edge_scheduler_has_active(sched)) {
-		int result = edge_scheduler_step(sched);
-		if (result < 0) {
-			return -1;
-		}
-	}
-
-	return 0;
+    return thread_context.thread_id;
 }
 
-bool edge_scheduler_has_active(const edge_scheduler_t* sched) {
-	if (!sched) {
-		return false;
-	}
+void edge_sched_run(edge_sched_t* sched) {
+    if (!sched) {
+        return;
+    }
 
-	return atomic_load(&sched->active_jobs) > 0;
+    mtx_lock(&sched->queue_mutex);
+
+    while (
+        atomic_load_explicit(&sched->active_jobs, memory_order_acquire) > 0 &&
+        !atomic_load_explicit(&sched->shutdown, memory_order_acquire)) {
+        cnd_wait(&sched->queue_cond, &sched->queue_mutex);
+    }
+
+    mtx_unlock(&sched->queue_mutex);
 }
 
-size_t edge_scheduler_job_count(const edge_scheduler_t* sched) {
-	if (!sched) {
-		return 0;
-	}
+void edge_sched_yield(void) {
+    edge_job_t* job = thread_context.current_job;
 
-	size_t count = 0;
-	for (int i = 0; i < EDGE_PRIORITY_COUNT; i++) {
-		count += sched->queues[i].count;
-	}
+    edge_coro_state_t job_state = atomic_load_explicit(&job->state, memory_order_acquire);
+    if (!job || job == &thread_context.main_job || job_state == EDGE_CORO_STATE_FINISHED) {
+        return;
+    }
 
-	return count;
+    edge_job_t* caller = job->caller;
+    if (!caller) {
+        return;
+    }
+
+    atomic_store_explicit(&job->state, EDGE_CORO_STATE_SUSPENDED, memory_order_release);
+    atomic_store_explicit(&caller->state, EDGE_CORO_STATE_RUNNING, memory_order_release);
+
+    /* Swap back to caller */
+    atomic_signal_fence(memory_order_release);
+    edge_coro_swap_context(job->context, caller->context);
+    atomic_signal_fence(memory_order_acquire);
+
+    /* When resumed, we continue here */
+    atomic_store_explicit(&job->state, EDGE_CORO_STATE_RUNNING, memory_order_release);
+}
+
+void edge_sched_await(edge_coro_fn func, void* payload, edge_sched_priority_t priority) {
+    if (!func) {
+        return;
+    }
+
+    edge_job_t* parent = edge_sched_current_job();
+    // TODO: Not implemented for now
 }
