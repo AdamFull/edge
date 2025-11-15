@@ -11,14 +11,18 @@ set(EDGE_BASE_SOURCES
     "src/edge_allocator.c"
     "src/edge_arena.c"
     "src/edge_list.c"
+    "src/edge_queue.c"
     "src/edge_threads_ext.c"
+    "src/edge_vector.c"
 )
 
 set(EDGE_BASE_HEADERS
     "include/edge_allocator.h"
     "include/edge_arena.h"
     "include/edge_list.h"
+    "include/edge_queue.h"
     "include/edge_threads_ext.h"
+    "include/edge_vector.h"
 )
 
 # Library
