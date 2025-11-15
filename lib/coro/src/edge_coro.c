@@ -1,28 +1,22 @@
 #include "edge_coro_internal.h"
+#include "edge_threads_ext.h"
 
 #include <stdatomic.h>
 #include <string.h>
 #include <assert.h>
+#include <stdio.h>
 
 #include <edge_allocator.h>
 #include <edge_arena.h>
-
-// TODO: Make this better in future
-typedef struct free_node {
-    void* ptr;
-    struct free_node* next;
-} free_node_t;
-
-typedef struct free_list {
-    free_node_t* head;
-    size_t count;
-} free_list_t;
+#include <edge_list.h>
+#include <edge_queue.h>
+#include <edge_vector.h>
 
 struct edge_coro_thread_context {
     edge_allocator_t allocator;
 
     edge_arena_t* stack_arena;
-    free_list_t free_stacks;
+    edge_list_t* free_stacks;
 
     edge_coro_t* current_coro;
     edge_coro_t main_coro;
@@ -66,16 +60,14 @@ static void edge_coro_main(void) {
 }
 
 static void* edge_coro_alloc_stack_pointer() {
-    free_node_t* free_node = g_coro_thread_context.free_stacks.head;
-    if (free_node) {
-        void* stack_pointer = free_node->ptr;
-        g_coro_thread_context.free_stacks.head = free_node->next;
-        edge_coro_free(free_node);
-        g_coro_thread_context.free_stacks.count--;
-        return stack_pointer;
+    struct edge_coro_thread_context* ctx = &g_coro_thread_context;
+
+    uintptr_t ptr_addr = 0x0;
+    if (!edge_list_pop_back(ctx->free_stacks, &ptr_addr)) {
+        return edge_arena_alloc_ex(g_coro_thread_context.stack_arena, EDGE_CORO_STACK_SIZE, EDGE_CORO_STACK_ALIGN);
     }
 
-    return edge_arena_alloc_ex(g_coro_thread_context.stack_arena, EDGE_CORO_STACK_SIZE, EDGE_CORO_STACK_ALIGN);
+    return (void*)ptr_addr;
 }
 
 static void edge_coro_free_stack_pointer(void* ptr) {
@@ -83,22 +75,18 @@ static void edge_coro_free_stack_pointer(void* ptr) {
         return;
     }
 
-    free_node_t* free_node = (free_node_t*)edge_coro_malloc(sizeof(free_node_t));
-    if (!free_node) {
+    struct edge_coro_thread_context* ctx = &g_coro_thread_context;
+
+    uintptr_t ptr_addr = (uintptr_t)ptr;
+    if (!edge_list_push_back(ctx->free_stacks, &ptr_addr)) {
         return;
     }
-
-    free_node->ptr = ptr;
-    free_node->next = g_coro_thread_context.free_stacks.head;
-    g_coro_thread_context.free_stacks.head = free_node;
-    g_coro_thread_context.free_stacks.count++;
 }
 
 void edge_coro_init_thread_context(edge_allocator_t* allocator) {
     if (g_coro_thread_context.main_coro.state == 0) {
         g_coro_thread_context.stack_arena = edge_arena_create(allocator, 0, false);
-        g_coro_thread_context.free_stacks.head = NULL;
-        g_coro_thread_context.free_stacks.count = 0;
+        g_coro_thread_context.free_stacks = edge_list_create(allocator, sizeof(uintptr_t));
 
         g_coro_thread_context.allocator = *allocator;
         g_coro_thread_context.main_coro.state = EDGE_CORO_STATE_RUNNING;
@@ -109,13 +97,7 @@ void edge_coro_init_thread_context(edge_allocator_t* allocator) {
 
 void edge_coro_shutdown_thread_context(void) {
     if (g_coro_thread_context.main_coro.state != 0) {
-        free_node_t* free_node = g_coro_thread_context.free_stacks.head;
-        while (free_node) {
-            free_node_t* next = free_node->next;
-            edge_coro_free(free_node);
-            free_node = next;
-        }
-
+        edge_list_destroy(g_coro_thread_context.free_stacks);
         edge_arena_destroy(g_coro_thread_context.stack_arena);
     }
 }
