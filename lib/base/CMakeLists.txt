@@ -10,8 +10,11 @@ option(EDGE_BASE_BUILD_EXAMPLES "Build examples" OFF)
 set(EDGE_BASE_SOURCES
     "src/edge_allocator.c"
     "src/edge_arena.c"
+    "src/edge_hashmap.c"
     "src/edge_list.c"
     "src/edge_queue.c"
+    "src/edge_stack.c"
+    "src/edge_string.c"
     "src/edge_testing.c"
     "src/edge_threads_ext.c"
     "src/edge_vector.c"
@@ -20,8 +23,11 @@ set(EDGE_BASE_SOURCES
 set(EDGE_BASE_HEADERS
     "include/edge_allocator.h"
     "include/edge_arena.h"
+    "include/edge_hashmap.h"
     "include/edge_list.h"
     "include/edge_queue.h"
+    "include/edge_stack.h"
+    "include/edge_string.h"
     "include/edge_testing.h"
     "include/edge_threads_ext.h"
     "include/edge_vector.h"
