@@ -1,5 +1,4 @@
 #include "edge_coro_internal.h"
-#include "edge_threads_ext.h"
 
 #include <stdatomic.h>
 #include <string.h>
