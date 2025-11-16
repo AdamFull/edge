@@ -420,7 +420,10 @@ edge_sched_t* edge_sched_create(edge_allocator_t* allocator) {
         goto failed;
     }
 
-    int num_cores = edge_thrd_get_cpu_count();
+    edge_cpu_info_t cpu_info[256];
+    int cpu_count = edge_thrd_get_cpu_topology(cpu_info, 256);
+
+    int num_cores = edge_thrd_get_logical_core_count(cpu_info, cpu_count);
     if (num_cores <= 0) {
         num_cores = 4;
     }
@@ -451,7 +454,7 @@ edge_sched_t* edge_sched_create(edge_allocator_t* allocator) {
             goto failed;
         }
 
-        edge_thrd_set_affinity(worker->thread, i);
+        edge_thrd_set_affinity_ex(worker->thread, cpu_info, cpu_count, i, false);
 
         char buffer[32] = { 0 };
         snprintf(buffer, sizeof(buffer), "worker-%d", i);
