@@ -170,8 +170,8 @@ static edge_job_t* edge_job_create(edge_sched_t* sched, edge_coro_fn func, void*
     job->context->rip = edge_job_main;
     job->context->rsp = stack_top;
 #elif defined(__aarch64__)
-    coro->context->lr = edge_job_main;
-    coro->context->sp = stack_top;
+    job->context->lr = edge_job_main;
+    job->context->sp = stack_top;
 #endif
 
     return job;

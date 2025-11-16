@@ -39,7 +39,7 @@ int thrd_set_affinity(thrd_t thr, int core_id) {
 
 #elif defined(PLATFORM_LINUX)
     // On Linux with glibc, thrd_t is pthread_t
-    pthread_t thread = (pthread_t)thr._Handle;
+    pthread_t thread = (pthread_t)thr;
 
     cpu_set_t cpuset;
     CPU_ZERO(&cpuset);
@@ -90,7 +90,7 @@ int thrd_set_name(thrd_t thr, const char* name) {
 
 #elif defined(PLATFORM_LINUX)
     // On Linux, thread names are limited to 16 characters (including null terminator)
-    pthread_t thread = (pthread_t)thr._Handle;
+    pthread_t thread = (pthread_t)thr;
 
     // pthread_setname_np truncates to 16 chars automatically on most systems
     if (pthread_setname_np(thread, name) != 0) {
