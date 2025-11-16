@@ -1,24 +1,20 @@
 #include "edge_arena.h"
-
+#include "edge_threads.h"
 #include "edge_allocator.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <Windows.h>
 #else
-
 #include <unistd.h>
 #include <sys/mman.h>
-#include <pthread.h>
 #include <sys/types.h>
-
 #endif
 
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <threads.h>
 
 struct edge_arena {
 	struct edge_allocator* allocator;
@@ -30,7 +26,7 @@ struct edge_arena {
 	size_t page_size;
 	bool has_guard;
 
-	mtx_t mtx;
+	edge_mtx_t mtx;
 };
 
 static size_t align_up(size_t size, size_t alignment) {
@@ -204,7 +200,7 @@ edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size, bool g
 	arena->page_size = page_size;
 	arena->has_guard = guard_page;
 
-	mtx_init(&arena->mtx, mtx_recursive);
+	edge_mtx_init(&arena->mtx, edge_mtx_recursive);
 
 	if (guard_page) {
 		void* guard_addr = ptr_add(arena->base, arena->reserved - arena->page_size);
@@ -247,7 +243,7 @@ void edge_arena_destroy(edge_arena_t* arena) {
 		virt_release(arena->base, arena->reserved);
 	}
 
-	mtx_destroy(&arena->mtx);
+	edge_mtx_destroy(&arena->mtx);
 
 	edge_allocator_t* alloc = arena->allocator;
 	edge_allocator_free(alloc, arena);
@@ -296,13 +292,13 @@ void* edge_arena_alloc_ex(edge_arena_t* arena, size_t size, size_t alignment) {
 		return NULL;
 	}
 
-	mtx_lock(&arena->mtx);
+	edge_mtx_lock(&arena->mtx);
 
 	size_t offset = arena->offset;
 	size_t aligned_offset = align_up(offset, alignment);
 
 	if (aligned_offset > SIZE_MAX - size) {
-		mtx_unlock(&arena->mtx);
+		edge_mtx_unlock(&arena->mtx);
 		return NULL; 
 	}
 
@@ -313,17 +309,17 @@ void* edge_arena_alloc_ex(edge_arena_t* arena, size_t size, size_t alignment) {
 
 	size_t new_offset = aligned_offset + size;
 	if (new_offset > max_size) {
-		mtx_unlock(&arena->mtx);
+		edge_mtx_unlock(&arena->mtx);
 		return NULL;
 	}
 
 	if (!arena_ensure_committed_locked(arena, new_offset)) {
-		mtx_unlock(&arena->mtx);
+		edge_mtx_unlock(&arena->mtx);
 		return NULL;
 	}
 	void* result = ptr_add(arena->base, aligned_offset);
 	arena->offset = new_offset;
-	mtx_unlock(&arena->mtx);
+	edge_mtx_unlock(&arena->mtx);
 
 	return result;
 }
@@ -337,10 +333,10 @@ void edge_arena_reset(edge_arena_t* arena, bool zero_memory) {
 		return;
 	}
 
-	mtx_lock(&arena->mtx);
+	edge_mtx_lock(&arena->mtx);
 	if (zero_memory && arena->committed > 0) {
 		memset(arena->base, 0, arena->committed);
 	}
 	arena->offset = 0;
-	mtx_unlock(&arena->mtx);
+	edge_mtx_unlock(&arena->mtx);
 }
