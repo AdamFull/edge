@@ -1,0 +1,1038 @@
+{
+  "configurations": [
+    {
+      "name": "WSL-GCC-Debug",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeExecutable": "cmake",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "linux_x64" ],
+      "wslPath": "${defaultWSLPath}",
+      "variables": [
+        {
+          "name": "CMAKE_EXPORT_COMPILE_COMMANDS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TOOLS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_REGRESS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_OSSFUZZ",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_DOC",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_INSTALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_SHARED_LIBS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "LIBZIP_DO_INSTALL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_OVERRIDE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "FT_DISABLE_TESTS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SKIP_INSTALL_ALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_USE_STD_FORMAT",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_DOCS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_CURL_EXE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_STATICLIB",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAP",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAPS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBPSL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBSSH2",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_ENABLE_SSL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "HTTP_ONLY",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_COOKIES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZLIB_BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZSTD_BUILD_PROGRAMS",
+          "value": "OFF",
+          "type": "STRING"
+        }
+      ]
+    },
+    {
+      "name": "WSL-GCC-Release",
+      "generator": "Ninja",
+      "configurationType": "RelWithDebInfo",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeExecutable": "cmake",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "linux_x64" ],
+      "wslPath": "${defaultWSLPath}",
+      "variables": [
+        {
+          "name": "CMAKE_EXPORT_COMPILE_COMMANDS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TOOLS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_REGRESS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_OSSFUZZ",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_DOC",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_INSTALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_SHARED_LIBS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "LIBZIP_DO_INSTALL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_OVERRIDE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "FT_DISABLE_TESTS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SKIP_INSTALL_ALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_USE_STD_FORMAT",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_DOCS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_CURL_EXE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_STATICLIB",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAP",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAPS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBPSL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBSSH2",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_ENABLE_SSL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "HTTP_ONLY",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_COOKIES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZLIB_BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZSTD_BUILD_PROGRAMS",
+          "value": "OFF",
+          "type": "STRING"
+        }
+      ]
+    },
+    {
+      "name": "x64-Clang-Debug",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "clang_cl_x64_x64" ],
+      "variables": [
+        {
+          "name": "CMAKE_EXPORT_COMPILE_COMMANDS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TOOLS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_REGRESS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_OSSFUZZ",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_DOC",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_INSTALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_SHARED_LIBS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "LIBZIP_DO_INSTALL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_OVERRIDE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "FT_DISABLE_TESTS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SKIP_INSTALL_ALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_USE_STD_FORMAT",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_DOCS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_CURL_EXE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_STATICLIB",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAP",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAPS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBPSL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBSSH2",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_ENABLE_SSL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "HTTP_ONLY",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_COOKIES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZLIB_BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZSTD_BUILD_PROGRAMS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_WIN_REDIRECT",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZLIB_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        }
+      ]
+    },
+    {
+      "name": "x64-Clang-Release",
+      "generator": "Ninja",
+      "configurationType": "RelWithDebInfo",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "inheritEnvironments": [ "clang_cl_x64_x64" ],
+      "variables": [
+        {
+          "name": "CMAKE_EXPORT_COMPILE_COMMANDS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TOOLS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_REGRESS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_OSSFUZZ",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_DOC",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_INSTALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_SHARED_LIBS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "LIBZIP_DO_INSTALL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_OVERRIDE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "FT_DISABLE_TESTS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SKIP_INSTALL_ALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_USE_STD_FORMAT",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_DOCS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_CURL_EXE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_STATICLIB",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAP",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAPS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBPSL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBSSH2",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_ENABLE_SSL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "HTTP_ONLY",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_COOKIES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZLIB_BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZSTD_BUILD_PROGRAMS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_WIN_REDIRECT",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZLIB_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        }
+      ]
+    },
+    {
+      "name": "Linux-ARM64-Debug",
+      "generator": "Ninja",
+      "configurationType": "Debug",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "remoteMachineName": "${defaultRemoteMachineName}",
+      "remoteCopySourcesMethod": "rsync",
+      "remoteCopySourcesExclusionList": [ ".vs", ".git", "out" ],
+      "remoteCopyBuildOutput": false,
+      "remoteCMakeListsRoot": "$HOME/.vs/${projectDirName}/${workspaceHash}/src",
+      "remoteBuildRoot": "$HOME/.vs/${projectDirName}/${workspaceHash}/out/build/${name}",
+      "remoteInstallRoot": "$HOME/.vs/${projectDirName}/${workspaceHash}/out/install/${name}",
+      "remoteCopySources": true,
+      "rsyncCommandArgs": "-t --delete --delete-excluded",
+      "remoteCopySourcesOutputVerbosity": "Normal",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "intelliSenseMode": "linux-gcc-arm",
+      "inheritEnvironments": [ "linux_arm" ],
+      "variables": [
+        {
+          "name": "CMAKE_EXPORT_COMPILE_COMMANDS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TOOLS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_REGRESS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_OSSFUZZ",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_DOC",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_INSTALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_SHARED_LIBS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "LIBZIP_DO_INSTALL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_OVERRIDE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "FT_DISABLE_TESTS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SKIP_INSTALL_ALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_USE_STD_FORMAT",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_DOCS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_CURL_EXE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_STATICLIB",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAP",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAPS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBPSL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBSSH2",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_ENABLE_SSL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "HTTP_ONLY",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_COOKIES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZLIB_BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZSTD_BUILD_PROGRAMS",
+          "value": "OFF",
+          "type": "STRING"
+        }
+      ]
+    },
+    {
+      "name": "Linux-ARM64-Release",
+      "generator": "Ninja",
+      "configurationType": "RelWithDebInfo",
+      "buildRoot": "${projectDir}\\out\\build\\${name}",
+      "installRoot": "${projectDir}\\out\\install\\${name}",
+      "remoteMachineName": "${defaultRemoteMachineName}",
+      "remoteCopySourcesMethod": "rsync",
+      "remoteCopySourcesExclusionList": [ ".vs", ".git", "out" ],
+      "remoteCopyBuildOutput": false,
+      "remoteCMakeListsRoot": "$HOME/.vs/${projectDirName}/${workspaceHash}/src",
+      "remoteBuildRoot": "$HOME/.vs/${projectDirName}/${workspaceHash}/out/build/${name}",
+      "remoteInstallRoot": "$HOME/.vs/${projectDirName}/${workspaceHash}/out/install/${name}",
+      "remoteCopySources": true,
+      "rsyncCommandArgs": "-t --delete --delete-excluded",
+      "remoteCopySourcesOutputVerbosity": "Normal",
+      "cmakeCommandArgs": "",
+      "buildCommandArgs": "",
+      "ctestCommandArgs": "",
+      "intelliSenseMode": "linux-gcc-arm",
+      "inheritEnvironments": [ "linux_arm" ],
+      "variables": [
+        {
+          "name": "CMAKE_EXPORT_COMPILE_COMMANDS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TOOLS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_REGRESS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_OSSFUZZ",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_DOC",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_INSTALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_SHARED_LIBS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "LIBZIP_DO_INSTALL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_OVERRIDE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_SHARED",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "MI_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "FT_DISABLE_TESTS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SKIP_INSTALL_ALL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "SPDLOG_USE_STD_FORMAT",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_EXAMPLES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_TESTS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "GLFW_BUILD_DOCS",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_CURL_EXE",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_STATICLIB",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAP",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_LDAPS",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBPSL",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_USE_LIBSSH2",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_ENABLE_SSL",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "HTTP_ONLY",
+          "value": "ON",
+          "type": "STRING"
+        },
+        {
+          "name": "CURL_DISABLE_COOKIES",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZLIB_BUILD_TESTING",
+          "value": "OFF",
+          "type": "STRING"
+        },
+        {
+          "name": "ZSTD_BUILD_PROGRAMS",
+          "value": "OFF",
+          "type": "STRING"
+        }
+      ]
+    }
+  ]
+}
