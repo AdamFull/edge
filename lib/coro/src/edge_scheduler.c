@@ -12,6 +12,13 @@
 #include <edge_queue.h>
 #include <edge_vector.h>
 
+// TODO: Add valgrind support
+// TODO: Add GDB and LLDB support
+// TODO: Prevent signal delivery on job threads
+// TODO: Improve stack memory allocation. It may be better to preallocate several 
+// stacks of different sizes and immediately place them in free lists. 
+// For example, there could be small, medium, and large stacks.
+
 #ifdef ASAN_ENABLED
 extern void __sanitizer_start_switch_fiber(void** fake_stack_save, const void* bottom, size_t size);
 extern void __sanitizer_finish_switch_fiber(void* fake_stack_save, const void** bottom_old, size_t* size_old);
@@ -42,6 +49,7 @@ struct edge_job {
     edge_sched_priority_t priority;
     atomic_bool in_queue;
 
+    // TODO: Needed only for debugging
     void* tsan_fiber;
 };
 
