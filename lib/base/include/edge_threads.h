@@ -94,9 +94,19 @@ extern "C" {
 
     void edge_call_once(edge_once_t* flag, void (*func)(void));
 
-    int edge_thrd_set_affinity(edge_thrd_t thr, int core_id);
+    typedef struct {
+        int logical_id;
+        int physical_id;
+        int core_id;
+    } edge_cpu_info_t;
+
+    int edge_thrd_set_affinity_ex(edge_thrd_t thr, edge_cpu_info_t* cpu_info, int cpu_count, int core_id, bool prefer_physical);
+    int edge_thrd_set_affinity(edge_thrd_t thr, int core_id, bool prefer_physical);
     int edge_thrd_set_name(edge_thrd_t thr, const char* name);
-    int edge_thrd_get_cpu_count(void);
+
+    int edge_thrd_get_physical_core_count(edge_cpu_info_t* cpu_info, int count);
+    int edge_thrd_get_logical_core_count(edge_cpu_info_t* cpu_info, int count);
+    int edge_thrd_get_cpu_topology(edge_cpu_info_t* cpu_info, int max_cpus);
 
 #ifdef __cplusplus
 }

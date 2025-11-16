@@ -296,7 +296,7 @@ void edge_call_once(edge_once_t* flag, void (*func)(void)) {
     }
 }
 
-int edge_thrd_set_affinity(edge_thrd_t thr, int core_id) {
+int edge_thrd_set_affinity_platform(edge_thrd_t thr, int core_id) {
     if (core_id < 0) {
         return edge_thrd_error;
     }
@@ -337,8 +337,63 @@ int edge_thrd_set_name(edge_thrd_t thr, const char* name) {
     return SUCCEEDED(hr) ? edge_thrd_success : edge_thrd_error;
 }
 
-int edge_thrd_get_cpu_count(void) {
-    SYSTEM_INFO sysinfo;
-    GetSystemInfo(&sysinfo);
-    return (int)sysinfo.dwNumberOfProcessors;
+typedef BOOL(WINAPI* GetLogicalProcessorInformationFunc)(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION, PDWORD);
+
+int edge_thrd_get_cpu_topology(edge_cpu_info_t* cpu_info, int max_cpus) {
+    if (!cpu_info || max_cpus <= 0) {
+        return -1;
+    }
+
+    HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
+    if (!kernel32) {
+        return -1;
+    }
+
+    GetLogicalProcessorInformationFunc GetLogicalProcessorInfo = (GetLogicalProcessorInformationFunc)GetProcAddress(kernel32, "GetLogicalProcessorInformation");
+
+    if (!GetLogicalProcessorInfo) {
+        return -1;
+    }
+
+    DWORD buffer_size = 0;
+    GetLogicalProcessorInfo(NULL, &buffer_size);
+
+    if (buffer_size == 0) {
+        return -1;
+    }
+
+    PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer =
+        (PSYSTEM_LOGICAL_PROCESSOR_INFORMATION)malloc(buffer_size);
+
+    if (!buffer) {
+        return -1;
+    }
+
+    if (!GetLogicalProcessorInfo(buffer, &buffer_size)) {
+        free(buffer);
+        return -1;
+    }
+
+    DWORD count = buffer_size / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
+    int cpu_count = 0;
+    int physical_core = 0;
+
+    for (DWORD i = 0; i < count && cpu_count < max_cpus; i++) {
+        if (buffer[i].Relationship == RelationProcessorCore) {
+            ULONG_PTR mask = buffer[i].ProcessorMask;
+
+            for (int bit = 0; bit < 64 && cpu_count < max_cpus; bit++) {
+                if (mask & ((ULONG_PTR)1 << bit)) {
+                    cpu_info[cpu_count].logical_id = cpu_count;
+                    cpu_info[cpu_count].physical_id = 0; /* Windows doesn't expose socket info easily */
+                    cpu_info[cpu_count].core_id = physical_core;
+                    cpu_count++;
+                }
+            }
+            physical_core++;
+        }
+    }
+
+    free(buffer);
+    return cpu_count;
 }

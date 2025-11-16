@@ -1,6 +1,7 @@
 #include "edge_threads.h"
 
 #include <stdlib.h>
+#include <stdio.h>
 
 #include <pthread.h>
 #include <sched.h>
@@ -263,7 +264,7 @@ void edge_call_once(edge_once_t* flag, void (*func)(void)) {
     pthread_once(once, func);
 }
 
-int edge_thrd_set_affinity(edge_thrd_t thr, int core_id) {
+int edge_thrd_set_affinity_platform(edge_thrd_t thr, int core_id) {
     if (core_id < 0) {
         return edge_thrd_error;
     }
@@ -293,10 +294,50 @@ int edge_thrd_set_name(edge_thrd_t thr, const char* name) {
     return edge_thrd_success;
 }
 
-int edge_thrd_get_cpu_count(void) {
-    long count = sysconf(_SC_NPROCESSORS_ONLN);
-    if (count == -1) {
+int edge_thrd_get_cpu_topology(edge_cpu_info_t* cpu_info, int max_cpus) {
+    if (!cpu_info || max_cpus <= 0) {
         return -1;
     }
-    return (int)count;
+
+    int cpu_count = 0;
+
+    for (int i = 0; i < max_cpus; i++) {
+        char path[256];
+
+        /* Check if CPU exists */
+        snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d", i);
+        FILE* test = fopen(path, "r");
+        if (!test) {
+            break;
+        }
+        fclose(test);
+
+        cpu_info[cpu_count].logical_id = i;
+
+        /* Get physical package ID */
+        snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d/topology/physical_package_id", i);
+        FILE* f = fopen(path, "r");
+        if (f) {
+            fscanf(f, "%d", &cpu_info[cpu_count].physical_id);
+            fclose(f);
+        }
+        else {
+            cpu_info[cpu_count].physical_id = 0;
+        }
+
+        /* Get core ID */
+        snprintf(path, sizeof(path), "/sys/devices/system/cpu/cpu%d/topology/core_id", i);
+        f = fopen(path, "r");
+        if (f) {
+            fscanf(f, "%d", &cpu_info[cpu_count].core_id);
+            fclose(f);
+        }
+        else {
+            cpu_info[cpu_count].core_id = i;
+        }
+
+        cpu_count++;
+    }
+
+    return cpu_count;
 }
