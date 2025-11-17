@@ -123,7 +123,7 @@ edge_coro_t* edge_coro_create(edge_coro_fn function, void* arg) {
 
     memset(coro->context, 0, sizeof(struct edge_coro_context));
 
-    coro->state = EDGE_CORO_STATE_READY;
+    coro->state = EDGE_CORO_STATE_SUSPENDED;
     coro->caller = NULL;
     coro->func = function;
     coro->user_data = arg;
@@ -176,7 +176,7 @@ void edge_coro_destroy(edge_coro_t* coro) {
 }
 
 bool edge_coro_resume(edge_coro_t* coro) {
-    if (!coro || (coro->state != EDGE_CORO_STATE_READY && coro->state != EDGE_CORO_STATE_SUSPENDED)) {
+    if (!coro || coro->state != EDGE_CORO_STATE_SUSPENDED) {
         return false;
     }
 

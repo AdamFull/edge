@@ -26,10 +26,9 @@ extern "C" {
 
 	/* Coroutine status */
 	typedef enum {
-		EDGE_CORO_STATE_READY,      /* Ready to run */
-		EDGE_CORO_STATE_RUNNING,    /* Currently executing */
-		EDGE_CORO_STATE_SUSPENDED,  /* Suspended, waiting to resume */
-		EDGE_CORO_STATE_FINISHED   /* Execution completed */
+		EDGE_CORO_STATE_RUNNING = 1,    /* Currently executing */
+		EDGE_CORO_STATE_SUSPENDED = 2,  /* Suspended, waiting to resume */
+		EDGE_CORO_STATE_FINISHED = 3   /* Execution completed */
 	} edge_coro_state_t;
 
 	/**

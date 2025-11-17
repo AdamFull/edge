@@ -191,7 +191,7 @@ static edge_job_t* edge_job_create(edge_sched_t* sched, edge_coro_fn func, void*
         goto failed;
     }
 
-    atomic_init(&job->state, EDGE_CORO_STATE_READY);
+    atomic_init(&job->state, EDGE_CORO_STATE_SUSPENDED);
     job->caller = NULL;
     job->func = func;
     job->user_data = payload;
@@ -342,19 +342,11 @@ static int sched_worker_thread(void* payload) {
             continue;
         }
 
-        edge_coro_state_t expected = EDGE_CORO_STATE_READY;
-        bool claimed = atomic_compare_exchange_strong_explicit(
+        edge_coro_state_t expected = EDGE_CORO_STATE_SUSPENDED;
+        bool claimed = claimed = atomic_compare_exchange_strong_explicit(
             &job->state, &expected, EDGE_CORO_STATE_RUNNING,
             memory_order_acq_rel, memory_order_acquire
         );
-
-        if (!claimed) {
-            expected = EDGE_CORO_STATE_SUSPENDED;
-            claimed = atomic_compare_exchange_strong_explicit(
-                &job->state, &expected, EDGE_CORO_STATE_RUNNING,
-                memory_order_acq_rel, memory_order_acquire
-            );
-        }
 
         if (!claimed) {
             // Job is in an invalid state or already being processed
