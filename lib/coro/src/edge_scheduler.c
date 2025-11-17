@@ -97,15 +97,16 @@ struct edge_sched_thread_context {
 static _Thread_local struct edge_sched_thread_context thread_context = { 0 };
 
 static void edge_sched_init_thread_context(worker_thread_t* worker) {
-    if (atomic_load(&thread_context.main_job.state) == 0) {
+    if (atomic_load_explicit(&thread_context.main_job.state, memory_order_acquire) == 0) {
         thread_context.scheduler = worker->scheduler;
-        atomic_init(&thread_context.main_job.state, EDGE_CORO_STATE_RUNNING);
         thread_context.main_job.context = &thread_context.main_context;
         thread_context.current_job = &thread_context.main_job;
         thread_context.thread_id = worker->thread_id;
 
         thread_context.main_job.tsan_fiber = __tsan_create_fiber(0);
         __tsan_switch_to_fiber(thread_context.main_job.tsan_fiber, 0);
+
+        atomic_store_explicit(&thread_context.main_job.state, EDGE_CORO_STATE_RUNNING, memory_order_release);
     }
 }
 
@@ -208,21 +209,21 @@ static edge_job_t* edge_job_create(edge_sched_t* sched, edge_coro_fn func, void*
 
     /* Align stack (grows downward, so align the top) */
     void* stack_top = (char*)job->stack + EDGE_CORO_STACK_SIZE;
-    stack_top = (void*)((uintptr_t)stack_top & ~(EDGE_CORO_STACK_ALIGN - 1));
 
 #if defined(__x86_64__)
 
 #ifdef _WIN32
     /* Windows x64 ABI: Reserve 32 bytes shadow space + 8 bytes for alignment */
-    stack_top = (char*)stack_top - 40;
+    stack_top = (void*)(((uintptr_t)stack_top - 40) & ~15UL);
 #else
-    /* 128 byte scratch space for red zone. */
-    stack_top = (char*)stack_top - 128;
+    stack_top = (void*)(((uintptr_t)stack_top - 8) & ~15UL);
 #endif
 
     job->context->rip = edge_job_main;
     job->context->rsp = stack_top;
 #elif defined(__aarch64__)
+    stack_top = (void*)(((uintptr_t)stack_top - 8) & ~15UL);
+
     job->context->lr = edge_job_main;
     job->context->sp = stack_top;
 #endif
@@ -280,12 +281,17 @@ static edge_job_t* edge_sched_pick_job(edge_sched_t* sched) {
         if (edge_queue_dequeue(sched->queues[i], &job_addr)) {
             job = (edge_job_t*)job_addr;
             atomic_store_explicit(&job->in_queue, false, memory_order_release);
-            atomic_fetch_sub_explicit(&sched->queued_jobs, 1, memory_order_relaxed);
+            atomic_fetch_sub_explicit(&sched->queued_jobs, 1, memory_order_release);
             break;
         }
     }
 
     edge_mtx_unlock(&sched->queue_mutex);
+
+    if (job) {
+        atomic_thread_fence(memory_order_acquire);
+    }
+
     return job;
 }
 
@@ -294,18 +300,24 @@ static void edge_sched_enqueue_job(edge_sched_t* sched, edge_job_t* job) {
         return;
     }
 
+    bool expected = false;
+    if (!atomic_compare_exchange_strong_explicit(&job->in_queue, &expected, true,
+        memory_order_acq_rel, memory_order_acquire)) {
+        return;
+    }
+
     edge_mtx_lock(&sched->queue_mutex);
 
-    bool already_queued = atomic_load(&job->in_queue);
-    if (!already_queued) {
-        uintptr_t job_addr = (uintptr_t)job;
-        bool enqueued = edge_queue_enqueue(sched->queues[job->priority], &job_addr);
+    uintptr_t job_addr = (uintptr_t)job;
+    bool enqueued = edge_queue_enqueue(sched->queues[job->priority], &job_addr);
 
-        if (enqueued) {
-            atomic_store_explicit(&job->in_queue, true, memory_order_release);
-            atomic_fetch_add_explicit(&sched->queued_jobs, 1, memory_order_relaxed);
-            edge_cnd_broadcast(&sched->queue_cond);
-        }
+    if (enqueued) {
+        atomic_fetch_add_explicit(&sched->queued_jobs, 1, memory_order_release);
+        edge_cnd_broadcast(&sched->queue_cond);
+    }
+    else {
+        /* Failed to enqueue, reset flag */
+        atomic_store_explicit(&job->in_queue, false, memory_order_release);
     }
 
     edge_mtx_unlock(&sched->queue_mutex);
@@ -327,7 +339,7 @@ static int sched_worker_thread(void* payload) {
             /* Wait for work */
             edge_mtx_lock(&sched->queue_mutex);
 
-            if (atomic_load_explicit(&sched->queued_jobs, memory_order_relaxed) == 0) {
+            if (atomic_load_explicit(&sched->queued_jobs, memory_order_acquire) == 0) {
                 struct timespec ts;
                 timespec_get(&ts, TIME_UTC);
                 ts.tv_nsec += 10000000; /* 10ms */
@@ -343,29 +355,31 @@ static int sched_worker_thread(void* payload) {
         }
 
         edge_coro_state_t expected = EDGE_CORO_STATE_SUSPENDED;
-        bool claimed = claimed = atomic_compare_exchange_strong_explicit(
+        bool claimed = atomic_compare_exchange_strong_explicit(
             &job->state, &expected, EDGE_CORO_STATE_RUNNING,
             memory_order_acq_rel, memory_order_acquire
         );
 
         if (!claimed) {
-            // Job is in an invalid state or already being processed
-            fprintf(stderr, "Warning: Could not claim job (state=%d)\n", expected);
-            edge_job_destroy(sched, job);
-
-            size_t prev_active = atomic_fetch_sub_explicit(&sched->active_jobs, 1, memory_order_acq_rel);
+            /* Job is in an invalid state or already being processed by another thread.
+             * This should be rare but can happen during shutdown or if the job was
+             * incorrectly queued multiple times. We must NOT destroy the job here
+             * because another thread might still be executing it (if state is RUNNING)
+             * or it might have already been destroyed (if state is FINISHED).
+             * Just log the issue and continue. */
+            fprintf(stderr, "Warning: Could not claim job (state=%d), skipping\n", expected);
             atomic_fetch_add_explicit(&sched->jobs_failed, 1, memory_order_relaxed);
 
-            if (prev_active == 1) {
-                edge_mtx_lock(&sched->queue_mutex);
-                edge_cnd_broadcast(&sched->queue_cond);
-                edge_mtx_unlock(&sched->queue_mutex);
-            }
-            continue;
+            /* If the job was FINISHED, the owning thread already decremented active_jobs.
+             * If it was RUNNING, another thread owns it and will handle cleanup.
+             * In either case, we should not touch active_jobs or destroy the job. */
+
         }
 
         edge_job_t* caller = edge_sched_current_job();
         job->caller = caller;
+
+        atomic_thread_fence(memory_order_release);
 
         atomic_store_explicit(&caller->state, EDGE_CORO_STATE_SUSPENDED, memory_order_release);
 
@@ -380,6 +394,7 @@ static int sched_worker_thread(void* payload) {
 
         edge_coro_state_t job_state = atomic_load_explicit(&job->state, memory_order_acquire);
         if (job_state == EDGE_CORO_STATE_FINISHED) {
+            atomic_store_explicit(&job->in_queue, true, memory_order_release);
             edge_job_destroy(sched, job);
 
             size_t prev_active = atomic_fetch_sub_explicit(&sched->active_jobs, 1, memory_order_acq_rel);
@@ -599,10 +614,12 @@ void edge_sched_schedule_job(edge_sched_t* sched, edge_coro_fn func, void* paylo
 }
 
 edge_job_t* edge_sched_current_job(void) {
+    atomic_thread_fence(memory_order_acquire);
     return thread_context.current_job;
 }
 
 int edge_sched_current_thread_id(void) {
+    atomic_thread_fence(memory_order_acquire);
     return thread_context.thread_id;
 }
 
@@ -623,6 +640,8 @@ void edge_sched_run(edge_sched_t* sched) {
 }
 
 void edge_sched_yield(void) {
+    atomic_thread_fence(memory_order_acquire);
+
     edge_job_t* job = thread_context.current_job;
 
     edge_coro_state_t job_state = atomic_load_explicit(&job->state, memory_order_acquire);
