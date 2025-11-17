@@ -599,18 +599,10 @@ void edge_sched_schedule_job(edge_sched_t* sched, edge_coro_fn func, void* paylo
 }
 
 edge_job_t* edge_sched_current_job(void) {
-    if (atomic_load(&thread_context.main_job.state) == 0) {
-        return NULL;
-    }
-
     return thread_context.current_job;
 }
 
 int edge_sched_current_thread_id(void) {
-    if (atomic_load(&thread_context.main_job.state) == 0) {
-        return -1;
-    }
-
     return thread_context.thread_id;
 }
 
