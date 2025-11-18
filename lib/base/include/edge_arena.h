@@ -19,10 +19,16 @@ extern "C" {
 		EDGE_ARENA_PROT_EXEC = 0x04,
 	} edge_arena_prot_t;
 
+	typedef enum edge_arena_guard {
+		EDGE_ARENA_GUARD_NONE,
+		EDGE_ARENA_GUARD_PUSH_FRONT,
+		EDGE_ARENA_GUARD_PUSH_BACK
+	} edge_arena_guard_t;
+
 	typedef struct edge_allocator edge_allocator_t;
 	typedef struct edge_arena edge_arena_t;
 
-	edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size, bool guard_page);
+	edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size);
 
 	void edge_arena_destroy(edge_arena_t* arena);
 

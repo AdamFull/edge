@@ -24,7 +24,6 @@ struct edge_arena {
 	size_t committed;
 	size_t offset;
 	size_t page_size;
-	bool has_guard;
 
 	edge_mtx_t mtx;
 };
@@ -165,7 +164,7 @@ static bool virt_protect(void* addr, size_t size, edge_arena_prot_t prot) {
 	return true;
 }
 
-edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size, bool guard_page) {
+edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size) {
 	if (!allocator) {
 		return NULL;
 	}
@@ -176,10 +175,6 @@ edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size, bool g
 
 	size_t page_size = get_page_size();
 	size = align_up(size, page_size);
-
-	if (guard_page) {
-		size += page_size;
-	}
 
 	void* base = NULL;
 	if (!virt_reserve(&base, size)) {
@@ -198,17 +193,8 @@ edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size, bool g
 	arena->committed = 0;
 	arena->offset = 0;
 	arena->page_size = page_size;
-	arena->has_guard = guard_page;
 
 	edge_mtx_init(&arena->mtx, edge_mtx_recursive);
-
-	if (guard_page) {
-		void* guard_addr = ptr_add(arena->base, arena->reserved - arena->page_size);
-		if (!edge_arena_protect(arena, guard_addr, arena->page_size, EDGE_ARENA_PROT_NONE)) {
-			edge_arena_destroy(arena);
-			return NULL;
-		}
-	}
 
 	return arena;
 }
@@ -255,10 +241,6 @@ static bool arena_ensure_committed_locked(edge_arena_t* arena, size_t required_b
 	}
 
 	size_t max_size = arena->reserved;
-	if (arena->has_guard) {
-		max_size -= arena->page_size;
-	}
-
 	if (required_bytes > max_size) {
 		return false;
 	}
@@ -303,10 +285,6 @@ void* edge_arena_alloc_ex(edge_arena_t* arena, size_t size, size_t alignment) {
 	}
 
 	size_t max_size = arena->reserved;
-	if (arena->has_guard) {
-		max_size -= arena->page_size;
-	}
-
 	size_t new_offset = aligned_offset + size;
 	if (new_offset > max_size) {
 		edge_mtx_unlock(&arena->mtx);
