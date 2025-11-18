@@ -1,6 +1,5 @@
 #include "edge_scheduler.h"
-#include "edge_coro_internal.h"
-#include "edge_threads.h"
+#include "edge_fiber.h"
 
 #include <stdatomic.h>
 #include <stdio.h>
@@ -8,6 +7,7 @@
 
 #include <edge_allocator.h>
 #include <edge_arena.h>
+#include <edge_threads.h>
 #include <edge_list.h>
 #include <edge_queue.h>
 #include <edge_vector.h>
@@ -19,38 +19,14 @@
 // stacks of different sizes and immediately place them in free lists. 
 // For example, there could be small, medium, and large stacks.
 
-#ifdef ASAN_ENABLED
-extern void __sanitizer_start_switch_fiber(void** fake_stack_save, const void* bottom, size_t size);
-extern void __sanitizer_finish_switch_fiber(void* fake_stack_save, const void** bottom_old, size_t* size_old);
-#else
-void __sanitizer_start_switch_fiber(void** fake_stack_save, const void* bottom, size_t size) {}
-void __sanitizer_finish_switch_fiber(void* fake_stack_save, const void** bottom_old, size_t* size_old) {}
-#endif
-
-#ifdef TSAN_ENABLED
-// TSAN fiber API
-extern void* __tsan_create_fiber(unsigned flags);
-extern void __tsan_destroy_fiber(void* fiber);
-extern void __tsan_switch_to_fiber(void* fiber, unsigned flags);
-#else
-void* __tsan_create_fiber(unsigned flags) { return NULL; }
-void __tsan_destroy_fiber(void* fiber) {}
-void __tsan_switch_to_fiber(void* fiber, unsigned flags) {}
-#endif
-
 struct edge_job {
-    struct edge_coro_context* context;
+    edge_fiber_context_t* context;
     edge_coro_fn func;
     void* user_data;
-    void* stack;
     _Atomic(edge_coro_state_t) state;
     edge_job_t* caller;
 
     edge_sched_priority_t priority;
-    atomic_bool in_queue;
-
-    // TODO: Needed only for debugging
-    void* tsan_fiber;
 };
 
 typedef struct worker_thread {
@@ -89,7 +65,7 @@ struct edge_sched_thread_context {
 
     edge_job_t* current_job;
     edge_job_t main_job;
-    struct edge_coro_context main_context;
+    edge_fiber_context_t* main_context;
 
     int thread_id;
 };
@@ -97,17 +73,13 @@ struct edge_sched_thread_context {
 static _Thread_local struct edge_sched_thread_context thread_context = { 0 };
 
 static void edge_sched_init_thread_context(worker_thread_t* worker) {
-    if (atomic_load_explicit(&thread_context.main_job.state, memory_order_acquire) == 0) {
-        thread_context.scheduler = worker->scheduler;
-        thread_context.main_job.context = &thread_context.main_context;
-        thread_context.current_job = &thread_context.main_job;
-        thread_context.thread_id = worker->thread_id;
+    thread_context.scheduler = worker->scheduler;
+    thread_context.main_context = edge_fiber_context_create(worker->scheduler->allocator, NULL, NULL, 0);
+    thread_context.main_job.context = thread_context.main_context;
+    thread_context.current_job = &thread_context.main_job;
+    thread_context.thread_id = worker->thread_id;
 
-        thread_context.main_job.tsan_fiber = __tsan_create_fiber(0);
-        __tsan_switch_to_fiber(thread_context.main_job.tsan_fiber, 0);
-
-        atomic_store_explicit(&thread_context.main_job.state, EDGE_CORO_STATE_RUNNING, memory_order_release);
-    }
+    atomic_store_explicit(&thread_context.main_job.state, EDGE_CORO_STATE_RUNNING, memory_order_release);
 }
 
 static void* edge_sched_alloc_stack_ptr(edge_sched_t* sched) {
@@ -120,7 +92,7 @@ static void* edge_sched_alloc_stack_ptr(edge_sched_t* sched) {
     uintptr_t ptr_addr = 0;
     if (!edge_list_pop_back(sched->free_stacks, &ptr_addr)) {
         edge_mtx_unlock(&sched->stack_mutex);
-        return edge_arena_alloc_ex(sched->protected_arena, EDGE_CORO_STACK_SIZE, EDGE_CORO_STACK_ALIGN);
+        return edge_arena_alloc_ex(sched->protected_arena, EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
     }
     edge_mtx_unlock(&sched->stack_mutex);
 
@@ -140,24 +112,6 @@ static void edge_sched_free_stack_ptr(edge_sched_t* sched, void* ptr) {
     edge_mtx_unlock(&sched->stack_mutex);
 }
 
-static void edge_job_swap_context(edge_job_t* from, edge_job_t* to) {
-    if (!from || !to) {
-        return;
-    }
-
-    __tsan_switch_to_fiber(to->tsan_fiber, 0);
-
-    void* fake_stack;
-    __sanitizer_start_switch_fiber(&fake_stack, to->stack, EDGE_CORO_STACK_SIZE);
-
-    /* Swap to job */
-    atomic_signal_fence(memory_order_release);
-    edge_coro_swap_context(from->context, to->context);
-    atomic_signal_fence(memory_order_acquire);
-
-    __sanitizer_finish_switch_fiber(fake_stack, NULL, 0);
-}
-
 static void edge_job_main(void) {
     edge_job_t* job = edge_sched_current_job();
 
@@ -170,7 +124,7 @@ static void edge_job_main(void) {
 
     /* Return to caller */
     if (job && job->caller) {
-        edge_job_swap_context(job, job->caller);
+        edge_fiber_context_switch(job->context, job->caller->context);
     }
 
     /* Should never reach here */
@@ -187,7 +141,12 @@ static edge_job_t* edge_job_create(edge_sched_t* sched, edge_coro_fn func, void*
         return NULL;
     }
 
-    job->context = (struct edge_coro_context*)edge_allocator_calloc(sched->allocator, 1, sizeof(struct edge_coro_context));
+    void* stack_ptr = edge_sched_alloc_stack_ptr(sched);
+    if (!stack_ptr) {
+        goto failed;
+    }
+
+    job->context = edge_fiber_context_create(sched->allocator, edge_job_main, stack_ptr, EDGE_FIBER_STACK_SIZE);
     if (!job->context) {
         goto failed;
     }
@@ -197,46 +156,18 @@ static edge_job_t* edge_job_create(edge_sched_t* sched, edge_coro_fn func, void*
     job->func = func;
     job->user_data = payload;
 
-    job->tsan_fiber = __tsan_create_fiber(0);
-
     job->priority = EDGE_SCHED_PRIORITY_LOW;
-    atomic_init(&job->in_queue, false);
-
-    job->stack = edge_sched_alloc_stack_ptr(sched);
-    if (!job->stack) {
-        goto failed;
-    }
-
-    /* Align stack (grows downward, so align the top) */
-    void* stack_top = (char*)job->stack + EDGE_CORO_STACK_SIZE;
-
-#if defined(__x86_64__)
-
-#ifdef _WIN32
-    /* Windows x64 ABI: Reserve 32 bytes shadow space + 8 bytes for alignment */
-    stack_top = (void*)(((uintptr_t)stack_top - 40) & ~15UL);
-#else
-    stack_top = (void*)(((uintptr_t)stack_top - 8) & ~15UL);
-#endif
-
-    job->context->rip = edge_job_main;
-    job->context->rsp = stack_top;
-#elif defined(__aarch64__)
-    stack_top = (void*)(((uintptr_t)stack_top - 8) & ~15UL);
-
-    job->context->lr = edge_job_main;
-    job->context->sp = stack_top;
-#endif
 
     return job;
 
 failed:
     if (job) {
-        if (job->tsan_fiber) {
-            __tsan_destroy_fiber(job->tsan_fiber);
-        }
-
         if (job->context) {
+            void* stack_ptr = edge_fiber_get_stack_ptr(job->context);
+            if (stack_ptr) {
+                edge_sched_free_stack_ptr(sched, stack_ptr);
+            }
+
             edge_allocator_free(sched->allocator, job->context);
         }
 
@@ -251,15 +182,12 @@ static void edge_job_destroy(edge_sched_t* sched, edge_job_t* job) {
         return;
     }
 
-    if (job->tsan_fiber) {
-        __tsan_destroy_fiber(job->tsan_fiber);
-    }
-
-    if (job->stack) {
-        edge_sched_free_stack_ptr(sched, job->stack);
-    }
-
     if (job->context) {
+        void* stack_ptr = edge_fiber_get_stack_ptr(job->context);
+        if (stack_ptr) {
+            edge_sched_free_stack_ptr(sched, stack_ptr);
+        }
+
         edge_allocator_free(sched->allocator, job->context);
     }
 
@@ -280,7 +208,6 @@ static edge_job_t* edge_sched_pick_job(edge_sched_t* sched) {
         uintptr_t job_addr;
         if (edge_queue_dequeue(sched->queues[i], &job_addr)) {
             job = (edge_job_t*)job_addr;
-            atomic_store_explicit(&job->in_queue, false, memory_order_release);
             atomic_fetch_sub_explicit(&sched->queued_jobs, 1, memory_order_release);
             break;
         }
@@ -288,21 +215,11 @@ static edge_job_t* edge_sched_pick_job(edge_sched_t* sched) {
 
     edge_mtx_unlock(&sched->queue_mutex);
 
-    if (job) {
-        atomic_thread_fence(memory_order_acquire);
-    }
-
     return job;
 }
 
 static void edge_sched_enqueue_job(edge_sched_t* sched, edge_job_t* job) {
     if (!sched || !job) {
-        return;
-    }
-
-    bool expected = false;
-    if (!atomic_compare_exchange_strong_explicit(&job->in_queue, &expected, true,
-        memory_order_acq_rel, memory_order_acquire)) {
         return;
     }
 
@@ -314,10 +231,6 @@ static void edge_sched_enqueue_job(edge_sched_t* sched, edge_job_t* job) {
     if (enqueued) {
         atomic_fetch_add_explicit(&sched->queued_jobs, 1, memory_order_release);
         edge_cnd_broadcast(&sched->queue_cond);
-    }
-    else {
-        /* Failed to enqueue, reset flag */
-        atomic_store_explicit(&job->in_queue, false, memory_order_release);
     }
 
     edge_mtx_unlock(&sched->queue_mutex);
@@ -361,32 +274,19 @@ static int sched_worker_thread(void* payload) {
         );
 
         if (!claimed) {
-            /* Job is in an invalid state or already being processed by another thread.
-             * This should be rare but can happen during shutdown or if the job was
-             * incorrectly queued multiple times. We must NOT destroy the job here
-             * because another thread might still be executing it (if state is RUNNING)
-             * or it might have already been destroyed (if state is FINISHED).
-             * Just log the issue and continue. */
-            fprintf(stderr, "Warning: Could not claim job (state=%d), skipping\n", expected);
             atomic_fetch_add_explicit(&sched->jobs_failed, 1, memory_order_relaxed);
-
-            /* If the job was FINISHED, the owning thread already decremented active_jobs.
-             * If it was RUNNING, another thread owns it and will handle cleanup.
-             * In either case, we should not touch active_jobs or destroy the job. */
-
+            continue;
         }
 
         edge_job_t* caller = edge_sched_current_job();
         job->caller = caller;
-
-        atomic_thread_fence(memory_order_release);
 
         atomic_store_explicit(&caller->state, EDGE_CORO_STATE_SUSPENDED, memory_order_release);
 
         edge_job_t* volatile target_job = job;
         thread_context.current_job = target_job;
 
-        edge_job_swap_context(caller, job);
+        edge_fiber_context_switch(caller->context, job->context);
 
         /* When we return here, job has yielded or finished */
         thread_context.current_job = caller;
@@ -394,7 +294,6 @@ static int sched_worker_thread(void* payload) {
 
         edge_coro_state_t job_state = atomic_load_explicit(&job->state, memory_order_acquire);
         if (job_state == EDGE_CORO_STATE_FINISHED) {
-            atomic_store_explicit(&job->in_queue, true, memory_order_release);
             edge_job_destroy(sched, job);
 
             size_t prev_active = atomic_fetch_sub_explicit(&sched->active_jobs, 1, memory_order_acq_rel);
@@ -427,7 +326,7 @@ edge_sched_t* edge_sched_create(edge_allocator_t* allocator) {
 
     sched->allocator = allocator;
 
-    sched->protected_arena = edge_arena_create(allocator, 0, false);
+    sched->protected_arena = edge_arena_create(allocator, 0);
     if (!sched->protected_arena) {
         goto failed;
     }
@@ -614,12 +513,10 @@ void edge_sched_schedule_job(edge_sched_t* sched, edge_coro_fn func, void* paylo
 }
 
 edge_job_t* edge_sched_current_job(void) {
-    atomic_thread_fence(memory_order_acquire);
     return thread_context.current_job;
 }
 
 int edge_sched_current_thread_id(void) {
-    atomic_thread_fence(memory_order_acquire);
     return thread_context.thread_id;
 }
 
@@ -640,8 +537,6 @@ void edge_sched_run(edge_sched_t* sched) {
 }
 
 void edge_sched_yield(void) {
-    atomic_thread_fence(memory_order_acquire);
-
     edge_job_t* job = thread_context.current_job;
 
     edge_coro_state_t job_state = atomic_load_explicit(&job->state, memory_order_acquire);
@@ -654,10 +549,11 @@ void edge_sched_yield(void) {
         return;
     }
 
+    // TODO: Add helper function bool edge_job_state_exchange(job, expected_state, new_state)
     atomic_store_explicit(&job->state, EDGE_CORO_STATE_SUSPENDED, memory_order_release);
     atomic_store_explicit(&caller->state, EDGE_CORO_STATE_RUNNING, memory_order_release);
 
-    edge_job_swap_context(job, caller);
+    edge_fiber_context_switch(job->context, caller->context);
 
     /* When resumed, we continue here */
     atomic_store_explicit(&job->state, EDGE_CORO_STATE_RUNNING, memory_order_release);

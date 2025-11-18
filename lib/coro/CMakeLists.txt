@@ -16,13 +16,13 @@ option(EDGE_CORO_BUILD_EXAMPLES "Build examples" ON)
 set(EDGE_COROUTINE_SOURCES
     "src/edge_coro.c"
     "src/edge_fiber.c"
-#    "src/edge_scheduler.c"
+    "src/edge_scheduler.c"
 )
 
 set(EDGE_COROUTINE_HEADERS
     "include/edge_coro.h"
     "include/edge_fiber.h"
-#    "include/edge_scheduler.h"
+    "include/edge_scheduler.h"
 )
 
 # Determine architecture and select appropriate assembly file
