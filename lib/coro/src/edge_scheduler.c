@@ -174,7 +174,7 @@ failed:
                 edge_sched_free_stack_ptr(sched, stack_ptr);
             }
 
-            edge_allocator_free(sched->allocator, job->context);
+            edge_fiber_context_destroy(sched->allocator, job->context);
         }
 
         edge_allocator_free(sched->allocator, job);
@@ -194,7 +194,7 @@ static void edge_job_destroy(edge_sched_t* sched, edge_job_t* job) {
             edge_sched_free_stack_ptr(sched, stack_ptr);
         }
 
-        edge_allocator_free(sched->allocator, job->context);
+        edge_fiber_context_destroy(sched->allocator, job->context);
     }
 
     edge_allocator_free(sched->allocator, job);
