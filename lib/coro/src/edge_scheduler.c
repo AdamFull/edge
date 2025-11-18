@@ -82,6 +82,12 @@ static void edge_sched_init_thread_context(worker_thread_t* worker) {
     atomic_store_explicit(&thread_context.main_job.state, EDGE_CORO_STATE_RUNNING, memory_order_release);
 }
 
+static void edge_sched_shutdown_thread_contex() {
+    if (thread_context.main_context) {
+        edge_fiber_context_destroy(thread_context.scheduler->allocator, thread_context.main_context);
+    }
+}
+
 static void* edge_sched_alloc_stack_ptr(edge_sched_t* sched) {
     if (!sched) {
         return NULL;
@@ -310,6 +316,8 @@ static int sched_worker_thread(void* payload) {
             edge_sched_enqueue_job(sched, job);
         }
     }
+
+    edge_sched_shutdown_thread_contex();
 
     return 0;
 }
