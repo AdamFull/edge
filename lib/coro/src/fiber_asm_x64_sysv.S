@@ -1,11 +1,22 @@
 #if defined(__x86_64__) && !defined(_WIN32)
 
 .text
-.globl edge_coro_swap_context
+.globl fiber_swap_context_internal
+.globl fiber_main
+.extern fiber_init
 
-/* void edge_coro_swap_context(edge_coro_context_t* from, edge_coro_context_t* to) */
+/* void fiber_main() */
+fiber_main:
+    movq 0(%rsp), %rbx
+    movq 8(%rsp), %r12
+    addq $16, %rsp
+    callq fiber_init
+    pushq %rbx
+    jmpq *%r12
+
+/* void fiber_swap_context_internal(edge_fiber_context_t* from, edge_fiber_context_t* to) */
 /* System V ABI: rdi = from, rsi = to */
-edge_coro_swap_context:
+fiber_swap_context_internal:
     /* Save return address */
     movq (%rsp), %rax
     movq %rax, 0(%rdi)       /* Save RIP */
@@ -36,6 +47,7 @@ edge_coro_swap_context:
     movq 0(%rsi), %rax       /* Load RIP */
     jmpq *%rax               /* Jump to RIP */
 
-.size edge_coro_swap_context, .-edge_coro_swap_context
+.size fiber_swap_context_internal, .-fiber_swap_context_internal
+.size fiber_main, .-fiber_main
 
 #endif

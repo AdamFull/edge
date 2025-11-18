@@ -1,15 +1,26 @@
 #if defined(__aarch64__)
 
 .text
-.globl edge_coro_swap_context
-.type edge_coro_swap_context, %function
+.globl fiber_swap_context_internal
+.globl fiber_main
+.type fiber_swap_context_internal, %function
+.type fiber_main, %function
+.extern fiber_init
 
-/* void edge_coro_swap_context(edge_coro_context_t* from, edge_coro_context_t* to) */
+/* void fiber_main() */
+fiber_main:
+    ldp x0, x1, [sp], #16
+    mov x19, x1
+    mov x20, x0
+    bl fiber_init
+    br x19
+
+/* void fiber_swap_context_internal(edge_fiber_context_t* from, edge_fiber_context_t* to) */
 /* AAPCS64: 
  * x0 = from context
  * x1 = to context
  */
-edge_coro_swap_context:
+fiber_swap_context_internal:
     /* Save current context to 'from' (x0) */
     mov x9, sp
     stp x30, x9,  [x0, #0]    /* Save LR, SP */
@@ -45,6 +56,7 @@ edge_coro_swap_context:
     /* Return to saved LR */
     ret
 
-.size edge_coro_swap_context, .-edge_coro_swap_context
+.size fiber_swap_context_internal, .-fiber_swap_context_internal
+.size fiber_main, .-fiber_main
 
 #endif

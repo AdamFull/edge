@@ -15,26 +15,28 @@ option(EDGE_CORO_BUILD_EXAMPLES "Build examples" ON)
 # Library source files
 set(EDGE_COROUTINE_SOURCES
     "src/edge_coro.c"
-    "src/edge_scheduler.c"
+    "src/edge_fiber.c"
+#    "src/edge_scheduler.c"
 )
 
 set(EDGE_COROUTINE_HEADERS
     "include/edge_coro.h"
-    "include/edge_scheduler.h"
-    "src/edge_coro_internal.h"
+    "include/edge_fiber.h"
+#    "include/edge_scheduler.h"
 )
 
 # Determine architecture and select appropriate assembly file
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     set(EDGE_CORO_ARCH "x86_64")
     if(WIN32)
-        set(EDGE_COROUTINE_SOURCES ${EDGE_COROUTINE_SOURCES} "src/edge_coro_asm_x64_win.S")
+        set(EDGE_COROUTINE_SOURCES ${EDGE_COROUTINE_SOURCES} "src/fiber_asm_x64_win.S")
+        set_source_files_properties("src/fiber_asm_x64_win.S" PROPERTIES LANGUAGE ASM)
     else()
-        set(EDGE_COROUTINE_SOURCES ${EDGE_COROUTINE_SOURCES} "src/edge_coro_asm_x64_sysv.S")
+        set(EDGE_COROUTINE_SOURCES ${EDGE_COROUTINE_SOURCES} "src/fiber_asm_x64_sysv.S")
     endif()
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
     set(EDGE_CORO_ARCH "aarch64")
-    set(EDGE_COROUTINE_SOURCES ${EDGE_COROUTINE_SOURCES} "src/edge_coro_asm_aarch64.S")
+    set(EDGE_COROUTINE_SOURCES ${EDGE_COROUTINE_SOURCES} "src/fiber_asm_aarch64.S")
 else()
     message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
 endif()

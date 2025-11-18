@@ -5,20 +5,13 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifndef EDGE_CORO_STACK_SIZE
-#define EDGE_CORO_STACK_SIZE (1024 * 1024)
-#endif
-
-#ifndef EDGE_CORO_STACK_ALIGN
-#define EDGE_CORO_STACK_ALIGN 16
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-	/* Forward declarations */
 	typedef struct edge_allocator edge_allocator_t;
+
+	/* Forward declarations */
 	typedef struct edge_coro edge_coro_t;
 
 	/* Coroutine function signature */
