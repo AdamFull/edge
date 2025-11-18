@@ -133,7 +133,7 @@ edge_fiber_context_t* edge_fiber_context_create(edge_allocator_t* allocator, edg
     ctx->tsan_fiber = __tsan_create_fiber(0);
 
     // For main fiber
-    if (!entry && !entry) {
+    if (!entry && !stack_ptr) {
         __tsan_switch_to_fiber(ctx->tsan_fiber, 0);
     }
 
