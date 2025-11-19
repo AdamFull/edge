@@ -6,7 +6,11 @@
 #include <stdbool.h>
 
 #ifndef EDGE_FIBER_STACK_SIZE
+#if TSAN_ENABLED
+#define EDGE_FIBER_STACK_SIZE ((512 + 64) * 1024)
+#else
 #define EDGE_FIBER_STACK_SIZE (64 * 1024)
+#endif
 #endif
 
 #ifndef EDGE_FIBER_STACK_ALIGN
