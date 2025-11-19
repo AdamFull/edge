@@ -95,7 +95,6 @@ extern void fiber_main();
 
 void fiber_init(void) {
     atomic_signal_fence(memory_order_acquire);
-    __sanitizer_finish_switch_fiber(NULL, NULL, NULL);
 }
 
 void fiber_abort(void) {
