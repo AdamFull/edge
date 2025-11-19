@@ -123,9 +123,9 @@ static void edge_job_main(void) {
 
     /* Run the job function */
     if (job && job->func) {
-        job->state, EDGE_CORO_STATE_RUNNING;
+        job->state = EDGE_CORO_STATE_RUNNING;
         job->func(job->user_data);
-        job->state, EDGE_CORO_STATE_FINISHED;
+        job->state = EDGE_CORO_STATE_FINISHED;
     }
 
     /* Return to caller */
