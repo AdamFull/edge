@@ -11,6 +11,8 @@ extern "C" {
 	typedef struct edge_job edge_job_t;
 	typedef struct edge_sched edge_sched_t;
 
+	typedef struct edge_sched_event edge_sched_event_t;
+
 	typedef enum {
 		EDGE_SCHED_PRIORITY_LOW = 0,
 		EDGE_SCHED_PRIORITY_NORMAL = 1,
@@ -18,6 +20,12 @@ extern "C" {
 		EDGE_SCHED_PRIORITY_CRITICAL = 3,
 		EDGE_SCHED_PRIORITY_COUNT
 	} edge_sched_priority_t;
+
+	edge_sched_event_t* edge_sched_event_create(void);
+	void edge_sched_event_destroy(edge_sched_event_t* event);
+    void edge_sched_event_wait(edge_sched_event_t* event);
+    void edge_sched_event_signal(edge_sched_event_t* event);
+    bool edge_sched_event_signalled(edge_sched_event_t* event);
 
 	edge_sched_t* edge_sched_create(edge_allocator_t* allocator);
 

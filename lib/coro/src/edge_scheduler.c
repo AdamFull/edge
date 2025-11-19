@@ -70,6 +70,10 @@ struct edge_sched_thread_context {
     int thread_id;
 };
 
+struct edge_sched_event {
+    atomic_bool done;
+};
+
 static _Thread_local struct edge_sched_thread_context thread_context = { 0 };
 
 static void edge_sched_init_thread_context(worker_thread_t* worker) {
@@ -86,6 +90,71 @@ static void edge_sched_shutdown_thread_contex() {
     if (thread_context.main_context) {
         edge_fiber_context_destroy(thread_context.scheduler->allocator, thread_context.main_context);
     }
+}
+
+edge_sched_event_t* edge_sched_event_create(void) {
+    edge_sched_t* sched = thread_context.scheduler;
+    if (!sched || !sched->allocator) {
+        return NULL;
+    }
+
+    edge_sched_event_t* event = (edge_sched_event_t*)edge_allocator_calloc(sched->allocator, 1, sizeof(edge_sched_event_t));
+    if (!event) {
+        return NULL;
+    }
+
+    atomic_init(&event->done, false);
+
+    return event;
+}
+
+void edge_sched_event_destroy(edge_sched_event_t* event) {
+    edge_sched_t* sched = thread_context.scheduler;
+    if (!sched || !sched->allocator) {
+        return;
+    }
+
+    if (!event) {
+        return;
+    }
+
+    edge_allocator_free(thread_context.scheduler->allocator, event);
+}
+
+void edge_sched_event_wait(edge_sched_event_t* event) {
+    if (!event) {
+        return;
+    }
+
+    edge_job_t* current_job = thread_context.current_job;
+    if (!current_job) {
+        return;
+    }
+
+    edge_sched_priority_t job_original_prio = current_job->priority;
+    current_job->priority = EDGE_SCHED_PRIORITY_LOW;
+
+    while (!atomic_load_explicit(&event->done, memory_order_acquire)) {
+        edge_sched_yield();
+    }
+
+    current_job->priority = job_original_prio;
+}
+
+void edge_sched_event_signal(edge_sched_event_t* event) {
+    if (!event) {
+        return;
+    }
+
+    atomic_store_explicit(&event->done, true, memory_order_release);
+}
+
+bool edge_sched_event_signalled(edge_sched_event_t* event) {
+    if (!event) {
+        return false;
+    }
+
+    return atomic_load_explicit(&event->done, memory_order_acquire);
 }
 
 static void* edge_sched_alloc_stack_ptr(edge_sched_t* sched) {
