@@ -1,4 +1,4 @@
-#include "edge_fiber.h"
+﻿#include "edge_fiber.h"
 
 #include <edge_allocator.h>
 
@@ -15,10 +15,12 @@ void __sanitizer_finish_switch_fiber(void* fake_stack_save, const void** bottom_
 
 #ifdef TSAN_ENABLED
 // TSAN fiber API
+extern void* __tsan_get_current_fiber(void);
 extern void* __tsan_create_fiber(unsigned flags);
 extern void __tsan_destroy_fiber(void* fiber);
 extern void __tsan_switch_to_fiber(void* fiber, unsigned flags);
 #else
+void* __tsan_get_current_fiber(void) { return NULL; }
 void* __tsan_create_fiber(unsigned flags) { return NULL; }
 void __tsan_destroy_fiber(void* fiber) {}
 void __tsan_switch_to_fiber(void* fiber, unsigned flags) {}
@@ -85,6 +87,7 @@ struct edge_fiber_context {
     size_t stack_size;
 
     void* tsan_fiber;
+    bool main_fiber;
 };
 
 extern void fiber_swap_context_internal(edge_fiber_context_t* from, edge_fiber_context_t* to);
@@ -130,11 +133,13 @@ edge_fiber_context_t* edge_fiber_context_create(edge_allocator_t* allocator, edg
 #endif
     }
 
-    ctx->tsan_fiber = __tsan_create_fiber(0);
-
     // For main fiber
     if (!entry && !stack_ptr) {
-        __tsan_switch_to_fiber(ctx->tsan_fiber, 0);
+        ctx->tsan_fiber = __tsan_get_current_fiber();
+        ctx->main_fiber = true;
+    }
+    else {
+        ctx->tsan_fiber = __tsan_create_fiber(0);
     }
 
     return ctx;
@@ -145,7 +150,7 @@ void edge_fiber_context_destroy(edge_allocator_t* allocator, edge_fiber_context_
 		return;
 	}
 
-    if (ctx->tsan_fiber) {
+    if (ctx->tsan_fiber && ctx->main_fiber) {
         __tsan_destroy_fiber(ctx->tsan_fiber);
     }
 
