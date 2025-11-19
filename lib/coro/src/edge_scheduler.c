@@ -23,7 +23,7 @@ struct edge_job {
     edge_fiber_context_t* context;
     edge_coro_fn func;
     void* user_data;
-    _Atomic(edge_coro_state_t) state;
+    edge_coro_state_t state;
     edge_job_t* caller;
 
     edge_sched_priority_t priority;
@@ -79,7 +79,7 @@ static void edge_sched_init_thread_context(worker_thread_t* worker) {
     thread_context.current_job = &thread_context.main_job;
     thread_context.thread_id = worker->thread_id;
 
-    atomic_store_explicit(&thread_context.main_job.state, EDGE_CORO_STATE_RUNNING, memory_order_release);
+    thread_context.main_job.state = EDGE_CORO_STATE_RUNNING;
 }
 
 static void edge_sched_shutdown_thread_contex() {
@@ -123,9 +123,9 @@ static void edge_job_main(void) {
 
     /* Run the job function */
     if (job && job->func) {
-        atomic_store_explicit(&job->state, EDGE_CORO_STATE_RUNNING, memory_order_release);
+        job->state, EDGE_CORO_STATE_RUNNING;
         job->func(job->user_data);
-        atomic_store_explicit(&job->state, EDGE_CORO_STATE_FINISHED, memory_order_release);
+        job->state, EDGE_CORO_STATE_FINISHED;
     }
 
     /* Return to caller */
@@ -157,7 +157,7 @@ static edge_job_t* edge_job_create(edge_sched_t* sched, edge_coro_fn func, void*
         goto failed;
     }
 
-    atomic_init(&job->state, EDGE_CORO_STATE_SUSPENDED);
+    job->state = EDGE_CORO_STATE_SUSPENDED;
     job->caller = NULL;
     job->func = func;
     job->user_data = payload;
@@ -198,6 +198,14 @@ static void edge_job_destroy(edge_sched_t* sched, edge_job_t* job) {
     }
 
     edge_allocator_free(sched->allocator, job);
+}
+
+static bool edge_job_state_update(edge_job_t* job, edge_coro_state_t expected_state, edge_coro_state_t new_state) {
+    if (job->state == expected_state) {
+        job->state = new_state;
+        return true;
+    }
+    return false;
 }
 
 static edge_job_t* edge_sched_pick_job(edge_sched_t* sched) {
@@ -273,12 +281,7 @@ static int sched_worker_thread(void* payload) {
             continue;
         }
 
-        edge_coro_state_t expected = EDGE_CORO_STATE_SUSPENDED;
-        bool claimed = atomic_compare_exchange_strong_explicit(
-            &job->state, &expected, EDGE_CORO_STATE_RUNNING,
-            memory_order_acq_rel, memory_order_acquire
-        );
-
+        bool claimed = edge_job_state_update(job, EDGE_CORO_STATE_SUSPENDED, EDGE_CORO_STATE_RUNNING);
         if (!claimed) {
             atomic_fetch_add_explicit(&sched->jobs_failed, 1, memory_order_relaxed);
             continue;
@@ -287,7 +290,7 @@ static int sched_worker_thread(void* payload) {
         edge_job_t* caller = edge_sched_current_job();
         job->caller = caller;
 
-        atomic_store_explicit(&caller->state, EDGE_CORO_STATE_SUSPENDED, memory_order_release);
+        caller->state = EDGE_CORO_STATE_SUSPENDED;
 
         edge_job_t* volatile target_job = job;
         thread_context.current_job = target_job;
@@ -296,9 +299,9 @@ static int sched_worker_thread(void* payload) {
 
         /* When we return here, job has yielded or finished */
         thread_context.current_job = caller;
-        atomic_store_explicit(&caller->state, EDGE_CORO_STATE_RUNNING, memory_order_release);
+        caller->state = EDGE_CORO_STATE_RUNNING;
 
-        edge_coro_state_t job_state = atomic_load_explicit(&job->state, memory_order_acquire);
+        edge_coro_state_t job_state = job->state;
         if (job_state == EDGE_CORO_STATE_FINISHED) {
             edge_job_destroy(sched, job);
 
@@ -547,7 +550,7 @@ void edge_sched_run(edge_sched_t* sched) {
 void edge_sched_yield(void) {
     edge_job_t* job = thread_context.current_job;
 
-    edge_coro_state_t job_state = atomic_load_explicit(&job->state, memory_order_acquire);
+    edge_coro_state_t job_state = job->state;
     if (!job || job == &thread_context.main_job || job_state == EDGE_CORO_STATE_FINISHED) {
         return;
     }
@@ -558,13 +561,13 @@ void edge_sched_yield(void) {
     }
 
     // TODO: Add helper function bool edge_job_state_exchange(job, expected_state, new_state)
-    atomic_store_explicit(&job->state, EDGE_CORO_STATE_SUSPENDED, memory_order_release);
-    atomic_store_explicit(&caller->state, EDGE_CORO_STATE_RUNNING, memory_order_release);
+    job->state = EDGE_CORO_STATE_SUSPENDED;
+    caller->state = EDGE_CORO_STATE_RUNNING;
 
     edge_fiber_context_switch(job->context, caller->context);
 
     /* When resumed, we continue here */
-    atomic_store_explicit(&job->state, EDGE_CORO_STATE_RUNNING, memory_order_release);
+    job->state = EDGE_CORO_STATE_RUNNING;
 }
 
 void edge_sched_await(edge_coro_fn func, void* payload, edge_sched_priority_t priority) {
