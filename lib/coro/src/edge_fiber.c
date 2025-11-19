@@ -149,7 +149,7 @@ void edge_fiber_context_destroy(edge_allocator_t* allocator, edge_fiber_context_
 		return;
 	}
 
-    if (ctx->tsan_fiber && ctx->main_fiber) {
+    if (ctx->tsan_fiber && !ctx->main_fiber) {
         __tsan_destroy_fiber(ctx->tsan_fiber);
     }
 
