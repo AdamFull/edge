@@ -1,6 +1,8 @@
-#if defined(_WIN32) || defined(_WIN64)
+#include "edge_platform_detect.h"
+
+#if EDGE_HAS_WINDOWS_API
 #include "edge_threads_win.c"
-#elif defined(__linux__) || defined(__unix__) || defined(__APPLE__)
+#elif EDGE_PLATFORM_POSIX
 #include "edge_threads_posix.c"
 #else
 #error "Unsupported platform"

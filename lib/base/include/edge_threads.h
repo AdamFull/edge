@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <time.h>
 
+#include "edge_platform_detect.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -30,7 +32,7 @@ extern "C" {
 
     typedef int (*edge_thrd_start_t)(void* arg);
 
-#if defined(_WIN32) || defined(_WIN64)
+#if EDGE_HAS_WINDOWS_API
     struct edge_thrd {
         void* handle;
         unsigned int id;
@@ -48,7 +50,7 @@ extern "C" {
     struct edge_once {
         long state;
     };
-#elif defined(__linux__) || defined(__unix__) || defined(__APPLE__)
+#elif EDGE_PLATFORM_POSIX
     struct edge_thrd {
         unsigned long handle;
     };

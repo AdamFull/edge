@@ -2,15 +2,6 @@
 #include "edge_threads.h"
 #include "edge_allocator.h"
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#else
-#include <unistd.h>
-#include <sys/mman.h>
-#include <sys/types.h>
-#endif
-
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,129 +32,6 @@ static void* ptr_add(void* p, size_t bytes) {
 	return (void*)((uintptr_t)p + bytes);
 }
 
-static size_t get_page_size() {
-#ifdef _WIN32
-	SYSTEM_INFO si;
-	GetSystemInfo(&si);
-	return (size_t)si.dwPageSize;
-#else
-	long page_size = sysconf(_SC_PAGESIZE);
-	if (page_size <= 0) {
-		return 4096;
-	}
-	return (size_t)page_size;
-#endif
-}
-
-static bool virt_reserve(void** out_base, size_t reserve_bytes) {
-#ifdef _WIN32
-	void* base = VirtualAlloc(NULL, reserve_bytes, MEM_RESERVE, PAGE_NOACCESS);
-	if (!base) {
-		return false;
-	}
-	*out_base = base;
-	return true;
-#else
-	// Use mmap with PROT_NONE to reserve address space.
-	void* base = mmap(NULL, reserve_bytes, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-	if (base == MAP_FAILED) {
-		return false;
-	}
-	*out_base = base;
-	return true;
-#endif
-}
-
-static bool virt_release(void* base, size_t reserve_bytes) {
-#ifdef _WIN32
-	(void)reserve_bytes;
-	return VirtualFree(base, 0, MEM_RELEASE) != 0;
-#else
-	return munmap(base, reserve_bytes) == 0;
-#endif
-}
-
-static bool virt_commit(void* addr, size_t size) {
-#ifdef _WIN32
-	return VirtualAlloc(addr, size, MEM_COMMIT, PAGE_READWRITE) != NULL;
-#else
-	int prot = PROT_READ | PROT_WRITE;
-	if (mprotect(addr, size, prot) != 0) {
-		return false;
-	}
-
-	return true;
-#endif
-}
-
-#if 0
-static bool virt_decommit(void* addr, size_t size) {
-#ifdef _WIN32
-	return VirtualFree(addr, size, MEM_DECOMMIT) != 0;
-#else
-	(void)madvise(addr, size, MADV_DONTNEED);
-	if (mprotect(addr, size, PROT_NONE) != 0) {
-		return false;
-	}
-	return true;
-#endif
-}
-#endif
-
-#ifdef _WIN32
-static DWORD translate_protection_flags(edge_arena_prot_t p) {
-	if (p == EDGE_ARENA_PROT_NONE) {
-		return PAGE_NOACCESS;
-	}
-
-	if ((p & EDGE_ARENA_PROT_WRITE) != 0) {
-		if ((p & EDGE_ARENA_PROT_EXEC) != 0) {
-			return PAGE_EXECUTE_READWRITE;
-		}
-		return PAGE_READWRITE;
-	}
-	// no write
-	if ((p & EDGE_ARENA_PROT_EXEC) != 0) {
-		return PAGE_EXECUTE_READ;
-	}
-	return PAGE_READONLY;
-}
-#else
-static int translate_protection_flags(edge_arena_prot_t p) {
-	int flags = 0;
-	if (p == EDGE_ARENA_PROT_NONE) {
-		return PROT_NONE;
-	}
-	if ((p & EDGE_ARENA_PROT_READ) != 0) {
-		flags |= PROT_READ;
-	}
-	if ((p & EDGE_ARENA_PROT_WRITE) != 0) {
-		flags |= PROT_WRITE;
-	}
-	if ((p & EDGE_ARENA_PROT_EXEC) != 0) {
-		flags |= PROT_EXEC;
-	}
-	return flags;
-}
-#endif
-
-static bool virt_protect(void* addr, size_t size, edge_arena_prot_t prot) {
-#ifdef _WIN32
-	DWORD old;
-	DWORD newf = translate_protection_flags(prot);
-	if (!VirtualProtect(addr, size, newf, &old)) {
-		return false;
-	}
-#else
-	int flags = translate_protection_flags(prot);
-	if (mprotect(addr, size, flags) != 0) {
-		return false;
-	}
-#endif
-
-	return true;
-}
-
 edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size) {
 	if (!allocator) {
 		return NULL;
@@ -173,17 +41,17 @@ edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size) {
 		size = EDGE_ARENA_MAX_SIZE;
 	}
 
-	size_t page_size = get_page_size();
+	size_t page_size = edge_vmem_page_size();
 	size = align_up(size, page_size);
 
 	void* base = NULL;
-	if (!virt_reserve(&base, size)) {
+	if (!edge_vmem_reserve(&base, size)) {
 		return NULL;
 	}
 
 	edge_arena_t* arena = (edge_arena_t*)edge_allocator_malloc(allocator, sizeof(edge_arena_t));
 	if (!arena) {
-		virt_release(base, size);
+		edge_vmem_release(base, size);
 		return NULL;
 	}
 
@@ -199,7 +67,7 @@ edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size) {
 	return arena;
 }
 
-bool edge_arena_protect(edge_arena_t* arena, void* addr, size_t size, edge_arena_prot_t prot) {
+bool edge_arena_protect(edge_arena_t* arena, void* addr, size_t size, edge_vmem_prot_t prot) {
 	if (!arena || !arena->base) {
 		return false;
 	}
@@ -217,7 +85,7 @@ bool edge_arena_protect(edge_arena_t* arena, void* addr, size_t size, edge_arena
 	uintptr_t page_addr = astart & page_mask;
 	size_t page_off = astart - page_addr;
 	size_t total = align_up(size + page_off, arena->page_size);
-	return virt_protect((void*)page_addr, total, prot);
+	return edge_vmem_protect((void*)page_addr, total, prot);
 }
 
 void edge_arena_destroy(edge_arena_t* arena) {
@@ -226,7 +94,7 @@ void edge_arena_destroy(edge_arena_t* arena) {
 	}
 
 	if (arena->base) {
-		virt_release(arena->base, arena->reserved);
+		edge_vmem_release(arena->base, arena->reserved);
 	}
 
 	edge_mtx_destroy(&arena->mtx);
@@ -253,7 +121,7 @@ static bool arena_ensure_committed_locked(edge_arena_t* arena, size_t required_b
 
 	void* commit_addr = ptr_add(arena->base, arena->committed);
 
-	if (!virt_commit(commit_addr, commit_size)) {
+	if (!edge_vmem_commit(commit_addr, commit_size)) {
 		return false;
 	}
 
@@ -279,7 +147,7 @@ void* edge_arena_alloc_ex(edge_arena_t* arena, size_t size, size_t alignment) {
 	size_t offset = arena->offset;
 	size_t aligned_offset = align_up(offset, alignment);
 
-	if (aligned_offset > SIZE_MAX - size) {
+	if (aligned_offset > __SIZE_MAX__ - size) {
 		edge_mtx_unlock(&arena->mtx);
 		return NULL; 
 	}

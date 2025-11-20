@@ -18,6 +18,7 @@ set(EDGE_BASE_SOURCES
     "src/edge_testing.c"
     "src/edge_threads.c"
     "src/edge_vector.c"
+    "src/edge_vmem.c"
 )
 
 set(EDGE_BASE_HEADERS
@@ -31,6 +32,7 @@ set(EDGE_BASE_HEADERS
     "include/edge_testing.h"
     "include/edge_threads.h"
     "include/edge_vector.h"
+    "include/edge_vmem.h"
 )
 
 # Library
