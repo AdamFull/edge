@@ -58,3 +58,4 @@ int edge_thrd_set_affinity(edge_thrd_t thr, int core_id, bool prefer_physical) {
 
     return edge_thrd_set_affinity_ex(thr, cpu_info, cpu_count, core_id, prefer_physical);
 }
+

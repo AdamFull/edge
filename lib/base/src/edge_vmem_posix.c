@@ -56,4 +56,5 @@ bool edge_vmem_protect(void* addr, size_t size, edge_vmem_prot_t prot) {
 	if (mprotect(addr, size, flags) != 0) {
 		return false;
 	}
+    return true;
 }

@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId = "com.adamfull.edge"
-        minSdk = 26
+        minSdk = 29
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -23,12 +23,57 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         externalNativeBuild {
             cmake {
-                cppFlags += listOf(
-                    "-std=c++23",
-                    "-fexceptions",
-                    "-frtti"
+                arguments += listOf(
+                    "-DCMAKE_C_FLAGS=-std=c11",
+                    "-DANDROID_STL=c++_shared",
+
+                    "-D_GNU_SOURCE=1",
+
+                    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+
+                    // Build configuration flags
+                    "-DBUILD_TOOLS=OFF",
+                    "-DBUILD_REGRESS=OFF",
+                    "-DBUILD_OSSFUZZ=OFF",
+                    "-DBUILD_EXAMPLES=OFF",
+                    "-DBUILD_DOC=OFF",
+                    "-DBUILD_TESTING=OFF",
+
+                    // Library configuration
+                    "-DBUILD_SHARED_LIBS=ON",
+
+                    // mimalloc configuration
+                    "-DMI_OVERRIDE=OFF",
+                    "-DMI_BUILD_SHARED=OFF",
+                    "-DMI_BUILD_TESTS=OFF",
+
+                    // FreeType configuration
+                    "-DFT_DISABLE_TESTS=ON",
+
+                    // Install configuration
+                    "-DSKIP_INSTALL_ALL=ON",
+
+                    // CURL configuration
+                    "-DBUILD_CURL_EXE=OFF",
+                    "-DCURL_STATICLIB=ON",
+                    "-DCURL_DISABLE_LDAP=ON",
+                    "-DCURL_DISABLE_LDAPS=ON",
+                    "-DCURL_USE_LIBPSL=OFF",
+                    "-DCURL_USE_LIBSSH2=OFF",
+                    "-DCURL_ENABLE_SSL=ON",
+                    "-DHTTP_ONLY=ON",
+                    "-DCURL_DISABLE_COOKIES=OFF",
+
+                    // zlib configuration
+                    "-DZLIB_BUILD_TESTING=OFF",
+
+                    // zstd configuration
+                    "-DZSTD_BUILD_PROGRAMS=OFF",
+
+                    // Sanitizers (typically OFF for Android release builds)
+                    "-DEDGE_USE_ASAN=OFF",
+                    "-DEDGE_USE_TSAN=OFF"
                 )
-                arguments += "-DANDROID_STL=c++_shared"
             }
         }
     }
@@ -55,7 +100,7 @@ android {
     externalNativeBuild {
         cmake {
             path = file("../../../CMakeLists.txt")
-            version = "3.28.1"
+            version = "3.31.6"
         }
     }
     //sourceSets.getByName("main") {

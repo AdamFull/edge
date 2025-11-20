@@ -29,10 +29,6 @@ elseif(ANDROID)
     target_compile_definitions(${PROJECT_NAME} PRIVATE EDGE_PLATFORM_MOBILE=1)
 endif()
 
-target_sources(${PROJECT_NAME} PRIVATE 
-        "platform_windows.c"
-    )
-
 # Desktop platforms (Windows, Linux, macOS)
 if(WIN32 OR (UNIX AND NOT ANDROID AND NOT IOS))
     # GLFW setup for desktop platforms    
@@ -49,7 +45,6 @@ if(WIN32 OR (UNIX AND NOT ANDROID AND NOT IOS))
     
     # Desktop window implementation
     target_sources(${PROJECT_NAME} PRIVATE 
-        "desktop_input.c"
         "desktop_window.c"
     )
 endif()
@@ -71,18 +66,19 @@ elseif(ANDROID)
     # Android-specific sources
     target_sources(${PROJECT_NAME} PRIVATE
         #"${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c"
-        "android_jni_helper.cpp"
-        "android_context.cpp"
-        "android_input.cpp"
-        "android_window.cpp"
-        "unix_filesystem.cpp"
+        "android_window.c"
+        #"android_jni_helper.cpp"
+        #"android_context.cpp"
+        #"android_input.cpp"
+        #"android_window.cpp"
+        #"unix_filesystem.cpp"
         #"zip_filesystem.cpp"
     )
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
-        "linux_context.cpp"
-        "unix_filesystem.cpp"
+        #"linux_context.cpp"
+        #"unix_filesystem.cpp"
     )
 else()
 endif()

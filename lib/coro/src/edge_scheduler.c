@@ -4,6 +4,7 @@
 #include <stdatomic.h>
 #include <stdio.h>
 #include <assert.h>
+#include <time.h>
 
 #include <edge_allocator.h>
 #include <edge_arena.h>

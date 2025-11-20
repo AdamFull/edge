@@ -95,29 +95,3 @@ char* edge_allocator_strndup(const edge_allocator_t* allocator, const char* str,
     }
     return copy;
 }
-
-void edge_allocator_protect(void* ptr, size_t size, edge_allocator_memprotect_flags_t flags) {
-#if _WIN32
-    DWORD old_flags;
-    DWORD new_flags = 0;
-
-    if (flags & EDGE_ALLOCATOR_PROTECT_READ_WRITE) {
-        new_flags = PAGE_READWRITE;
-    }
-    else if (flags & EDGE_ALLOCATOR_PROTECT_READ) {
-        new_flags = PAGE_READONLY;
-    }
-
-    VirtualProtect(ptr, size, new_flags, &old_flags);
-#else
-    int new_flags = 0;
-    if (flags & EDGE_ALLOCATOR_PROTECT_READ) {
-        new_flags |= PROT_READ;
-    }
-    if (flags & EDGE_ALLOCATOR_PROTECT_WRITE) {
-        new_flags |= PROT_WRITE;
-    }
-
-    mprotect(ptr, size, new_flags);
-#endif
-}

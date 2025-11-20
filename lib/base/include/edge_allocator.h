@@ -78,11 +78,6 @@ char* edge_allocator_strdup(const edge_allocator_t* allocator, const char* str);
  */
 char* edge_allocator_strndup(const edge_allocator_t* allocator, const char* str, size_t n);
 
-/**
- * Protect memory range
- */
-void edge_allocator_protect(void* ptr, size_t size, edge_allocator_memprotect_flags_t flags);
-
 #ifdef __cplusplus
 }
 #endif

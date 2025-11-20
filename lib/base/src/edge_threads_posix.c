@@ -9,6 +9,10 @@
 #include <errno.h>
 #include <sys/time.h>
 
+#if EDGE_PLATFORM_ANDROID
+#include <sched.h>
+#endif
+
 struct thread_start_info {
     edge_thrd_start_t func;
     void* arg;
@@ -280,7 +284,12 @@ int edge_thrd_set_affinity_platform(edge_thrd_t thr, int core_id) {
     CPU_ZERO(&cpuset);
     CPU_SET(core_id, &cpuset);
 
+#if EDGE_PLATFORM_ANDROID
+    pid_t tid = pthread_gettid_np(thread);
+    if (sched_setaffinity(tid, sizeof(cpu_set_t), &cpuset) != 0) {
+#else
     if (pthread_setaffinity_np(thread, sizeof(cpu_set_t), &cpuset) != 0) {
+#endif
         return edge_thrd_error;
     }
     return edge_thrd_success;

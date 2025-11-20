@@ -49,8 +49,8 @@ static void platform_destroy(edge_logger_output_t* output) {
         return;
     }
 
-    edge_log_writer_platform_t* platform_writer = (edge_log_writer_platform_t*)output;
-    edge_allocator_free(output->allocator, platform_writer);
+    edge_logger_output_logcat_t* platform_output = (edge_logger_output_logcat_t*)output;
+    edge_allocator_free(output->allocator, platform_output);
 }
 
 static const edge_logger_output_vtable_t platform_vtable = {
