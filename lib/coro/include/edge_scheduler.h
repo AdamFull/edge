@@ -37,6 +37,8 @@ extern "C" {
 
 	int edge_sched_current_thread_id(void);
 
+	edge_sched_t* edge_sched_current_instance(void);
+
 	void edge_sched_run(edge_sched_t* sched);
 
 	void edge_sched_yield(void);

@@ -600,6 +600,10 @@ int edge_sched_current_thread_id(void) {
     return thread_context.thread_id;
 }
 
+edge_sched_t* edge_sched_current_instance(void) {
+    return thread_context.scheduler;
+}
+
 void edge_sched_run(edge_sched_t* sched) {
     if (!sched) {
         return;
