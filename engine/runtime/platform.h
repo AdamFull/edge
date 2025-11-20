@@ -41,6 +41,16 @@ extern "C" {
 	edge_window_t* edge_window_create(edge_window_create_info_t* create_info);
 	void edge_window_destroy(edge_window_t* window);
 
+	void edge_window_process_events(edge_window_t* window, float delta_time);
+
+	void edge_window_show(edge_window_t* window);
+	void edge_window_hide(edge_window_t* window);
+
+	void edge_window_set_title(edge_window_t* window, const char* title);
+
+	float edge_window_dpi_scale_factor(edge_window_t* window);
+	float edge_window_content_scale_factor(edge_window_t* window);
+
 #ifdef __cplusplus
 }
 #endif
