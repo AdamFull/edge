@@ -162,6 +162,14 @@
           "name": "ZSTD_BUILD_PROGRAMS",
           "value": "OFF",
           "type": "STRING"
+        },
+        {
+          "name": "EDGE_USE_ASAN",
+          "value": "OFF"
+        },
+        {
+          "name": "EDGE_USE_TSAN",
+          "value": "ON"
         }
       ]
     },
