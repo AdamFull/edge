@@ -164,6 +164,10 @@
           "type": "STRING"
         },
         {
+          "name": "GLFW_INSTALL",
+          "value": "OFF"
+        },
+        {
           "name": "EDGE_USE_ASAN",
           "value": "OFF"
         },
@@ -335,6 +339,10 @@
           "name": "ZSTD_BUILD_PROGRAMS",
           "value": "OFF",
           "type": "STRING"
+        },
+        {
+          "name": "GLFW_INSTALL",
+          "value": "OFF"
         }
       ]
     },
@@ -513,6 +521,10 @@
           "name": "ZLIB_BUILD_SHARED",
           "value": "OFF",
           "type": "STRING"
+        },
+        {
+          "name": "GLFW_INSTALL",
+          "value": "OFF"
         }
       ]
     },
@@ -691,6 +703,10 @@
           "name": "ZLIB_BUILD_SHARED",
           "value": "OFF",
           "type": "STRING"
+        },
+        {
+          "name": "GLFW_INSTALL",
+          "value": "OFF"
         }
       ]
     },
@@ -865,6 +881,10 @@
           "name": "ZSTD_BUILD_PROGRAMS",
           "value": "OFF",
           "type": "STRING"
+        },
+        {
+          "name": "GLFW_INSTALL",
+          "value": "OFF"
         }
       ]
     },
@@ -1039,6 +1059,10 @@
           "name": "ZSTD_BUILD_PROGRAMS",
           "value": "OFF",
           "type": "STRING"
+        },
+        {
+          "name": "GLFW_INSTALL",
+          "value": "OFF"
         }
       ]
     }
