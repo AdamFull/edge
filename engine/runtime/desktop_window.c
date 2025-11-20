@@ -1,6 +1,10 @@
 #include "platform.h"
 
+#include <math.h>
+#include <string.h>
+
 #include <edge_allocator.h>
+#include <edge_logger.h>
 
 #include <GLFW/glfw3.h>
 
@@ -11,10 +15,14 @@ struct edge_window {
 	window_mode_t mode;
 	bool resizable;
 	window_vsync_mode_t vsync_mode;
+
+	bool should_close;
+
+	GLFWgamepadstate gamepad_states[GLFW_JOYSTICK_LAST];
 };
 
 static void window_error_cb(int error, const char* description) {
-	// TODO: logger
+	EDGE_LOG_ERROR("GLFW error: %d. %s.", error, description);
 }
 
 static void window_close_cb(GLFWwindow* window) {
@@ -22,6 +30,7 @@ static void window_close_cb(GLFWwindow* window) {
 	if (!edge_window) {
 		return;
 	}
+	// TODO: DISPATCH EVENTS
 }
 
 static void window_size_cb(GLFWwindow* window, int width, int height) {
@@ -29,6 +38,7 @@ static void window_size_cb(GLFWwindow* window, int width, int height) {
 	if (!edge_window) {
 		return;
 	}
+	// TODO: DISPATCH EVENTS
 }
 
 static void window_focus_cb(GLFWwindow* window, int focused) {
@@ -36,7 +46,33 @@ static void window_focus_cb(GLFWwindow* window, int focused) {
 	if (!edge_window) {
 		return;
 	}
+	// TODO: DISPATCH EVENTS
 }
+
+static void window_key_cb(GLFWwindow* window, int key, int scancode, int action, int mods) {
+	// TODO: DISPATCH EVENTS
+}
+
+static void window_cursor_cb(GLFWwindow* window, double xpos, double ypos) {
+	// TODO: DISPATCH EVENTS
+}
+
+static void mouse_button_cb(GLFWwindow* window, int button, int action, int mods) {
+	// TODO: DISPATCH EVENTS
+}
+
+static void mouse_scroll_cb(GLFWwindow* window, double xoffset, double yoffset) {
+	// TODO: DISPATCH EVENTS
+}
+
+static void character_input_cb(GLFWwindow* window, uint32_t codepoint) {
+	// TODO: DISPATCH EVENTS
+}
+
+static void gamepad_connected_cb(int jid, int event) {
+	// TODO: DISPATCH EVENTS
+}
+
 
 static void* glfw_allocate(size_t size, void* user) {
 	if (!user) {
@@ -111,6 +147,7 @@ edge_window_t* edge_window_create(edge_window_create_info_t* create_info) {
 	window->mode = create_info->mode;
 	window->resizable = create_info->resizable;
 	window->vsync_mode = create_info->vsync_mode;
+	window->should_close = false;
 
 	switch (create_info->mode)
 	{
@@ -148,6 +185,14 @@ edge_window_t* edge_window_create(edge_window_create_info_t* create_info) {
 	glfwSetWindowSizeCallback(window->handle, window_size_cb);
 	glfwSetWindowFocusCallback(window->handle, window_focus_cb);
 
+	// For input
+	glfwSetKeyCallback(window->handle, window_key_cb);
+	glfwSetCursorPosCallback(window->handle, window_cursor_cb);
+	glfwSetMouseButtonCallback(window->handle, mouse_button_cb);
+	glfwSetScrollCallback(window->handle, mouse_scroll_cb);
+	glfwSetCharCallback(window->handle, character_input_cb);
+	glfwSetJoystickCallback(gamepad_connected_cb);
+
 	glfwSetInputMode(window->handle, GLFW_STICKY_KEYS, 1);
 	glfwSetInputMode(window->handle, GLFW_STICKY_MOUSE_BUTTONS, 1);
 
@@ -170,4 +215,116 @@ void edge_window_destroy(edge_window_t* window) {
 	edge_allocator_free(alloc, window);
 
 	deinit_glfw_context();
+}
+
+void edge_window_process_events(edge_window_t* window, float delta_time) {
+	if (!window) {
+		return;
+	}
+
+	glfwPollEvents();
+	window->should_close = glfwWindowShouldClose(window->handle);
+
+	const float axis_threshold = 0.01f;
+
+	for (int jid = 0; jid < GLFW_JOYSTICK_LAST; ++jid) {
+		GLFWgamepadstate state;
+		if (glfwGetGamepadState(jid, &state)) {
+			GLFWgamepadstate* prev_state = &window->gamepad_states[jid];
+
+			for (int btn = 0; btn < GLFW_GAMEPAD_BUTTON_LAST + 1; ++btn) {
+				bool current_state = state.buttons[btn] == GLFW_PRESS;
+				bool prev_button_state = prev_state->buttons[btn] == GLFW_PRESS;
+
+				if (current_state != prev_button_state) {
+					// TODO: DISPATCH EVENT
+				}
+			}
+
+			float left_x_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X] - prev_state->axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
+			float left_y_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] - prev_state->axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
+			if (left_x_diff > axis_threshold || left_y_diff > axis_threshold) {
+				// TODO: DISPATCH EVENT
+			}
+
+			float right_x_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X] - prev_state->axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
+			float right_y_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] - prev_state->axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
+			if (right_x_diff > axis_threshold || right_y_diff > axis_threshold) {
+				// TODO: DISPATCH EVENT
+			}
+
+			float left_trigger_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] - prev_state->axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]);
+			if (left_trigger_diff > axis_threshold) {
+				// TODO: DISPATCH EVENT
+			}
+
+			float right_trigger_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] - prev_state->axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]);
+			if (right_trigger_diff > axis_threshold) {
+				// TODO: DISPATCH EVENT
+			}
+
+			*prev_state = state;
+		}
+		else {
+			memset(&window->gamepad_states[jid], 0, sizeof(GLFWgamepadstate));
+		}
+	}
+}
+
+void edge_window_show(edge_window_t* window) {
+	if (!window) {
+		return;
+	}
+
+	glfwShowWindow(window->handle);
+}
+
+void edge_window_hide(edge_window_t* window) {
+	if (!window) {
+		return;
+	}
+
+	glfwHideWindow(window->handle);
+}
+
+void edge_window_set_title(edge_window_t* window, const char* title) {
+	if (!window || !title) {
+		return;
+	}
+
+	glfwSetWindowTitle(window->handle, title);
+}
+
+float edge_window_dpi_scale_factor(edge_window_t* window) {
+	if (!window) {
+		return 1.0f;
+	}
+
+	// TODO: select current active monitor
+	GLFWmonitor* primary_monitor = glfwGetPrimaryMonitor();
+	const GLFWvidmode* vidmode = glfwGetVideoMode(primary_monitor);
+
+	int width_mm, height_mm;
+	glfwGetMonitorPhysicalSize(primary_monitor, &width_mm, &height_mm);
+
+	// As suggested by the GLFW monitor guide
+	const float inch_to_mm = 25.0f;
+	const float win_base_density = 96.0f;
+
+	float dpi = (float)(vidmode->width / (width_mm / inch_to_mm));
+	return dpi / win_base_density;
+}
+
+float edge_window_content_scale_factor(edge_window_t* window) {
+	if (!window) {
+		return 1.0f;
+	}
+
+	int fb_width, fb_height;
+	glfwGetFramebufferSize(window->handle, &fb_width, &fb_height);
+	int win_width, win_height;
+	glfwGetWindowSize(window->handle, &win_width, &win_height);
+
+	// Needed for ui scale
+	return (float)(fb_width) / win_width;
 }
