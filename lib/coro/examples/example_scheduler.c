@@ -1,54 +1,74 @@
-#include <edge_coro.h>
 #include <edge_scheduler.h>
-#include <edge_allocator.h>
+#include <edge_testing.h>
 
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
+#include <assert.h>
 
-void task_a(void* arg) {
-    printf("Task A: Starting\n");
-    edge_coro_yield();
-    printf("Task A: Continuing\n");
-    edge_coro_yield();
-    printf("Task A: Done\n");
+static void job_a(void* payload) {
+    edge_sched_event_t* completion_event = (edge_sched_event_t*)payload;
+    if (!completion_event) {
+        return;
+    }
+
+    int thread_id = edge_sched_current_thread_id();
+    printf("[Thread %d] [Job A] Downloading began.\n", thread_id);
+
+    for (int i = 0; i < 100; ++i) {
+        printf("[Thread %d] [Job A] Progress: %d%%\n", thread_id, i);
+        edge_sched_yield();
+    }
+
+    edge_sched_event_signal(completion_event);
 }
 
-void task_b(void* arg) {
-    printf("Task B: Starting (after A completes)\n");
-    edge_coro_yield();
-    printf("Task B: Done\n");
-}
+static void job_b(void* payload) {
+    int thread_id = edge_sched_current_thread_id();
+    printf("[Thread %d] Job B Online\n", thread_id);
 
-void task_c(void* arg) {
-    printf("Task C: Starting (after both A and B complete)\n");
-    printf("Task C: Done\n");
+    for (int i = 0; i < 100; ++i) {
+        printf("[Thread %d] [Job B] Preparing request: %d%%\n", thread_id, i);
+        edge_sched_yield();
+        thread_id = edge_sched_current_thread_id();
+    }
+
+    thread_id = edge_sched_current_thread_id();
+
+    edge_sched_event_t* completion_event = edge_sched_event_create();
+
+    edge_sched_t* sched = edge_sched_current_instance();
+    edge_sched_schedule_job(sched, job_a, completion_event, EDGE_SCHED_PRIORITY_CRITICAL);
+
+    printf("[Thread %d] [Job B] waiting subtask completion\n", thread_id);
+    edge_sched_event_wait(completion_event);
+    printf("[Thread %d] [Job B] subtask completed\n", thread_id);
+
+    for (int i = 0; i < 100; i += 2) {
+        printf("[Thread %d] [Job B] Processing downloaded data: %d%%\n", thread_id, i);
+        edge_sched_yield();
+        thread_id = edge_sched_current_thread_id();
+    }
+
+    thread_id = edge_sched_current_thread_id();
+    printf("[Thread %d] [Job B] Shutdown\n", thread_id);
 }
 
 int main(void) {
-    /* Initialize allocator */
-    edge_allocator_t allocator = edge_allocator_create_default();
-    edge_coro_init_thread_context(&allocator);
+    edge_allocator_t allocator = edge_testing_allocator_create();
 
-    edge_scheduler_t* sched = edge_scheduler_create(&allocator);
+    edge_sched_t* sched = edge_sched_create(&allocator);
 
-    /* Create jobs */
-    edge_job_t* job_a = edge_scheduler_create_job(sched, task_a, NULL, EDGE_PRIORITY_LOW);
-    edge_job_t* job_b = edge_scheduler_create_job(sched, task_b, NULL, EDGE_PRIORITY_LOW);
-    edge_job_t* job_c = edge_scheduler_create_job(sched, task_c, NULL, EDGE_PRIORITY_CRITICAL);
+    edge_sched_schedule_job(sched, job_b, NULL, EDGE_SCHED_PRIORITY_CRITICAL);
 
-    /* Add to scheduler (order doesn't matter with dependencies) */
-    edge_scheduler_add_job(sched, job_c);
-    edge_scheduler_add_job(sched, job_b);
-    edge_scheduler_add_job(sched, job_a);
+    edge_sched_run(sched);
 
-    /* Run scheduler */
-    edge_scheduler_run(sched);
+    edge_sched_destroy(sched);
 
-    edge_scheduler_destroy(sched);
-
-    edge_coro_shutdown_thread_context();
+    size_t alloc_net = edge_testing_net_allocated();
+    assert(alloc_net == 0 && "Memory leaks detected, some data was not freed.");
 
     return 0;
 }
