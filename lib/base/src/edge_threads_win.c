@@ -78,6 +78,11 @@ edge_thrd_t edge_thrd_current(void) {
     return thr;
 }
 
+unsigned int edge_thrd_current_thread_id(void) {
+    edge_thrd_t thrd = edge_thrd_current();
+    return thrd.id;
+}
+
 int edge_thrd_equal(edge_thrd_t lhs, edge_thrd_t rhs) {
     return lhs.id == rhs.id;
 }

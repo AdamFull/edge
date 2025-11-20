@@ -72,6 +72,11 @@ edge_thrd_t edge_thrd_current(void) {
     return thr;
 }
 
+unsigned int edge_thrd_current_thread_id(void) {
+    edge_thrd_t thrd = edge_thrd_current();
+    return (unsigned int)thrd.handle;
+}
+
 int edge_thrd_equal(edge_thrd_t lhs, edge_thrd_t rhs) {
     return pthread_equal((pthread_t)lhs.handle, (pthread_t)rhs.handle);
 }

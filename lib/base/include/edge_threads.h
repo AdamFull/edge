@@ -75,6 +75,8 @@ extern "C" {
     int edge_thrd_join(edge_thrd_t thr, int* res);
     int edge_thrd_detach(edge_thrd_t thr);
     edge_thrd_t edge_thrd_current(void);
+    unsigned int edge_thrd_current_thread_id(void);
+
     int edge_thrd_equal(edge_thrd_t lhs, edge_thrd_t rhs);
     void edge_thrd_exit(int res);
     void edge_thrd_yield(void);
