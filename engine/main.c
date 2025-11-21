@@ -11,8 +11,8 @@
 static edge_engine_context_t engine_context = { 0 };
 
 static void edge_cleanup_engine(void) {
-	if (engine_context.window) {
-		edge_window_destroy(engine_context.window);
+	if (engine_context.platform_context) {
+		edge_platform_destroy(engine_context.platform_context);
 	}
 
 	if (engine_context.logger) {
@@ -38,26 +38,23 @@ int edge_main(edge_platform_layout_t* platform_layout) {
 		goto fatal_error;
 	}
 
+	edge_logger_set_global(engine_context.logger);
+
 	edge_logger_output_t* stdout_output = edge_logger_create_stdout_output(&allocator, EDGE_LOG_FORMAT_DEFAULT);
 	edge_logger_add_output(engine_context.logger, stdout_output);
 
 	edge_logger_output_t* file_output = edge_logger_create_file_output(&allocator, EDGE_LOG_FORMAT_DEFAULT, "log.log", false);
 	edge_logger_add_output(engine_context.logger, file_output);
 
-	// TODO: Init platform in specific place
-#if EDGE_HAS_WINDOWS_API
-	edge_logger_output_t* debug_output = edge_logger_create_debug_console_output(&allocator, EDGE_LOG_FORMAT_DEFAULT);
-	edge_logger_add_output(engine_context.logger, debug_output);
-#endif
+	engine_context.platform_context = edge_platform_create(&allocator, engine_context.platform_layout);
+	if (!engine_context.platform_context) {
+		goto fatal_error;
+	}
 
-	edge_logger_set_global(engine_context.logger);
-
-	EDGE_LOG_INFO("Logger initialization finished.");
+	EDGE_LOG_INFO("Context initialization finished.");
 	edge_logger_flush(edge_logger_get_global());
 
 	edge_window_create_info_t window_create_info = { 0 };
-	window_create_info.allocator = &allocator;
-	window_create_info.platform_layout = platform_layout;
 	window_create_info.title = "Window";
 	window_create_info.mode = EDGE_WINDOW_MODE_DEFAULT;
 	window_create_info.resizable = true;
@@ -65,10 +62,13 @@ int edge_main(edge_platform_layout_t* platform_layout) {
 	window_create_info.width = 1280;
 	window_create_info.height = 720;
 
-	engine_context.window = edge_window_create(&window_create_info);
-	if (!engine_context.window) {
+	if (!edge_platform_window_init(engine_context.platform_context, &window_create_info)) {
 		goto fatal_error;
 	}
+
+    while (!edge_platform_window_should_close(engine_context.platform_context)) {
+		edge_platform_window_process_events(engine_context.platform_context, 0.1f);
+    }
 
 	edge_cleanup_engine();
 	return 0;

@@ -42,20 +42,13 @@ if(WIN32 OR (UNIX AND NOT ANDROID AND NOT IOS))
     
     target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
     target_compile_definitions(${PROJECT_NAME} PRIVATE GLFW_INCLUDE_NONE)
-    
-    # Desktop window implementation
-    target_sources(${PROJECT_NAME} PRIVATE 
-        "desktop_window.c"
-    )
 endif()
 
 if(WIN32)
     # Windows-specific sources
-    #target_sources(${PROJECT_NAME} PRIVATE 
-    #    "windows_context.cpp"
-    #    "windows_filesystem.cpp"
-    #    #"zip_filesystem.cpp"
-    #)
+    target_sources(${PROJECT_NAME} PRIVATE 
+        "windows_platform.c"
+    )
 elseif(ANDROID)
     find_package(games-controller REQUIRED CONFIG)
     target_link_libraries(${PROJECT_NAME}
@@ -65,14 +58,7 @@ elseif(ANDROID)
 
     # Android-specific sources
     target_sources(${PROJECT_NAME} PRIVATE
-        #"${CMAKE_ANDROID_NDK}/sources/android/native_app_glue/android_native_app_glue.c"
-        "android_window.c"
-        #"android_jni_helper.cpp"
-        #"android_context.cpp"
-        #"android_input.cpp"
-        #"android_window.cpp"
-        #"unix_filesystem.cpp"
-        #"zip_filesystem.cpp"
+        "android_platform.cpp"
     )
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux-specific sources

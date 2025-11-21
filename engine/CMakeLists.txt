@@ -1,4 +1,4 @@
-project(edge_engine LANGUAGES C)
+project(edge LANGUAGES C CXX)
 
 set(EDGE_ENGINE_SOURCES
     "main.c"

@@ -24,7 +24,7 @@ android {
         externalNativeBuild {
             cmake {
                 arguments += listOf(
-                    "-DCMAKE_C_FLAGS=-std=c11",
+                    "-DCMAKE_C_FLAGS=-std=c11 -fms-extensions",
                     "-DANDROID_STL=c++_shared",
 
                     "-D_GNU_SOURCE=1",

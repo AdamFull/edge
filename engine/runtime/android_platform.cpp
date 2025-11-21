@@ -1,0 +1,516 @@
+#include "platform.h"
+
+#include <cassert>
+
+#include <edge_allocator.h>
+#include <edge_logger.h>
+
+#include <paddleboat/paddleboat.h>
+#include <game-text-input/gametextinput.h>
+#include <game-activity/native_app_glue/android_native_app_glue.h>
+
+extern "C" int edge_main(edge_platform_layout_t* platform_layout);
+
+struct edge_platform_layout {
+    struct android_app* app;
+};
+
+struct edge_window {
+    window_mode_t mode;
+    bool resizable;
+    window_vsync_mode_t vsync_mode;
+
+    bool should_close;
+    bool surface_ready;
+};
+
+struct edge_platform_context {
+    edge_allocator_t* alloc;
+    edge_platform_layout_t* layout;
+
+    struct edge_window* wnd;
+};
+
+static JNIEnv* get_jni_env(struct android_app* app) {
+    JNIEnv* env = NULL;
+    jint get_env_result = app->activity->vm->GetEnv((void**)&env, JNI_VERSION_1_6);
+    if (get_env_result == JNI_EDETACHED) {
+        if (app->activity->vm->AttachCurrentThread(&env, NULL) != JNI_OK) {
+            return NULL;
+        }
+    }
+
+    return env;
+}
+
+static void on_app_cmd_cb(struct android_app* app, int32_t cmd) {
+    edge_platform_context_t* ctx = (edge_platform_context_t*)app->userData;
+
+    switch (cmd) {
+        case APP_CMD_INIT_WINDOW: {
+            // TODO: DISPATCH EVENT WINDOW SIZE CHANGED
+            ctx->wnd->surface_ready = true;
+            break;
+        }
+        case APP_CMD_CONTENT_RECT_CHANGED: {
+            int width = app->contentRect.right - app->contentRect.left;
+            int height = app->contentRect.bottom - app->contentRect.top;
+
+            EDGE_LOG_DEBUG("Contect rect changed: %dx%d", width, height);
+
+            // TODO: DISPATCH EVENT WINDOW SIZE CHANGED
+            break;
+        }
+        case APP_CMD_GAINED_FOCUS: {
+            EDGE_LOG_DEBUG("Focus gained.");
+            // TODO: DISPATCH EVENT
+            break;
+        }
+        case APP_CMD_LOST_FOCUS: {
+            EDGE_LOG_DEBUG("Focus lost.");
+            // TODO: DISPATCH EVENT
+            break;
+        }
+        case APP_CMD_START: {
+            if(!Paddleboat_isInitialized()) {
+                break;
+            }
+
+            JNIEnv* jni_env = get_jni_env(app);
+            Paddleboat_onStart(jni_env);
+            break;
+        }
+        case APP_CMD_STOP: {
+            if(!Paddleboat_isInitialized()) {
+                break;
+            }
+
+            JNIEnv* jni_env = get_jni_env(app);
+            Paddleboat_onStop(jni_env);
+            break;
+        }
+        default: {
+            const char* cmd_lut[21] = {
+                    "UNUSED_APP_CMD_INPUT_CHANGED",
+                    "APP_CMD_INIT_WINDOW",
+                    "APP_CMD_TERM_WINDOW",
+                    "APP_CMD_WINDOW_RESIZED",
+                    "APP_CMD_WINDOW_REDRAW_NEEDED",
+                    "APP_CMD_CONTENT_RECT_CHANGED",
+                    "APP_CMD_SOFTWARE_KB_VIS_CHANGED",
+                    "APP_CMD_GAINED_FOCUS",
+                    "APP_CMD_LOST_FOCUS",
+                    "APP_CMD_CONFIG_CHANGED",
+                    "APP_CMD_LOW_MEMORY",
+                    "APP_CMD_START",
+                    "APP_CMD_RESUME",
+                    "APP_CMD_SAVE_STATE",
+                    "APP_CMD_PAUSE",
+                    "APP_CMD_STOP",
+                    "APP_CMD_DESTROY",
+                    "APP_CMD_WINDOW_INSETS_CHANGED",
+                    "APP_CMD_EDITOR_ACTION",
+                    "APP_CMD_KEY_EVENT",
+                    "APP_CMD_TOUCH_EVENT"
+                };
+
+            EDGE_LOG_DEBUG("Unhandled command: %s", cmd_lut[cmd]);
+            break;
+        }
+    }
+}
+
+static void motion_data_cb(const int32_t controller_index, const Paddleboat_Motion_Data* motion_data, void* user_data) {
+    if(!user_data || !motion_data) {
+        return;
+    }
+
+    edge_platform_context_t* ctx = (edge_platform_context_t*)user_data;
+
+    switch (motion_data->motionType) {
+        case PADDLEBOAT_MOTION_ACCELEROMETER: {
+            // TODO: DISPATCH EVENT
+            break;
+        }
+        case PADDLEBOAT_MOTION_GYROSCOPE: {
+            // TODO: DISPATCH EVENT
+            break;
+        }
+    }
+}
+
+static void controller_status_cb(const int32_t controller_index, const enum Paddleboat_ControllerStatus controller_status, void* user_data) {
+    if(!user_data) {
+        return;
+    }
+
+    edge_platform_context_t* ctx = (edge_platform_context_t*)user_data;
+
+    bool is_just_connected = controller_status == PADDLEBOAT_CONTROLLER_JUST_CONNECTED;
+    bool is_just_disconnected = controller_status == PADDLEBOAT_CONTROLLER_JUST_DISCONNECTED;
+
+    if (is_just_connected || is_just_disconnected) {
+        char controller_name[256];
+        if (Paddleboat_getControllerName(controller_index, sizeof(controller_name), controller_name) != PADDLEBOAT_NO_ERROR) {
+            return;
+        }
+
+        Paddleboat_Controller_Info controller_info;
+        if (Paddleboat_getControllerInfo(controller_index, &controller_info) != PADDLEBOAT_NO_ERROR) {
+            return;
+        }
+
+        EDGE_LOG_DEBUG("Connected gamepad, name: \"%s\", id: %d, vendor: %d, product: %d, device: %d.",
+                   controller_name, controller_index, controller_info.vendorId,
+                   controller_info.productId, controller_info.deviceId);
+
+        EDGE_LOG_DEBUG("Feature support:\naccel: %d; gyro: %d; player light: %d; rgb light: %d; battery info: %d; vibration: %d; dual motor vibration: %d; touchpad: %d; virtual mouse: %d;",
+                   (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_ACCELEROMETER) == PADDLEBOAT_CONTROLLER_FLAG_ACCELEROMETER,
+                   (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_GYROSCOPE) == PADDLEBOAT_CONTROLLER_FLAG_GYROSCOPE,
+                   (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_LIGHT_PLAYER) == PADDLEBOAT_CONTROLLER_FLAG_LIGHT_PLAYER,
+                   (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_LIGHT_RGB) == PADDLEBOAT_CONTROLLER_FLAG_LIGHT_RGB,
+                   (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_BATTERY) == PADDLEBOAT_CONTROLLER_FLAG_BATTERY,
+                   (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_VIBRATION) == PADDLEBOAT_CONTROLLER_FLAG_VIBRATION,
+                   (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_VIBRATION_DUAL_MOTOR) == PADDLEBOAT_CONTROLLER_FLAG_VIBRATION_DUAL_MOTOR,
+                   (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_TOUCHPAD) == PADDLEBOAT_CONTROLLER_FLAG_TOUCHPAD,
+                   (controller_info.controllerFlags & PADDLEBOAT_CONTROLLER_FLAG_VIRTUAL_MOUSE) == PADDLEBOAT_CONTROLLER_FLAG_VIRTUAL_MOUSE);
+
+        // TODO: DISPATCH EVENT
+        //dispatcher.emit(events::GamepadConnectionEvent{
+        //    .gamepad_id = controller_index,
+        //    .vendor_id = controller_info.vendorId,
+        //    .product_id = controller_info.productId,
+        //    .device_id = controller_info.deviceId,
+        //    .connected = is_just_connected,
+        //    .name = controller_name
+        //});
+    }
+}
+
+static void mouse_status_cb(const enum Paddleboat_MouseStatus mouse_status, void* user_data) {
+    if(!user_data) {
+        return;
+    }
+
+    edge_platform_context_t* ctx = (edge_platform_context_t*)user_data;
+
+    if (mouse_status == PADDLEBOAT_MOUSE_NONE) {
+        EDGE_LOG_DEBUG("Mouse disconnected.");
+    }
+    else {
+        EDGE_LOG_DEBUG("%s mouse connected.", mouse_status == PADDLEBOAT_MOUSE_CONTROLLER_EMULATED ? "Virtual" : "Physical");
+    }
+}
+
+static void keyboard_status_cb(const bool physical_keyboard_status, void* user_data) {
+    if(!user_data) {
+        return;
+    }
+
+    edge_platform_context_t* ctx = (edge_platform_context_t*)user_data;
+
+    EDGE_LOG_DEBUG("Physical keyboard %sconnected.", physical_keyboard_status ? "" : "dis");
+}
+
+edge_platform_context_t* edge_platform_create(edge_allocator_t* alloc, edge_platform_layout_t* layout) {
+    if (!alloc || !layout) {
+        return NULL;
+    }
+
+    edge_platform_context_t* ctx = (edge_platform_context_t*)edge_allocator_calloc(alloc, 1, sizeof(edge_platform_context_t));
+    if (!ctx) {
+        return NULL;
+    }
+
+    ctx->alloc = alloc;
+    ctx->layout = layout;
+    ctx->wnd = NULL;
+
+    edge_logger_t* logger = edge_logger_get_global();
+    edge_logger_output_t* debug_output = edge_logger_create_logcat_output(alloc, EDGE_LOG_FORMAT_DEFAULT);
+    edge_logger_add_output(logger, debug_output);
+
+    return ctx;
+}
+
+void edge_platform_destroy(edge_platform_context_t* ctx) {
+    if (!ctx) {
+        return;
+    }
+
+    if (ctx->wnd) {
+        struct android_app* app = ctx->layout->app;
+
+        if (Paddleboat_isInitialized()) {
+            Paddleboat_setControllerStatusCallback(NULL, NULL);
+            Paddleboat_setMouseStatusCallback(NULL, NULL);
+            Paddleboat_setPhysicalKeyboardStatusCallback(NULL, NULL);
+            Paddleboat_setMotionDataCallback(NULL, NULL);
+
+            JNIEnv* jni_env = get_jni_env(app);
+            Paddleboat_destroy(jni_env);
+        }
+
+        GameActivity_finish(app->activity);
+        ctx->wnd->should_close = true;
+
+        struct edge_window* wnd = ctx->wnd;
+        edge_allocator_free(ctx->alloc, wnd);
+        ctx->wnd = NULL;
+    }
+
+    edge_allocator_t* alloc = ctx->alloc;
+    edge_allocator_free(alloc, ctx);
+}
+
+bool edge_platform_window_init(edge_platform_context_t* ctx, edge_window_create_info_t* create_info) {
+    if (!ctx || !ctx->layout || !ctx->layout->app || !create_info) {
+        return false;
+    }
+
+    struct edge_window* wnd = (struct edge_window*)edge_allocator_malloc(ctx->alloc, sizeof(struct edge_window));
+    if (!wnd) {
+        return false;
+    }
+
+    wnd->mode = create_info->mode;
+    wnd->resizable = create_info->resizable;
+    wnd->vsync_mode = create_info->vsync_mode;
+    wnd->should_close = false;
+
+    struct android_app* app = ctx->layout->app;
+    app->onAppCmd = on_app_cmd_cb;
+    app->userData = ctx;
+
+    JNIEnv* jni_env = get_jni_env(app);
+    if(!jni_env) {
+        edge_allocator_free(ctx->alloc, wnd);
+        return false;
+    }
+
+    enum Paddleboat_ErrorCode result = Paddleboat_init(jni_env, app->activity->javaGameActivity);
+    if (result != PADDLEBOAT_NO_ERROR) {
+        edge_allocator_free(ctx->alloc, wnd);
+
+        EDGE_LOG_DEBUG("Failed to initialize Paddleboat: %d", (int32_t)result);
+        return false;
+    }
+
+    if (!Paddleboat_isInitialized()) {
+        edge_allocator_free(ctx->alloc, wnd);
+
+        EDGE_LOG_DEBUG("Paddleboat initialization verification failed");
+        return false;
+    }
+
+    Paddleboat_setMotionDataCallbackWithIntegratedFlags(motion_data_cb, Paddleboat_getIntegratedMotionSensorFlags(), ctx);
+    Paddleboat_setControllerStatusCallback(controller_status_cb, ctx);
+    Paddleboat_setMouseStatusCallback(mouse_status_cb, ctx);
+    Paddleboat_setPhysicalKeyboardStatusCallback(keyboard_status_cb, ctx);
+
+    ctx->wnd = wnd;
+
+    return true;
+}
+
+bool edge_platform_window_should_close(edge_platform_context_t* ctx) {
+    if (!ctx || !ctx->wnd) {
+        return false;
+    }
+
+    return ctx->wnd->should_close;
+}
+
+void edge_platform_window_process_events(edge_platform_context_t* ctx, float delta_time) {
+    if (!ctx || !ctx->wnd) {
+        return;
+    }
+
+    struct android_app* app = ctx->layout->app;
+    struct android_poll_source* source;
+    int ident, events;
+
+    while ((ident = ALooper_pollOnce(0, NULL, &events, (void**)&source)) > ALOOPER_POLL_TIMEOUT) {
+        if (source) {
+            source->process(app, source);
+        }
+
+        if (app->destroyRequested != 0) {
+            EDGE_LOG_DEBUG("Requested window destroy.");
+            // TODO: DISPATCH EVENT WINDOW CLOSE
+            ctx->wnd->should_close = true;
+        }
+    }
+
+    if (Paddleboat_isInitialized()) {
+        return;
+    }
+
+    struct android_input_buffer* input_buf = android_app_swap_input_buffers(app);
+    if(!input_buf) {
+        return;
+    }
+
+    if (input_buf->motionEventsCount) {
+        for (int idx = 0; idx < input_buf->motionEventsCount; idx++) {
+            GameActivityMotionEvent* event = &input_buf->motionEvents[idx];
+            assert((event->source == AINPUT_SOURCE_MOUSE || event->source == AINPUT_SOURCE_TOUCHSCREEN) &&
+                   "Invalid motion event source");
+
+            if (Paddleboat_processGameActivityMotionInputEvent(event, sizeof(GameActivityMotionEvent)) != 0) {
+                continue;
+            }
+
+            // Process other events
+            if (event->source == AINPUT_SOURCE_TOUCHSCREEN) {
+                // TODO: Not Implemented
+                for (int32_t i = 0; i < event->pointerCount; ++i) {
+
+                }
+            }
+        }
+        android_app_clear_motion_events(input_buf);
+    }
+
+    if (input_buf->keyEventsCount) {
+        for (int idx = 0; idx < input_buf->keyEventsCount; idx++) {
+            GameActivityKeyEvent* event = &input_buf->keyEvents[idx];
+            assert((event->source == AINPUT_SOURCE_KEYBOARD) && "Invalid key event source");
+
+            if (Paddleboat_processGameActivityKeyInputEvent(event, sizeof(GameActivityKeyEvent)) != 0) {
+                return;
+            }
+
+            if (event->action == AKEY_STATE_VIRTUAL) {
+                return;
+            }
+
+            // Process other events
+            //auto& dispatcher = platform_context_->get_event_dispatcher();
+            //dispatcher.emit(events::KeyEvent{
+            //    .key_code = translate_keyboard_key_code(event->keyCode),
+            //    .state = event->action == AKEY_STATE_DOWN,
+            //    .window_id = ~0ull
+            //});
+        }
+        android_app_clear_key_events(input_buf);
+    }
+
+    JNIEnv* jni_env = get_jni_env(app);
+    if(!jni_env) {
+        return;
+    }
+
+    Paddleboat_update(jni_env);
+
+    // Process mouse
+    Paddleboat_Mouse_Data mouse_data;
+    if (Paddleboat_getMouseData(&mouse_data) == PADDLEBOAT_NO_ERROR) {
+        // Process mouse buttons
+        for (int32_t button_idx = 0; button_idx < 8; ++button_idx) {
+            enum Paddleboat_Mouse_Buttons mouse_button = (enum Paddleboat_Mouse_Buttons)(1 << button_idx);
+            // TODO: DISPATCH EVENT
+            //dispatcher.emit(events::MouseKeyEvent{
+            //    .key_code = translate_mouse_key_code(button_idx),
+            //    .state = (mouse_data.buttonsDown & mouse_button) == mouse_button,
+            //    .window_id = ~0ull
+            //});
+        }
+
+        // Process mouse motion
+        // TODO: DISPATCH EVENT
+        //dispatcher.emit(events::MousePositionEvent{
+        //    .x = mouse_data.mouseX,
+        //    .y = mouse_data.mouseY,
+        //    .window_id = ~0ull
+        //});
+
+        // Process mouse scroll
+        // TODO: DISPATCH EVENT
+        //dispatcher.emit(events::MouseScrollEvent{
+        //    .offset_x = static_cast<double>(mouse_data.mouseScrollDeltaH),
+        //    .offset_y = static_cast<double>(mouse_data.mouseScrollDeltaV),
+        //    .window_id = ~0ull
+        //});
+    }
+
+    // Update all controllers available
+    for (int32_t jid = 0; jid < PADDLEBOAT_MAX_CONTROLLERS; ++jid) {
+        enum Paddleboat_ControllerStatus status = Paddleboat_getControllerStatus(jid);
+        if (status == PADDLEBOAT_CONTROLLER_ACTIVE) {
+            Paddleboat_Controller_Data controller_data;
+            if (Paddleboat_getControllerData(jid, &controller_data) == PADDLEBOAT_NO_ERROR) {
+                // Update gamepad buttons
+                for (int32_t button_idx = 0; button_idx < PADDLEBOAT_BUTTON_COUNT; ++button_idx) {
+                    enum Paddleboat_Buttons controller_button = (enum Paddleboat_Buttons)(1 << button_idx);
+                    //dispatcher.emit(events::GamepadButtonEvent{
+                    //    .gamepad_id = jid,
+                    //    .key_code = translate_gamepad_key_code(button_idx),
+                    //    .state = (controller_data.buttonsDown & controller_button) == controller_button
+                    //});
+                }
+
+                // Update gamepad axis
+                //dispatcher.emit(events::GamepadAxisEvent{
+                //    .gamepad_id = jid,
+                //    .values = { controller_data.leftStick.stickX, controller_data.leftStick.stickY },
+                //    .axis_code = GamepadAxisCode::eLeftStick
+                //});
+
+                //dispatcher.emit(events::GamepadAxisEvent{
+                //    .gamepad_id = jid,
+                //    .values = { controller_data.rightStick.stickX, controller_data.rightStick.stickY },
+                //    .axis_code = GamepadAxisCode::eRightStick
+                //});
+
+                //dispatcher.emit(events::GamepadAxisEvent{
+                //    .gamepad_id = jid,
+                //    .values = { controller_data.triggerL2 },
+                //    .axis_code = GamepadAxisCode::eLeftTrigger
+                //});
+
+                //dispatcher.emit(events::GamepadAxisEvent{
+                //    .gamepad_id = jid,
+                //    .values = { controller_data.triggerR2 },
+                //    .axis_code = GamepadAxisCode::eRightTrigger
+                //});
+            }
+        }
+    }
+}
+
+void edge_platform_window_show(edge_platform_context_t* ctx) {
+    if (!ctx || !ctx->wnd) {
+        return;
+    }
+}
+
+void edge_platform_window_hide(edge_platform_context_t* ctx) {
+    if (!ctx || !ctx->wnd) {
+        return;
+    }
+}
+
+void edge_platform_window_set_title(edge_platform_context_t* ctx, const char* title) {
+    if (!ctx || !ctx->wnd || !title) {
+        return;
+    }
+}
+
+float edge_platform_window_dpi_scale_factor(edge_platform_context_t* ctx) {
+    if (!ctx || !ctx->wnd) {
+        return 1.0f;
+    }
+
+    struct android_app* app = ctx->layout->app;
+    return (float)AConfiguration_getDensity(app->config) / (float)ACONFIGURATION_DENSITY_MEDIUM;
+}
+
+float edge_platform_window_content_scale_factor(edge_platform_context_t* ctx) {
+    return 1.0f;
+}
+
+extern "C" void android_main(struct android_app* state) {
+    edge_platform_layout_t platform_layout = { 0 };
+    edge_main(&platform_layout);
+}
