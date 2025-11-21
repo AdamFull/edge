@@ -44,6 +44,7 @@ if(EDGE_ZIP_BUILD_SHARED)
         SOVERSION ${PROJECT_VERSION_MAJOR}
         PUBLIC_HEADER "${EDGE_ZIP_HEADERS}"
     )
+    target_compile_definitions(edge_zip PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
 # Static library
@@ -61,6 +62,7 @@ if(EDGE_ZIP_BUILD_STATIC)
         OUTPUT_NAME edge_zip
         PUBLIC_HEADER "${EDGE_ZIP_HEADERS}"
     )
+    target_compile_definitions(edge_zip_static PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()
 
 # Examples

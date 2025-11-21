@@ -30,7 +30,7 @@ target_include_directories(edge_logger
     PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
-target_compile_definitions(edge_base PRIVATE _CRT_SECURE_NO_WARNINGS)
+target_compile_definitions(edge_logger PRIVATE _CRT_SECURE_NO_WARNINGS)
 
 if(ANDROID)
 target_link_libraries(edge_logger
