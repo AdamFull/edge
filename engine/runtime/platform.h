@@ -8,9 +8,16 @@ extern "C" {
 #endif
 
 	typedef struct edge_allocator edge_allocator_t;
+	typedef struct edge_event_dispatcher edge_event_dispatcher_t;
 
 	typedef struct edge_platform_layout edge_platform_layout_t;
 	typedef struct edge_platform_context edge_platform_context_t;
+
+	typedef struct edge_platform_context_create_info {
+		edge_allocator_t* alloc;
+		edge_platform_layout_t* layout;
+		edge_event_dispatcher_t* event_dispatcher;
+	} edge_platform_context_create_info_t;
 
 	typedef enum window_mode {
 		EDGE_WINDOW_MODE_FULLSCREEN,
@@ -34,7 +41,7 @@ extern "C" {
 		int height;
 	} edge_window_create_info_t;
 
-	edge_platform_context_t* edge_platform_create(edge_allocator_t* allocator, edge_platform_layout_t* layout);
+	edge_platform_context_t* edge_platform_create(edge_platform_context_create_info_t* create_info);
 	void edge_platform_destroy(edge_platform_context_t* ctx);
 
 	bool edge_platform_window_init(edge_platform_context_t* ctx, edge_window_create_info_t* create_info);
