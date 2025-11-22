@@ -1,4 +1,5 @@
 #include "engine.h"
+#include "event_dispatcher.h"
 
 #include <edge_allocator.h>
 #include <edge_testing.h>
@@ -11,6 +12,10 @@
 static edge_engine_context_t engine_context = { 0 };
 
 static void edge_cleanup_engine(void) {
+	if (engine_context.event_dispatcher) {
+		event_dispatcher_destroy(engine_context.event_dispatcher);
+	}
+
 	if (engine_context.platform_context) {
 		edge_platform_destroy(engine_context.platform_context);
 	}
@@ -46,7 +51,17 @@ int edge_main(edge_platform_layout_t* platform_layout) {
 	edge_logger_output_t* file_output = edge_logger_create_file_output(&allocator, EDGE_LOG_FORMAT_DEFAULT, "log.log", false);
 	edge_logger_add_output(engine_context.logger, file_output);
 
-	engine_context.platform_context = edge_platform_create(&allocator, engine_context.platform_layout);
+	engine_context.event_dispatcher = event_dispatcher_create(&allocator);
+	if (!engine_context.event_dispatcher) {
+		goto fatal_error;
+	}
+
+	edge_platform_context_create_info_t platform_context_create_info = { 0 };
+	platform_context_create_info.alloc = &allocator;
+	platform_context_create_info.layout = platform_layout;
+	platform_context_create_info.event_dispatcher = engine_context.event_dispatcher;
+
+	engine_context.platform_context = edge_platform_create(&platform_context_create_info);
 	if (!engine_context.platform_context) {
 		goto fatal_error;
 	}
