@@ -1,6 +1,7 @@
 project(edge LANGUAGES C CXX)
 
 set(EDGE_ENGINE_SOURCES
+    "event_dispatcher.c"
     "main.c"
 )
 
