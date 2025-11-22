@@ -1,4 +1,5 @@
 #include "platform.h"
+#include "input_events.h"
 
 #include <edge_allocator.h>
 #include <edge_logger.h>
@@ -38,8 +39,160 @@ struct edge_window {
 struct edge_platform_context {
 	edge_allocator_t* alloc;
 	edge_platform_layout_t* layout;
+	edge_event_dispatcher_t* event_dispatcher;
 
 	struct edge_window* wnd;
+};
+
+static input_keyboard_key_t glfw_key_code_to_edge[] = {
+	[GLFW_KEY_SPACE] = INPUT_KEY_SPACE,
+	[GLFW_KEY_APOSTROPHE] = INPUT_KEY_APOSTROPHE,
+	[GLFW_KEY_COMMA] = INPUT_KEY_COMMA,
+	[GLFW_KEY_MINUS] = INPUT_KEY_MINUS,
+	[GLFW_KEY_PERIOD] = INPUT_KEY_PERIOD,
+	[GLFW_KEY_SLASH] = INPUT_KEY_SLASH,
+	[GLFW_KEY_0] = INPUT_KEY_0,
+	[GLFW_KEY_1] = INPUT_KEY_1,
+	[GLFW_KEY_2] = INPUT_KEY_2,
+	[GLFW_KEY_3] = INPUT_KEY_3,
+	[GLFW_KEY_4] = INPUT_KEY_4,
+	[GLFW_KEY_5] = INPUT_KEY_5,
+	[GLFW_KEY_6] = INPUT_KEY_6,
+	[GLFW_KEY_7] = INPUT_KEY_7,
+	[GLFW_KEY_8] = INPUT_KEY_8,
+	[GLFW_KEY_9] = INPUT_KEY_9,
+	[GLFW_KEY_SEMICOLON] = INPUT_KEY_SEMICOLON,
+	[GLFW_KEY_EQUAL] = INPUT_KEY_EQ,
+	[GLFW_KEY_A] = INPUT_KEY_A,
+	[GLFW_KEY_B] = INPUT_KEY_B,
+	[GLFW_KEY_C] = INPUT_KEY_C,
+	[GLFW_KEY_D] = INPUT_KEY_D,
+	[GLFW_KEY_E] = INPUT_KEY_E,
+	[GLFW_KEY_F] = INPUT_KEY_F,
+	[GLFW_KEY_G] = INPUT_KEY_G,
+	[GLFW_KEY_H] = INPUT_KEY_H,
+	[GLFW_KEY_I] = INPUT_KEY_I,
+	[GLFW_KEY_J] = INPUT_KEY_J,
+	[GLFW_KEY_K] = INPUT_KEY_K,
+	[GLFW_KEY_L] = INPUT_KEY_L,
+	[GLFW_KEY_M] = INPUT_KEY_M,
+	[GLFW_KEY_N] = INPUT_KEY_N,
+	[GLFW_KEY_O] = INPUT_KEY_O,
+	[GLFW_KEY_P] = INPUT_KEY_P,
+	[GLFW_KEY_Q] = INPUT_KEY_Q,
+	[GLFW_KEY_R] = INPUT_KEY_R,
+	[GLFW_KEY_S] = INPUT_KEY_S,
+	[GLFW_KEY_T] = INPUT_KEY_T,
+	[GLFW_KEY_U] = INPUT_KEY_U,
+	[GLFW_KEY_V] = INPUT_KEY_V,
+	[GLFW_KEY_W] = INPUT_KEY_W,
+	[GLFW_KEY_X] = INPUT_KEY_X,
+	[GLFW_KEY_Y] = INPUT_KEY_Y,
+	[GLFW_KEY_Z] = INPUT_KEY_Z,
+	[GLFW_KEY_LEFT_BRACKET] = INPUT_KEY_LEFT_BRACKET,
+	[GLFW_KEY_BACKSLASH] = INPUT_KEY_BACKSLASH,
+	[GLFW_KEY_RIGHT_BRACKET] = INPUT_KEY_RIGHT_BRACKET,
+	[GLFW_KEY_GRAVE_ACCENT] = INPUT_KEY_GRAVE_ACCENT,
+
+	[GLFW_KEY_ESCAPE] = INPUT_KEY_ESC,
+	[GLFW_KEY_ENTER] = INPUT_KEY_ENTER,
+	[GLFW_KEY_TAB] = INPUT_KEY_TAB,
+	[GLFW_KEY_BACKSPACE] = INPUT_KEY_BACKSPACE,
+	[GLFW_KEY_INSERT] = INPUT_KEY_INSERT,
+	[GLFW_KEY_DELETE] = INPUT_KEY_DEL,
+	[GLFW_KEY_RIGHT] = INPUT_KEY_RIGHT,
+	[GLFW_KEY_LEFT] = INPUT_KEY_LEFT,
+	[GLFW_KEY_DOWN] = INPUT_KEY_DOWN,
+	[GLFW_KEY_UP] = INPUT_KEY_UP,
+	[GLFW_KEY_PAGE_UP] = INPUT_KEY_PAGE_UP,
+	[GLFW_KEY_PAGE_DOWN] = INPUT_KEY_PAGE_DOWN,
+	[GLFW_KEY_HOME] = INPUT_KEY_HOME,
+	[GLFW_KEY_END] = INPUT_KEY_END,
+	[GLFW_KEY_CAPS_LOCK] = INPUT_KEY_CAPS_LOCK,
+	[GLFW_KEY_SCROLL_LOCK] = INPUT_KEY_SCROLL_LOCK,
+	[GLFW_KEY_NUM_LOCK] = INPUT_KEY_NUM_LOCK,
+	[GLFW_KEY_PRINT_SCREEN] = INPUT_KEY_PRINT_SCREEN,
+	[GLFW_KEY_PAUSE] = INPUT_KEY_PAUSE,
+	[GLFW_KEY_F1] = INPUT_KEY_F1,
+	[GLFW_KEY_F2] = INPUT_KEY_F2,
+	[GLFW_KEY_F3] = INPUT_KEY_F3,
+	[GLFW_KEY_F4] = INPUT_KEY_F4,
+	[GLFW_KEY_F5] = INPUT_KEY_F5,
+	[GLFW_KEY_F6] = INPUT_KEY_F6,
+	[GLFW_KEY_F7] = INPUT_KEY_F7,
+	[GLFW_KEY_F8] = INPUT_KEY_F8,
+	[GLFW_KEY_F9] = INPUT_KEY_F9,
+	[GLFW_KEY_F10] = INPUT_KEY_F10,
+	[GLFW_KEY_F11] = INPUT_KEY_F11,
+	[GLFW_KEY_F12] = INPUT_KEY_F12,
+	[GLFW_KEY_F13] = INPUT_KEY_F13,
+	[GLFW_KEY_F14] = INPUT_KEY_F14,
+	[GLFW_KEY_F15] = INPUT_KEY_F15,
+	[GLFW_KEY_F16] = INPUT_KEY_F16,
+	[GLFW_KEY_F17] = INPUT_KEY_F17,
+	[GLFW_KEY_F18] = INPUT_KEY_F18,
+	[GLFW_KEY_F19] = INPUT_KEY_F19,
+	[GLFW_KEY_F20] = INPUT_KEY_F20,
+	[GLFW_KEY_F21] = INPUT_KEY_F21,
+	[GLFW_KEY_F22] = INPUT_KEY_F22,
+	[GLFW_KEY_F23] = INPUT_KEY_F23,
+	[GLFW_KEY_F24] = INPUT_KEY_F24,
+	[GLFW_KEY_F25] = INPUT_KEY_F25,
+	[GLFW_KEY_KP_0] = INPUT_KEY_KP_0,
+	[GLFW_KEY_KP_1] = INPUT_KEY_KP_1,
+	[GLFW_KEY_KP_2] = INPUT_KEY_KP_2,
+	[GLFW_KEY_KP_3] = INPUT_KEY_KP_3,
+	[GLFW_KEY_KP_4] = INPUT_KEY_KP_4,
+	[GLFW_KEY_KP_5] = INPUT_KEY_KP_5,
+	[GLFW_KEY_KP_6] = INPUT_KEY_KP_6,
+	[GLFW_KEY_KP_7] = INPUT_KEY_KP_7,
+	[GLFW_KEY_KP_8] = INPUT_KEY_KP_8,
+	[GLFW_KEY_KP_9] = INPUT_KEY_KP_9,
+	[GLFW_KEY_KP_DECIMAL] = INPUT_KEY_KP_DEC,
+	[GLFW_KEY_KP_DIVIDE] = INPUT_KEY_KP_DIV,
+	[GLFW_KEY_KP_MULTIPLY] = INPUT_KEY_KP_MUL,
+	[GLFW_KEY_KP_SUBTRACT] = INPUT_KEY_KP_SUB,
+	[GLFW_KEY_KP_ADD] = INPUT_KEY_KP_ADD,
+	[GLFW_KEY_KP_ENTER] = INPUT_KEY_KP_ENTER,
+	[GLFW_KEY_KP_EQUAL] = INPUT_KEY_KP_EQ,
+	[GLFW_KEY_LEFT_SHIFT] = INPUT_KEY_LEFT_SHIFT,
+	[GLFW_KEY_LEFT_CONTROL] = INPUT_KEY_LEFT_CONTROL,
+	[GLFW_KEY_LEFT_ALT] = INPUT_KEY_LEFT_ALT,
+	[GLFW_KEY_LEFT_SUPER] = INPUT_KEY_LEFT_SUPER,
+	[GLFW_KEY_RIGHT_SHIFT] = INPUT_KEY_RIGHT_SHIFT,
+	[GLFW_KEY_RIGHT_CONTROL] = INPUT_KEY_RIGHT_CONTROL,
+	[GLFW_KEY_RIGHT_ALT] = INPUT_KEY_RIGHT_ALT,
+	[GLFW_KEY_RIGHT_SUPER] = INPUT_KEY_RIGHT_SUPER,
+	[GLFW_KEY_MENU] = INPUT_KEY_MENU
+};
+
+static input_mouse_btn_t glfw_mouse_btn_code_to_edge[] = {
+	[GLFW_MOUSE_BUTTON_1] = INPUT_MOUSE_BTN_LEFT,
+	[GLFW_MOUSE_BUTTON_2] = INPUT_MOUSE_BTN_RIGHT,
+	[GLFW_MOUSE_BUTTON_3] = INPUT_MOUSE_BTN_MIDDLE,
+	[GLFW_MOUSE_BUTTON_4] = INPUT_MOUSE_BTN_4,
+	[GLFW_MOUSE_BUTTON_5] = INPUT_MOUSE_BTN_5,
+	[GLFW_MOUSE_BUTTON_6] = INPUT_MOUSE_BTN_6,
+	[GLFW_MOUSE_BUTTON_7] = INPUT_MOUSE_BTN_7,
+	[GLFW_MOUSE_BUTTON_8] = INPUT_MOUSE_BTN_8
+};
+
+static input_pad_btn_t glfw_pad_btn_code_to_edge[] = {
+	[GLFW_GAMEPAD_BUTTON_A] = INPUT_PAD_A,
+	[GLFW_GAMEPAD_BUTTON_B] = INPUT_PAD_B,
+	[GLFW_GAMEPAD_BUTTON_X] = INPUT_PAD_X,
+	[GLFW_GAMEPAD_BUTTON_Y] = INPUT_PAD_Y,
+	[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] = INPUT_PAD_BUMPER_LEFT,
+	[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER] = INPUT_PAD_BUMPER_RIGHT,
+	[GLFW_GAMEPAD_BUTTON_BACK] = INPUT_PAD_BACK,
+	[GLFW_GAMEPAD_BUTTON_START] = INPUT_PAD_START,
+	[GLFW_GAMEPAD_BUTTON_GUIDE] = INPUT_PAD_GUIDE,
+	[GLFW_GAMEPAD_BUTTON_LEFT_THUMB] = INPUT_PAD_THUMB_LEFT,
+	[GLFW_GAMEPAD_BUTTON_RIGHT_THUMB] = INPUT_PAD_THUMB_RIGHT,
+	[GLFW_GAMEPAD_BUTTON_DPAD_UP] = INPUT_PAD_DPAD_UP,
+	[GLFW_GAMEPAD_BUTTON_DPAD_RIGHT] = INPUT_PAD_DPAD_RIGHT,
+	[GLFW_GAMEPAD_BUTTON_DPAD_DOWN] = INPUT_PAD_DPAD_DOWN,
+	[GLFW_GAMEPAD_BUTTON_DPAD_LEFT] = INPUT_PAD_DPAD_LEFT
 };
 
 static void* glfw_allocate_cb(size_t size, void* user) {
@@ -132,7 +285,14 @@ static void window_key_cb(GLFWwindow* window, int key, int scancode, int action,
 	if (!ctx) {
 		return;
 	}
-	// TODO: DISPATCH EVENTS
+
+	input_keyboard_event_t evt;
+	input_keyboard_event_init(&evt, glfw_key_code_to_edge[key], action == GLFW_PRESS ? INPUT_KEY_ACTION_DOWN : INPUT_KEY_ACTION_UP);
+	
+	edge_event_dispatcher_t* dispatcher = ctx->event_dispatcher;
+	if (dispatcher) {
+		event_dispatcher_dispatch(dispatcher, (edge_event_header_t*)&evt);
+	}
 }
 
 static void window_cursor_cb(GLFWwindow* window, double xpos, double ypos) {
@@ -171,24 +331,25 @@ static void gamepad_connected_cb(int jid, int event) {
 	// TODO: DISPATCH EVENTS
 }
 
-edge_platform_context_t* edge_platform_create(edge_allocator_t* alloc, edge_platform_layout_t* layout) {
-	if (!alloc || !layout) {
+edge_platform_context_t* edge_platform_create(edge_platform_context_create_info_t* create_info) {
+	if (!create_info || !create_info->alloc || !create_info->layout) {
 		return NULL;
 	}
 
-	edge_platform_context_t* ctx = (edge_platform_context_t*)edge_allocator_calloc(alloc, 1, sizeof(edge_platform_context_t));
+	edge_platform_context_t* ctx = (edge_platform_context_t*)edge_allocator_calloc(create_info->alloc, 1, sizeof(edge_platform_context_t));
 	if (!ctx) {
 		return NULL;
 	}
 
-	ctx->alloc = alloc;
-	ctx->layout = layout;
+	ctx->alloc = create_info->alloc;
+	ctx->layout = create_info->layout;
+	ctx->event_dispatcher = create_info->event_dispatcher;
 	ctx->wnd = NULL;
 
 	// TODO: Init terminal
 
 	edge_logger_t* logger = edge_logger_get_global();
-	edge_logger_output_t* debug_output = edge_logger_create_debug_console_output(alloc, EDGE_LOG_FORMAT_DEFAULT);
+	edge_logger_output_t* debug_output = edge_logger_create_debug_console_output(create_info->alloc, EDGE_LOG_FORMAT_DEFAULT);
 	edge_logger_add_output(logger, debug_output);
 
 	return ctx;
