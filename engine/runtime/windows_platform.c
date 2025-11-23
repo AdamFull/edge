@@ -15,9 +15,9 @@
 
 #include <Windows.h>
 
-extern int edge_main(edge_platform_layout_t* platform_layout);
+extern int edge_main(platform_layout_t* platform_layout);
 
-struct edge_platform_layout {
+struct platform_layout {
 	HINSTANCE hinst;
 	HINSTANCE prev_hinst;
 	PSTR cmd_line;
@@ -32,16 +32,15 @@ struct edge_window {
 	window_vsync_mode_t vsync_mode;
 
 	bool should_close;
-
-	GLFWgamepadstate gamepad_states[GLFW_JOYSTICK_LAST];
 };
 
-struct edge_platform_context {
+struct platform_context {
 	edge_allocator_t* alloc;
-	edge_platform_layout_t* layout;
-	edge_event_dispatcher_t* event_dispatcher;
+	platform_layout_t* layout;
+	event_dispatcher_t* event_dispatcher;
 
 	struct edge_window* wnd;
+	input_state_t* input_state;
 };
 
 static input_keyboard_key_t glfw_key_code_to_edge[] = {
@@ -257,7 +256,7 @@ static void deinit_glfw_context(void) {
 }
 
 static void window_close_cb(GLFWwindow* window) {
-	edge_platform_context_t* ctx = (edge_platform_context_t*)glfwGetWindowUserPointer(window);
+	platform_context_t* ctx = (platform_context_t*)glfwGetWindowUserPointer(window);
 	if (!ctx) {
 		return;
 	}
@@ -265,7 +264,7 @@ static void window_close_cb(GLFWwindow* window) {
 }
 
 static void window_size_cb(GLFWwindow* window, int width, int height) {
-	edge_platform_context_t* ctx = (edge_platform_context_t*)glfwGetWindowUserPointer(window);
+	platform_context_t* ctx = (platform_context_t*)glfwGetWindowUserPointer(window);
 	if (!ctx) {
 		return;
 	}
@@ -273,7 +272,7 @@ static void window_size_cb(GLFWwindow* window, int width, int height) {
 }
 
 static void window_focus_cb(GLFWwindow* window, int focused) {
-	edge_platform_context_t* ctx = (edge_platform_context_t*)glfwGetWindowUserPointer(window);
+	platform_context_t* ctx = (platform_context_t*)glfwGetWindowUserPointer(window);
 	if (!ctx) {
 		return;
 	}
@@ -281,7 +280,7 @@ static void window_focus_cb(GLFWwindow* window, int focused) {
 }
 
 static void window_key_cb(GLFWwindow* window, int key, int scancode, int action, int mods) {
-	edge_platform_context_t* ctx = (edge_platform_context_t*)glfwGetWindowUserPointer(window);
+	platform_context_t* ctx = (platform_context_t*)glfwGetWindowUserPointer(window);
 	if (!ctx) {
 		return;
 	}
@@ -289,14 +288,14 @@ static void window_key_cb(GLFWwindow* window, int key, int scancode, int action,
 	input_keyboard_event_t evt;
 	input_keyboard_event_init(&evt, glfw_key_code_to_edge[key], action == GLFW_PRESS ? INPUT_KEY_ACTION_DOWN : INPUT_KEY_ACTION_UP);
 	
-	edge_event_dispatcher_t* dispatcher = ctx->event_dispatcher;
+	event_dispatcher_t* dispatcher = ctx->event_dispatcher;
 	if (dispatcher) {
 		event_dispatcher_dispatch(dispatcher, (edge_event_header_t*)&evt);
 	}
 }
 
 static void window_cursor_cb(GLFWwindow* window, double xpos, double ypos) {
-	edge_platform_context_t* ctx = (edge_platform_context_t*)glfwGetWindowUserPointer(window);
+	platform_context_t* ctx = (platform_context_t*)glfwGetWindowUserPointer(window);
 	if (!ctx) {
 		return;
 	}
@@ -304,7 +303,7 @@ static void window_cursor_cb(GLFWwindow* window, double xpos, double ypos) {
 }
 
 static void mouse_button_cb(GLFWwindow* window, int button, int action, int mods) {
-	edge_platform_context_t* ctx = (edge_platform_context_t*)glfwGetWindowUserPointer(window);
+	platform_context_t* ctx = (platform_context_t*)glfwGetWindowUserPointer(window);
 	if (!ctx) {
 		return;
 	}
@@ -312,7 +311,7 @@ static void mouse_button_cb(GLFWwindow* window, int button, int action, int mods
 }
 
 static void mouse_scroll_cb(GLFWwindow* window, double xoffset, double yoffset) {
-	edge_platform_context_t* ctx = (edge_platform_context_t*)glfwGetWindowUserPointer(window);
+	platform_context_t* ctx = (platform_context_t*)glfwGetWindowUserPointer(window);
 	if (!ctx) {
 		return;
 	}
@@ -320,7 +319,7 @@ static void mouse_scroll_cb(GLFWwindow* window, double xoffset, double yoffset) 
 }
 
 static void character_input_cb(GLFWwindow* window, uint32_t codepoint) {
-	edge_platform_context_t* ctx = (edge_platform_context_t*)glfwGetWindowUserPointer(window);
+	platform_context_t* ctx = (platform_context_t*)glfwGetWindowUserPointer(window);
 	if (!ctx) {
 		return;
 	}
@@ -331,13 +330,19 @@ static void gamepad_connected_cb(int jid, int event) {
 	// TODO: DISPATCH EVENTS
 }
 
-edge_platform_context_t* edge_platform_create(edge_platform_context_create_info_t* create_info) {
+platform_context_t* platform_context_create(platform_context_create_info_t* create_info) {
 	if (!create_info || !create_info->alloc || !create_info->layout) {
 		return NULL;
 	}
 
-	edge_platform_context_t* ctx = (edge_platform_context_t*)edge_allocator_calloc(create_info->alloc, 1, sizeof(edge_platform_context_t));
+	platform_context_t* ctx = (platform_context_t*)edge_allocator_calloc(create_info->alloc, 1, sizeof(platform_context_t));
 	if (!ctx) {
+		return NULL;
+	}
+
+	ctx->input_state = (input_state_t*)edge_allocator_calloc(create_info->alloc, 1, sizeof(input_state_t));
+	if (!ctx->input_state) {
+		edge_allocator_free(create_info->alloc, ctx);
 		return NULL;
 	}
 
@@ -355,7 +360,7 @@ edge_platform_context_t* edge_platform_create(edge_platform_context_create_info_
 	return ctx;
 }
 
-void edge_platform_destroy(edge_platform_context_t* ctx) {
+void platform_context_destroy(platform_context_t* ctx) {
 	if (!ctx) {
 		return;
 	}
@@ -374,7 +379,7 @@ void edge_platform_destroy(edge_platform_context_t* ctx) {
 	edge_allocator_free(alloc, ctx);
 }
 
-bool edge_platform_window_init(edge_platform_context_t* ctx, edge_window_create_info_t* create_info) {
+bool platform_context_window_init(platform_context_t* ctx, window_create_info_t* create_info) {
 	if (!ctx) {
 		return false;
 	}
@@ -394,13 +399,13 @@ bool edge_platform_window_init(edge_platform_context_t* ctx, edge_window_create_
 
 	switch (create_info->mode)
 	{
-	case EDGE_WINDOW_MODE_FULLSCREEN: {
+	case WINDOW_MODE_FULLSCREEN: {
 		GLFWmonitor* monitor = glfwGetPrimaryMonitor();
 		const GLFWvidmode* mode = glfwGetVideoMode(monitor);
 		wnd->handle = glfwCreateWindow(mode->width, mode->height, create_info->title, monitor, NULL);
 		break;
 	}
-	case EDGE_WINDOW_MODE_FULLSCREEN_BORDERLESS: {
+	case WINDOW_MODE_FULLSCREEN_BORDERLESS: {
 		GLFWmonitor* monitor = glfwGetPrimaryMonitor();
 		const GLFWvidmode* mode = glfwGetVideoMode(monitor);
 
@@ -446,7 +451,7 @@ bool edge_platform_window_init(edge_platform_context_t* ctx, edge_window_create_
 	return true;
 }
 
-bool edge_platform_window_should_close(edge_platform_context_t* ctx) {
+bool platform_context_window_should_close(platform_context_t* ctx) {
     if (!ctx || !ctx->wnd) {
         return false;
     }
@@ -454,7 +459,7 @@ bool edge_platform_window_should_close(edge_platform_context_t* ctx) {
     return ctx->wnd->should_close;
 }
 
-void edge_platform_window_process_events(edge_platform_context_t* ctx, float delta_time) {
+void platform_context_window_process_events(platform_context_t* ctx, float delta_time) {
 	if (!ctx || !ctx->wnd || !ctx->wnd->handle) {
 		return;
 	}
@@ -509,7 +514,7 @@ void edge_platform_window_process_events(edge_platform_context_t* ctx, float del
 	}
 }
 
-void edge_platform_window_show(edge_platform_context_t* ctx) {
+void platform_context_window_show(platform_context_t* ctx) {
 	if (!ctx || !ctx->wnd || !ctx->wnd->handle) {
 		return;
 	}
@@ -517,7 +522,7 @@ void edge_platform_window_show(edge_platform_context_t* ctx) {
 	glfwShowWindow(ctx->wnd->handle);
 }
 
-void edge_platform_window_hide(edge_platform_context_t* ctx) {
+void platform_context_window_hide(platform_context_t* ctx) {
 	if (!ctx || !ctx->wnd || !ctx->wnd->handle) {
 		return;
 	}
@@ -525,7 +530,7 @@ void edge_platform_window_hide(edge_platform_context_t* ctx) {
 	glfwHideWindow(ctx->wnd->handle);
 }
 
-void edge_platform_window_set_title(edge_platform_context_t* ctx, const char* title) {
+void platform_context_window_set_title(platform_context_t* ctx, const char* title) {
 	if (!ctx || !ctx->wnd || !ctx->wnd->handle || !title) {
 		return;
 	}
@@ -533,7 +538,7 @@ void edge_platform_window_set_title(edge_platform_context_t* ctx, const char* ti
 	glfwSetWindowTitle(ctx->wnd->handle, title);
 }
 
-float edge_platform_window_dpi_scale_factor(edge_platform_context_t* ctx) {
+float platform_context_window_dpi_scale_factor(platform_context_t* ctx) {
 	if (!ctx || !ctx->wnd || !ctx->wnd->handle) {
 		return 1.0f;
 	}
@@ -552,7 +557,7 @@ float edge_platform_window_dpi_scale_factor(edge_platform_context_t* ctx) {
 	return dpi / win_base_density;
 }
 
-float edge_platform_window_content_scale_factor(edge_platform_context_t* ctx) {
+float platform_context_window_content_scale_factor(platform_context_t* ctx) {
 	if (!ctx || !ctx->wnd || !ctx->wnd->handle) {
 		return 1.0f;
 	}
@@ -567,7 +572,7 @@ float edge_platform_window_content_scale_factor(edge_platform_context_t* ctx) {
 }
 
 int APIENTRY WinMain(HINSTANCE hinst, HINSTANCE prev_hinst, PSTR cmd_line, INT cmd_show) {
-	edge_platform_layout_t platform_layout = { 0 };
+	platform_layout_t platform_layout = { 0 };
 	platform_layout.hinst = hinst;
 	platform_layout.prev_hinst = prev_hinst;
 	platform_layout.cmd_line = cmd_line;

@@ -1,4 +1,5 @@
 #include "platform.h"
+#include "../event_dispatcher.h"
 
 #include <cassert>
 
@@ -9,9 +10,9 @@
 #include <game-text-input/gametextinput.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 
-extern "C" int edge_main(edge_platform_layout_t* platform_layout);
+extern "C" int edge_main(platform_layout_t* platform_layout);
 
-struct edge_platform_layout {
+struct platform_layout {
     struct android_app* app;
 };
 
@@ -24,9 +25,10 @@ struct edge_window {
     bool surface_ready;
 };
 
-struct edge_platform_context {
+struct platform_context {
     edge_allocator_t* alloc;
-    edge_platform_layout_t* layout;
+    platform_layout_t* layout;
+    event_dispatcher_t* event_dispatcher;
 
     struct edge_window* wnd;
 };
@@ -44,7 +46,7 @@ static JNIEnv* get_jni_env(struct android_app* app) {
 }
 
 static void on_app_cmd_cb(struct android_app* app, int32_t cmd) {
-    edge_platform_context_t* ctx = (edge_platform_context_t*)app->userData;
+    platform_context_t* ctx = (platform_context_t*)app->userData;
 
     switch (cmd) {
         case APP_CMD_INIT_WINDOW: {
@@ -125,7 +127,7 @@ static void motion_data_cb(const int32_t controller_index, const Paddleboat_Moti
         return;
     }
 
-    edge_platform_context_t* ctx = (edge_platform_context_t*)user_data;
+    platform_context_t* ctx = (platform_context_t*)user_data;
 
     switch (motion_data->motionType) {
         case PADDLEBOAT_MOTION_ACCELEROMETER: {
@@ -144,7 +146,7 @@ static void controller_status_cb(const int32_t controller_index, const enum Padd
         return;
     }
 
-    edge_platform_context_t* ctx = (edge_platform_context_t*)user_data;
+    platform_context_t* ctx = (platform_context_t*)user_data;
 
     bool is_just_connected = controller_status == PADDLEBOAT_CONTROLLER_JUST_CONNECTED;
     bool is_just_disconnected = controller_status == PADDLEBOAT_CONTROLLER_JUST_DISCONNECTED;
@@ -192,7 +194,7 @@ static void mouse_status_cb(const enum Paddleboat_MouseStatus mouse_status, void
         return;
     }
 
-    edge_platform_context_t* ctx = (edge_platform_context_t*)user_data;
+    platform_context_t* ctx = (platform_context_t*)user_data;
 
     if (mouse_status == PADDLEBOAT_MOUSE_NONE) {
         EDGE_LOG_DEBUG("Mouse disconnected.");
@@ -207,33 +209,34 @@ static void keyboard_status_cb(const bool physical_keyboard_status, void* user_d
         return;
     }
 
-    edge_platform_context_t* ctx = (edge_platform_context_t*)user_data;
+    platform_context_t* ctx = (platform_context_t*)user_data;
 
     EDGE_LOG_DEBUG("Physical keyboard %sconnected.", physical_keyboard_status ? "" : "dis");
 }
 
-edge_platform_context_t* edge_platform_create(edge_allocator_t* alloc, edge_platform_layout_t* layout) {
-    if (!alloc || !layout) {
+platform_context_t* platform_context_create(platform_context_create_info_t* create_info) {
+    if (!create_info || !create_info->alloc || !create_info->layout) {
         return NULL;
     }
 
-    edge_platform_context_t* ctx = (edge_platform_context_t*)edge_allocator_calloc(alloc, 1, sizeof(edge_platform_context_t));
+    platform_context_t* ctx = (platform_context_t*)edge_allocator_calloc(create_info->alloc, 1, sizeof(platform_context_t));
     if (!ctx) {
         return NULL;
     }
 
-    ctx->alloc = alloc;
-    ctx->layout = layout;
+    ctx->alloc = create_info->alloc;
+    ctx->layout = create_info->layout;
+    ctx->event_dispatcher = create_info->event_dispatcher;
     ctx->wnd = NULL;
 
     edge_logger_t* logger = edge_logger_get_global();
-    edge_logger_output_t* debug_output = edge_logger_create_logcat_output(alloc, EDGE_LOG_FORMAT_DEFAULT);
+    edge_logger_output_t* debug_output = edge_logger_create_logcat_output(create_info->alloc, EDGE_LOG_FORMAT_DEFAULT);
     edge_logger_add_output(logger, debug_output);
 
     return ctx;
 }
 
-void edge_platform_destroy(edge_platform_context_t* ctx) {
+void platform_context_destroy(platform_context_t* ctx) {
     if (!ctx) {
         return;
     }
@@ -263,7 +266,7 @@ void edge_platform_destroy(edge_platform_context_t* ctx) {
     edge_allocator_free(alloc, ctx);
 }
 
-bool edge_platform_window_init(edge_platform_context_t* ctx, edge_window_create_info_t* create_info) {
+bool platform_context_window_init(platform_context_t* ctx, window_create_info_t* create_info) {
     if (!ctx || !ctx->layout || !ctx->layout->app || !create_info) {
         return false;
     }
@@ -313,7 +316,7 @@ bool edge_platform_window_init(edge_platform_context_t* ctx, edge_window_create_
     return true;
 }
 
-bool edge_platform_window_should_close(edge_platform_context_t* ctx) {
+bool platform_context_window_should_close(platform_context_t* ctx) {
     if (!ctx || !ctx->wnd) {
         return false;
     }
@@ -321,7 +324,7 @@ bool edge_platform_window_should_close(edge_platform_context_t* ctx) {
     return ctx->wnd->should_close;
 }
 
-void edge_platform_window_process_events(edge_platform_context_t* ctx, float delta_time) {
+void platform_context_window_process_events(platform_context_t* ctx, float delta_time) {
     if (!ctx || !ctx->wnd) {
         return;
     }
@@ -479,25 +482,25 @@ void edge_platform_window_process_events(edge_platform_context_t* ctx, float del
     }
 }
 
-void edge_platform_window_show(edge_platform_context_t* ctx) {
+void platform_context_window_show(platform_context_t* ctx) {
     if (!ctx || !ctx->wnd) {
         return;
     }
 }
 
-void edge_platform_window_hide(edge_platform_context_t* ctx) {
+void platform_context_window_hide(platform_context_t* ctx) {
     if (!ctx || !ctx->wnd) {
         return;
     }
 }
 
-void edge_platform_window_set_title(edge_platform_context_t* ctx, const char* title) {
+void platform_context_window_set_title(platform_context_t* ctx, const char* title) {
     if (!ctx || !ctx->wnd || !title) {
         return;
     }
 }
 
-float edge_platform_window_dpi_scale_factor(edge_platform_context_t* ctx) {
+float platform_context_window_dpi_scale_factor(platform_context_t* ctx) {
     if (!ctx || !ctx->wnd) {
         return 1.0f;
     }
@@ -506,11 +509,11 @@ float edge_platform_window_dpi_scale_factor(edge_platform_context_t* ctx) {
     return (float)AConfiguration_getDensity(app->config) / (float)ACONFIGURATION_DENSITY_MEDIUM;
 }
 
-float edge_platform_window_content_scale_factor(edge_platform_context_t* ctx) {
+float platform_context_window_content_scale_factor(platform_context_t* ctx) {
     return 1.0f;
 }
 
 extern "C" void android_main(struct android_app* state) {
-    edge_platform_layout_t platform_layout = { 0 };
+    platform_layout_t platform_layout = { 0 };
     edge_main(&platform_layout);
 }

@@ -1,5 +1,5 @@
-#ifndef EDGE_PLATFORM_H
-#define EDGE_PLATFORM_H
+#ifndef PLATFORM_CONTEXT_H
+#define PLATFORM_CONTEXT_H
 
 #include <stdbool.h>
 
@@ -8,30 +8,30 @@ extern "C" {
 #endif
 
 	typedef struct edge_allocator edge_allocator_t;
-	typedef struct edge_event_dispatcher edge_event_dispatcher_t;
+	typedef struct event_dispatcher event_dispatcher_t;
 
-	typedef struct edge_platform_layout edge_platform_layout_t;
-	typedef struct edge_platform_context edge_platform_context_t;
+	typedef struct platform_layout platform_layout_t;
+	typedef struct platform_context platform_context_t;
 
-	typedef struct edge_platform_context_create_info {
+	typedef struct platform_context_create_info {
 		edge_allocator_t* alloc;
-		edge_platform_layout_t* layout;
-		edge_event_dispatcher_t* event_dispatcher;
-	} edge_platform_context_create_info_t;
+		platform_layout_t* layout;
+		event_dispatcher_t* event_dispatcher;
+	} platform_context_create_info_t;
 
 	typedef enum window_mode {
-		EDGE_WINDOW_MODE_FULLSCREEN,
-		EDGE_WINDOW_MODE_FULLSCREEN_BORDERLESS,
-		EDGE_WINDOW_MODE_DEFAULT
+		WINDOW_MODE_FULLSCREEN,
+		WINDOW_MODE_FULLSCREEN_BORDERLESS,
+		WINDOW_MODE_DEFAULT
 	} window_mode_t;
 
 	typedef enum window_vsync_mode {
-		EDGE_WINDOW_VSYNC_MODE_OFF,
-		EDGE_WINDOW_VSYNC_MODE_ON,
-		EDGE_WINDOW_VSYNC_MODE_DEFAULT
+		WINDOW_VSYNC_MODE_OFF,
+		WINDOW_VSYNC_MODE_ON,
+		WINDOW_VSYNC_MODE_DEFAULT
 	} window_vsync_mode_t;
 
-	typedef struct edge_window_create_info {
+	typedef struct window_create_info {
 		const char* title;
 		window_mode_t mode;
 		bool resizable;
@@ -39,26 +39,26 @@ extern "C" {
 
 		int width;
 		int height;
-	} edge_window_create_info_t;
+	} window_create_info_t;
 
-	edge_platform_context_t* edge_platform_create(edge_platform_context_create_info_t* create_info);
-	void edge_platform_destroy(edge_platform_context_t* ctx);
+	platform_context_t* platform_context_create(platform_context_create_info_t* create_info);
+	void platform_context_destroy(platform_context_t* ctx);
 
-	bool edge_platform_window_init(edge_platform_context_t* ctx, edge_window_create_info_t* create_info);
+	bool platform_context_window_init(platform_context_t* ctx, window_create_info_t* create_info);
 
-    bool edge_platform_window_should_close(edge_platform_context_t* ctx);
-	void edge_platform_window_process_events(edge_platform_context_t* ctx, float delta_time);
+    bool platform_context_window_should_close(platform_context_t* ctx);
+	void platform_context_window_process_events(platform_context_t* ctx, float delta_time);
 
-	void edge_platform_window_show(edge_platform_context_t* ctx);
-	void edge_platform_window_hide(edge_platform_context_t* ctx);
+	void platform_context_window_show(platform_context_t* ctx);
+	void platform_context_window_hide(platform_context_t* ctx);
 
-	void edge_platform_window_set_title(edge_platform_context_t* ctx, const char* title);
+	void platform_context_window_set_title(platform_context_t* ctx, const char* title);
 
-	float edge_platform_window_dpi_scale_factor(edge_platform_context_t* ctx);
-	float edge_platform_window_content_scale_factor(edge_platform_context_t* ctx);
+	float platform_context_window_dpi_scale_factor(platform_context_t* ctx);
+	float platform_context_window_content_scale_factor(platform_context_t* ctx);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif //EDGE_PLATFORM_H
+#endif //PLATFORM_CONTEXT_H
