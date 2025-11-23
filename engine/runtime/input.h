@@ -2,6 +2,10 @@
 #define EDGE_INPUT_H
 
 #include <stdint.h>
+#include <edge_bitarray.h>
+#include <edge_platform_detect.h>
+
+#define EDGE_MAX_PAD_SLOTS 8
 
 #ifdef __cplusplus
 extern "C" {
@@ -190,7 +194,26 @@ extern "C" {
 		INPUT_PAD_AXIS_COUNT
 	} input_pad_axis_t;
 
+	typedef EDGE_ALIGN(16) struct input_pad_state {
+		uint8_t btn_states[EDGE_BITARRAY_SIZE(INPUT_PAD_COUNT)];
+		float stick_left_x, stick_left_y;
+		float stick_right_x, stick_right_y;
+		float trigger_left_x, trigger_left_y;
+		float trigger_right_x, trigger_right_y;
+		float accel_x, accel_y, accel_z;
+		float gyro_x, gyro_y, gyro_z;
+	} input_pad_state_t;
 
+	typedef EDGE_ALIGN(16) struct input_mouse_state {
+		uint8_t btn_states[EDGE_BITARRAY_SIZE(INPUT_MOUSE_BTN_COUNT)];
+		float x, y;
+	} input_mouse_state_t;
+
+	typedef EDGE_ALIGN(16) struct input_state {
+		uint8_t key_states[EDGE_BITARRAY_SIZE(INPUT_KEY_COUNT)];
+		input_mouse_state_t mouse;
+		input_pad_state_t pads[EDGE_MAX_PAD_SLOTS];
+	} input_state_t;
 
 #ifdef __cplusplus
 }
