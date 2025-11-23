@@ -24,6 +24,7 @@ set(EDGE_BASE_SOURCES
 set(EDGE_BASE_HEADERS
     "include/edge_allocator.h"
     "include/edge_arena.h"
+    "include/edge_bitarray.h"
     "include/edge_hashmap.h"
     "include/edge_list.h"
     "include/edge_queue.h"
