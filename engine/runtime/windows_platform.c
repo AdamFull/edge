@@ -5,6 +5,7 @@
 #include <edge_logger.h>
 
 #include <math.h>
+#include <stdio.h>
 
 // TODO: GLFW is common between windows and linux
 #include <GLFW/glfw3.h>
@@ -14,6 +15,8 @@
 #endif
 
 #include <Windows.h>
+
+static event_dispatcher_t* g_event_dispatcher = NULL;
 
 extern int edge_main(platform_layout_t* platform_layout);
 
@@ -311,8 +314,11 @@ static void mouse_scroll_cb(GLFWwindow* window, double xoffset, double yoffset) 
 	if (!ctx) {
 		return;
 	}
-	
-	input_update_mouse_scroll_state(ctx->input_state, ctx->event_dispatcher, (float)xoffset, (float)yoffset);
+
+	input_mouse_scroll_event_t evt;
+	input_mouse_scroll_event_init(&evt, (float)xoffset, (float)yoffset);
+
+	event_dispatcher_dispatch(ctx->event_dispatcher, (event_header_t*)&evt);
 }
 
 static void character_input_cb(GLFWwindow* window, uint32_t codepoint) {
@@ -320,11 +326,30 @@ static void character_input_cb(GLFWwindow* window, uint32_t codepoint) {
 	if (!ctx) {
 		return;
 	}
-	// TODO: DISPATCH EVENTS
+
+	input_text_input_event_t evt;
+	input_text_input_event_init(&evt, codepoint);
+	
+	event_dispatcher_dispatch(ctx->event_dispatcher, (event_header_t*)&evt);
 }
 
 static void gamepad_connected_cb(int jid, int event) {
-	// TODO: DISPATCH EVENTS
+	const char* guid = glfwGetJoystickGUID(jid);
+
+	int vendor_id = 0, product_id = 0;
+	sscanf(guid, "%04x%04x", &vendor_id, &product_id);
+
+	input_pad_connection_event_t evt;
+	input_pad_connection_event_init(&evt, 
+		jid, 
+		vendor_id,
+		product_id,
+		0, 
+		event == GLFW_CONNECTED,
+		glfwGetJoystickName(jid)
+	);
+
+	event_dispatcher_dispatch(g_event_dispatcher, (event_header_t*)&evt);
 }
 
 platform_context_t* platform_context_create(platform_context_create_info_t* create_info) {
@@ -347,6 +372,8 @@ platform_context_t* platform_context_create(platform_context_create_info_t* crea
 	ctx->layout = create_info->layout;
 	ctx->event_dispatcher = create_info->event_dispatcher;
 	ctx->wnd = NULL;
+
+	g_event_dispatcher = create_info->event_dispatcher;
 
 	// TODO: Init terminal
 
@@ -371,6 +398,8 @@ void platform_context_destroy(platform_context_t* ctx) {
 		edge_allocator_free(ctx->alloc, wnd);
 		deinit_glfw_context();
 	}
+
+	g_event_dispatcher = NULL;
 
 	edge_allocator_t* alloc = ctx->alloc;
 	edge_allocator_free(alloc, ctx);
@@ -470,11 +499,12 @@ void platform_context_window_process_events(platform_context_t* ctx, float delta
 	for (int jid = 0; jid < GLFW_JOYSTICK_LAST; ++jid) {
 		GLFWgamepadstate state;
 		if (glfwGetGamepadState(jid, &state)) {
-			GLFWgamepadstate* prev_state = &wnd->gamepad_states[jid];
+			input_pad_state_t* prev_state = &ctx->input_state->pads[jid];
 
 			for (int btn = 0; btn < GLFW_GAMEPAD_BUTTON_LAST + 1; ++btn) {
+
 				bool current_state = state.buttons[btn] == GLFW_PRESS;
-				bool prev_button_state = prev_state->buttons[btn] == GLFW_PRESS;
+				bool prev_button_state = edge_bitarray_get(prev_state->btn_states, btn);
 
 				if (current_state != prev_button_state) {
 					// TODO: DISPATCH EVENT

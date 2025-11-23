@@ -17,6 +17,7 @@ extern "C" {
 		INPUT_EVENT_TYPE_MOUSE_BTN,
 		INPUT_EVENT_TYPE_MOUSE_SCROLL,
 		INPUT_EVENT_TYPE_TEXT_INPUT,
+		INPUT_EVENT_TYPE_PAD_CONNECTION,
 	} input_event_type_t;
 
 	typedef struct input_keyboard_event {
@@ -38,7 +39,7 @@ extern "C" {
 
 	typedef struct input_mouse_scroll_event {
 		event_header_t header;
-		float dx, dy;
+		float xoffset, yoffset;
 	} input_mouse_scroll_event_t;
 
 	typedef struct input_text_input_event {
@@ -46,10 +47,23 @@ extern "C" {
 		uint32_t codepoint;
 	} input_text_input_event_t;
 
+	typedef struct input_pad_connection_event {
+		event_header_t header;
+		int32_t pad_id;
+		int32_t vendor_id;
+		int32_t product_id;
+		int32_t device_id;
+		bool connected;
+		char name[256];
+	} input_pad_connection_event_t;
+
 	void input_update_keyboard_state(input_state_t* state, event_dispatcher_t* dispatcher, input_keyboard_key_t key, input_key_action_t new_state);
 	void input_update_mouse_move_state(input_state_t* state, event_dispatcher_t* dispatcher, float x, float y);
 	void input_update_mouse_btn_state(input_state_t* state, event_dispatcher_t* dispatcher, input_mouse_btn_t key, input_key_action_t new_state);
-	void input_update_mouse_scroll_state(input_state_t* state, event_dispatcher_t* dispatcher, float dx, float dy);
+
+	void input_mouse_scroll_event_init(input_mouse_scroll_event_t* evt, float xoffset, float yoffset);
+	void input_text_input_event_init(input_text_input_event_t* evt, uint32_t codepoint);
+	void input_pad_connection_event_init(input_pad_connection_event_t* evt, int32_t pad_id, int32_t vendor_id, int32_t product_id, int32_t device_id, bool connected, const char* name);
 
 #ifdef __cplusplus
 }
