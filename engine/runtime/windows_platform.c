@@ -285,13 +285,7 @@ static void window_key_cb(GLFWwindow* window, int key, int scancode, int action,
 		return;
 	}
 
-	input_keyboard_event_t evt;
-	input_keyboard_event_init(&evt, glfw_key_code_to_edge[key], action == GLFW_PRESS ? INPUT_KEY_ACTION_DOWN : INPUT_KEY_ACTION_UP);
-	
-	event_dispatcher_t* dispatcher = ctx->event_dispatcher;
-	if (dispatcher) {
-		event_dispatcher_dispatch(dispatcher, (edge_event_header_t*)&evt);
-	}
+	input_update_keyboard_state(ctx->input_state, ctx->event_dispatcher, glfw_key_code_to_edge[key], action == GLFW_PRESS ? INPUT_KEY_ACTION_DOWN : INPUT_KEY_ACTION_UP);
 }
 
 static void window_cursor_cb(GLFWwindow* window, double xpos, double ypos) {
