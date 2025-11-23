@@ -293,7 +293,8 @@ static void window_cursor_cb(GLFWwindow* window, double xpos, double ypos) {
 	if (!ctx) {
 		return;
 	}
-	// TODO: DISPATCH EVENTS
+	
+	input_update_mouse_move_state(ctx->input_state, ctx->event_dispatcher, (float)xpos, (float)ypos);
 }
 
 static void mouse_button_cb(GLFWwindow* window, int button, int action, int mods) {
@@ -301,7 +302,8 @@ static void mouse_button_cb(GLFWwindow* window, int button, int action, int mods
 	if (!ctx) {
 		return;
 	}
-	// TODO: DISPATCH EVENTS
+	
+	input_update_mouse_btn_state(ctx->input_state, ctx->event_dispatcher, glfw_mouse_btn_code_to_edge[button], action == GLFW_PRESS ? INPUT_KEY_ACTION_DOWN : INPUT_KEY_ACTION_UP);
 }
 
 static void mouse_scroll_cb(GLFWwindow* window, double xoffset, double yoffset) {
@@ -309,7 +311,8 @@ static void mouse_scroll_cb(GLFWwindow* window, double xoffset, double yoffset) 
 	if (!ctx) {
 		return;
 	}
-	// TODO: DISPATCH EVENTS
+	
+	input_update_mouse_scroll_state(ctx->input_state, ctx->event_dispatcher, (float)xoffset, (float)yoffset);
 }
 
 static void character_input_cb(GLFWwindow* window, uint32_t codepoint) {

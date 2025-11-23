@@ -1,5 +1,10 @@
 include(FetchContent)
 
+target_sources(${PROJECT_NAME}
+    PRIVATE
+    "input_events.c"
+)
+
 # Platform detection and definitions
 if(WIN32)
     target_compile_definitions(${PROJECT_NAME} PRIVATE
