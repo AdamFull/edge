@@ -17,15 +17,17 @@ extern "C" {
 	} input_event_type_t;
 
 	typedef struct input_keyboard_event {
-		edge_event_header_t header;
+		event_header_t header;
 		input_keyboard_key_t key;
 		input_key_action_t action;
 	} input_keyboard_event_t;
 
 	typedef struct input_mouse_move_event {
-		edge_event_header_t header;
+		event_header_t header;
 		float x, y, dx, dy;
 	} input_mouse_move_event_t;
+
+	void input_update_keyboard_state(input_state_t* state, event_dispatcher_t* dispatcher, input_keyboard_key_t key, input_key_action_t new_state);
 
 	inline void input_keyboard_event_init(input_keyboard_event_t* evt, input_keyboard_key_t key, input_key_action_t action) {
 		if (!evt) {
