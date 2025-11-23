@@ -13,8 +13,8 @@ extern "C" {
 
 	typedef enum input_key_action {
 		INPUT_KEY_ACTION_UNKNOWN = -1,
-		INPUT_KEY_ACTION_DOWN,
-		INPUT_KEY_ACTION_UP
+		INPUT_KEY_ACTION_UP,
+		INPUT_KEY_ACTION_DOWN
 	} input_key_action_t;
 
 	typedef enum input_keyboard_key {
