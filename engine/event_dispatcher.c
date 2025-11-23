@@ -9,7 +9,7 @@
 typedef struct edge_event_listener {
 	uint64_t id;
 	uint64_t listen_categories;
-	edge_event_listener_fn listener_fn;
+	event_listener_fn listener_fn;
 	void* user_data;
 } edge_event_listener_t;
 
@@ -53,7 +53,7 @@ void event_dispatcher_destroy(event_dispatcher_t* dispatcher) {
 	edge_allocator_free(dispatcher->allocator, dispatcher);
 }
 
-uint64_t event_dispatcher_add_listener(event_dispatcher_t* dispatcher, uint64_t listen_categories, edge_event_listener_fn listener_fn, void* user_data) {
+uint64_t event_dispatcher_add_listener(event_dispatcher_t* dispatcher, uint64_t listen_categories, event_listener_fn listener_fn, void* user_data) {
 	if (!dispatcher || !listener_fn) {
 		return 0;
 	}
@@ -86,7 +86,7 @@ void event_dispatcher_remove_listener(event_dispatcher_t* dispatcher, uint64_t l
 	}
 }
 
-void event_dispatcher_dispatch(event_dispatcher_t* dispatcher, edge_event_header_t* event) {
+void event_dispatcher_dispatch(event_dispatcher_t* dispatcher, event_header_t* event) {
 	if (!dispatcher || !event) {
 		return;
 	}
