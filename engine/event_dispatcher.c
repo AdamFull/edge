@@ -13,18 +13,18 @@ typedef struct edge_event_listener {
 	void* user_data;
 } edge_event_listener_t;
 
-struct edge_event_dispatcher {
+struct event_dispatcher {
 	edge_vector_t* listeners;
 	edge_allocator_t* allocator;
 	uint64_t next_listener_id;
 };
 
-edge_event_dispatcher_t* event_dispatcher_create(edge_allocator_t* alloc) {
+event_dispatcher_t* event_dispatcher_create(edge_allocator_t* alloc) {
 	if (!alloc) {
 		return NULL;
 	}
 
-	edge_event_dispatcher_t* dispatcher = (edge_event_dispatcher_t*)edge_allocator_malloc(alloc, sizeof(edge_event_dispatcher_t));
+	event_dispatcher_t* dispatcher = (event_dispatcher_t*)edge_allocator_malloc(alloc, sizeof(event_dispatcher_t));
 	if (!dispatcher) {
 		return NULL;
 	}
@@ -41,7 +41,7 @@ edge_event_dispatcher_t* event_dispatcher_create(edge_allocator_t* alloc) {
 	return dispatcher;
 }
 
-void event_dispatcher_destroy(edge_event_dispatcher_t* dispatcher) {
+void event_dispatcher_destroy(event_dispatcher_t* dispatcher) {
 	if (!dispatcher) {
 		return;
 	}
@@ -53,7 +53,7 @@ void event_dispatcher_destroy(edge_event_dispatcher_t* dispatcher) {
 	edge_allocator_free(dispatcher->allocator, dispatcher);
 }
 
-uint64_t event_dispatcher_add_listener(edge_event_dispatcher_t* dispatcher, uint64_t listen_categories, edge_event_listener_fn listener_fn, void* user_data) {
+uint64_t event_dispatcher_add_listener(event_dispatcher_t* dispatcher, uint64_t listen_categories, edge_event_listener_fn listener_fn, void* user_data) {
 	if (!dispatcher || !listener_fn) {
 		return 0;
 	}
@@ -71,7 +71,7 @@ uint64_t event_dispatcher_add_listener(edge_event_dispatcher_t* dispatcher, uint
 	return listener.id;
 }
 
-void event_dispatcher_remove_listener(edge_event_dispatcher_t* dispatcher, uint64_t listener_id) {
+void event_dispatcher_remove_listener(event_dispatcher_t* dispatcher, uint64_t listener_id) {
 	if (!dispatcher || listener_id == 0) {
 		return;
 	}
@@ -86,7 +86,7 @@ void event_dispatcher_remove_listener(edge_event_dispatcher_t* dispatcher, uint6
 	}
 }
 
-void event_dispatcher_dispatch(edge_event_dispatcher_t* dispatcher, edge_event_header_t* event) {
+void event_dispatcher_dispatch(event_dispatcher_t* dispatcher, edge_event_header_t* event) {
 	if (!dispatcher || !event) {
 		return;
 	}
