@@ -10,6 +10,7 @@ add_library(edge_foundation INTERFACE)
 target_link_libraries(edge_foundation
 	INTERFACE
 	edge_base
+	edge_coro
 	#edge_http_static
 	edge_json_static
 	edge_logger
