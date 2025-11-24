@@ -499,44 +499,14 @@ void platform_context_window_process_events(platform_context_t* ctx, float delta
 	for (int jid = 0; jid < GLFW_JOYSTICK_LAST; ++jid) {
 		GLFWgamepadstate state;
 		if (glfwGetGamepadState(jid, &state)) {
-			input_pad_state_t* prev_state = &ctx->input_state->pads[jid];
-
 			for (int btn = 0; btn < GLFW_GAMEPAD_BUTTON_LAST + 1; ++btn) {
-
-				bool current_state = state.buttons[btn] == GLFW_PRESS;
-				bool prev_button_state = edge_bitarray_get(prev_state->btn_states, btn);
-
-				if (current_state != prev_button_state) {
-					// TODO: DISPATCH EVENT
-				}
+				input_update_pad_btn_state(ctx->input_state, ctx->event_dispatcher, jid, glfw_pad_btn_code_to_edge[btn], (input_key_action_t)state.buttons[btn]);
 			}
 
-			float left_x_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X] - prev_state->axes[GLFW_GAMEPAD_AXIS_LEFT_X]);
-			float left_y_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y] - prev_state->axes[GLFW_GAMEPAD_AXIS_LEFT_Y]);
-			if (left_x_diff > axis_threshold || left_y_diff > axis_threshold) {
-				// TODO: DISPATCH EVENT
-			}
-
-			float right_x_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X] - prev_state->axes[GLFW_GAMEPAD_AXIS_RIGHT_X]);
-			float right_y_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y] - prev_state->axes[GLFW_GAMEPAD_AXIS_RIGHT_Y]);
-			if (right_x_diff > axis_threshold || right_y_diff > axis_threshold) {
-				// TODO: DISPATCH EVENT
-			}
-
-			float left_trigger_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER] - prev_state->axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER]);
-			if (left_trigger_diff > axis_threshold) {
-				// TODO: DISPATCH EVENT
-			}
-
-			float right_trigger_diff = fabs(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER] - prev_state->axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER]);
-			if (right_trigger_diff > axis_threshold) {
-				// TODO: DISPATCH EVENT
-			}
-
-			*prev_state = state;
-		}
-		else {
-			memset(&wnd->gamepad_states[jid], 0, sizeof(GLFWgamepadstate));
+			input_update_pad_axis_state(ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_STICK_LEFT, state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y], 0.0f);
+			input_update_pad_axis_state(ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_STICK_RIGHT, state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y], 0.0f);
+			input_update_pad_axis_state(ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_TRIGGER_LEFT, state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER], 0.0f, 0.0f);
+			input_update_pad_axis_state(ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_TRIGGER_RIGHT, state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER], 0.0f, 0.0f);
 		}
 	}
 }

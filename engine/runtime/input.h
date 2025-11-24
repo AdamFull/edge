@@ -198,8 +198,7 @@ extern "C" {
 		uint8_t btn_states[EDGE_BITARRAY_SIZE(INPUT_PAD_COUNT)];
 		float stick_left_x, stick_left_y;
 		float stick_right_x, stick_right_y;
-		float trigger_left_x, trigger_left_y;
-		float trigger_right_x, trigger_right_y;
+		float trigger_left, trigger_right;
 		float accel_x, accel_y, accel_z;
 		float gyro_x, gyro_y, gyro_z;
 	} input_pad_state_t;
