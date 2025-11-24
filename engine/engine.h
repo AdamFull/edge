@@ -8,11 +8,13 @@ extern "C" {
 #endif
 
 	typedef struct edge_logger edge_logger_t;
+	typedef struct edge_sched edge_sched_t;
 	typedef struct event_dispatcher event_dispatcher_t;
 
 	typedef struct edge_engine_context {
 		edge_allocator_t* allocator;
 		edge_logger_t* logger;
+		edge_sched_t* sched;
 
 		event_dispatcher_t* event_dispatcher;
 

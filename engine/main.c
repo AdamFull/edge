@@ -4,6 +4,7 @@
 #include <edge_allocator.h>
 #include <edge_testing.h>
 #include <edge_logger.h>
+#include <edge_scheduler.h>
 #include <edge_platform_detect.h>
 
 #include <assert.h>
@@ -18,6 +19,10 @@ static void edge_cleanup_engine(void) {
 
 	if (engine_context.platform_context) {
 		platform_context_destroy(engine_context.platform_context);
+	}
+
+	if (engine_context.sched) {
+		edge_sched_destroy(engine_context.sched);
 	}
 
 	if (engine_context.logger) {
@@ -50,6 +55,11 @@ int edge_main(platform_layout_t* platform_layout) {
 
 	edge_logger_output_t* file_output = edge_logger_create_file_output(&allocator, EDGE_LOG_FORMAT_DEFAULT, "log.log", false);
 	edge_logger_add_output(engine_context.logger, file_output);
+
+	engine_context.sched = edge_sched_create(&allocator);
+	if (!engine_context.sched) {
+		goto fatal_error;
+	}
 
 	engine_context.event_dispatcher = event_dispatcher_create(&allocator);
 	if (!engine_context.event_dispatcher) {
