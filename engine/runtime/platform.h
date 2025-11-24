@@ -44,6 +44,8 @@ extern "C" {
 	platform_context_t* platform_context_create(platform_context_create_info_t* create_info);
 	void platform_context_destroy(platform_context_t* ctx);
 
+	void platform_context_get_surface(platform_context_t* ctx, void* surface_info);
+
 	bool platform_context_window_init(platform_context_t* ctx, window_create_info_t* create_info);
 
     bool platform_context_window_should_close(platform_context_t* ctx);

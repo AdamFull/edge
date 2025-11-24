@@ -36,98 +36,98 @@ include(FetchContent)
 #FetchContent_MakeAvailable(spdlog)
 
 # vulkan
-#add_library(vulkan INTERFACE)
-#set(VULKAN_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/include)
-#target_sources(vulkan INTERFACE 
-#    ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h
-#    ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.hpp
-#)
-#target_include_directories(vulkan SYSTEM INTERFACE ${VULKAN_INCLUDE_DIR})
-#
-#target_compile_definitions(vulkan INTERFACE VK_NO_PROTOTYPES)
-#
-#if(ANDROID)
-#    target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_ANDROID_KHR)
-#elseif(WIN32)
-#    target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_WIN32_KHR)
-#elseif(APPLE)
-#	target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_METAL_EXT)
-#elseif(UNIX)
-#    set(EDGE_VK_WSI_SELECTION XLIB)
-#    # Choose WSI based on EDGE_VK_WSI_SELECTION
-#    if (VKB_WSI_SELECTION STREQUAL XCB OR EDGE_VK_WSI_SELECTION STREQUAL XLIB OR EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
-#        find_package(PkgConfig REQUIRED)
-#    endif()
-#    if (EDGE_VK_WSI_SELECTION STREQUAL XCB)
-#        pkg_check_modules(XCB xcb REQUIRED)
-#        if (XCB_FOUND)
-#            target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_XCB_KHR)
-#        endif()
-#    elseif (EDGE_VK_WSI_SELECTION STREQUAL XLIB)
-#        pkg_check_modules(X11 x11 REQUIRED)
-#        if (X11_FOUND)
-#            target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_XLIB_KHR)
-#        endif()
-#    elseif (EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
-#        pkg_check_modules(WAYLAND wayland-client REQUIRED)
-#        if (WAYLAND_FOUND)
-#            target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_WAYLAND_KHR)
-#        endif()
-#    elseif (EDGE_VK_WSI_SELECTION STREQUAL D2D)
-#        set(DIRECT_TO_DISPLAY TRUE)
-#        set(DIRECT_TO_DISPLAY TRUE PARENT_SCOPE)
-#        target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_DISPLAY_KHR)
-#    else()
-#        message(FATAL_ERROR "Unknown WSI")
-#    endif()
-#endif()
-#
-#add_library(Vulkan::Headers ALIAS vulkan)
-#
-## volk
-#set(VOLK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/volk")
-#set(VOLK_FILES
-#    "${VOLK_DIR}/volk.c"
-#    "${VOLK_DIR}/volk.h")
-#
-#add_library(volk STATIC ${VOLK_FILES})
-#set_target_properties(volk PROPERTIES POSITION_INDEPENDENT_CODE ON)
-#
-#target_link_libraries(volk PUBLIC vulkan)
-#
-#target_include_directories(volk SYSTEM PUBLIC ${VOLK_DIR})
-#if (EDGE_VK_WSI_SELECTION STREQUAL XCB)
-#    target_include_directories(volk SYSTEM PUBLIC ${XCB_INCLUDE_DIRS})
-#elseif (EDGE_VK_WSI_SELECTION STREQUAL XLIB)
-#    target_include_directories(volk SYSTEM PUBLIC ${X11_INCLUDE_DIRS})
-#elseif (EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
-#    target_include_directories(volk SYSTEM PUBLIC ${WAYLAND_INCLUDE_DIRS})
-#endif()
-#
-#add_library(volk::volk ALIAS volk)
-#
+add_library(vulkan INTERFACE)
+set(VULKAN_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/include)
+target_sources(vulkan INTERFACE 
+    ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.h
+    ${VULKAN_INCLUDE_DIR}/vulkan/vulkan.hpp
+)
+target_include_directories(vulkan SYSTEM INTERFACE ${VULKAN_INCLUDE_DIR})
+
+target_compile_definitions(vulkan INTERFACE VK_NO_PROTOTYPES)
+
+if(ANDROID)
+    target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_ANDROID_KHR)
+elseif(WIN32)
+    target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_WIN32_KHR)
+elseif(APPLE)
+	target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_METAL_EXT)
+elseif(UNIX)
+    set(EDGE_VK_WSI_SELECTION XLIB)
+    # Choose WSI based on EDGE_VK_WSI_SELECTION
+    if (VKB_WSI_SELECTION STREQUAL XCB OR EDGE_VK_WSI_SELECTION STREQUAL XLIB OR EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
+        find_package(PkgConfig REQUIRED)
+    endif()
+    if (EDGE_VK_WSI_SELECTION STREQUAL XCB)
+        pkg_check_modules(XCB xcb REQUIRED)
+        if (XCB_FOUND)
+            target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_XCB_KHR)
+        endif()
+    elseif (EDGE_VK_WSI_SELECTION STREQUAL XLIB)
+        pkg_check_modules(X11 x11 REQUIRED)
+        if (X11_FOUND)
+            target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_XLIB_KHR)
+        endif()
+    elseif (EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
+        pkg_check_modules(WAYLAND wayland-client REQUIRED)
+        if (WAYLAND_FOUND)
+            target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_WAYLAND_KHR)
+        endif()
+    elseif (EDGE_VK_WSI_SELECTION STREQUAL D2D)
+        set(DIRECT_TO_DISPLAY TRUE)
+        set(DIRECT_TO_DISPLAY TRUE PARENT_SCOPE)
+        target_compile_definitions(vulkan INTERFACE VK_USE_PLATFORM_DISPLAY_KHR)
+    else()
+        message(FATAL_ERROR "Unknown WSI")
+    endif()
+endif()
+
+add_library(Vulkan::Headers ALIAS vulkan)
+
+# volk
+set(VOLK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/volk")
+set(VOLK_FILES
+    "${VOLK_DIR}/volk.c"
+    "${VOLK_DIR}/volk.h")
+
+add_library(volk STATIC ${VOLK_FILES})
+set_target_properties(volk PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
+target_link_libraries(volk PUBLIC vulkan)
+
+target_include_directories(volk SYSTEM PUBLIC ${VOLK_DIR})
+if (EDGE_VK_WSI_SELECTION STREQUAL XCB)
+    target_include_directories(volk SYSTEM PUBLIC ${XCB_INCLUDE_DIRS})
+elseif (EDGE_VK_WSI_SELECTION STREQUAL XLIB)
+    target_include_directories(volk SYSTEM PUBLIC ${X11_INCLUDE_DIRS})
+elseif (EDGE_VK_WSI_SELECTION STREQUAL WAYLAND)
+    target_include_directories(volk SYSTEM PUBLIC ${WAYLAND_INCLUDE_DIRS})
+endif()
+
+add_library(volk::volk ALIAS volk)
+
 # vma
-#set(VMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vma/include")
-#set(VMA_IMPL_DIR "${CMAKE_CURRENT_BINARY_DIR}/vma_impl")
-#set(VMA_IMPL_C "${VMA_IMPL_DIR}/vk_mem_alloc_impl.cpp")
-#
-#file(WRITE "${VMA_IMPL_C}"
-#"#ifndef VMA_IMPLEMENTATION\n"
-#"#define VMA_IMPLEMENTATION\n"
-#"#include \"vk_mem_alloc.h\"\n"
-#"#endif\n"
-#)
-#
-#add_library(vma STATIC ${VMA_IMPL_C})
-#target_include_directories(vma PUBLIC ${VMA_DIR})
-#target_link_libraries(vma PUBLIC vulkan)
-#
-#if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-#    target_compile_options(vma PRIVATE -Wno-nullability-completeness)
-#endif()
-#
-#add_library(GPUOpen::VulkanMemoryAllocator ALIAS vma)
-#
+set(VMA_DIR "${CMAKE_CURRENT_SOURCE_DIR}/vma/include")
+set(VMA_IMPL_DIR "${CMAKE_CURRENT_BINARY_DIR}/vma_impl")
+set(VMA_IMPL_C "${VMA_IMPL_DIR}/vk_mem_alloc_impl.cpp")
+
+file(WRITE "${VMA_IMPL_C}"
+"#ifndef VMA_IMPLEMENTATION\n"
+"#define VMA_IMPLEMENTATION\n"
+"#include \"vk_mem_alloc.h\"\n"
+"#endif\n"
+)
+
+add_library(vma STATIC ${VMA_IMPL_C})
+target_include_directories(vma PUBLIC ${VMA_DIR})
+target_link_libraries(vma PUBLIC vulkan)
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(vma PRIVATE -Wno-nullability-completeness)
+endif()
+
+add_library(GPUOpen::VulkanMemoryAllocator ALIAS vma)
+
 #add_library(argparse INTERFACE)
 #set(ARGPARSE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/argparse")
 #target_include_directories(argparse SYSTEM INTERFACE "${ARGPARSE_DIR}/include")
@@ -323,9 +323,9 @@ target_link_libraries(${PROJECT_NAME}
 
     #glm::glm
 
-    #Vulkan::Headers
-    #volk::volk
-    #GPUOpen::VulkanMemoryAllocator
+    Vulkan::Headers
+    volk::volk
+    GPUOpen::VulkanMemoryAllocator
 
     #imgui
 

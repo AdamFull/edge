@@ -8,7 +8,11 @@
 #include <stdio.h>
 
 // TODO: GLFW is common between windows and linux
+#define GLFW_EXPOSE_NATIVE_WIN32
 #include <GLFW/glfw3.h>
+#include <GLFW/glfw3native.h>
+
+#include <vulkan/vulkan.h>
 
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -405,6 +409,19 @@ void platform_context_destroy(platform_context_t* ctx) {
 	edge_allocator_free(alloc, ctx);
 }
 
+void platform_context_get_surface(platform_context_t* ctx, void* surface_info) {
+	if (!ctx || !surface_info) {
+		return;
+	}
+
+	VkWin32SurfaceCreateInfoKHR* create_info = (VkWin32SurfaceCreateInfoKHR*)surface_info;
+	create_info->sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+	create_info->pNext = NULL;
+	create_info->flags = 0;
+	create_info->hinstance = ctx->layout->hinst;
+	create_info->hwnd = glfwGetWin32Window(ctx->wnd->handle);
+}
+
 bool platform_context_window_init(platform_context_t* ctx, window_create_info_t* create_info) {
 	if (!ctx) {
 		return false;
@@ -495,7 +512,6 @@ void platform_context_window_process_events(platform_context_t* ctx, float delta
 	glfwPollEvents();
 	wnd->should_close = glfwWindowShouldClose(wnd->handle);
 
-	const float axis_threshold = 0.01f;
 	for (int jid = 0; jid < GLFW_JOYSTICK_LAST; ++jid) {
 		GLFWgamepadstate state;
 		if (glfwGetGamepadState(jid, &state)) {

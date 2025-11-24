@@ -1,5 +1,6 @@
 #include "engine.h"
 #include "event_dispatcher.h"
+#include "gfx_context.h"
 
 #include <edge_allocator.h>
 #include <edge_testing.h>
@@ -13,6 +14,10 @@
 static edge_engine_context_t engine_context = { 0 };
 
 static void edge_cleanup_engine(void) {
+	if (engine_context.gfx_context) {
+		gfx_context_destroy(engine_context.gfx_context);
+	}
+
 	if (engine_context.event_dispatcher) {
 		event_dispatcher_destroy(engine_context.event_dispatcher);
 	}
@@ -88,6 +93,11 @@ int edge_main(platform_layout_t* platform_layout) {
 	window_create_info.height = 720;
 
 	if (!platform_context_window_init(engine_context.platform_context, &window_create_info)) {
+		goto fatal_error;
+	}
+
+	engine_context.gfx_context = gfx_context_create(&allocator, engine_context.platform_context);
+	if (!engine_context.gfx_context) {
 		goto fatal_error;
 	}
 
