@@ -379,7 +379,18 @@ platform_context_t* platform_context_create(platform_context_create_info_t* crea
 
 	g_event_dispatcher = create_info->event_dispatcher;
 
-	// TODO: Init terminal
+#if EDGE_DEBUG
+	if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
+		if (!AllocConsole()) {
+			EDGE_LOG_DEBUG("Failed to allocate console.");
+		}
+	}
+
+	FILE* fp;
+	freopen_s(&fp, "conin$", "r", stdin);
+	freopen_s(&fp, "conout$", "w", stdout);
+	freopen_s(&fp, "conout$", "w", stderr);
+#endif
 
 	edge_logger_t* logger = edge_logger_get_global();
 	edge_logger_output_t* debug_output = edge_logger_create_debug_console_output(create_info->alloc, EDGE_LOG_FORMAT_DEFAULT);
