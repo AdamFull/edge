@@ -18,7 +18,12 @@ extern "C" {
 
 	typedef struct gfx_context gfx_context_t;
 
-	gfx_context_t* gfx_context_create(const edge_allocator_t* alloc, platform_context_t* platform_ctx);
+	typedef struct gfx_context_create_info {
+		const edge_allocator_t* alloc;
+		platform_context_t* platform_context;
+	} gfx_context_create_info_t;
+
+	gfx_context_t* gfx_context_create(const gfx_context_create_info_t* cteate_info);
 	void gfx_context_destroy(gfx_context_t* context);
 
 #ifdef __cplusplus

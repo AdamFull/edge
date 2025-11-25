@@ -96,7 +96,11 @@ int edge_main(platform_layout_t* platform_layout) {
 		goto fatal_error;
 	}
 
-	engine_context.gfx_context = gfx_context_create(&allocator, engine_context.platform_context);
+	gfx_context_create_info_t gfx_cteate_info = { 0 };
+	gfx_cteate_info.alloc = &allocator;
+	gfx_cteate_info.platform_context = engine_context.platform_context;
+
+	engine_context.gfx_context = gfx_context_create(&gfx_cteate_info);
 	if (!engine_context.gfx_context) {
 		goto fatal_error;
 	}

@@ -380,8 +380,8 @@ static void gfx_instance_destroy(struct gfx_instance* inst) {
 	edge_allocator_free(alloc, inst);
 }
 
-gfx_context_t* gfx_context_create(const edge_allocator_t* alloc, platform_context_t* platform_ctx) {
-	if (!alloc || !platform_ctx) {
+gfx_context_t* gfx_context_create(const gfx_context_create_info_t* cteate_info) {
+	if (!cteate_info || !cteate_info->alloc || !cteate_info->platform_context) {
 		return NULL;
 	}
 
@@ -391,15 +391,15 @@ gfx_context_t* gfx_context_create(const edge_allocator_t* alloc, platform_contex
 		return NULL;
 	}
 
-	gfx_context_t* ctx = (gfx_context_t*)edge_allocator_calloc(alloc, 1, sizeof(gfx_context_t));
+	gfx_context_t* ctx = (gfx_context_t*)edge_allocator_calloc(cteate_info->alloc, 1, sizeof(gfx_context_t));
 	if (!ctx) {
 		goto fatal_error;
 	}
 
-	ctx->alloc = alloc;
+	ctx->alloc = cteate_info->alloc;
 
 	// Init allocation callbacks
-	ctx->alloc_callbacks.pUserData = (void*)alloc;
+	ctx->alloc_callbacks.pUserData = (void*)ctx->alloc;
 	ctx->alloc_callbacks.pfnAllocation = vk_alloc_cb;
 	ctx->alloc_callbacks.pfnReallocation = vk_realloc_cb;
 	ctx->alloc_callbacks.pfnFree = vk_free_cb;
