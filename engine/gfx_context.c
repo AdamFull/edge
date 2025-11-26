@@ -5,6 +5,11 @@
 #include <edge_vector.h>
 #include <edge_logger.h>
 
+#if EDGE_DEBUG
+#include <edge_testing.h>
+#include <assert.h>
+#endif
+
 #include <volk.h>
 #include <vulkan/vulkan.h>
 
@@ -115,10 +120,9 @@ static struct gfx_key_value g_device_extensions[] = {
 #endif
 };
 
-struct gfx_instance {
-	const edge_allocator_t* alloc;
-	const VkAllocationCallbacks* alloc_cb;
+static const uint32_t g_required_api_version = VK_API_VERSION_1_1;
 
+typedef struct gfx_instance {
 	VkInstance handle;
 	VkDebugUtilsMessengerEXT debug_messenger;
 
@@ -130,15 +134,30 @@ struct gfx_instance {
 
 	bool validation_enabled;
 	bool synchronization_validation_enabled;
-};
+} gfx_instance_t;
+
+typedef struct gfx_adapter {
+	VkPhysicalDevice handle;
+
+	VkPhysicalDeviceProperties properties;
+	VkPhysicalDeviceFeatures features;
+
+	const char* enabled_extensions[64];
+	uint32_t enabled_extension_count;
+} gfx_adapter_t;
+
+typedef struct gfx_device {
+	VkDevice handle;
+} gfx_device_t;
 
 struct gfx_context {
 	const edge_allocator_t* alloc;
 	VkAllocationCallbacks alloc_callbacks;
 
-	struct gfx_instance* instance;
-
+	struct gfx_instance instance;
 	VkSurfaceKHR surf;
+	gfx_adapter_t adapter;
+	gfx_device_t device;
 };
 
 static void* VKAPI_CALL vk_alloc_cb(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) {
@@ -192,18 +211,6 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_utils_messenger_cb(
 	return VK_FALSE;
 }
 
-//#if defined(VK_USE_PLATFORM_WIN32_KHR)
-//	VkWin32SurfaceCreateInfoKHR create_info;
-//	platform_context_get_surface(platform_ctx, &create_info);
-//
-//	VkResult result = vkCreateWin32SurfaceKHR(ctx->inst, &create_info, &ctx->alloc_callbacks, &ctx->surf);
-//	if (result != VK_SUCCESS) {
-//		return false;
-//	}
-//#elif defined(VK_USE_PLATFORM_XLIB_KHR)
-//#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-//#endif
-
 static bool is_extension_supported(const char* extension_name, const VkExtensionProperties* available_extensions, uint32_t available_count) {
 	for (int32_t i = 0; i < available_count; i++) {
 		if (strcmp(extension_name, available_extensions[i].extensionName) == 0) {
@@ -222,20 +229,11 @@ static bool is_layer_supported(const char* layer_name, const VkLayerProperties* 
 	return false;
 }
 
-static struct gfx_instance* gfx_instance_create(gfx_context_t* ctx) {
-	if (!ctx || !ctx->alloc) {
-		return NULL;
+static bool gfx_instance_init(struct gfx_instance* inst, const edge_allocator_t* alloc, const VkAllocationCallbacks* alloc_cb) {
+	if (!inst || !alloc || !alloc_cb) {
+		return false;
 	}
 
-	const edge_allocator_t* alloc = ctx->alloc;
-
-	struct gfx_instance* inst = (struct gfx_instance*)edge_allocator_malloc(alloc, sizeof(struct gfx_instance));
-	if (!inst) {
-		return NULL;
-	}
-
-	inst->alloc = alloc;
-	inst->alloc_cb = &ctx->alloc_callbacks;
 	inst->handle = VK_NULL_HANDLE;
 	inst->debug_messenger = VK_NULL_HANDLE;
 	inst->enabled_layer_count = 0;
@@ -289,10 +287,12 @@ static struct gfx_instance* gfx_instance_create(gfx_context_t* ctx) {
 
 	if (available_layers) {
 		edge_allocator_free(alloc, available_layers);
+		available_layers = NULL;
 	}
 
 	if (available_extensions) {
 		edge_allocator_free(alloc, available_extensions);
+		available_extensions = NULL;
 	}
 
 	VkApplicationInfo app_info = { 0 };
@@ -301,7 +301,7 @@ static struct gfx_instance* gfx_instance_create(gfx_context_t* ctx) {
 	app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0); // TODO: Generate
 	app_info.pEngineName = "enginename";
 	app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0); // TODO: Generate
-	app_info.apiVersion = VK_API_VERSION_1_1;
+	app_info.apiVersion = g_required_api_version;
 
 	VkInstanceCreateInfo instance_info = { 0 };
 	instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -321,7 +321,7 @@ static struct gfx_instance* gfx_instance_create(gfx_context_t* ctx) {
 	}
 #endif
 
-	VkResult result = vkCreateInstance(&instance_info, &ctx->alloc_callbacks, &inst->handle);
+	VkResult result = vkCreateInstance(&instance_info, alloc_cb, &inst->handle);
 	if (result != VK_SUCCESS) {
 		EDGE_LOG_FATAL("Failed to create Vulkan instance: %d\n", result);
 		goto fatal_error;
@@ -338,14 +338,14 @@ static struct gfx_instance* gfx_instance_create(gfx_context_t* ctx) {
 			VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 		debug_info.pfnUserCallback = debug_utils_messenger_cb;
 
-		result = vkCreateDebugUtilsMessengerEXT(inst->handle, &debug_info, &ctx->alloc_callbacks, &inst->debug_messenger);
+		result = vkCreateDebugUtilsMessengerEXT(inst->handle, &debug_info, alloc_cb, &inst->debug_messenger);
 		if (result != VK_SUCCESS) {
 			EDGE_LOG_WARN("Failed to create debug messenger: %d", result);
 		}
 	}
 #endif
 
-	return inst;
+	return true;
 
 fatal_error:
 	if (available_layers) {
@@ -356,28 +356,261 @@ fatal_error:
 		edge_allocator_free(alloc, available_extensions);
 	}
 
-	if (inst) {
-		edge_allocator_free(alloc, inst);
-	}
-
-	return NULL;
+	return VK_ERROR_UNKNOWN;
 }
 
-static void gfx_instance_destroy(struct gfx_instance* inst) {
-	if (!inst || !inst->alloc || !inst->alloc_cb) {
+static void gfx_instance_destroy(gfx_instance_t* inst, const VkAllocationCallbacks* alloc_cb) {
+	if (!inst || !alloc_cb) {
 		return;
 	}
 
 	if (inst->debug_messenger != VK_NULL_HANDLE) {
-		vkDestroyDebugUtilsMessengerEXT(inst->handle, inst->debug_messenger, inst->alloc_cb);
+		vkDestroyDebugUtilsMessengerEXT(inst->handle, inst->debug_messenger, alloc_cb);
 	}
 
 	if (inst->handle != VK_NULL_HANDLE) {
-		vkDestroyInstance(inst->handle, inst->alloc_cb);
+		vkDestroyInstance(inst->handle, alloc_cb);
+	}
+}
+
+static bool gfx_select_adapter(gfx_adapter_t* adapter_out, gfx_instance_t* instance, const edge_allocator_t* alloc, VkSurfaceKHR surface) {
+	if (!adapter_out || !instance || !alloc) {
+		return false;
 	}
 
-	const edge_allocator_t* alloc = inst->alloc;
-	edge_allocator_free(alloc, inst);
+	int32_t best_score = -1;
+	int32_t selected_device = -1;
+
+	uint32_t adapter_count = 0;
+	vkEnumeratePhysicalDevices(instance->handle, &adapter_count, NULL);
+
+	if (adapter_count == 0) {
+		EDGE_LOG_FATAL("No Vulkan-capable GPUs found");
+		return false;
+	}
+
+	VkPhysicalDevice* adapters = (VkPhysicalDevice*)edge_allocator_malloc(alloc, adapter_count * sizeof(VkPhysicalDevice));
+	vkEnumeratePhysicalDevices(instance->handle, &adapter_count, adapters);
+
+	for (int32_t i = 0; i < adapter_count; i++) {
+		VkPhysicalDevice adapter = adapters[i];
+
+		const char* enabled_extensions[64] = { 0 };
+		uint32_t enabled_extension_count = 0;
+
+		VkPhysicalDeviceProperties properties;
+		vkGetPhysicalDeviceProperties(adapter, &properties);
+
+		VkPhysicalDeviceFeatures features;
+		vkGetPhysicalDeviceFeatures(adapter, &features);
+
+		uint32_t extension_count = 0;
+		vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count, NULL);
+		VkExtensionProperties* available_extensions = (VkExtensionProperties*)edge_allocator_malloc(alloc, extension_count * sizeof(VkExtensionProperties));
+		vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count, available_extensions);
+
+		int32_t adapter_score = 0;
+
+		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+			adapter_score += 1000;
+		}
+
+		// Check extensions
+		bool all_required_found = true;
+		for (int32_t j = 0; j < GFX_ARRAY_SIZE(g_device_extensions); ++j) {
+			struct gfx_key_value* ext_pair = &g_device_extensions[j];
+			bool supported = is_extension_supported(ext_pair->key, available_extensions, extension_count);
+			if (!supported && ext_pair->required) {
+				all_required_found = false;
+				break;
+			}
+			else if (supported && !ext_pair->required) {
+				adapter_score += 100;
+			}
+
+			if (supported) {
+				enabled_extensions[enabled_extension_count++] = ext_pair->key;
+			}
+		}
+
+		edge_allocator_free(alloc, available_extensions);
+
+		if (!all_required_found) {
+			continue;
+		}
+
+		uint32_t queue_family_count = 0;
+		vkGetPhysicalDeviceQueueFamilyProperties(adapter, &queue_family_count, NULL);
+
+		VkQueueFamilyProperties* queue_families = (VkQueueFamilyProperties*)edge_allocator_malloc(alloc, queue_family_count * sizeof(VkQueueFamilyProperties));
+		vkGetPhysicalDeviceQueueFamilyProperties(adapter, &queue_family_count, queue_families);
+
+		// Check surface support
+		if (surface != VK_NULL_HANDLE) {
+			VkBool32 surface_supported = VK_FALSE;
+			for (int32_t j = 0; j < queue_family_count; ++j) {
+				vkGetPhysicalDeviceSurfaceSupportKHR(adapter, j, surface, &surface_supported);
+				if (surface_supported == VK_TRUE) {
+					break;
+				}
+			}
+
+			if (surface_supported == VK_FALSE) {
+				continue;
+			}
+		}
+
+		if (properties.apiVersion >= g_required_api_version) {
+			adapter_score += 500;
+		}
+
+		// Check supported queues
+		for (int32_t j = 0; j < queue_family_count; ++j) {
+			VkQueueFamilyProperties* queue_family = &queue_families[j];
+			adapter_score += queue_family->queueCount * 10;
+		}
+
+		edge_allocator_free(alloc, queue_families);
+
+		if (adapter_score > best_score) {
+			best_score = adapter_score;
+			selected_device = i;
+
+			adapter_out->handle = adapter;
+			memcpy(&adapter_out->properties, &properties, sizeof(VkPhysicalDeviceProperties));
+			memcpy(&adapter_out->features, &features, sizeof(VkPhysicalDeviceFeatures));
+			memcpy(&adapter_out->enabled_extensions, enabled_extensions, enabled_extension_count * sizeof(const char*));
+			adapter_out->enabled_extension_count = enabled_extension_count;
+		}
+	}
+
+	edge_allocator_free(alloc, adapters);
+
+	if (selected_device < 0) {
+		return false;
+	}
+
+	return true;
+}
+
+static bool gfx_device_init(gfx_device_t* device_out, gfx_adapter_t* adapter, const edge_allocator_t* alloc, const VkAllocationCallbacks* alloc_cb) {
+	if (!device_out || !alloc || !alloc_cb) {
+		return false;
+	}
+
+	uint32_t queue_family_count = 0;
+	vkGetPhysicalDeviceQueueFamilyProperties(adapter->handle, &queue_family_count, NULL);
+
+	VkQueueFamilyProperties* queue_families = (VkQueueFamilyProperties*)edge_allocator_malloc(alloc, queue_family_count * sizeof(VkQueueFamilyProperties));
+	vkGetPhysicalDeviceQueueFamilyProperties(adapter->handle, &queue_family_count, queue_families);
+
+	VkDeviceQueueCreateInfo* queue_create_infos = (VkDeviceQueueCreateInfo*)edge_allocator_calloc(alloc, queue_family_count, sizeof(VkDeviceQueueCreateInfo));
+	float queue_priorities[32];
+	for (int32_t i = 0; i < 32; ++i) {
+		queue_priorities[i] = 1.0f;
+	}
+
+	for (int32_t i = 0; i < queue_family_count; ++i) {
+		VkDeviceQueueCreateInfo* queue_create_info = &queue_create_infos[i];
+		queue_create_info->sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_create_info->queueFamilyIndex = i;
+		queue_create_info->queueCount = queue_families[i].queueCount;
+		queue_create_info->pQueuePriorities = queue_priorities;
+	}
+
+	if (queue_families) {
+		edge_allocator_free(alloc, queue_families);
+		queue_families = NULL;
+	}
+
+	VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = { 0 };
+	sync2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
+	sync2_features.pNext = NULL;
+
+	VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = { 0 };
+	dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
+	sync2_features.pNext = &dynamic_rendering_features;
+
+	VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptor_indexing_features = { 0 };
+	descriptor_indexing_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+	dynamic_rendering_features.pNext = &descriptor_indexing_features;
+
+	void* last_feature = &sync2_features;
+
+	VkPhysicalDeviceVulkan11Features features_vk11 = { 0 };
+	features_vk11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+
+	VkPhysicalDeviceVulkan12Features features_vk12 = { 0 };
+	features_vk12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+
+	VkPhysicalDeviceVulkan13Features features_vk13 = { 0 };
+	features_vk13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+
+	VkPhysicalDeviceVulkan14Features features_vk14 = { 0 };
+	features_vk14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
+
+	void* feature_chain = NULL;
+	if (g_required_api_version >= VK_API_VERSION_1_4) {
+		feature_chain = &features_vk14;
+		features_vk14.pNext = &features_vk13;
+		features_vk13.pNext = &features_vk12;
+		features_vk12.pNext = &features_vk11;
+		features_vk11.pNext = last_feature;
+	}
+	else if (g_required_api_version >= VK_API_VERSION_1_3) {
+		feature_chain = &features_vk13;
+		features_vk13.pNext = &features_vk12;
+		features_vk12.pNext = &features_vk11;
+		features_vk11.pNext = last_feature;
+	}
+	else if (g_required_api_version >= VK_API_VERSION_1_2) {
+		feature_chain = &features_vk12;
+		features_vk12.pNext = &features_vk11;
+		features_vk11.pNext = last_feature;
+	}
+	else if (g_required_api_version >= VK_API_VERSION_1_1) {
+		feature_chain = &features_vk11;
+		features_vk11.pNext = last_feature;
+	}
+	else {
+		feature_chain = last_feature;
+	}
+
+	VkPhysicalDeviceFeatures2 features2 = { 0 };
+	features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+	features2.pNext = feature_chain;
+
+	vkGetPhysicalDeviceFeatures2(adapter->handle, &features2);
+
+	VkDeviceCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+	create_info.queueCreateInfoCount = queue_family_count;
+	create_info.pQueueCreateInfos = queue_create_infos;
+	create_info.enabledExtensionCount = adapter->enabled_extension_count;
+	create_info.ppEnabledExtensionNames = adapter->enabled_extensions;
+	create_info.pNext = &features2;
+
+	// TODO: Add enabled extension flags in device
+
+	VkResult result = vkCreateDevice(adapter->handle, &create_info, alloc_cb, &device_out->handle);
+	if (result != VK_SUCCESS) {
+		edge_allocator_free(alloc, queue_create_infos);
+		return false;
+	}
+
+	edge_allocator_free(alloc, queue_create_infos);
+
+	return true;
+}
+
+static void gfx_device_destroy(gfx_device_t* dev, const VkAllocationCallbacks* alloc_cb) {
+	if (!dev || !alloc_cb) {
+		return;
+	}
+
+	if (dev->handle != VK_NULL_HANDLE) {
+		vkDestroyDevice(dev->handle, alloc_cb);
+	}
 }
 
 gfx_context_t* gfx_context_create(const gfx_context_create_info_t* cteate_info) {
@@ -406,10 +639,31 @@ gfx_context_t* gfx_context_create(const gfx_context_create_info_t* cteate_info) 
 	ctx->alloc_callbacks.pfnInternalAllocation = vk_internal_alloc_cb;
 	ctx->alloc_callbacks.pfnInternalFree = vk_internal_free_cb;
 
-	ctx->instance = gfx_instance_create(ctx);
-	if (!ctx->instance) {
-		gfx_context_destroy(ctx);
-		return NULL;
+	if (!gfx_instance_init(&ctx->instance, ctx->alloc, &ctx->alloc_callbacks)) {
+		goto fatal_error;
+	}
+
+	// TODO: Maybe move to instance
+	{
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+		VkWin32SurfaceCreateInfoKHR surface_create_info;
+		platform_context_get_surface(cteate_info->platform_context, &surface_create_info);
+
+		result = vkCreateWin32SurfaceKHR(ctx->instance.handle, &surface_create_info, &ctx->alloc_callbacks, &ctx->surf);
+		if (result != VK_SUCCESS) {
+			goto fatal_error;
+		}
+#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+#endif
+	}
+
+	if (!gfx_select_adapter(&ctx->adapter, &ctx->instance, ctx->alloc, ctx->surf)) {
+		goto fatal_error;
+	}
+
+	if (!gfx_device_init(&ctx->device, &ctx->adapter, ctx->alloc, &ctx->alloc_callbacks)) {
+		goto fatal_error;
 	}
 
 	return ctx;
@@ -424,9 +678,8 @@ void gfx_context_destroy(gfx_context_t* ctx) {
 		return;
 	}
 
-	if (ctx->instance) {
-		gfx_instance_destroy(ctx->instance);
-	}
+	gfx_device_destroy(&ctx->device, &ctx->alloc_callbacks);
+	gfx_instance_destroy(&ctx->instance, &ctx->alloc_callbacks);
 
 	const edge_allocator_t* alloc = ctx->alloc;
 	edge_allocator_free(alloc, ctx);
