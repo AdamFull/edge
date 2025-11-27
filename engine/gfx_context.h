@@ -4,7 +4,6 @@
 #include "gfx_enum.h"
 
 #include <vulkan/vulkan.h>
-#include <volk.h>
 #include <vk_mem_alloc.h>
 
 #include <stdbool.h>
@@ -17,6 +16,44 @@ extern "C" {
 	typedef struct platform_context platform_context_t;
 
 	typedef struct gfx_context gfx_context_t;
+
+	typedef struct gfx_instance {
+		VkInstance handle;
+		VkDebugUtilsMessengerEXT debug_messenger;
+
+		const char* enabled_layers[32];
+		uint32_t enabled_layer_count;
+
+		const char* enabled_extensions[32];
+		uint32_t enabled_extension_count;
+
+		bool validation_enabled;
+		bool synchronization_validation_enabled;
+	} gfx_instance_t;
+
+	typedef struct gfx_adapter {
+		VkPhysicalDevice handle;
+
+		VkPhysicalDeviceProperties properties;
+		VkPhysicalDeviceFeatures features;
+
+		const char* enabled_extensions[64];
+		uint32_t enabled_extension_count;
+	} gfx_adapter_t;
+
+	typedef struct gfx_device {
+		VkDevice handle;
+
+		bool get_memory_requirements_2_enabled;
+		bool memory_budget_enabled;
+		bool memory_priority_enabled;
+		bool bind_memory_enabled;
+		bool amd_device_coherent_memory_enabled;
+	} gfx_device_t;
+
+	typedef struct gfx_allocator {
+		VmaAllocator handle;
+	} gfx_allocator_t;
 
 	typedef struct gfx_context_create_info {
 		const edge_allocator_t* alloc;
