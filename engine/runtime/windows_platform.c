@@ -47,7 +47,7 @@ struct platform_context {
 	event_dispatcher_t* event_dispatcher;
 
 	struct edge_window* wnd;
-	input_state_t* input_state;
+	input_state_t input_state;
 };
 
 static input_keyboard_key_t glfw_key_code_to_edge[] = {
@@ -292,7 +292,7 @@ static void window_key_cb(GLFWwindow* window, int key, int scancode, int action,
 		return;
 	}
 
-	input_update_keyboard_state(ctx->input_state, ctx->event_dispatcher, glfw_key_code_to_edge[key], action == GLFW_PRESS ? INPUT_KEY_ACTION_DOWN : INPUT_KEY_ACTION_UP);
+	input_update_keyboard_state(&ctx->input_state, ctx->event_dispatcher, glfw_key_code_to_edge[key], action == GLFW_PRESS ? INPUT_KEY_ACTION_DOWN : INPUT_KEY_ACTION_UP);
 }
 
 static void window_cursor_cb(GLFWwindow* window, double xpos, double ypos) {
@@ -301,7 +301,7 @@ static void window_cursor_cb(GLFWwindow* window, double xpos, double ypos) {
 		return;
 	}
 	
-	input_update_mouse_move_state(ctx->input_state, ctx->event_dispatcher, (float)xpos, (float)ypos);
+	input_update_mouse_move_state(&ctx->input_state, ctx->event_dispatcher, (float)xpos, (float)ypos);
 }
 
 static void mouse_button_cb(GLFWwindow* window, int button, int action, int mods) {
@@ -310,7 +310,7 @@ static void mouse_button_cb(GLFWwindow* window, int button, int action, int mods
 		return;
 	}
 	
-	input_update_mouse_btn_state(ctx->input_state, ctx->event_dispatcher, glfw_mouse_btn_code_to_edge[button], action == GLFW_PRESS ? INPUT_KEY_ACTION_DOWN : INPUT_KEY_ACTION_UP);
+	input_update_mouse_btn_state(&ctx->input_state, ctx->event_dispatcher, glfw_mouse_btn_code_to_edge[button], action == GLFW_PRESS ? INPUT_KEY_ACTION_DOWN : INPUT_KEY_ACTION_UP);
 }
 
 static void mouse_scroll_cb(GLFWwindow* window, double xoffset, double yoffset) {
@@ -366,11 +366,7 @@ platform_context_t* platform_context_create(platform_context_create_info_t* crea
 		return NULL;
 	}
 
-	ctx->input_state = (input_state_t*)edge_allocator_calloc(create_info->alloc, 1, sizeof(input_state_t));
-	if (!ctx->input_state) {
-		edge_allocator_free(create_info->alloc, ctx);
-		return NULL;
-	}
+	memset(&ctx->input_state, 0, sizeof(input_state_t));
 
 	ctx->alloc = create_info->alloc;
 	ctx->layout = create_info->layout;
@@ -527,13 +523,13 @@ void platform_context_window_process_events(platform_context_t* ctx, float delta
 		GLFWgamepadstate state;
 		if (glfwGetGamepadState(jid, &state)) {
 			for (int btn = 0; btn < GLFW_GAMEPAD_BUTTON_LAST + 1; ++btn) {
-				input_update_pad_btn_state(ctx->input_state, ctx->event_dispatcher, jid, glfw_pad_btn_code_to_edge[btn], (input_key_action_t)state.buttons[btn]);
+				input_update_pad_btn_state(&ctx->input_state, ctx->event_dispatcher, jid, glfw_pad_btn_code_to_edge[btn], (input_key_action_t)state.buttons[btn]);
 			}
 
-			input_update_pad_axis_state(ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_STICK_LEFT, state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y], 0.0f);
-			input_update_pad_axis_state(ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_STICK_RIGHT, state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y], 0.0f);
-			input_update_pad_axis_state(ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_TRIGGER_LEFT, state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER], 0.0f, 0.0f);
-			input_update_pad_axis_state(ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_TRIGGER_RIGHT, state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER], 0.0f, 0.0f);
+			input_update_pad_axis_state(&ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_STICK_LEFT, state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y], 0.0f);
+			input_update_pad_axis_state(&ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_STICK_RIGHT, state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y], 0.0f);
+			input_update_pad_axis_state(&ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_TRIGGER_LEFT, state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER], 0.0f, 0.0f);
+			input_update_pad_axis_state(&ctx->input_state, ctx->event_dispatcher, jid, INPUT_PAD_AXIS_TRIGGER_RIGHT, state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER], 0.0f, 0.0f);
 		}
 	}
 }
