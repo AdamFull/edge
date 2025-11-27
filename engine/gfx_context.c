@@ -126,10 +126,15 @@ struct gfx_context {
 	VkAllocationCallbacks alloc_callbacks;
 
 	gfx_instance_t instance;
-	VkSurfaceKHR surf;
+	gfx_surface_t surface;
 	gfx_adapter_t adapter;
 	gfx_device_t device;
 	gfx_allocator_t allocator;
+};
+
+struct gfx_fence {
+	const gfx_context_t* ctx;
+	VkFence handle;
 };
 
 static void* VKAPI_CALL vk_alloc_cb(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) {
@@ -345,7 +350,38 @@ static void gfx_instance_destroy(gfx_instance_t* inst, const VkAllocationCallbac
 	}
 }
 
-static bool gfx_select_adapter(gfx_adapter_t* adapter_out, gfx_instance_t* instance, const edge_allocator_t* alloc, VkSurfaceKHR surface) {
+static bool gfx_surface_init(gfx_surface_t* surface, platform_context_t* platform_context, const gfx_instance_t* instance, const VkAllocationCallbacks* alloc_cb) {
+	if (!surface || !instance || !alloc_cb) {
+		return false;
+	}
+
+#if defined(VK_USE_PLATFORM_WIN32_KHR)
+	VkWin32SurfaceCreateInfoKHR surface_create_info;
+	platform_context_get_surface(platform_context, &surface_create_info);
+
+	VkResult result = vkCreateWin32SurfaceKHR(instance->handle, &surface_create_info, alloc_cb, &surface->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+#elif defined(VK_USE_PLATFORM_XLIB_KHR)
+#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+#endif
+
+	return true;
+}
+
+static void gfx_surface_destroy(gfx_surface_t* surface, const gfx_instance_t* instance, const VkAllocationCallbacks* alloc_cb) {
+	if (!surface || !alloc_cb) {
+		return;
+	}
+
+	if (surface->handle != VK_NULL_HANDLE) {
+		vkDestroySurfaceKHR(instance->handle, surface->handle, alloc_cb);
+		surface->handle = VK_NULL_HANDLE;
+	}
+}
+
+static bool gfx_select_adapter(gfx_adapter_t* adapter_out, const gfx_instance_t* instance, const gfx_surface_t* surface, const edge_allocator_t* alloc) {
 	if (!adapter_out || !instance || !alloc) {
 		return false;
 	}
@@ -686,22 +722,11 @@ gfx_context_t* gfx_context_create(const gfx_context_create_info_t* cteate_info) 
 		goto fatal_error;
 	}
 
-	// TODO: Maybe move to instance
-	{
-#if defined(VK_USE_PLATFORM_WIN32_KHR)
-		VkWin32SurfaceCreateInfoKHR surface_create_info;
-		platform_context_get_surface(cteate_info->platform_context, &surface_create_info);
-
-		result = vkCreateWin32SurfaceKHR(ctx->instance.handle, &surface_create_info, &ctx->alloc_callbacks, &ctx->surf);
-		if (result != VK_SUCCESS) {
-			goto fatal_error;
-		}
-#elif defined(VK_USE_PLATFORM_XLIB_KHR)
-#elif defined(VK_USE_PLATFORM_ANDROID_KHR)
-#endif
+	if (!gfx_surface_init(&ctx->surface, cteate_info->platform_context, &ctx->instance, &ctx->alloc_callbacks)) {
+		goto fatal_error;
 	}
 
-	if (!gfx_select_adapter(&ctx->adapter, &ctx->instance, ctx->alloc, ctx->surf)) {
+	if (!gfx_select_adapter(&ctx->adapter, &ctx->instance, &ctx->surface, ctx->alloc)) {
 		goto fatal_error;
 	}
 
@@ -712,6 +737,8 @@ gfx_context_t* gfx_context_create(const gfx_context_create_info_t* cteate_info) 
 	if (!gfx_allocator_init(&ctx->allocator, &ctx->instance, &ctx->adapter, &ctx->device, &ctx->alloc_callbacks)) {
 		goto fatal_error;
 	}
+
+	// TODO: Prepare queue info and swapchain info
 
 	return ctx;
 
@@ -727,15 +754,137 @@ void gfx_context_destroy(gfx_context_t* ctx) {
 
 	gfx_allocator_destroy(&ctx->allocator);
 	gfx_device_destroy(&ctx->device, &ctx->alloc_callbacks);
-
-	if (ctx->surf != VK_NULL_HANDLE) {
-		vkDestroySurfaceKHR(ctx->instance.handle, ctx->surf, &ctx->alloc_callbacks);
-	}
-
+	gfx_surface_destroy(&ctx->surface, &ctx->instance, &ctx->alloc_callbacks);
 	gfx_instance_destroy(&ctx->instance, &ctx->alloc_callbacks);
 
 	const edge_allocator_t* alloc = ctx->alloc;
 	edge_allocator_free(alloc, ctx);
 
 	volkFinalize();
+}
+
+gfx_fence_t* gfx_fence_create(const gfx_context_t* ctx, VkFenceCreateFlags flags) {
+	if (!ctx) {
+		return NULL;
+	}
+
+	gfx_fence_t* fence = (gfx_fence_t*)edge_allocator_malloc(ctx->alloc, sizeof(gfx_fence_t));
+	if (!fence) {
+		return NULL;
+	}
+
+	fence->ctx = ctx;
+
+	VkFenceCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	create_info.flags = flags;
+
+	VkResult result = vkCreateFence(ctx->device.handle, &create_info, &ctx->alloc_callbacks, &fence->handle);
+	if (result != VK_SUCCESS) {
+		edge_allocator_free(ctx->alloc, fence);
+		return NULL;
+	}
+
+	return fence;
+}
+
+void gfx_fence_wait(const gfx_fence_t* fence, uint64_t timeout) {
+	if (!fence) {
+		return;
+	}
+
+	const gfx_context_t* ctx = fence->ctx;
+	VkResult result = vkWaitForFences(ctx->device.handle, 1, &fence->handle, VK_TRUE, timeout);
+	if (result != VK_SUCCESS) {
+		EDGE_LOG_ERROR("Wait for fences failed. Result: %d", result);
+	}
+}
+
+void gfx_fence_reset(const gfx_fence_t* fence) {
+	if (!fence) {
+		return;
+	}
+
+	const gfx_context_t* ctx = fence->ctx;
+	VkResult result = vkResetFences(ctx->device.handle, 1, &fence->handle);
+	if (result != VK_SUCCESS) {
+		EDGE_LOG_ERROR("Reset fences failed. Result: %d", result);
+	}
+}
+
+void gfx_fence_destroy(gfx_fence_t* fence) {
+	if (!fence || !fence->ctx) {
+		return;
+	}
+
+	if (fence->handle != VK_NULL_HANDLE) {
+		const gfx_context_t* ctx = fence->ctx;
+		vkDestroyFence(ctx->device.handle, fence->handle, &ctx->alloc_callbacks);
+	}
+}
+
+VkFence gfx_context_fence_init(const gfx_context_t* ctx, VkFenceCreateFlags flags) {
+	if (!ctx) {
+		return VK_NULL_HANDLE;
+	}
+
+	VkFenceCreateInfo create_info = {};
+	create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	create_info.flags = flags;
+
+	VkFence handle = VK_NULL_HANDLE;
+	VkResult result = vkCreateFence(ctx->device.handle, &create_info, &ctx->alloc_callbacks, &handle);
+	if (result != VK_SUCCESS) {
+		return VK_NULL_HANDLE;
+	}
+
+	return handle;
+}
+
+void gfx_context_fence_deinit(const gfx_context_t* ctx, VkFence fence) {
+	if (!ctx || fence == VK_NULL_HANDLE) {
+		return;
+	}
+
+	vkDestroyFence(ctx->device.handle, fence, &ctx->alloc_callbacks);
+}
+
+const gfx_instance_t* gfx_context_get_instance(const gfx_context_t* ctx) {
+	if (!ctx) {
+		return NULL;
+	}
+
+	return &ctx->instance;
+}
+
+const gfx_surface_t* gfx_context_get_surface(const gfx_context_t* ctx) {
+	if (!ctx) {
+		return NULL;
+	}
+
+	return &ctx->surface;
+}
+
+const gfx_adapter_t* gfx_context_get_adapter(const gfx_context_t* ctx) {
+	if (!ctx) {
+		return NULL;
+	}
+
+	return &ctx->adapter;
+}
+
+const gfx_device_t* gfx_context_get_device(const gfx_context_t* ctx) {
+	if (!ctx) {
+		return NULL;
+	}
+
+	return &ctx->device;
+}
+
+const gfx_allocator_t* gfx_context_get_gpu_allocator(const gfx_context_t* ctx) {
+	if (!ctx) {
+		return NULL;
+	}
+
+	return &ctx->allocator;
 }

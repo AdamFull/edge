@@ -31,6 +31,10 @@ extern "C" {
 		bool synchronization_validation_enabled;
 	} gfx_instance_t;
 
+	typedef struct gfx_surface {
+		VkSurfaceKHR handle;
+	} gfx_surface_t;
+
 	typedef struct gfx_adapter {
 		VkPhysicalDevice handle;
 
@@ -55,13 +59,26 @@ extern "C" {
 		VmaAllocator handle;
 	} gfx_allocator_t;
 
+	typedef struct gfx_fence gfx_fence_t;
+	typedef struct gfx_semaphore gfx_semaphore_t;
+
 	typedef struct gfx_context_create_info {
 		const edge_allocator_t* alloc;
 		platform_context_t* platform_context;
 	} gfx_context_create_info_t;
 
 	gfx_context_t* gfx_context_create(const gfx_context_create_info_t* cteate_info);
-	void gfx_context_destroy(gfx_context_t* context);
+	void gfx_context_destroy(gfx_context_t* ctx);
+
+	gfx_fence_t* gfx_fence_create(const gfx_context_t* ctx, VkFenceCreateFlags flags);
+	void gfx_fence_wait(const gfx_fence_t* fence, uint64_t timeout);
+	void gfx_fence_destroy(gfx_fence_t* fence);
+
+	const gfx_instance_t* gfx_context_get_instance(const gfx_context_t* ctx);
+	const gfx_surface_t* gfx_context_get_surface(const gfx_context_t* ctx);
+	const gfx_adapter_t* gfx_context_get_adapter(const gfx_context_t* ctx);
+	const gfx_device_t* gfx_context_get_device(const gfx_context_t* ctx);
+	const gfx_allocator_t* gfx_context_get_gpu_allocator(const gfx_context_t* ctx);
 
 #ifdef __cplusplus
 }
