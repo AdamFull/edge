@@ -9,6 +9,7 @@ set(ENABLE_VULKAN_DEBUG ON CACHE BOOL "Enable VK_EXT_debug_utils or VK_EXT_debug
 set(EDGE_ENGINE_SOURCES
     "event_dispatcher.c"
     "gfx_context.c"
+    "gfx_renderer.c"
     "main.c"
 )
 

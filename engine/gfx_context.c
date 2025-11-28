@@ -24,6 +24,12 @@
 #endif
 #endif
 
+#define GFX_LAYERS_MAX 16
+#define GFX_INSTANCE_EXTENSIONS_MAX 32
+#define GFX_DEVICE_EXTENSIONS_MAX 128
+#define GFX_ADAPTER_MAX 8
+#define GFX_QUEUE_FAMILY_MAX 16
+
 #define GFX_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
 struct gfx_key_value {
@@ -121,6 +127,45 @@ static struct gfx_key_value g_device_extensions[] = {
 
 static const uint32_t g_required_api_version = VK_API_VERSION_1_1;
 
+struct gfx_instance {
+	VkInstance handle;
+	VkDebugUtilsMessengerEXT debug_messenger;
+
+	bool validation_enabled;
+	bool synchronization_validation_enabled;
+};
+
+struct gfx_surface {
+	VkSurfaceKHR handle;
+};
+
+struct gfx_device {
+	VkDevice handle;
+
+	bool get_memory_requirements_2_enabled;
+	bool memory_budget_enabled;
+	bool memory_priority_enabled;
+	bool bind_memory_enabled;
+	bool amd_device_coherent_memory_enabled;
+};
+
+struct gfx_allocator {
+	VmaAllocator handle;
+};
+
+struct gfx_adapter {
+	VkPhysicalDevice handle;
+
+	VkPhysicalDeviceProperties properties;
+	VkPhysicalDeviceFeatures features;
+
+	VkQueueFamilyProperties queue_families[GFX_QUEUE_FAMILY_MAX];
+	uint32_t queue_family_count;
+
+	const char* enabled_extensions[GFX_DEVICE_EXTENSIONS_MAX];
+	uint32_t enabled_extension_count;
+};
+
 struct gfx_context {
 	const edge_allocator_t* alloc;
 	VkAllocationCallbacks alloc_callbacks;
@@ -130,6 +175,18 @@ struct gfx_context {
 	gfx_adapter_t adapter;
 	gfx_device_t device;
 	gfx_allocator_t allocator;
+};
+
+struct gfx_queue {
+	const gfx_context_t* ctx;
+
+	int32_t family_index;
+	int32_t queue_index;
+};
+
+struct gfx_command_pool {
+	const gfx_context_t* ctx;
+	VkCommandPool handle;
 };
 
 struct gfx_fence {
@@ -206,15 +263,13 @@ static bool is_layer_supported(const char* layer_name, const VkLayerProperties* 
 	return false;
 }
 
-static bool gfx_instance_init(struct gfx_instance* inst, const edge_allocator_t* alloc, const VkAllocationCallbacks* alloc_cb) {
+static bool gfx_instance_init(gfx_instance_t* inst, const edge_allocator_t* alloc, const VkAllocationCallbacks* alloc_cb) {
 	if (!inst || !alloc || !alloc_cb) {
 		return false;
 	}
 
 	inst->handle = VK_NULL_HANDLE;
 	inst->debug_messenger = VK_NULL_HANDLE;
-	inst->enabled_layer_count = 0;
-	inst->enabled_extension_count = 0;
 	inst->validation_enabled = false;
 	inst->synchronization_validation_enabled = false;
 
@@ -233,11 +288,16 @@ static bool gfx_instance_init(struct gfx_instance* inst, const edge_allocator_t*
 		available_extensions = (VkExtensionProperties*)edge_allocator_malloc(alloc, extension_count * sizeof(VkExtensionProperties));
 		vkEnumerateInstanceExtensionProperties(NULL, &extension_count, available_extensions);
 	}
+
+	const char* enabled_layers[GFX_LAYERS_MAX];
+	uint32_t enabled_layer_count = 0;
 	
 	for (int i = 0; i < GFX_ARRAY_SIZE(g_instance_layers); ++i) {
+		assert(enabled_layer_count < GFX_LAYERS_MAX && "Validation layer enables overflow.");
+
 		const char* layer_name = g_instance_layers[i];
 		if (is_layer_supported(layer_name, available_layers, layer_count)) {
-			inst->enabled_layers[inst->enabled_layer_count++] = layer_name;
+			enabled_layers[enabled_layer_count++] = layer_name;
 #ifdef USE_VALIDATION_LAYERS
 			if (strcmp(layer_name, "VK_LAYER_KHRONOS_validation") == 0) {
 				inst->validation_enabled = true;
@@ -252,10 +312,15 @@ static bool gfx_instance_init(struct gfx_instance* inst, const edge_allocator_t*
 		}
 	}
 
+	const char* enabled_extensions[GFX_INSTANCE_EXTENSIONS_MAX];
+	uint32_t enabled_extension_count = 0;;
+
 	for (int i = 0; i < GFX_ARRAY_SIZE(g_instance_extensions); ++i) {
+		assert(enabled_extension_count < GFX_INSTANCE_EXTENSIONS_MAX && "Extension enables overflow.");
+
 		const char* ext_name = g_instance_extensions[i];
 		if (is_extension_supported(ext_name, available_extensions, extension_count)) {
-			inst->enabled_extensions[inst->enabled_extension_count++] = ext_name;
+			enabled_extensions[enabled_extension_count++] = ext_name;
 		}
 		else {
 			EDGE_LOG_WARN("Required instance extension not supported: %s\n", ext_name);
@@ -272,7 +337,7 @@ static bool gfx_instance_init(struct gfx_instance* inst, const edge_allocator_t*
 		available_extensions = NULL;
 	}
 
-	VkApplicationInfo app_info = { 0 };
+	VkApplicationInfo app_info;
 	app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
 	app_info.pApplicationName = "applicationname";
 	app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0); // TODO: Generate
@@ -283,10 +348,10 @@ static bool gfx_instance_init(struct gfx_instance* inst, const edge_allocator_t*
 	VkInstanceCreateInfo instance_info = { 0 };
 	instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
 	instance_info.pApplicationInfo = &app_info;
-	instance_info.enabledLayerCount = inst->enabled_layer_count;
-	instance_info.ppEnabledLayerNames = inst->enabled_layers;
-	instance_info.enabledExtensionCount = inst->enabled_extension_count;
-	instance_info.ppEnabledExtensionNames = inst->enabled_extensions;
+	instance_info.enabledLayerCount = enabled_layer_count;
+	instance_info.ppEnabledLayerNames = enabled_layers;
+	instance_info.enabledExtensionCount = enabled_extension_count;
+	instance_info.ppEnabledExtensionNames = enabled_extensions;
 
 #ifdef USE_VALIDATION_LAYER_FEATURES
 	VkValidationFeaturesEXT validation_features = { 0 };
@@ -391,41 +456,45 @@ static bool gfx_select_adapter(gfx_adapter_t* adapter_out, const gfx_instance_t*
 
 	uint32_t adapter_count = 0;
 	vkEnumeratePhysicalDevices(instance->handle, &adapter_count, NULL);
+	adapter_count = min(adapter_count, GFX_ADAPTER_MAX);
 
 	if (adapter_count == 0) {
 		EDGE_LOG_FATAL("No Vulkan-capable GPUs found");
 		return false;
 	}
 
-	VkPhysicalDevice* adapters = (VkPhysicalDevice*)edge_allocator_malloc(alloc, adapter_count * sizeof(VkPhysicalDevice));
+	VkPhysicalDevice adapters[GFX_ADAPTER_MAX];
 	vkEnumeratePhysicalDevices(instance->handle, &adapter_count, adapters);
 
 	for (int32_t i = 0; i < adapter_count; i++) {
-		VkPhysicalDevice adapter = adapters[i];
+		gfx_adapter_t adapter;
+		adapter.handle = adapters[i];
+		adapter.queue_family_count = 0;
+		adapter.enabled_extension_count = 0;
 
-		const char* enabled_extensions[64] = { 0 };
-		uint32_t enabled_extension_count = 0;
-
-		VkPhysicalDeviceProperties properties;
-		vkGetPhysicalDeviceProperties(adapter, &properties);
-
-		VkPhysicalDeviceFeatures features;
-		vkGetPhysicalDeviceFeatures(adapter, &features);
+		vkGetPhysicalDeviceProperties(adapter.handle, &adapter.properties);
+		vkGetPhysicalDeviceFeatures(adapter.handle, &adapter.features);
 
 		uint32_t extension_count = 0;
-		vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count, NULL);
+		vkEnumerateDeviceExtensionProperties(adapter.handle, NULL, &extension_count, NULL);
 		VkExtensionProperties* available_extensions = (VkExtensionProperties*)edge_allocator_malloc(alloc, extension_count * sizeof(VkExtensionProperties));
-		vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count, available_extensions);
+		vkEnumerateDeviceExtensionProperties(adapter.handle, NULL, &extension_count, available_extensions);
 
 		int32_t adapter_score = 0;
 
-		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
+		if (adapter.properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
 			adapter_score += 1000;
+		}
+
+		if (adapter.properties.apiVersion >= g_required_api_version) {
+			adapter_score += 500;
 		}
 
 		// Check extensions
 		bool all_required_found = true;
 		for (int32_t j = 0; j < GFX_ARRAY_SIZE(g_device_extensions); ++j) {
+			assert(adapter.enabled_extension_count < GFX_DEVICE_EXTENSIONS_MAX && "Device extension enables overflow.");
+
 			struct gfx_key_value* ext_pair = &g_device_extensions[j];
 			bool supported = is_extension_supported(ext_pair->key, available_extensions, extension_count);
 			if (!supported && ext_pair->required) {
@@ -437,7 +506,7 @@ static bool gfx_select_adapter(gfx_adapter_t* adapter_out, const gfx_instance_t*
 			}
 
 			if (supported) {
-				enabled_extensions[enabled_extension_count++] = ext_pair->key;
+				adapter.enabled_extensions[adapter.enabled_extension_count++] = ext_pair->key;
 			}
 		}
 
@@ -447,19 +516,17 @@ static bool gfx_select_adapter(gfx_adapter_t* adapter_out, const gfx_instance_t*
 			continue;
 		}
 
-		uint32_t queue_family_count = 0;
-		vkGetPhysicalDeviceQueueFamilyProperties(adapter, &queue_family_count, NULL);
-
-		VkQueueFamilyProperties* queue_families = (VkQueueFamilyProperties*)edge_allocator_malloc(alloc, queue_family_count * sizeof(VkQueueFamilyProperties));
-		vkGetPhysicalDeviceQueueFamilyProperties(adapter, &queue_family_count, queue_families);
+		vkGetPhysicalDeviceQueueFamilyProperties(adapter.handle, &adapter.queue_family_count, NULL);
+		adapter.queue_family_count = min(adapter.queue_family_count, GFX_QUEUE_FAMILY_MAX);
+		vkGetPhysicalDeviceQueueFamilyProperties(adapter.handle, &adapter.queue_family_count, adapter.queue_families);
 
 		// Check surface support
 		if (surface != VK_NULL_HANDLE) {
 			VkBool32 surface_supported = VK_FALSE;
-			for (int32_t j = 0; j < queue_family_count; ++j) {
-				vkGetPhysicalDeviceSurfaceSupportKHR(adapter, j, surface, &surface_supported);
-				if (surface_supported == VK_TRUE) {
-					break;
+			for (int32_t j = 0; j < adapter.queue_family_count; ++j) {
+				adapter_score += adapter.queue_families[j].queueCount * 10;
+				if (surface_supported == VK_FALSE) {
+					vkGetPhysicalDeviceSurfaceSupportKHR(adapter.handle, j, surface->handle, &surface_supported);
 				}
 			}
 
@@ -468,31 +535,12 @@ static bool gfx_select_adapter(gfx_adapter_t* adapter_out, const gfx_instance_t*
 			}
 		}
 
-		if (properties.apiVersion >= g_required_api_version) {
-			adapter_score += 500;
-		}
-
-		// Check supported queues
-		for (int32_t j = 0; j < queue_family_count; ++j) {
-			VkQueueFamilyProperties* queue_family = &queue_families[j];
-			adapter_score += queue_family->queueCount * 10;
-		}
-
-		edge_allocator_free(alloc, queue_families);
-
 		if (adapter_score > best_score) {
 			best_score = adapter_score;
 			selected_device = i;
-
-			adapter_out->handle = adapter;
-			memcpy(&adapter_out->properties, &properties, sizeof(VkPhysicalDeviceProperties));
-			memcpy(&adapter_out->features, &features, sizeof(VkPhysicalDeviceFeatures));
-			memcpy(&adapter_out->enabled_extensions, enabled_extensions, enabled_extension_count * sizeof(const char*));
-			adapter_out->enabled_extension_count = enabled_extension_count;
+			memcpy(adapter_out, &adapter, sizeof(gfx_adapter_t));
 		}
 	}
-
-	edge_allocator_free(alloc, adapters);
 
 	if (selected_device < 0) {
 		return false;
@@ -506,29 +554,21 @@ static bool gfx_device_init(gfx_device_t* device_out, gfx_adapter_t* adapter, co
 		return false;
 	}
 
-	uint32_t queue_family_count = 0;
-	vkGetPhysicalDeviceQueueFamilyProperties(adapter->handle, &queue_family_count, NULL);
+	VkDeviceQueueCreateInfo queue_create_infos[GFX_QUEUE_FAMILY_MAX];
 
-	VkQueueFamilyProperties* queue_families = (VkQueueFamilyProperties*)edge_allocator_malloc(alloc, queue_family_count * sizeof(VkQueueFamilyProperties));
-	vkGetPhysicalDeviceQueueFamilyProperties(adapter->handle, &queue_family_count, queue_families);
-
-	VkDeviceQueueCreateInfo* queue_create_infos = (VkDeviceQueueCreateInfo*)edge_allocator_calloc(alloc, queue_family_count, sizeof(VkDeviceQueueCreateInfo));
 	float queue_priorities[32];
 	for (int32_t i = 0; i < 32; ++i) {
 		queue_priorities[i] = 1.0f;
 	}
 
-	for (int32_t i = 0; i < queue_family_count; ++i) {
+	for (int32_t i = 0; i < adapter->queue_family_count; ++i) {
 		VkDeviceQueueCreateInfo* queue_create_info = &queue_create_infos[i];
 		queue_create_info->sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+		queue_create_info->flags = 0;
+		queue_create_info->pNext = NULL;
 		queue_create_info->queueFamilyIndex = i;
-		queue_create_info->queueCount = queue_families[i].queueCount;
+		queue_create_info->queueCount = adapter->queue_families[i].queueCount;
 		queue_create_info->pQueuePriorities = queue_priorities;
-	}
-
-	if (queue_families) {
-		edge_allocator_free(alloc, queue_families);
-		queue_families = NULL;
 	}
 
 	VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = { 0 };
@@ -592,7 +632,7 @@ static bool gfx_device_init(gfx_device_t* device_out, gfx_adapter_t* adapter, co
 
 	VkDeviceCreateInfo create_info = { 0 };
 	create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	create_info.queueCreateInfoCount = queue_family_count;
+	create_info.queueCreateInfoCount = adapter->queue_family_count;
 	create_info.pQueueCreateInfos = queue_create_infos;
 	create_info.enabledExtensionCount = adapter->enabled_extension_count;
 	create_info.ppEnabledExtensionNames = adapter->enabled_extensions;
@@ -618,13 +658,10 @@ static bool gfx_device_init(gfx_device_t* device_out, gfx_adapter_t* adapter, co
 
 	VkResult result = vkCreateDevice(adapter->handle, &create_info, alloc_cb, &device_out->handle);
 	if (result != VK_SUCCESS) {
-		edge_allocator_free(alloc, queue_create_infos);
 		return false;
 	}
 
 	volkLoadDevice(device_out->handle);
-
-	edge_allocator_free(alloc, queue_create_infos);
 
 	return true;
 }
@@ -761,6 +798,150 @@ void gfx_context_destroy(gfx_context_t* ctx) {
 	edge_allocator_free(alloc, ctx);
 
 	volkFinalize();
+}
+
+static int32_t gfx_queue_calculate_family_score(const gfx_queue_request_t* request, const gfx_surface_t* surface, const gfx_adapter_t* adapter, uint32_t family_index) {
+	if (!request) {
+		return -1;
+	}
+
+	gfx_queue_caps_flags_t caps = GFX_QUEUE_CAPS_NONE;
+
+	VkQueueFamilyProperties props = adapter->queue_families[family_index];
+	if (props.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+		caps |= GFX_QUEUE_CAPS_GRAPHICS;
+	}
+	if (props.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+		caps |= GFX_QUEUE_CAPS_COMPUTE;
+	}
+	if (props.queueFlags & VK_QUEUE_TRANSFER_BIT) {
+		caps |= GFX_QUEUE_CAPS_TRANSFER;
+	}
+	if (props.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) {
+		caps |= GFX_QUEUE_CAPS_SPARSE_BINDING;
+	}
+	if (props.queueFlags & VK_QUEUE_PROTECTED_BIT) {
+		caps |= GFX_QUEUE_CAPS_PROTECTED;
+	}
+
+	if (props.queueFlags & VK_QUEUE_VIDEO_DECODE_BIT_KHR) {
+		caps |= GFX_QUEUE_CAPS_VIDEO_DECODE;
+	}
+	if (props.queueFlags & VK_QUEUE_VIDEO_ENCODE_BIT_KHR) {
+		caps |= GFX_QUEUE_CAPS_VIDEO_ENCODE;
+	}
+
+	if (surface) {
+		VkBool32 surface_supported = VK_FALSE;
+		vkGetPhysicalDeviceSurfaceSupportKHR(adapter->handle, family_index, surface->handle, &surface_supported);
+		if (surface_supported) {
+			caps |= GFX_QUEUE_CAPS_PRESENT;
+		}
+	}
+
+	if (request->strategy == GFX_QUEUE_SELECTION_STRATEGY_EXACT) {
+		return (caps == request->required_caps) ? 1000 : -1;
+	}
+
+	if ((caps & request->required_caps) != request->required_caps) {
+		return -1;
+	}
+
+	int score = 100;
+	switch (request->strategy) {
+	case GFX_QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED: {
+		score -= __builtin_popcount(caps & ~request->required_caps) * 10;
+		break;
+	}
+
+	case GFX_QUEUE_SELECTION_STRATEGY_PREFER_SHARED: {
+		score += __builtin_popcount(caps) * 5;
+		break;
+	}
+
+	case GFX_QUEUE_SELECTION_STRATEGY_MINIMAL:
+	default:
+		break;
+	}
+
+	if (request->preferred_caps != GFX_QUEUE_CAPS_NONE) {
+		if ((caps & request->preferred_caps) == request->preferred_caps) {
+			score += 30;
+		}
+		else {
+			score += __builtin_popcount(caps & request->preferred_caps) * 5;
+		}
+	}
+
+	if (caps & GFX_QUEUE_CAPS_PRESENT) {
+		score += 2;
+	}
+
+	return score;
+}
+
+gfx_queue_t* gfx_queue_request(const gfx_context_t* ctx, const gfx_queue_request_t* request) {
+	if (!ctx || !request) {
+		return NULL;
+	}
+
+	gfx_queue_t* queue = (gfx_queue_t*)edge_allocator_malloc(ctx->alloc, sizeof(gfx_queue_t));
+	if (!queue) {
+		return NULL;
+	}
+
+	queue->ctx = ctx;
+	queue->queue_index = 0; // TODO: Select specific index
+
+	int32_t best_score = -1;
+
+	for (int32_t i = 0; i < ctx->adapter.queue_family_count; ++i) {
+		int32_t score = gfx_queue_calculate_family_score(request, &ctx->surface, &ctx->adapter, i);
+		if (score > best_score) {
+			best_score = score;
+			queue->family_index = 0;
+		}
+	}
+
+	if (best_score < 0) {
+		edge_allocator_free(ctx->alloc, queue);
+		return NULL;
+	}
+
+	return queue;
+}
+
+void gfx_queue_return(gfx_queue_t* queue) {
+	if (!queue) {
+		return;
+	}
+
+	// TODO: release indices
+
+	edge_allocator_free(queue->ctx->alloc, queue);
+}
+
+gfx_command_pool_t* gfx_command_pool_create(const gfx_context_t* ctx) {
+	if (!ctx) {
+		return NULL;
+	}
+
+	gfx_command_pool_t* command_pool = (gfx_command_pool_t*)edge_allocator_malloc(ctx->alloc, sizeof(gfx_command_pool_t));
+	if (!command_pool) {
+		return NULL;
+	}
+
+	VkCommandPoolCreateInfo create_info;
+	create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+	return command_pool;
+}
+
+void gfx_command_pool_destroy(gfx_command_pool_t* command_pool) {
+	if (!command_pool) {
+		return;
+	}
 }
 
 gfx_fence_t* gfx_fence_create(const gfx_context_t* ctx, VkFenceCreateFlags flags) {

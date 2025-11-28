@@ -1,6 +1,8 @@
 #include "engine.h"
 #include "event_dispatcher.h"
+
 #include "gfx_context.h"
+#include "gfx_renderer.h"
 
 #include <edge_allocator.h>
 #include <edge_testing.h>
@@ -14,6 +16,14 @@
 static edge_engine_context_t engine_context = { 0 };
 
 static void edge_cleanup_engine(void) {
+	if (engine_context.gfx_renderer) {
+		gfx_renderer_destroy(engine_context.gfx_renderer);
+	}
+
+	if (engine_context.gfx_main_queue) {
+		gfx_queue_return(engine_context.gfx_main_queue);
+	}
+
 	if (engine_context.gfx_context) {
 		gfx_context_destroy(engine_context.gfx_context);
 	}
@@ -102,6 +112,22 @@ int edge_main(platform_layout_t* platform_layout) {
 
 	engine_context.gfx_context = gfx_context_create(&gfx_cteate_info);
 	if (!engine_context.gfx_context) {
+		goto fatal_error;
+	}
+
+	gfx_queue_request_t queue_request;
+	queue_request.required_caps = GFX_QUEUE_CAPS_GRAPHICS | GFX_QUEUE_CAPS_COMPUTE | GFX_QUEUE_CAPS_TRANSFER | GFX_QUEUE_CAPS_PRESENT;
+	queue_request.preferred_caps = GFX_QUEUE_CAPS_NONE;
+	queue_request.strategy = GFX_QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED;
+	queue_request.prefer_separate_family = false;
+
+	engine_context.gfx_main_queue = gfx_queue_request(engine_context.gfx_context, &queue_request);
+	if (!engine_context.gfx_main_queue) {
+		goto fatal_error;
+	}
+
+	engine_context.gfx_renderer = gfx_renderer_create(&allocator, engine_context.gfx_context);
+	if (!engine_context.gfx_renderer) {
 		goto fatal_error;
 	}
 

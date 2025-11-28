@@ -1,7 +1,7 @@
 #ifndef GFX_CONTEXT_H
 #define GFX_CONTEXT_H
 
-#include "gfx_enum.h"
+#include "gfx_interface.h"
 
 #include <vulkan/vulkan.h>
 #include <vk_mem_alloc.h>
@@ -12,63 +12,30 @@
 extern "C" {
 #endif
 
-	typedef struct edge_allocator edge_allocator_t;
-	typedef struct platform_context platform_context_t;
-
-	typedef struct gfx_context gfx_context_t;
-
-	typedef struct gfx_instance {
-		VkInstance handle;
-		VkDebugUtilsMessengerEXT debug_messenger;
-
-		const char* enabled_layers[32];
-		uint32_t enabled_layer_count;
-
-		const char* enabled_extensions[32];
-		uint32_t enabled_extension_count;
-
-		bool validation_enabled;
-		bool synchronization_validation_enabled;
-	} gfx_instance_t;
-
-	typedef struct gfx_surface {
-		VkSurfaceKHR handle;
-	} gfx_surface_t;
-
-	typedef struct gfx_adapter {
-		VkPhysicalDevice handle;
-
-		VkPhysicalDeviceProperties properties;
-		VkPhysicalDeviceFeatures features;
-
-		const char* enabled_extensions[64];
-		uint32_t enabled_extension_count;
-	} gfx_adapter_t;
-
-	typedef struct gfx_device {
-		VkDevice handle;
-
-		bool get_memory_requirements_2_enabled;
-		bool memory_budget_enabled;
-		bool memory_priority_enabled;
-		bool bind_memory_enabled;
-		bool amd_device_coherent_memory_enabled;
-	} gfx_device_t;
-
-	typedef struct gfx_allocator {
-		VmaAllocator handle;
-	} gfx_allocator_t;
-
+	typedef struct gfx_command_pool gfx_command_pool_t;
 	typedef struct gfx_fence gfx_fence_t;
 	typedef struct gfx_semaphore gfx_semaphore_t;
 
-	typedef struct gfx_context_create_info {
+	typedef struct {
 		const edge_allocator_t* alloc;
 		platform_context_t* platform_context;
 	} gfx_context_create_info_t;
 
+	typedef struct {
+		gfx_queue_caps_flags_t required_caps;
+		gfx_queue_caps_flags_t preferred_caps;
+		gfx_queue_selection_strategy_t strategy;
+		bool prefer_separate_family;
+	} gfx_queue_request_t;
+
 	gfx_context_t* gfx_context_create(const gfx_context_create_info_t* cteate_info);
 	void gfx_context_destroy(gfx_context_t* ctx);
+
+	gfx_queue_t* gfx_queue_request(const gfx_context_t* ctx, const gfx_queue_request_t* create_info);
+	void gfx_queue_return(gfx_queue_t* queue);
+
+	gfx_command_pool_t* gfx_command_pool_create(const gfx_context_t* ctx);
+	void gfx_command_pool_destroy(gfx_command_pool_t* command_pool);
 
 	gfx_fence_t* gfx_fence_create(const gfx_context_t* ctx, VkFenceCreateFlags flags);
 	void gfx_fence_wait(const gfx_fence_t* fence, uint64_t timeout);
