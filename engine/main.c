@@ -20,13 +20,9 @@ static void edge_cleanup_engine(void) {
 		gfx_renderer_destroy(engine_context.gfx_renderer);
 	}
 
-	if (engine_context.gfx_main_queue) {
-		gfx_queue_return(engine_context.gfx_main_queue);
-	}
-
-	if (engine_context.gfx_context) {
-		gfx_context_destroy(engine_context.gfx_context);
-	}
+	gfx_release_queue(&engine_context.gfx_main_queue);
+	
+	gfx_context_shutdown();
 
 	if (engine_context.event_dispatcher) {
 		event_dispatcher_destroy(engine_context.event_dispatcher);
@@ -110,8 +106,7 @@ int edge_main(platform_layout_t* platform_layout) {
 	gfx_cteate_info.alloc = &allocator;
 	gfx_cteate_info.platform_context = engine_context.platform_context;
 
-	engine_context.gfx_context = gfx_context_create(&gfx_cteate_info);
-	if (!engine_context.gfx_context) {
+	if (!gfx_context_init(&gfx_cteate_info)) {
 		goto fatal_error;
 	}
 
@@ -121,12 +116,15 @@ int edge_main(platform_layout_t* platform_layout) {
 	queue_request.strategy = GFX_QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED;
 	queue_request.prefer_separate_family = false;
 
-	engine_context.gfx_main_queue = gfx_queue_request(engine_context.gfx_context, &queue_request);
-	if (!engine_context.gfx_main_queue) {
+	if (!gfx_get_queue(&queue_request, &engine_context.gfx_main_queue)) {
 		goto fatal_error;
 	}
 
-	engine_context.gfx_renderer = gfx_renderer_create(&allocator, engine_context.gfx_context);
+	gfx_renderer_create_info_t renderer_create_info;
+	renderer_create_info.alloc = &allocator;
+	renderer_create_info.main_queue = &engine_context.gfx_main_queue;
+
+	engine_context.gfx_renderer = gfx_renderer_create(&renderer_create_info);
 	if (!engine_context.gfx_renderer) {
 		goto fatal_error;
 	}

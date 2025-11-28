@@ -2,6 +2,7 @@
 #define GFX_INTERFACE_H
 
 #include <stdint.h>
+#include <vulkan/vulkan.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -10,26 +11,34 @@ extern "C" {
 	typedef struct edge_allocator edge_allocator_t;
 	typedef struct platform_context platform_context_t;
 
-	// Base structs
-	typedef struct gfx_context gfx_context_t;
-	typedef struct gfx_instance gfx_instance_t;
-	typedef struct gfx_surface gfx_surface_t;
-	typedef struct gfx_adapter gfx_adapter_t;
-	typedef struct gfx_device gfx_device_t;
-	typedef struct gfx_allocator gfx_allocator_t;
+	// Primitives
+	typedef struct gfx_queue {
+		int32_t family_index;
+		int32_t queue_index;
+	} gfx_queue_t;
 
-	typedef struct gfx_queue gfx_queue_t;
+	typedef struct gfx_command_pool {
+		VkCommandPool handle;
+	} gfx_command_pool_t;
+
+	typedef struct gfx_fence {
+		VkFence handle;
+	} gfx_fence_t;
+
+	typedef struct gfx_semaphore {
+		VkSemaphore handle;
+	} gfx_semaphore_t;
 
 	enum gfx_queue_caps_flag {
-		GFX_QUEUE_CAPS_NONE			= 0,
-		GFX_QUEUE_CAPS_GRAPHICS		= 0x01,	// Graphics operations
+		GFX_QUEUE_CAPS_NONE				= 0,
+		GFX_QUEUE_CAPS_GRAPHICS			= 0x01,	// Graphics operations
 		GFX_QUEUE_CAPS_COMPUTE			= 0x02,	// Compute shader dispatch
-		GFX_QUEUE_CAPS_TRANSFER		= 0x04,	// Transfer/copy operations (implicit in Graphics/Compute)
+		GFX_QUEUE_CAPS_TRANSFER			= 0x04,	// Transfer/copy operations (implicit in Graphics/Compute)
 		GFX_QUEUE_CAPS_PRESENT			= 0x08,	// Surface presentation support
 		GFX_QUEUE_CAPS_SPARSE_BINDING	= 0x10,	// Sparse memory binding
 		GFX_QUEUE_CAPS_PROTECTED		= 0x20,	// Protected memory operations
-		GFX_QUEUE_CAPS_VIDEO_DECODE	= 0x40,	// Video decode operations
-		GFX_QUEUE_CAPS_VIDEO_ENCODE	= 0x80,	// Video encode operations
+		GFX_QUEUE_CAPS_VIDEO_DECODE		= 0x40,	// Video decode operations
+		GFX_QUEUE_CAPS_VIDEO_ENCODE		= 0x80,	// Video encode operations
 	};
 
 	typedef uint16_t gfx_queue_caps_flags_t;

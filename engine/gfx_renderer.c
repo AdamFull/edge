@@ -8,8 +8,9 @@
 
 struct gfx_renderer {
 	const edge_allocator_t* alloc;
-	const gfx_context_t* ctx;
 	const gfx_queue_t* queue;
+
+	gfx_command_pool_t* cmd_pool;
 
 	edge_vector_t* write_descriptor_sets;
 	edge_vector_t* image_descriptors;
@@ -17,7 +18,7 @@ struct gfx_renderer {
 };
 
 gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_info) {
-	if (!create_info || !create_info->alloc || !create_info->ctx || !create_info->main_queue) {
+	if (!create_info || !create_info->alloc || !create_info->main_queue) {
 		return NULL;
 	}
 
@@ -26,8 +27,9 @@ gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_inf
 		return NULL;
 	}
 
+	memset(renderer, 0, sizeof(gfx_renderer_t));
+
 	renderer->alloc = create_info->alloc;
-	renderer->ctx = create_info->ctx;
 	renderer->queue = create_info->main_queue;
 
 	renderer->write_descriptor_sets = edge_vector_create(create_info->alloc, sizeof(VkWriteDescriptorSet), 256);
