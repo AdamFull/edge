@@ -18,6 +18,9 @@ struct gfx_renderer {
 	gfx_descriptor_set_layout_t descriptor_layout;
 	gfx_descriptor_pool_t descriptor_pool;
 	gfx_descriptor_set_t descriptor_set;
+	gfx_pipeline_layout_t pipeline_layout;
+
+	gfx_swapchain_t swapchain;
 
 	edge_vector_t* write_descriptor_sets;
 	edge_vector_t* image_descriptors;
@@ -96,6 +99,26 @@ gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_inf
 		return NULL;
 	}
 
+	if (!gfx_descriptor_set_create(&renderer->descriptor_pool, &renderer->descriptor_layout, &renderer->descriptor_set)) {
+		gfx_renderer_destroy(renderer);
+		return NULL;
+	}
+
+	gfx_pipeline_layout_builder_t pipeline_layout_builder = { 0 };
+	gfx_pipeline_layout_builder_add_layout(&renderer->descriptor_layout, &pipeline_layout_builder);
+	gfx_pipeline_layout_builder_add_range(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0u, props->limits.maxPushConstantsSize, &pipeline_layout_builder);
+
+	if (!gfx_pipeline_layout_create(&pipeline_layout_builder, &renderer->pipeline_layout)) {
+		gfx_renderer_destroy(renderer);
+		return NULL;
+	}
+
+	gfx_swapchain_create_info_t swapchain_create_info = { 0 };
+	if (!gfx_swapchain_create(&swapchain_create_info, &renderer->swapchain)) {
+		gfx_renderer_destroy(renderer);
+		return NULL;
+	}
+
 	renderer->write_descriptor_sets = edge_vector_create(create_info->alloc, sizeof(VkWriteDescriptorSet), 256);
 	if (!renderer->write_descriptor_sets) {
 		gfx_renderer_destroy(renderer);
@@ -134,6 +157,11 @@ void gfx_renderer_destroy(gfx_renderer_t* renderer) {
 		edge_vector_destroy(renderer->buffer_descriptors);
 	}
 
+	gfx_pipeline_layout_destroy(&renderer->pipeline_layout);
+	gfx_descriptor_set_destroy(&renderer->descriptor_set);
+	gfx_descriptor_pool_destroy(&renderer->descriptor_pool);
+	gfx_descriptor_set_layout_destroy(&renderer->descriptor_layout);
+	gfx_query_pool_destroy(&renderer->frame_timestamp);
 	gfx_command_pool_destroy(&renderer->cmd_pool);
 
 	const edge_allocator_t* alloc = renderer->alloc;

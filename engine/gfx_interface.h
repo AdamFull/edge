@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
+#define GFX_MAX_BINDING_COUNT 16
 #define GFX_DESCRIPTOR_SIZES_COUNT 11
 
 #ifdef __cplusplus
@@ -43,6 +44,20 @@ extern "C" {
 		VkDescriptorSet handle;
 		const gfx_descriptor_pool_t* pool;
 	} gfx_descriptor_set_t;
+
+	typedef struct {
+		VkPipelineLayout handle;
+	} gfx_pipeline_layout_t;
+
+	typedef struct {
+		VkSwapchainKHR handle;
+		VkFormat format;
+		VkColorSpaceKHR color_space;
+		uint32_t image_count;
+		VkExtent2D extent;
+		VkPresentModeKHR present_mode;
+		VkCompositeAlphaFlagBitsKHR composite_alpha;
+	} gfx_swapchain_t;
 
 	typedef struct gfx_fence {
 		VkFence handle;

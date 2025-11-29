@@ -25,10 +25,31 @@ extern "C" {
 	} gfx_queue_request_t;
 
 	typedef struct {
-		VkDescriptorSetLayoutBinding bindings[16];
-		VkDescriptorBindingFlagsEXT binding_flags[16];
+		VkDescriptorSetLayoutBinding bindings[GFX_MAX_BINDING_COUNT];
+		VkDescriptorBindingFlagsEXT binding_flags[GFX_MAX_BINDING_COUNT];
 		uint32_t binding_count;
 	} gfx_descriptor_layout_builder_t;
+
+	typedef struct {
+		VkPushConstantRange constant_ranges[8];
+		uint32_t constant_range_count;
+		VkDescriptorSetLayout descriptor_layouts[GFX_MAX_BINDING_COUNT];
+		uint32_t descriptor_layout_count;
+	} gfx_pipeline_layout_builder_t;
+
+	typedef enum {
+		GFX_SWAPCHAIN_BUFFERING_AUTO,
+		GFX_SWAPCHAIN_BUFFERING_DOUBLE,
+		GFX_SWAPCHAIN_BUFFERING_TRIPLE,
+	} gfx_swapchain_buffering_t;
+
+	typedef struct {
+		VkFormat preferred_format;
+		VkColorSpaceKHR preferred_color_space;
+
+		bool vsync_enable;
+		bool hdr_enable;
+	} gfx_swapchain_create_info_t;
 
 	bool gfx_context_init(const gfx_context_create_info_t* cteate_info);
 	void gfx_context_shutdown();
@@ -54,6 +75,16 @@ extern "C" {
 
 	bool gfx_descriptor_set_create(const gfx_descriptor_pool_t* pool, const gfx_descriptor_set_layout_t* layouts, gfx_descriptor_set_t* set);
 	void gfx_descriptor_set_destroy(gfx_descriptor_set_t* set);
+
+	void gfx_pipeline_layout_builder_add_range(VkShaderStageFlags flaags, uint32_t offset, uint32_t size, gfx_pipeline_layout_builder_t* builder);
+	void gfx_pipeline_layout_builder_add_layout(const gfx_descriptor_set_layout_t* layout, gfx_pipeline_layout_builder_t* builder);
+
+	bool gfx_pipeline_layout_create(const gfx_pipeline_layout_builder_t* builder, gfx_pipeline_layout_t* pipeline_layout);
+	void gfx_pipeline_layout_destroy(gfx_pipeline_layout_t* pipeline_layout);
+
+	bool gfx_swapchain_create(const gfx_swapchain_create_info_t* create_info, gfx_swapchain_t* swapchain);
+	bool gfx_swapchain_update(gfx_swapchain_t* swapchain);
+	void gfx_swapchain_destroy(gfx_swapchain_t* swapchain);
 
 #ifdef __cplusplus
 }

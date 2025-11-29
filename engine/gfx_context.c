@@ -29,6 +29,8 @@
 #define GFX_DEVICE_EXTENSIONS_MAX 128
 #define GFX_ADAPTER_MAX 8
 #define GFX_QUEUE_FAMILY_MAX 16
+#define GFX_SURFACE_FORMAT_MAX 32
+#define GFX_PRESENT_MODES_MAX 8
 
 #define GFX_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
@@ -119,6 +121,7 @@ static struct gfx_key_value g_device_extensions[] = {
 	{ VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, true },
 	{ VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, true },
 	{ VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, true },
+	{ VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME, true },
 #if USE_NSIGHT_AFTERMATH
 	{ VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME, false },
 	{ VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME, false },
@@ -139,6 +142,10 @@ struct gfx_context {
 	bool synchronization_validation_enabled;
 
 	VkSurfaceKHR surf;
+	VkSurfaceFormatKHR surf_formats[GFX_SURFACE_FORMAT_MAX];
+	uint32_t surf_format_count;
+	VkPresentModeKHR surf_present_modes[GFX_PRESENT_MODES_MAX];
+	uint32_t surf_present_mode_count;
 
 	VkPhysicalDevice adapter;
 
@@ -215,6 +222,12 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_utils_messenger_cb(
 	return VK_FALSE;
 }
 
+static inline uint32_t clamp_u32(uint32_t value, uint32_t min, uint32_t max) {
+	if (value < min) return min;
+	if (value > max) return max;
+	return value;
+}
+
 static bool is_extension_supported(const char* extension_name, const VkExtensionProperties* available_extensions, uint32_t available_count) {
 	for (int32_t i = 0; i < available_count; i++) {
 		if (strcmp(extension_name, available_extensions[i].extensionName) == 0) {
@@ -231,6 +244,241 @@ static bool is_layer_supported(const char* layer_name, const VkLayerProperties* 
 		}
 	}
 	return false;
+}
+
+static VkExtent2D choose_suitable_extent(VkExtent2D request_extent, const VkSurfaceCapabilitiesKHR* surface_caps) {
+	if (surface_caps->currentExtent.width == 0xFFFFFFFF) {
+		return request_extent;
+	}
+
+	if (request_extent.width < 1 || request_extent.height < 1) {
+		EDGE_LOG_WARN("Image extent %dx%d is not supported. Selecting available %dx%d.", 
+			request_extent.width, request_extent.height,
+			surface_caps->currentExtent.width, surface_caps->currentExtent.height);
+		return surface_caps->currentExtent;
+	}
+
+	request_extent.width = clamp_u32(request_extent.width, surface_caps->minImageExtent.width, surface_caps->maxImageExtent.width);
+	request_extent.height = clamp_u32(request_extent.height, surface_caps->minImageExtent.height, surface_caps->maxImageExtent.height);
+
+	return request_extent;
+}
+
+static bool is_hdr_format(VkFormat format) {
+	switch (format) {
+		// 10-bit formats
+	case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
+	case VK_FORMAT_A2R10G10B10_UNORM_PACK32:
+	case VK_FORMAT_A2B10G10R10_UINT_PACK32:
+	case VK_FORMAT_A2R10G10B10_UINT_PACK32:
+	case VK_FORMAT_A2B10G10R10_SINT_PACK32:
+	case VK_FORMAT_A2R10G10B10_SINT_PACK32:
+
+		// 16-bit float formats
+	case VK_FORMAT_R16G16B16A16_SFLOAT:
+	case VK_FORMAT_R16G16B16_SFLOAT:
+
+		// 32-bit float formats
+	case VK_FORMAT_R32G32B32A32_SFLOAT:
+	case VK_FORMAT_R32G32B32_SFLOAT:
+
+		// BC6H (HDR texture compression)
+	case VK_FORMAT_BC6H_UFLOAT_BLOCK:
+	case VK_FORMAT_BC6H_SFLOAT_BLOCK:
+
+		// ASTC HDR
+	case VK_FORMAT_ASTC_4x4_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_5x4_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_5x5_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_6x5_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_6x6_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_8x5_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_8x6_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_8x8_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_10x5_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_10x6_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_10x8_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_10x10_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_12x10_SFLOAT_BLOCK:
+	case VK_FORMAT_ASTC_12x12_SFLOAT_BLOCK:
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+static bool is_hdr_color_space(VkColorSpaceKHR color_space) {
+	switch (color_space) {
+	case VK_COLOR_SPACE_HDR10_ST2084_EXT:
+	case VK_COLOR_SPACE_HDR10_HLG_EXT:
+	case VK_COLOR_SPACE_DOLBYVISION_EXT:
+	case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+	case VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT:
+	case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT:
+	case VK_COLOR_SPACE_DISPLAY_P3_LINEAR_EXT:
+	case VK_COLOR_SPACE_BT2020_LINEAR_EXT:
+	case VK_COLOR_SPACE_BT709_LINEAR_EXT:
+	case VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT:
+	case VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT:
+	case VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT:
+		return true;
+
+	default:
+		return false;
+	}
+}
+
+static bool is_surface_format_hdr(const VkSurfaceFormatKHR* format) {
+	return is_hdr_format(format->format) && is_hdr_color_space(format->colorSpace);
+}
+
+static bool is_depth_format(VkFormat format) {
+	return format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D32_SFLOAT;
+}
+
+static bool is_depth_stencil_format(VkFormat format) {
+	return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D16_UNORM_S8_UINT ||
+		format == VK_FORMAT_D24_UNORM_S8_UINT;
+}
+
+static bool surface_format_equal(const VkSurfaceFormatKHR* a, const VkSurfaceFormatKHR* b, bool full_match) {
+	if (full_match) {
+		return a->format == b->format && a->colorSpace == b->colorSpace;
+	}
+	return a->format == b->format;
+}
+
+static bool find_surface_format(const VkSurfaceFormatKHR* available_formats, uint32_t available_count,
+	const VkSurfaceFormatKHR* requested, VkSurfaceFormatKHR* out_format, bool full_match) {
+	for (uint32_t i = 0; i < available_count; i++) {
+		if (surface_format_equal(&available_formats[i], requested, full_match)) {
+			*out_format = available_formats[i];
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool pick_by_priority_list(const VkSurfaceFormatKHR* available_formats, uint32_t available_count,
+	const VkSurfaceFormatKHR* priority_list, uint32_t priority_count, bool hdr_only, VkSurfaceFormatKHR* out_format) {
+	for (uint32_t p = 0; p < priority_count; p++) {
+		for (uint32_t i = 0; i < available_count; i++) {
+			// Skip if filtering by HDR and format doesn't match
+			if (hdr_only && !is_surface_format_hdr(&available_formats[i])) {
+				continue;
+			}
+			if (!hdr_only && is_surface_format_hdr(&available_formats[i])) {
+				continue;
+			}
+
+			if (surface_format_equal(&available_formats[i], &priority_list[p], true) ||
+				surface_format_equal(&available_formats[i], &priority_list[p], false)) {
+				*out_format = available_formats[i];
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR requested_surface_format, const VkSurfaceFormatKHR* available_surface_formats, uint32_t available_count, bool prefer_hdr) {
+	static const VkSurfaceFormatKHR hdr_priority_list[] = {
+		{ VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_COLOR_SPACE_HDR10_ST2084_EXT },
+		{ VK_FORMAT_A2R10G10B10_UNORM_PACK32, VK_COLOR_SPACE_HDR10_ST2084_EXT },
+		{ VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT },
+		{ VK_FORMAT_A2R10G10B10_UNORM_PACK32, VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT },
+		{ VK_FORMAT_R16G16B16A16_SFLOAT, VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT },
+		{ VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT },
+		{ VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_COLOR_SPACE_BT2020_LINEAR_EXT },
+		{ VK_FORMAT_R16G16B16A16_SFLOAT, VK_COLOR_SPACE_BT2020_LINEAR_EXT }
+	};
+
+	static const VkSurfaceFormatKHR sdr_priority_list[] = {
+		{VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+		{VK_FORMAT_B8G8R8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+		{VK_FORMAT_R8G8B8A8_SRGB, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+		{VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+		{VK_FORMAT_R8G8B8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+		{VK_FORMAT_A8B8G8R8_SRGB_PACK32, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+		{VK_FORMAT_A8B8G8R8_UNORM_PACK32, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR}
+	};
+
+	VkSurfaceFormatKHR result;
+
+	if (available_count == 0) {
+		result.format = VK_FORMAT_UNDEFINED;
+		result.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+		return result;
+	}
+
+	if (requested_surface_format.format != VK_FORMAT_UNDEFINED) {
+		if (find_surface_format(available_surface_formats, available_count,
+			&requested_surface_format, &result, true)) {
+			return result;
+		}
+		if (find_surface_format(available_surface_formats, available_count,
+			&requested_surface_format, &result, false)) {
+			return result;
+		}
+	}
+
+	if (prefer_hdr) {
+		if (pick_by_priority_list(available_surface_formats, available_count,
+			hdr_priority_list, GFX_ARRAY_SIZE(hdr_priority_list),
+			true, &result)) {
+			return result;
+		}
+	}
+
+	if (pick_by_priority_list(available_surface_formats, available_count,
+		sdr_priority_list, GFX_ARRAY_SIZE(sdr_priority_list),
+		false, &result)) {
+		return result;
+	}
+
+	return available_surface_formats[0];
+}
+
+static VkCompositeAlphaFlagBitsKHR choose_suitable_composite_alpha(VkCompositeAlphaFlagBitsKHR request_composite_alpha, VkCompositeAlphaFlagsKHR supported_composite_alpha) {
+	if (request_composite_alpha & supported_composite_alpha) {
+		return request_composite_alpha;
+	}
+
+	static const VkCompositeAlphaFlagBitsKHR composite_alpha_priority_list[] = {
+		VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+		VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+		VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
+		VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR
+	};
+
+	for (uint32_t i = 0; i < GFX_ARRAY_SIZE(composite_alpha_priority_list); i++) {
+		if (composite_alpha_priority_list[i] & supported_composite_alpha) {
+			return composite_alpha_priority_list[i];
+		}
+	}
+
+	return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+}
+
+VkPresentModeKHR choose_suitable_present_mode(VkPresentModeKHR request_present_mode,
+	const VkPresentModeKHR* available_present_modes, uint32_t available_count,
+	const VkPresentModeKHR* present_mode_priority_list, uint32_t priority_count) {
+	for (uint32_t i = 0; i < available_count; i++) {
+		if (available_present_modes[i] == request_present_mode) {
+			return request_present_mode;
+		}
+	}
+
+	for (uint32_t p = 0; p < priority_count; p++) {
+		for (uint32_t i = 0; i < available_count; i++) {
+			if (available_present_modes[i] == present_mode_priority_list[p]) {
+				return present_mode_priority_list[p];
+			}
+		}
+	}
+
+	return VK_PRESENT_MODE_FIFO_KHR;
 }
 
 static bool gfx_instance_init() {
@@ -671,6 +919,30 @@ bool gfx_context_init(const gfx_context_create_info_t* cteate_info) {
 		goto fatal_error;
 	}
 
+	result = vkGetPhysicalDeviceSurfaceFormatsKHR(g_ctx.adapter, g_ctx.surf, &g_ctx.surf_format_count, NULL);
+	if (result != VK_SUCCESS) {
+		goto fatal_error;
+	}
+
+	g_ctx.surf_format_count = min(g_ctx.surf_format_count, GFX_SURFACE_FORMAT_MAX);
+
+	result = vkGetPhysicalDeviceSurfaceFormatsKHR(g_ctx.adapter, g_ctx.surf, &g_ctx.surf_format_count, g_ctx.surf_formats);
+	if (result != VK_SUCCESS) {
+		goto fatal_error;
+	}
+
+	result = vkGetPhysicalDeviceSurfacePresentModesKHR(g_ctx.adapter, g_ctx.surf, &g_ctx.surf_present_mode_count, NULL);
+	if (result != VK_SUCCESS) {
+		goto fatal_error;
+	}
+
+	g_ctx.surf_present_mode_count = min(g_ctx.surf_present_mode_count, GFX_PRESENT_MODES_MAX);
+
+	result = vkGetPhysicalDeviceSurfacePresentModesKHR(g_ctx.adapter, g_ctx.surf, &g_ctx.surf_present_mode_count, g_ctx.surf_present_modes);
+	if (result != VK_SUCCESS) {
+		goto fatal_error;
+	}
+
 	if (!gfx_device_init()) {
 		goto fatal_error;
 	}
@@ -678,8 +950,6 @@ bool gfx_context_init(const gfx_context_create_info_t* cteate_info) {
 	if (!gfx_allocator_init()) {
 		goto fatal_error;
 	}
-
-	// TODO: Prepare queue info and swapchain info
 
 	return true;
 
@@ -932,8 +1202,8 @@ bool gfx_descriptor_set_layout_create(const gfx_descriptor_layout_builder_t* bui
 	}
 
 	for (int32_t i = 0; i < builder->binding_count; ++i) {
-		VkDescriptorSetLayoutBinding* binding = &builder->bindings[i];
-		descriptor_set_layout->descriptor_sizes[i] += binding->descriptorCount;
+		VkDescriptorSetLayoutBinding binding = builder->bindings[i];
+		descriptor_set_layout->descriptor_sizes[binding.descriptorType] += binding.descriptorCount;
 	}
 
 	return true;
@@ -971,7 +1241,7 @@ bool gfx_descriptor_pool_create(uint32_t* descriptor_sizes, gfx_descriptor_pool_
 		return false;
 	}
 
-	memcpy(descriptor_pool->descriptor_sizes, descriptor_sizes, sizeof(descriptor_sizes));
+	memcpy(descriptor_pool->descriptor_sizes, descriptor_sizes, GFX_DESCRIPTOR_SIZES_COUNT * sizeof(uint32_t));
 
 	return true;
 }
@@ -1011,4 +1281,171 @@ void gfx_descriptor_set_destroy(gfx_descriptor_set_t* set) {
 	}
 
 	vkFreeDescriptorSets(g_ctx.dev, set->pool->handle, 1, &set->handle);
+}
+
+void gfx_pipeline_layout_builder_add_range(VkShaderStageFlags stage_flags, uint32_t offset, uint32_t size, gfx_pipeline_layout_builder_t* builder) {
+	if (!builder) {
+		return;
+	}
+
+	VkPushConstantRange constant_range = {
+		.stageFlags = stage_flags,
+		.offset = offset,
+		.size = size
+	};
+
+	builder->constant_ranges[builder->constant_range_count++] = constant_range;
+}
+
+void gfx_pipeline_layout_builder_add_layout(const gfx_descriptor_set_layout_t* layout, gfx_pipeline_layout_builder_t* builder) {
+	if (!layout || !builder) {
+		return;
+	}
+
+	builder->descriptor_layouts[builder->descriptor_layout_count++] = layout->handle;
+}
+
+bool gfx_pipeline_layout_create(const gfx_pipeline_layout_builder_t* builder, gfx_pipeline_layout_t* pipeline_layout) {
+	if (!builder || !pipeline_layout) {
+		return false;
+	}
+
+	VkPipelineLayoutCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	create_info.setLayoutCount = builder->descriptor_layout_count;
+	create_info.pSetLayouts = builder->descriptor_layouts;
+	create_info.pushConstantRangeCount = builder->constant_range_count;
+	create_info.pPushConstantRanges = builder->constant_ranges;
+
+	VkResult result = vkCreatePipelineLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_layout->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	return true;
+}
+
+void gfx_pipeline_layout_destroy(gfx_pipeline_layout_t* pipeline_layout) {
+	if (!pipeline_layout) {
+		return;
+	}
+
+	vkDestroyPipelineLayout(g_ctx.dev, pipeline_layout->handle, &g_ctx.vk_alloc);
+}
+
+bool gfx_swapchain_create(const gfx_swapchain_create_info_t* create_info, gfx_swapchain_t* swapchain) {
+	if (!create_info || !swapchain) {
+		return false;
+	}
+
+	VkPresentModeKHR present_mode = create_info->vsync_enable ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+	VkPresentModeKHR present_mode_priority_list[3] = {
+#ifdef VK_USE_PLATFORM_ANDROID_KHR
+			VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR
+#else
+			VK_PRESENT_MODE_IMMEDIATE_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_FIFO_KHR
+#endif
+	};
+
+	VkSurfaceCapabilitiesKHR surf_caps;
+	VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_ctx.adapter, g_ctx.surf, &surf_caps);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	uint32_t queue_family_indices[GFX_QUEUE_FAMILY_MAX];
+	for (int32_t i = 0; i < g_ctx.queue_family_count; ++i) {
+		queue_family_indices[i] = i;
+	}
+
+	VkSwapchainCreateInfoKHR swapchain_create_info = { 0 };
+	swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	swapchain_create_info.surface = g_ctx.surf;
+	swapchain_create_info.minImageCount = 2;
+	swapchain_create_info.minImageCount = clamp_u32(swapchain_create_info.minImageCount, surf_caps.minImageCount, surf_caps.maxImageCount ? surf_caps.maxImageCount : 16);
+
+	VkSurfaceFormatKHR requested_surface_format;
+	requested_surface_format.format = create_info->preferred_format;
+	requested_surface_format.colorSpace = create_info->preferred_color_space;
+
+	VkSurfaceFormatKHR selected_surface_format = choose_surface_format(requested_surface_format, g_ctx.surf_formats, g_ctx.surf_format_count, create_info->hdr_enable);
+	swapchain_create_info.imageFormat = selected_surface_format.format;
+	swapchain_create_info.imageColorSpace = selected_surface_format.colorSpace;
+
+	swapchain_create_info.imageExtent = choose_suitable_extent(swapchain->extent, &surf_caps);
+	swapchain_create_info.imageArrayLayers = 1;
+	swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	swapchain_create_info.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+	swapchain_create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
+	swapchain_create_info.pQueueFamilyIndices = queue_family_indices;
+	swapchain_create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	swapchain_create_info.compositeAlpha = choose_suitable_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surf_caps.supportedCompositeAlpha);
+	swapchain_create_info.presentMode = choose_suitable_present_mode(present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
+		present_mode_priority_list, GFX_ARRAY_SIZE(present_mode_priority_list));
+	swapchain_create_info.oldSwapchain = swapchain->handle;
+
+	result = vkCreateSwapchainKHR(g_ctx.dev, &swapchain_create_info, &g_ctx.vk_alloc, &swapchain->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	swapchain->format = selected_surface_format.format;
+	swapchain->color_space = selected_surface_format.colorSpace;
+	swapchain->image_count = swapchain_create_info.minImageCount;
+	swapchain->extent = swapchain_create_info.imageExtent;
+	swapchain->present_mode = swapchain_create_info.presentMode;
+	swapchain->composite_alpha = swapchain_create_info.compositeAlpha;
+
+	return true;
+}
+
+bool gfx_swapchain_update(gfx_swapchain_t* swapchain) {
+	if (!swapchain) {
+		return false;
+	}
+
+	VkSurfaceCapabilitiesKHR surf_caps;
+	VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_ctx.adapter, g_ctx.surf, &surf_caps);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	uint32_t queue_family_indices[GFX_QUEUE_FAMILY_MAX];
+	for (int32_t i = 0; i < g_ctx.queue_family_count; ++i) {
+		queue_family_indices[i] = i;
+	}
+
+	VkSwapchainCreateInfoKHR create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+	create_info.surface = g_ctx.surf;
+	create_info.minImageCount = swapchain->image_count;
+	create_info.imageFormat = swapchain->format;
+	create_info.imageColorSpace = swapchain->color_space;
+	create_info.imageExtent = choose_suitable_extent(swapchain->extent, &surf_caps);
+	create_info.imageArrayLayers = 1;
+	create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	create_info.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+	create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
+	create_info.pQueueFamilyIndices = queue_family_indices;
+	create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+	create_info.compositeAlpha = swapchain->composite_alpha;
+	create_info.presentMode = swapchain->present_mode;
+	create_info.oldSwapchain = swapchain->handle;
+
+	result = vkCreateSwapchainKHR(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &swapchain->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	swapchain->extent = create_info.imageExtent;
+
+	return true;
+}
+
+void gfx_swapchain_destroy(gfx_swapchain_t* swapchain) {
+	if (!swapchain) {
+		return;
+	}
+
+	vkDestroySwapchainKHR(g_ctx.dev, swapchain->handle, &g_ctx.vk_alloc);
 }
