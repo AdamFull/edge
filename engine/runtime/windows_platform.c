@@ -382,6 +382,13 @@ platform_context_t* platform_context_create(platform_context_create_info_t* crea
 		}
 	}
 
+	HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	DWORD dwMode = 0;
+
+	GetConsoleMode(hOut, &dwMode);
+	dwMode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
+	SetConsoleMode(hOut, dwMode);
+
 	FILE* fp;
 	freopen_s(&fp, "conin$", "r", stdin);
 	freopen_s(&fp, "conout$", "w", stdout);

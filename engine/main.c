@@ -61,7 +61,7 @@ int edge_main(platform_layout_t* platform_layout) {
 
 	edge_logger_set_global(engine_context.logger);
 
-	edge_logger_output_t* stdout_output = edge_logger_create_stdout_output(&allocator, EDGE_LOG_FORMAT_DEFAULT);
+	edge_logger_output_t* stdout_output = edge_logger_create_stdout_output(&allocator, EDGE_LOG_FORMAT_DEFAULT | EDGE_LOG_FORMAT_COLOR);
 	edge_logger_add_output(engine_context.logger, stdout_output);
 
 	edge_logger_output_t* file_output = edge_logger_create_file_output(&allocator, EDGE_LOG_FORMAT_DEFAULT, "log.log", false);
