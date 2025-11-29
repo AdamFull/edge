@@ -4,6 +4,8 @@
 #include <stdint.h>
 #include <vulkan/vulkan.h>
 
+#define GFX_DESCRIPTOR_SIZES_COUNT 11
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -20,6 +22,27 @@ extern "C" {
 	typedef struct gfx_command_pool {
 		VkCommandPool handle;
 	} gfx_command_pool_t;
+
+	typedef struct gfx_query_pool {
+		VkQueryPool handle;
+		VkQueryType type;
+		uint32_t max_query;
+	} gfx_query_pool_t;
+
+	typedef struct gfx_descriptor_set_layout {
+		VkDescriptorSetLayout handle;
+		uint32_t descriptor_sizes[GFX_DESCRIPTOR_SIZES_COUNT];
+	} gfx_descriptor_set_layout_t;
+
+	typedef struct {
+		VkDescriptorPool handle;
+		uint32_t descriptor_sizes[GFX_DESCRIPTOR_SIZES_COUNT];
+	} gfx_descriptor_pool_t;
+
+	typedef struct {
+		VkDescriptorSet handle;
+		const gfx_descriptor_pool_t* pool;
+	} gfx_descriptor_set_t;
 
 	typedef struct gfx_fence {
 		VkFence handle;

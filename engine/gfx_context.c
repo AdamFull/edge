@@ -716,6 +716,10 @@ void gfx_context_shutdown() {
 	volkFinalize();
 }
 
+const VkPhysicalDeviceProperties* gfx_get_adapter_props() {
+	return &g_ctx.properties;
+}
+
 static int32_t gfx_queue_calculate_family_score(const gfx_queue_request_t* request, uint32_t family_index) {
 	if (!request) {
 		return -1;
@@ -852,4 +856,159 @@ void gfx_command_pool_destroy(gfx_command_pool_t* command_pool) {
 	}
 
 	vkDestroyCommandPool(g_ctx.dev, command_pool->handle, &g_ctx.vk_alloc);
+}
+
+bool gfx_query_pool_create(VkQueryType type, uint32_t count, gfx_query_pool_t* query_pool) {
+	if (!query_pool) {
+		return false;
+	}
+
+	VkQueryPoolCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+	create_info.queryType = type;
+	create_info.queryCount = count;
+
+	if (type == VK_QUERY_TYPE_TIMESTAMP) {
+		create_info.queryCount *= 2;
+	}
+
+	VkResult result = vkCreateQueryPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &query_pool->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	query_pool->type = type;
+	query_pool->max_query = create_info.queryCount;
+
+	return true;
+}
+
+void gfx_query_pool_reset(gfx_query_pool_t* query_pool) {
+	if (!query_pool) {
+		return;
+	}
+
+	vkResetQueryPoolEXT(g_ctx.dev, query_pool->handle, 0, query_pool->max_query);
+}
+
+void gfx_query_pool_destroy(gfx_query_pool_t* query_pool) {
+	if (!query_pool) {
+		return;
+	}
+
+	vkDestroyQueryPool(g_ctx.dev, query_pool->handle, &g_ctx.vk_alloc);
+}
+
+void gfx_descriptor_layout_builder_add_binding(VkDescriptorSetLayoutBinding binding, VkDescriptorBindingFlags flags, gfx_descriptor_layout_builder_t* builder) {
+	if (!builder) {
+		return;
+	}
+
+	uint32_t index = builder->binding_count++;
+	builder->bindings[index] = binding;
+	builder->binding_flags[index] = flags;
+}
+
+bool gfx_descriptor_set_layout_create(const gfx_descriptor_layout_builder_t* builder, gfx_descriptor_set_layout_t* descriptor_set_layout) {
+	if (!descriptor_set_layout) {
+		return false;
+	}
+
+	VkDescriptorSetLayoutBindingFlagsCreateInfoEXT binding_flags_create_info = { 0 };
+	binding_flags_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
+	binding_flags_create_info.bindingCount = builder->binding_count;
+	binding_flags_create_info.pBindingFlags = builder->binding_flags;
+
+	VkDescriptorSetLayoutCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+	create_info.bindingCount = builder->binding_count;
+	create_info.pBindings = builder->bindings;
+	create_info.pNext = &binding_flags_create_info;
+
+	VkResult result = vkCreateDescriptorSetLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_set_layout->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	for (int32_t i = 0; i < builder->binding_count; ++i) {
+		VkDescriptorSetLayoutBinding* binding = &builder->bindings[i];
+		descriptor_set_layout->descriptor_sizes[i] += binding->descriptorCount;
+	}
+
+	return true;
+}
+
+void gfx_descriptor_set_layout_destroy(gfx_descriptor_set_layout_t* descriptor_set_layout) {
+	if (!descriptor_set_layout) {
+		return;
+	}
+
+	vkDestroyDescriptorSetLayout(g_ctx.dev, descriptor_set_layout->handle, &g_ctx.vk_alloc);
+}
+
+bool gfx_descriptor_pool_create(uint32_t* descriptor_sizes, gfx_descriptor_pool_t* descriptor_pool) {
+	if (!descriptor_sizes || !descriptor_pool) {
+		return false;
+	}
+
+	VkDescriptorPoolSize pool_sizes[GFX_DESCRIPTOR_SIZES_COUNT];
+	for (int32_t i = 0; i < GFX_DESCRIPTOR_SIZES_COUNT; ++i) {
+		VkDescriptorPoolSize* pool_size = &pool_sizes[i];
+		pool_size->type = (VkDescriptorType)i;
+		pool_size->descriptorCount = descriptor_sizes[i] ? descriptor_sizes[i] : 1;
+	}
+
+	VkDescriptorPoolCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	create_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
+	create_info.maxSets = 64; // TODO: Set it manually
+	create_info.poolSizeCount = GFX_DESCRIPTOR_SIZES_COUNT;
+	create_info.pPoolSizes = pool_sizes;
+
+	VkResult result = vkCreateDescriptorPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_pool->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	memcpy(descriptor_pool->descriptor_sizes, descriptor_sizes, sizeof(descriptor_sizes));
+
+	return true;
+}
+
+void gfx_descriptor_pool_destroy(gfx_descriptor_pool_t* descriptor_pool) {
+	if (!descriptor_pool) {
+		return;
+	}
+
+	vkDestroyDescriptorPool(g_ctx.dev, descriptor_pool->handle, &g_ctx.vk_alloc);
+}
+
+bool gfx_descriptor_set_create(const gfx_descriptor_pool_t* pool, const gfx_descriptor_set_layout_t* layouts, gfx_descriptor_set_t* set) {
+	if (!pool || !layouts || !set) {
+		return false;
+	}
+
+	VkDescriptorSetAllocateInfo alloc_info = { 0 };
+	alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	alloc_info.descriptorPool = pool->handle;
+	alloc_info.descriptorSetCount = 1;
+	alloc_info.pSetLayouts = &layouts->handle;
+
+	VkResult result = vkAllocateDescriptorSets(g_ctx.dev, &alloc_info, &set->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	set->pool = pool;
+
+	return true;
+}
+
+void gfx_descriptor_set_destroy(gfx_descriptor_set_t* set) {
+	if (!set) {
+		return;
+	}
+
+	vkFreeDescriptorSets(g_ctx.dev, set->pool->handle, 1, &set->handle);
 }
