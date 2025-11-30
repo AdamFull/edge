@@ -8,7 +8,7 @@
 #error "Unsupported platform"
 #endif
 
-int edge_thrd_get_physical_core_count(edge_cpu_info_t* cpu_info, int count) {
+i32 edge_thrd_get_physical_core_count(edge_cpu_info_t* cpu_info, i32 count) {
     if (!cpu_info || count < 0) {
         return -1;
     }
@@ -16,7 +16,7 @@ int edge_thrd_get_physical_core_count(edge_cpu_info_t* cpu_info, int count) {
     return cpu_info[count - 1].core_id + 1;
 }
 
-int edge_thrd_get_logical_core_count(edge_cpu_info_t* cpu_info, int count) {
+i32 edge_thrd_get_logical_core_count(edge_cpu_info_t* cpu_info, i32 count) {
     if (!cpu_info || count < 0) {
         return -1;
     }
@@ -24,7 +24,7 @@ int edge_thrd_get_logical_core_count(edge_cpu_info_t* cpu_info, int count) {
     return cpu_info[count - 1].logical_id + 1;
 }
 
-int edge_thrd_set_affinity_ex(edge_thrd_t thr, edge_cpu_info_t* cpu_info, int cpu_count, int core_id, bool prefer_physical) {
+i32 edge_thrd_set_affinity_ex(edge_thrd_t thr, edge_cpu_info_t* cpu_info, i32 cpu_count, i32 core_id, bool prefer_physical) {
     if (core_id < 0) {
         return edge_thrd_error;
     }
@@ -34,8 +34,8 @@ int edge_thrd_set_affinity_ex(edge_thrd_t thr, edge_cpu_info_t* cpu_info, int cp
     }
 
     /* Find the first logical CPU that corresponds to this physical core */
-    int target_logical_id = -1;
-    for (int i = 0; i < cpu_count; i++) {
+    i32 target_logical_id = -1;
+    for (i32 i = 0; i < cpu_count; i++) {
         if (cpu_info[i].core_id == core_id) {
             target_logical_id = cpu_info[i].logical_id;
             break;
@@ -49,9 +49,9 @@ int edge_thrd_set_affinity_ex(edge_thrd_t thr, edge_cpu_info_t* cpu_info, int cp
     return edge_thrd_set_affinity_platform(thr, target_logical_id);
 }
 
-int edge_thrd_set_affinity(edge_thrd_t thr, int core_id, bool prefer_physical) {
+i32 edge_thrd_set_affinity(edge_thrd_t thr, i32 core_id, bool prefer_physical) {
     edge_cpu_info_t cpu_info[256];
-    int cpu_count = edge_thrd_get_cpu_topology(cpu_info, 256);
+    i32 cpu_count = edge_thrd_get_cpu_topology(cpu_info, 256);
     if (cpu_count <= 0) {
         return edge_thrd_error;
     }

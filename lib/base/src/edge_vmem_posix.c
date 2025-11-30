@@ -26,7 +26,7 @@ bool edge_vmem_release(void* base, size_t reserve_bytes) {
 }
 
 bool edge_vmem_commit(void* addr, size_t size) {
-	int prot = PROT_READ | PROT_WRITE;
+	i32 prot = PROT_READ | PROT_WRITE;
 	if (mprotect(addr, size, prot) != 0) {
 		return false;
 	}
@@ -34,8 +34,8 @@ bool edge_vmem_commit(void* addr, size_t size) {
 	return true;
 }
 
-static int translate_protection_flags(edge_vmem_prot_t p) {
-	int flags = 0;
+static i32 translate_protection_flags(edge_vmem_prot_t p) {
+	i32 flags = 0;
 	if (p == EDGE_VMEM_PROT_NONE) {
 		return PROT_NONE;
 	}
@@ -52,7 +52,7 @@ static int translate_protection_flags(edge_vmem_prot_t p) {
 }
 
 bool edge_vmem_protect(void* addr, size_t size, edge_vmem_prot_t prot) {
-	int flags = translate_protection_flags(prot);
+	i32 flags = translate_protection_flags(prot);
 	if (mprotect(addr, size, flags) != 0) {
 		return false;
 	}

@@ -206,7 +206,7 @@ void* edge_list_get(const edge_list_t* list, size_t index) {
     }
     else {
         current = list->tail;
-        for (size_t i = list->size - 1; i > index; i--) {
+        for (i32 i = list->size - 1; i > index; i--) {
             current = current->prev;
         }
     }
@@ -233,7 +233,7 @@ bool edge_list_insert(edge_list_t* list, size_t index, const void* element) {
     }
 
     edge_list_node_t* current = list->head;
-    for (size_t i = 0; i < index; i++) {
+    for (i32 i = 0; i < index; i++) {
         current = current->next;
     }
 
@@ -260,7 +260,7 @@ bool edge_list_remove(edge_list_t* list, size_t index, void* out_element) {
     }
 
     edge_list_node_t* current = list->head;
-    for (size_t i = 0; i < index; i++) {
+    for (i32 i = 0; i < index; i++) {
         current = current->next;
     }
 
@@ -285,7 +285,7 @@ bool edge_list_empty(const edge_list_t* list) {
     return !list || list->size == 0;
 }
 
-edge_list_node_t* edge_list_find(const edge_list_t* list, const void* element, int (*compare)(const void*, const void*)) {
+edge_list_node_t* edge_list_find(const edge_list_t* list, const void* element, i32 (*compare)(const void*, const void*)) {
     if (!list || !element || !compare) {
         return NULL;
     }
@@ -321,7 +321,7 @@ void edge_list_reverse(edge_list_t* list) {
     list->tail = temp;
 }
 
-static edge_list_node_t* merge_sorted(edge_list_node_t* left, edge_list_node_t* right, int (*compare)(const void*, const void*)) {
+static edge_list_node_t* merge_sorted(edge_list_node_t* left, edge_list_node_t* right, i32 (*compare)(const void*, const void*)) {
     if (!left) {
         return right;
     }
@@ -348,7 +348,7 @@ static edge_list_node_t* merge_sorted(edge_list_node_t* left, edge_list_node_t* 
     return result;
 }
 
-static edge_list_node_t* merge_sort_nodes(edge_list_node_t* head, int (*compare)(const void*, const void*)) {
+static edge_list_node_t* merge_sort_nodes(edge_list_node_t* head, i32 (*compare)(const void*, const void*)) {
     if (!head || !head->next) {
         return head;
     }
@@ -373,7 +373,7 @@ static edge_list_node_t* merge_sort_nodes(edge_list_node_t* head, int (*compare)
     return merge_sorted(left, right, compare);
 }
 
-void edge_list_sort(edge_list_t* list, int (*compare)(const void*, const void*)) {
+void edge_list_sort(edge_list_t* list, i32 (*compare)(const void*, const void*)) {
     if (!list || !compare || list->size < 2) {
         return;
     }

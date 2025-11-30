@@ -1,12 +1,12 @@
 #ifndef EDGE_TESTING_H
 #define EDGE_TESTING_H
 
+#include <stdatomic.h>
+#include "edge_allocator.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stdatomic.h>
-#include "edge_allocator.h"
 
 	edge_allocator_t edge_testing_allocator_create(void);
 

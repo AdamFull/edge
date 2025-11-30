@@ -1,12 +1,11 @@
 #ifndef EDGE_HASHMAP_H
 #define EDGE_HASHMAP_H
 
+#include "edge_base.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
-#include <stdbool.h>
 
     typedef struct edge_allocator edge_allocator_t;
 
@@ -25,7 +24,7 @@ extern "C" {
         size_t value_size;
         const edge_allocator_t* allocator;
         size_t(*hash_func)(const void* key, size_t key_size);
-        int (*compare_func)(const void* key1, const void* key2, size_t key_size);
+        i32 (*compare_func)(const void* key1, const void* key2, size_t key_size);
     } edge_hashmap_t;
 
     /**
@@ -36,7 +35,7 @@ extern "C" {
     /**
      * Default comparison function (memcmp)
      */
-    int edge_hashmap_default_compare(const void* key1, const void* key2, size_t key_size);
+    i32 edge_hashmap_default_compare(const void* key1, const void* key2, size_t key_size);
 
     /**
      * Create a new hashmap
@@ -54,7 +53,7 @@ extern "C" {
         size_t value_size,
         size_t initial_bucket_count,
         size_t(*hash_func)(const void*, size_t),
-        int (*compare_func)(const void*, const void*, size_t));
+        i32 (*compare_func)(const void*, const void*, size_t));
 
     /**
      * Destroy hashmap and free all memory
@@ -101,7 +100,7 @@ extern "C" {
     /**
      * Get load factor (size / bucket_count)
      */
-    float edge_hashmap_load_factor(const edge_hashmap_t* map);
+    f32 edge_hashmap_load_factor(const edge_hashmap_t* map);
 
     /**
      * Rehash with new bucket count

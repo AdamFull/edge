@@ -265,7 +265,7 @@ bool edge_vector_shrink_to_fit(edge_vector_t* vec) {
     return true;
 }
 
-int edge_vector_find(const edge_vector_t* vec, const void* element, int (*compare)(const void*, const void*)) {
+i32 edge_vector_find(const edge_vector_t* vec, const void* element, i32 (*compare)(const void*, const void*)) {
     if (!vec || !element || !compare) {
         return -1;
     }
@@ -273,14 +273,14 @@ int edge_vector_find(const edge_vector_t* vec, const void* element, int (*compar
     for (size_t i = 0; i < vec->size; i++) {
         void* current = edge_vector_at(vec, i);
         if (compare(current, element) == 0) {
-            return (int)i;
+            return (i32)i;
         }
     }
 
     return -1;
 }
 
-void edge_vector_sort(edge_vector_t* vec, int (*compare)(const void*, const void*)) {
+void edge_vector_sort(edge_vector_t* vec, i32 (*compare)(const void*, const void*)) {
     if (!vec || !compare || vec->size < 2) {
         return;
     }

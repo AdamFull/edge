@@ -1,8 +1,8 @@
 #ifndef EDGE_VMEM_H
 #define EDGE_VMEM_H
 
-#include <stdbool.h>
 #include <stddef.h>
+#include "edge_base.h"
 
 #ifdef __cplusplus
 extern "C" {

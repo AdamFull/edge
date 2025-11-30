@@ -2,9 +2,7 @@
 #define EDGE_STACK_ALLOCATOR_H
 
 #include <stddef.h>
-#include <stdint.h>
-#include <stdbool.h>
-
+#include "edge_base.h"
 #include "edge_vmem.h"
 
 #define EDGE_ARENA_MAX_SIZE (256 * 1024 * 1024)

@@ -1,11 +1,11 @@
 #ifndef EDGE_ALLOCATOR_H
 #define EDGE_ALLOCATOR_H
 
+#include <stddef.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
 
 /* Allocator function pointers */
 typedef void* (*edge_malloc_func)(size_t size);

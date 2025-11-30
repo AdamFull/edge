@@ -19,7 +19,7 @@ size_t edge_hashmap_default_hash(const void* key, size_t key_size) {
     return hash;
 }
 
-int edge_hashmap_default_compare(const void* key1, const void* key2, size_t key_size) {
+i32 edge_hashmap_default_compare(const void* key1, const void* key2, size_t key_size) {
     return memcmp(key1, key2, key_size);
 }
 
@@ -69,7 +69,7 @@ edge_hashmap_t* edge_hashmap_create(const edge_allocator_t* allocator,
 
 edge_hashmap_t* edge_hashmap_create_custom(const edge_allocator_t* allocator,
     size_t key_size, size_t value_size, size_t initial_bucket_count,
-    size_t(*hash_func)(const void*, size_t), int (*compare_func)(const void*, const void*, size_t)) {
+    size_t(*hash_func)(const void*, size_t), i32 (*compare_func)(const void*, const void*, size_t)) {
     if (!allocator || key_size == 0 || value_size == 0) {
         return NULL;
     }
@@ -118,7 +118,7 @@ void edge_hashmap_clear(edge_hashmap_t* map) {
         return;
     }
 
-    for (size_t i = 0; i < map->bucket_count; i++) {
+    for (i32 i = 0; i < map->bucket_count; i++) {
         edge_hashmap_entry_t* entry = map->buckets[i];
         while (entry) {
             edge_hashmap_entry_t* next = entry->next;
@@ -143,7 +143,7 @@ bool edge_hashmap_rehash(edge_hashmap_t* map, size_t new_bucket_count) {
     }
 
     /* Rehash all entries */
-    for (size_t i = 0; i < map->bucket_count; i++) {
+    for (i32 i = 0; i < map->bucket_count; i++) {
         edge_hashmap_entry_t* entry = map->buckets[i];
         while (entry) {
             edge_hashmap_entry_t* next = entry->next;
@@ -283,7 +283,7 @@ edge_hashmap_iterator_t edge_hashmap_begin(const edge_hashmap_t* map) {
 
     if (map) {
         /* Find first non-empty bucket */
-        for (size_t i = 0; i < map->bucket_count; i++) {
+        for (i32 i = 0; i < map->bucket_count; i++) {
             if (map->buckets[i]) {
                 it.bucket_index = i;
                 it.current = map->buckets[i];
@@ -311,7 +311,7 @@ void edge_hashmap_iterator_next(edge_hashmap_iterator_t* it) {
     }
 
     /* Find next non-empty bucket */
-    for (size_t i = it->bucket_index + 1; i < it->map->bucket_count; i++) {
+    for (i32 i = it->bucket_index + 1; i < it->map->bucket_count; i++) {
         if (it->map->buckets[i]) {
             it->bucket_index = i;
             it->current = it->map->buckets[i];

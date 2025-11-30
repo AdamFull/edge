@@ -1,12 +1,12 @@
 #ifndef EDGE_LIST_H
 #define EDGE_LIST_H
 
+#include <stddef.h>
+#include "edge_base.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
-#include <stdbool.h>
 
     typedef struct edge_allocator edge_allocator_t;
 
@@ -101,7 +101,7 @@ extern "C" {
     /**
      * Find element using comparison function
      */
-    edge_list_node_t* edge_list_find(const edge_list_t* list, const void* element, int (*compare)(const void*, const void*));
+    edge_list_node_t* edge_list_find(const edge_list_t* list, const void* element, i32 (*compare)(const void*, const void*));
 
     /**
      * Reverse the list
@@ -111,7 +111,7 @@ extern "C" {
     /**
      * Sort the list using merge sort
      */
-    void edge_list_sort(edge_list_t* list, int (*compare)(const void*, const void*));
+    void edge_list_sort(edge_list_t* list, i32 (*compare)(const void*, const void*));
 
     /* Iterator functions */
     edge_list_iterator_t edge_list_begin(const edge_list_t* list);

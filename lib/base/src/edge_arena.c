@@ -1,6 +1,7 @@
 #include "edge_arena.h"
 #include "edge_threads.h"
 #include "edge_allocator.h"
+#include "edge_math.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -19,15 +20,6 @@ struct edge_arena {
 	edge_mtx_t mtx;
 };
 
-static size_t align_up(size_t size, size_t alignment) {
-	if (alignment == 0) {
-		return size;
-	}
-
-	assert(alignment > 0 && (alignment & (alignment - 1)) == 0);
-	return (size + alignment - 1) & ~(alignment - 1);
-}
-
 static void* ptr_add(void* p, size_t bytes) {
 	return (void*)((uintptr_t)p + bytes);
 }
@@ -42,7 +34,7 @@ edge_arena_t* edge_arena_create(edge_allocator_t* allocator, size_t size) {
 	}
 
 	size_t page_size = edge_vmem_page_size();
-	size = align_up(size, page_size);
+	size = em_align_up(size, page_size);
 
 	void* base = NULL;
 	if (!edge_vmem_reserve(&base, size)) {
@@ -84,7 +76,7 @@ bool edge_arena_protect(edge_arena_t* arena, void* addr, size_t size, edge_vmem_
 	uintptr_t page_mask = ~(uintptr_t)(arena->page_size - 1);
 	uintptr_t page_addr = astart & page_mask;
 	size_t page_off = astart - page_addr;
-	size_t total = align_up(size + page_off, arena->page_size);
+	size_t total = em_align_up(size + page_off, arena->page_size);
 	return edge_vmem_protect((void*)page_addr, total, prot);
 }
 
@@ -114,7 +106,7 @@ static bool arena_ensure_committed_locked(edge_arena_t* arena, size_t required_b
 	}
 
 	size_t need = required_bytes - arena->committed;
-	size_t commit_size = align_up(need, EDGE_ARENA_COMMIT_CHUNK_SIZE);
+	size_t commit_size = em_align_up(need, EDGE_ARENA_COMMIT_CHUNK_SIZE);
 	if (arena->committed + commit_size > max_size) {
 		commit_size = max_size - arena->committed;
 	}
@@ -145,7 +137,7 @@ void* edge_arena_alloc_ex(edge_arena_t* arena, size_t size, size_t alignment) {
 	edge_mtx_lock(&arena->mtx);
 
 	size_t offset = arena->offset;
-	size_t aligned_offset = align_up(offset, alignment);
+	size_t aligned_offset = em_align_up(offset, alignment);
 
 	if (aligned_offset > __SIZE_MAX__ - size) {
 		edge_mtx_unlock(&arena->mtx);

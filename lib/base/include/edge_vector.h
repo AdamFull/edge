@@ -1,12 +1,12 @@
 #ifndef EDGE_VECTOR_H
 #define EDGE_VECTOR_H
 
+#include <stddef.h>
+#include "edge_base.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
-#include <stdbool.h>
 
     typedef struct edge_allocator edge_allocator_t;
 
@@ -127,12 +127,12 @@ extern "C" {
      * Find element using comparison function
      * Returns index or -1 if not found
      */
-    int edge_vector_find(const edge_vector_t* vec, const void* element, int (*compare)(const void*, const void*));
+    i32 edge_vector_find(const edge_vector_t* vec, const void* element, i32 (*compare)(const void*, const void*));
 
     /**
      * Sort vector using comparison function
      */
-    void edge_vector_sort(edge_vector_t* vec, int (*compare)(const void*, const void*));
+    void edge_vector_sort(edge_vector_t* vec, i32 (*compare)(const void*, const void*));
 
 #ifdef __cplusplus
 }

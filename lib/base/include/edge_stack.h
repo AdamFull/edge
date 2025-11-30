@@ -1,12 +1,12 @@
 #ifndef EDGE_STACK_H
 #define EDGE_STACK_H
 
+#include <stddef.h>
+#include "edge_base.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#include <stddef.h>
-#include <stdbool.h>
 
     typedef struct edge_allocator edge_allocator_t;
 
