@@ -1250,6 +1250,26 @@ void gfx_cmd_bind_descriptor(const gfx_cmd_buf_t* cmd_buf, const gfx_pipeline_la
 	vkCmdBindDescriptorSets(cmd_buf->handle, bind_point, layout->handle, 0u, 1u, &descriptor->handle, 0u, NULL);
 }
 
+void gfx_cmd_pipeline_barrier(const gfx_cmd_buf_t* cmd_buf, const gfx_pipeline_barrier_builder_t* builder) {
+	if (!cmd_buf || !builder) {
+		return;
+	}
+
+	VkDependencyInfoKHR dependency_info = {
+		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
+		.pNext = NULL,
+		.dependencyFlags = 0,
+		.memoryBarrierCount = builder->memory_barrier_count,
+		.pMemoryBarriers = builder->memory_barriers,
+		.bufferMemoryBarrierCount = builder->buffer_barrier_count,
+		.pBufferMemoryBarriers = builder->buffer_barriers,
+		.imageMemoryBarrierCount = builder->image_barrier_count,
+		.pImageMemoryBarriers = builder->image_barriers
+	};
+
+	vkCmdPipelineBarrier2KHR(cmd_buf->handle, &dependency_info);
+}
+
 void gfx_cmd_buf_destroy(gfx_cmd_buf_t* cmd_buf) {
 	if (!cmd_buf) {
 		return;
@@ -1448,7 +1468,7 @@ void gfx_descriptor_set_destroy(gfx_descriptor_set_t* set) {
 	vkFreeDescriptorSets(g_ctx.dev, set->pool->handle, 1, &set->handle);
 }
 
-void gfx_pipeline_layout_builder_add_range(VkShaderStageFlags stage_flags, u32 offset, u32 size, gfx_pipeline_layout_builder_t* builder) {
+void gfx_pipeline_layout_builder_add_range(gfx_pipeline_layout_builder_t* builder, VkShaderStageFlags stage_flags, u32 offset, u32 size) {
 	if (!builder) {
 		return;
 	}
@@ -1462,7 +1482,7 @@ void gfx_pipeline_layout_builder_add_range(VkShaderStageFlags stage_flags, u32 o
 	builder->constant_ranges[builder->constant_range_count++] = constant_range;
 }
 
-void gfx_pipeline_layout_builder_add_layout(const gfx_descriptor_set_layout_t* layout, gfx_pipeline_layout_builder_t* builder) {
+void gfx_pipeline_layout_builder_add_layout(gfx_pipeline_layout_builder_t* builder, const gfx_descriptor_set_layout_t* layout) {
 	if (!layout || !builder) {
 		return;
 	}
@@ -1986,4 +2006,105 @@ void gfx_fence_destroy(gfx_fence_t* fence) {
 	}
 
 	vkDestroyFence(g_ctx.dev, fence->handle, &g_ctx.vk_alloc);
+}
+
+bool gfx_pipeline_barrier_add_memory(gfx_pipeline_barrier_builder_t* builder, VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
+	VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask) {
+	if (builder->memory_barrier_count >= GFX_MEMORY_BARRIERS_MAX) {
+		return false;
+	}
+
+	VkMemoryBarrier2* barrier = &builder->memory_barriers[builder->memory_barrier_count++];
+	barrier->sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+	barrier->pNext = NULL;
+	barrier->srcStageMask = src_stage_mask;
+	barrier->srcAccessMask = src_access_mask;
+	barrier->dstStageMask = dst_stage_mask;
+	barrier->dstAccessMask = dst_access_mask;
+
+	return true;
+}
+
+bool gfx_pipeline_barrier_add_buffer(gfx_pipeline_barrier_builder_t* builder, const gfx_buffer_t* buffer, VkPipelineStageFlags2 src_stage_mask,
+	VkAccessFlags2 src_access_mask, VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask, VkDeviceSize offset, VkDeviceSize size) {
+	if (builder->buffer_barrier_count >= GFX_BUFFER_BARRIERS_MAX || !buffer) {
+		return false;
+	}
+
+	VkBufferMemoryBarrier2* barrier = &builder->buffer_barriers[builder->buffer_barrier_count++];
+	barrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+	barrier->pNext = NULL;
+	barrier->srcStageMask = src_stage_mask;
+	barrier->srcAccessMask = src_access_mask;
+	barrier->dstStageMask = dst_stage_mask;
+	barrier->dstAccessMask = dst_access_mask;
+	barrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier->dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier->buffer = buffer->handle;
+	barrier->offset = offset;
+	barrier->size = size;
+
+	return true;
+}
+
+static void gfx_image_get_stage_and_acces(VkImageLayout layout, VkPipelineStageFlags2KHR* out_stage, VkAccessFlags2* out_access) {
+	switch (layout)
+	{
+	case VK_IMAGE_LAYOUT_UNDEFINED:
+		*out_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+		*out_access = VK_ACCESS_2_NONE;
+		break;
+	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+		*out_stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+		*out_access = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
+		break;
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+		*out_stage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
+		*out_access = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+		break;
+	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
+		*out_stage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
+		*out_access = VK_ACCESS_2_SHADER_READ_BIT;
+		break;
+	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+		*out_stage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
+		*out_access = VK_ACCESS_2_SHADER_READ_BIT;
+		break;
+	case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+		*out_stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		*out_access = VK_ACCESS_2_TRANSFER_READ_BIT;
+		break;
+	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+		*out_stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
+		*out_access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
+		break;
+	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+		*out_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+		*out_access = VK_ACCESS_2_NONE;
+		break;
+	default:
+		*out_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
+		*out_access = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
+		break;
+	}
+}
+
+bool gfx_pipeline_barrier_add_image(gfx_pipeline_barrier_builder_t* builder, const gfx_image_t* image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range) {
+	if (builder->image_barrier_count >= GFX_IMAGE_BARRIERS_MAX || !image) {
+		return false;
+	}
+
+	VkImageMemoryBarrier2* barrier = &builder->image_barriers[builder->image_barrier_count++];
+	barrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
+	barrier->pNext = NULL;
+	gfx_image_get_stage_and_acces(image->layout, &barrier->srcStageMask, &barrier->srcAccessMask);
+	gfx_image_get_stage_and_acces(new_layout, &barrier->dstStageMask, &barrier->dstAccessMask);
+	barrier->oldLayout = image->layout;
+	barrier->newLayout = new_layout;
+	barrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier->dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier->image = image->handle;
+	barrier->subresourceRange = subresource_range;
+
+	return true;
 }

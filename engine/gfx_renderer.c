@@ -5,7 +5,6 @@
 #include <edge_vector.h>
 
 #include <vulkan/vulkan.h>
-#include <volk.h>
 
 #define GFX_RENDERER_FRAME_OVERLAP 3
 
@@ -47,63 +46,6 @@ struct gfx_renderer {
 	edge_vector_t* image_descriptors;
 	edge_vector_t* buffer_descriptors;
 };
-
-static void gfx_image_access_state_by_layout(VkImageLayout layout, VkPipelineStageFlags2KHR* out_stage, VkAccessFlags2* out_access) {
-	switch (layout)
-	{
-	case VK_IMAGE_LAYOUT_UNDEFINED:
-		*out_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-		*out_access = VK_ACCESS_2_NONE;
-		break;
-	case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
-		*out_stage = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
-		*out_access = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT;
-		break;
-	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
-		*out_stage = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT;
-		*out_access = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-		break;
-	case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
-		*out_stage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-		*out_access = VK_ACCESS_2_SHADER_READ_BIT;
-		break;
-	case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
-		*out_stage = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT;
-		*out_access = VK_ACCESS_2_SHADER_READ_BIT;
-		break;
-	case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
-		*out_stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-		*out_access = VK_ACCESS_2_TRANSFER_READ_BIT;
-		break;
-	case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
-		*out_stage = VK_PIPELINE_STAGE_2_TRANSFER_BIT;
-		*out_access = VK_ACCESS_2_TRANSFER_WRITE_BIT;
-		break;
-	case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
-		*out_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-		*out_access = VK_ACCESS_2_NONE;
-		break;
-	default:
-		*out_stage = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT;
-		*out_access = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT;
-		break;
-	}
-}
-
-static VkImageMemoryBarrier2KHR gfx_make_image_barrier(const gfx_image_t* image, VkImageLayout new_layout, VkImageSubresourceRange range) {
-	VkImageMemoryBarrier2KHR barrier = { 0 };
-	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2_KHR;
-	gfx_image_access_state_by_layout(image->layout, &barrier.srcStageMask, &barrier.srcAccessMask);
-	gfx_image_access_state_by_layout(new_layout, &barrier.dstStageMask, &barrier.dstAccessMask);
-	barrier.oldLayout = image->layout;
-	barrier.newLayout = new_layout;
-	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-	barrier.image = image->handle;
-	barrier.subresourceRange = range;
-
-	return barrier;
-}
 
 gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_info) {
 	if (!create_info || !create_info->alloc || !create_info->main_queue) {
@@ -183,8 +125,8 @@ gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_inf
 	}
 
 	gfx_pipeline_layout_builder_t pipeline_layout_builder = { 0 };
-	gfx_pipeline_layout_builder_add_layout(&renderer->descriptor_layout, &pipeline_layout_builder);
-	gfx_pipeline_layout_builder_add_range(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0u, props->limits.maxPushConstantsSize, &pipeline_layout_builder);
+	gfx_pipeline_layout_builder_add_layout(&pipeline_layout_builder , &renderer->descriptor_layout);
+	gfx_pipeline_layout_builder_add_range(&pipeline_layout_builder, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0u, props->limits.maxPushConstantsSize);
 
 	if (!gfx_pipeline_layout_create(&pipeline_layout_builder, &renderer->pipeline_layout)) {
 		gfx_renderer_destroy(renderer);
@@ -294,7 +236,13 @@ bool gfx_renderer_frame_begin(gfx_renderer_t* renderer) {
 	if (gfx_swapchain_is_outdated(&renderer->swapchain)) {
 		gfx_queue_wait_idle(renderer->queue);
 
-		gfx_swapchain_update(&renderer->swapchain);
+		if (!gfx_swapchain_update(&renderer->swapchain)) {
+			return false;
+		}
+
+		if (!gfx_swapchain_get_images(&renderer->swapchain, renderer->swapchain_images)) {
+			return false;
+		}
 
 		renderer->active_frame = NULL;
 		renderer->active_image_index = 0;
@@ -353,25 +301,22 @@ bool gfx_renderer_frame_end(gfx_renderer_t* renderer) {
 	}
 
 	gfx_image_t* current_image = &renderer->swapchain_images[renderer->active_image_index];
+	if (current_image->layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+		gfx_pipeline_barrier_builder_t barrier_builder = { 0 };
 
-	VkImageSubresourceRange subresource_range = { 
+		VkImageSubresourceRange subresource_range = {
 		.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 		.baseMipLevel = 0u,
 		.levelCount = 1u,
 		.baseArrayLayer = 0u,
 		.layerCount = 1u
-	};
+		};
 
-	VkImageMemoryBarrier2KHR image_barrier = gfx_make_image_barrier(current_image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
+		gfx_pipeline_barrier_add_image(&barrier_builder, current_image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
+		gfx_cmd_pipeline_barrier(&current_frame->cmd_buf, &barrier_builder);
 
-	VkDependencyInfo dependency_info = {
-		.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO,
-		.pNext = NULL,
-		.imageMemoryBarrierCount = 1u,
-		.pImageMemoryBarriers = &image_barrier
-	};
-
-	vkCmdPipelineBarrier2KHR(current_frame->cmd_buf.handle, &dependency_info);
+		current_image->layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+	}
 
 	if (!edge_vector_empty(renderer->write_descriptor_sets)) {
 		gfx_updete_descriptors((const VkWriteDescriptorSet*)edge_vector_data(renderer->write_descriptor_sets), edge_vector_size(renderer->write_descriptor_sets));

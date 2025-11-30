@@ -5,6 +5,10 @@
 
 #include <stdbool.h>
 
+#define GFX_MEMORY_BARRIERS_MAX 16
+#define GFX_BUFFER_BARRIERS_MAX 32
+#define GFX_IMAGE_BARRIERS_MAX 32
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -63,6 +67,18 @@ extern "C" {
 		gfx_buffer_flags_t flags;
 	} gfx_buffer_create_info_t;
 
+	typedef struct {
+		VkMemoryBarrier2 memory_barriers[GFX_MEMORY_BARRIERS_MAX];
+		VkBufferMemoryBarrier2 buffer_barriers[GFX_BUFFER_BARRIERS_MAX];
+		VkImageMemoryBarrier2 image_barriers[GFX_IMAGE_BARRIERS_MAX];
+
+		u32 memory_barrier_count;
+		u32 buffer_barrier_count;
+		u32 image_barrier_count;
+
+		VkDependencyFlags dependency_flags;
+	} gfx_pipeline_barrier_builder_t;
+
 	bool gfx_context_init(const gfx_context_create_info_t* cteate_info);
 	void gfx_context_shutdown();
 
@@ -85,6 +101,7 @@ extern "C" {
 	void gfx_cmd_reset_query(const gfx_cmd_buf_t* cmd_buf, const gfx_query_pool_t* query, u32 first_query, u32 query_count);
 	void gfx_cmd_write_timestamp(const gfx_cmd_buf_t* cmd_buf, const gfx_query_pool_t* query, VkPipelineStageFlagBits2 stage, u32 query_index);
 	void gfx_cmd_bind_descriptor(const gfx_cmd_buf_t* cmd_buf, const gfx_pipeline_layout_t* layout, const gfx_descriptor_set_t* descriptor, VkPipelineBindPoint bind_point);
+	void gfx_cmd_pipeline_barrier(const gfx_cmd_buf_t* cmd_buf, const gfx_pipeline_barrier_builder_t* builder);
 	void gfx_cmd_buf_destroy(gfx_cmd_buf_t* cmd_buf);
 
 	void gfx_updete_descriptors(const VkWriteDescriptorSet* writes, u32 count);
@@ -104,8 +121,8 @@ extern "C" {
 	bool gfx_descriptor_set_create(const gfx_descriptor_pool_t* pool, const gfx_descriptor_set_layout_t* layouts, gfx_descriptor_set_t* set);
 	void gfx_descriptor_set_destroy(gfx_descriptor_set_t* set);
 
-	void gfx_pipeline_layout_builder_add_range(VkShaderStageFlags flaags, u32 offset, u32 size, gfx_pipeline_layout_builder_t* builder);
-	void gfx_pipeline_layout_builder_add_layout(const gfx_descriptor_set_layout_t* layout, gfx_pipeline_layout_builder_t* builder);
+	void gfx_pipeline_layout_builder_add_range(gfx_pipeline_layout_builder_t* builder, VkShaderStageFlags flaags, u32 offset, u32 size);
+	void gfx_pipeline_layout_builder_add_layout(gfx_pipeline_layout_builder_t* builder, const gfx_descriptor_set_layout_t* layout);
 
 	bool gfx_pipeline_layout_create(const gfx_pipeline_layout_builder_t* builder, gfx_pipeline_layout_t* pipeline_layout);
 	void gfx_pipeline_layout_destroy(gfx_pipeline_layout_t* pipeline_layout);
@@ -137,6 +154,12 @@ extern "C" {
 	bool gfx_fence_wait(const gfx_fence_t* fence, u64 timeout);
 	void gfx_fence_reset(const gfx_fence_t* fence);
 	void gfx_fence_destroy(gfx_fence_t* fence);
+
+	bool gfx_pipeline_barrier_add_memory(gfx_pipeline_barrier_builder_t* builder, VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
+		VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask);
+	bool gfx_pipeline_barrier_add_buffer(gfx_pipeline_barrier_builder_t* builder, const gfx_buffer_t* buffer, VkPipelineStageFlags2 src_stage_mask,
+		VkAccessFlags2 src_access_mask, VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask, VkDeviceSize offset, VkDeviceSize size);
+	bool gfx_pipeline_barrier_add_image(gfx_pipeline_barrier_builder_t* builder, const gfx_image_t* image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range);
 
 #ifdef __cplusplus
 }
