@@ -2,6 +2,7 @@
 #include "runtime/platform.h"
 
 #include <edge_allocator.h>
+#include <edge_math.h>
 #include <edge_vector.h>
 #include <edge_logger.h>
 
@@ -31,8 +32,6 @@
 #define GFX_QUEUE_FAMILY_MAX 16
 #define GFX_SURFACE_FORMAT_MAX 32
 #define GFX_PRESENT_MODES_MAX 8
-
-#define GFX_ARRAY_SIZE(arr) (sizeof(arr) / sizeof(arr[0]))
 
 struct gfx_key_value {
 	const char* key;
@@ -128,7 +127,7 @@ static struct gfx_key_value g_device_extensions[] = {
 #endif
 };
 
-static const uint32_t g_required_api_version = VK_API_VERSION_1_1;
+static const u32 g_required_api_version = VK_API_VERSION_1_1;
 
 
 struct gfx_context {
@@ -143,9 +142,9 @@ struct gfx_context {
 
 	VkSurfaceKHR surf;
 	VkSurfaceFormatKHR surf_formats[GFX_SURFACE_FORMAT_MAX];
-	uint32_t surf_format_count;
+	u32 surf_format_count;
 	VkPresentModeKHR surf_present_modes[GFX_PRESENT_MODES_MAX];
-	uint32_t surf_present_mode_count;
+	u32 surf_present_mode_count;
 
 	VkPhysicalDevice adapter;
 
@@ -153,10 +152,10 @@ struct gfx_context {
 	VkPhysicalDeviceFeatures features;
 
 	const char* enabled_extensions[GFX_DEVICE_EXTENSIONS_MAX];
-	uint32_t enabled_extension_count;
+	u32 enabled_extension_count;
 
 	VkQueueFamilyProperties queue_families[GFX_QUEUE_FAMILY_MAX];
-	uint32_t queue_family_count;
+	u32 queue_family_count;
 
 	VkDevice dev;
 
@@ -222,14 +221,17 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debug_utils_messenger_cb(
 	return VK_FALSE;
 }
 
-static inline uint32_t clamp_u32(uint32_t value, uint32_t min, uint32_t max) {
-	if (value < min) return min;
-	if (value > max) return max;
-	return value;
+static inline u32 compute_max_mip_level(u32 size) {
+	u32 level_count = 0;
+	while (size) {
+		level_count++;
+		size >>= 1;
+	}
+	return level_count;
 }
 
-static bool is_extension_supported(const char* extension_name, const VkExtensionProperties* available_extensions, uint32_t available_count) {
-	for (int32_t i = 0; i < available_count; i++) {
+static bool is_extension_supported(const char* extension_name, const VkExtensionProperties* available_extensions, u32 available_count) {
+	for (i32 i = 0; i < available_count; i++) {
 		if (strcmp(extension_name, available_extensions[i].extensionName) == 0) {
 			return true;
 		}
@@ -237,8 +239,8 @@ static bool is_extension_supported(const char* extension_name, const VkExtension
 	return false;
 }
 
-static bool is_layer_supported(const char* layer_name, const VkLayerProperties* available_layers, uint32_t available_count) {
-	for (int32_t i = 0; i < available_count; i++) {
+static bool is_layer_supported(const char* layer_name, const VkLayerProperties* available_layers, u32 available_count) {
+	for (i32 i = 0; i < available_count; i++) {
 		if (strcmp(layer_name, available_layers[i].layerName) == 0) {
 			return true;
 		}
@@ -258,8 +260,8 @@ static VkExtent2D choose_suitable_extent(VkExtent2D request_extent, const VkSurf
 		return surface_caps->currentExtent;
 	}
 
-	request_extent.width = clamp_u32(request_extent.width, surface_caps->minImageExtent.width, surface_caps->maxImageExtent.width);
-	request_extent.height = clamp_u32(request_extent.height, surface_caps->minImageExtent.height, surface_caps->maxImageExtent.height);
+	request_extent.width = em_clamp(request_extent.width, surface_caps->minImageExtent.width, surface_caps->maxImageExtent.width);
+	request_extent.height = em_clamp(request_extent.height, surface_caps->minImageExtent.height, surface_caps->maxImageExtent.height);
 
 	return request_extent;
 }
@@ -349,9 +351,9 @@ static bool surface_format_equal(const VkSurfaceFormatKHR* a, const VkSurfaceFor
 	return a->format == b->format;
 }
 
-static bool find_surface_format(const VkSurfaceFormatKHR* available_formats, uint32_t available_count,
+static bool find_surface_format(const VkSurfaceFormatKHR* available_formats, u32 available_count,
 	const VkSurfaceFormatKHR* requested, VkSurfaceFormatKHR* out_format, bool full_match) {
-	for (uint32_t i = 0; i < available_count; i++) {
+	for (u32 i = 0; i < available_count; i++) {
 		if (surface_format_equal(&available_formats[i], requested, full_match)) {
 			*out_format = available_formats[i];
 			return true;
@@ -360,10 +362,10 @@ static bool find_surface_format(const VkSurfaceFormatKHR* available_formats, uin
 	return false;
 }
 
-static bool pick_by_priority_list(const VkSurfaceFormatKHR* available_formats, uint32_t available_count,
-	const VkSurfaceFormatKHR* priority_list, uint32_t priority_count, bool hdr_only, VkSurfaceFormatKHR* out_format) {
-	for (uint32_t p = 0; p < priority_count; p++) {
-		for (uint32_t i = 0; i < available_count; i++) {
+static bool pick_by_priority_list(const VkSurfaceFormatKHR* available_formats, u32 available_count,
+	const VkSurfaceFormatKHR* priority_list, u32 priority_count, bool hdr_only, VkSurfaceFormatKHR* out_format) {
+	for (u32 p = 0; p < priority_count; p++) {
+		for (u32 i = 0; i < available_count; i++) {
 			// Skip if filtering by HDR and format doesn't match
 			if (hdr_only && !is_surface_format_hdr(&available_formats[i])) {
 				continue;
@@ -382,7 +384,7 @@ static bool pick_by_priority_list(const VkSurfaceFormatKHR* available_formats, u
 	return false;
 }
 
-static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR requested_surface_format, const VkSurfaceFormatKHR* available_surface_formats, uint32_t available_count, bool prefer_hdr) {
+static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR requested_surface_format, const VkSurfaceFormatKHR* available_surface_formats, u32 available_count, bool prefer_hdr) {
 	static const VkSurfaceFormatKHR hdr_priority_list[] = {
 		{ VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_COLOR_SPACE_HDR10_ST2084_EXT },
 		{ VK_FORMAT_A2R10G10B10_UNORM_PACK32, VK_COLOR_SPACE_HDR10_ST2084_EXT },
@@ -425,14 +427,14 @@ static VkSurfaceFormatKHR choose_surface_format(VkSurfaceFormatKHR requested_sur
 
 	if (prefer_hdr) {
 		if (pick_by_priority_list(available_surface_formats, available_count,
-			hdr_priority_list, GFX_ARRAY_SIZE(hdr_priority_list),
+			hdr_priority_list, EDGE_ARRAY_SIZE(hdr_priority_list),
 			true, &result)) {
 			return result;
 		}
 	}
 
 	if (pick_by_priority_list(available_surface_formats, available_count,
-		sdr_priority_list, GFX_ARRAY_SIZE(sdr_priority_list),
+		sdr_priority_list, EDGE_ARRAY_SIZE(sdr_priority_list),
 		false, &result)) {
 		return result;
 	}
@@ -452,7 +454,7 @@ static VkCompositeAlphaFlagBitsKHR choose_suitable_composite_alpha(VkCompositeAl
 		VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR
 	};
 
-	for (uint32_t i = 0; i < GFX_ARRAY_SIZE(composite_alpha_priority_list); i++) {
+	for (u32 i = 0; i < EDGE_ARRAY_SIZE(composite_alpha_priority_list); i++) {
 		if (composite_alpha_priority_list[i] & supported_composite_alpha) {
 			return composite_alpha_priority_list[i];
 		}
@@ -462,16 +464,16 @@ static VkCompositeAlphaFlagBitsKHR choose_suitable_composite_alpha(VkCompositeAl
 }
 
 VkPresentModeKHR choose_suitable_present_mode(VkPresentModeKHR request_present_mode,
-	const VkPresentModeKHR* available_present_modes, uint32_t available_count,
-	const VkPresentModeKHR* present_mode_priority_list, uint32_t priority_count) {
-	for (uint32_t i = 0; i < available_count; i++) {
+	const VkPresentModeKHR* available_present_modes, u32 available_count,
+	const VkPresentModeKHR* present_mode_priority_list, u32 priority_count) {
+	for (u32 i = 0; i < available_count; i++) {
 		if (available_present_modes[i] == request_present_mode) {
 			return request_present_mode;
 		}
 	}
 
-	for (uint32_t p = 0; p < priority_count; p++) {
-		for (uint32_t i = 0; i < available_count; i++) {
+	for (u32 p = 0; p < priority_count; p++) {
+		for (u32 i = 0; i < available_count; i++) {
 			if (available_present_modes[i] == present_mode_priority_list[p]) {
 				return present_mode_priority_list[p];
 			}
@@ -482,7 +484,7 @@ VkPresentModeKHR choose_suitable_present_mode(VkPresentModeKHR request_present_m
 }
 
 static bool gfx_instance_init() {
-	uint32_t layer_count = 0;
+	u32 layer_count = 0;
 	vkEnumerateInstanceLayerProperties(&layer_count, NULL);
 	VkLayerProperties* available_layers = NULL;
 	if (layer_count > 0) {
@@ -490,7 +492,7 @@ static bool gfx_instance_init() {
 		vkEnumerateInstanceLayerProperties(&layer_count, available_layers);
 	}
 
-	uint32_t extension_count = 0;
+	u32 extension_count = 0;
 	vkEnumerateInstanceExtensionProperties(NULL, &extension_count, NULL);
 	VkExtensionProperties* available_extensions = NULL;
 	if (extension_count > 0) {
@@ -499,9 +501,9 @@ static bool gfx_instance_init() {
 	}
 
 	const char* enabled_layers[GFX_LAYERS_MAX];
-	uint32_t enabled_layer_count = 0;
+	u32 enabled_layer_count = 0;
 	
-	for (int i = 0; i < GFX_ARRAY_SIZE(g_instance_layers); ++i) {
+	for (int i = 0; i < EDGE_ARRAY_SIZE(g_instance_layers); ++i) {
 		assert(enabled_layer_count < GFX_LAYERS_MAX && "Validation layer enables overflow.");
 
 		const char* layer_name = g_instance_layers[i];
@@ -522,9 +524,9 @@ static bool gfx_instance_init() {
 	}
 
 	const char* enabled_extensions[GFX_INSTANCE_EXTENSIONS_MAX];
-	uint32_t enabled_extension_count = 0;;
+	u32 enabled_extension_count = 0;;
 
-	for (int i = 0; i < GFX_ARRAY_SIZE(g_instance_extensions); ++i) {
+	for (int i = 0; i < EDGE_ARRAY_SIZE(g_instance_extensions); ++i) {
 		assert(enabled_extension_count < GFX_INSTANCE_EXTENSIONS_MAX && "Extension enables overflow.");
 
 		const char* ext_name = g_instance_extensions[i];
@@ -566,7 +568,7 @@ static bool gfx_instance_init() {
 	VkValidationFeaturesEXT validation_features = { 0 };
 	if (g_ctx.validation_enabled) {
 		validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-		validation_features.enabledValidationFeatureCount = GFX_ARRAY_SIZE(g_validation_features_enable);
+		validation_features.enabledValidationFeatureCount = EDGE_ARRAY_SIZE(g_validation_features_enable);
 		validation_features.pEnabledValidationFeatures = g_validation_features_enable;
 		instance_info.pNext = &validation_features;
 	}
@@ -611,12 +613,12 @@ fatal_error:
 }
 
 static bool gfx_select_adapter() {
-	int32_t best_score = -1;
-	int32_t selected_device = -1;
+	i32 best_score = -1;
+	i32 selected_device = -1;
 
-	uint32_t adapter_count = 0;
+	u32 adapter_count = 0;
 	vkEnumeratePhysicalDevices(g_ctx.inst, &adapter_count, NULL);
-	adapter_count = min(adapter_count, GFX_ADAPTER_MAX);
+	adapter_count = em_min(adapter_count, GFX_ADAPTER_MAX);
 
 	if (adapter_count == 0) {
 		EDGE_LOG_FATAL("No Vulkan-capable GPUs found");
@@ -626,7 +628,7 @@ static bool gfx_select_adapter() {
 	VkPhysicalDevice adapters[GFX_ADAPTER_MAX];
 	vkEnumeratePhysicalDevices(g_ctx.inst, &adapter_count, adapters);
 
-	for (int32_t i = 0; i < adapter_count; i++) {
+	for (i32 i = 0; i < adapter_count; i++) {
 		VkPhysicalDevice adapter = adapters[i];
 
 		VkPhysicalDeviceProperties properties;
@@ -634,12 +636,12 @@ static bool gfx_select_adapter() {
 		VkPhysicalDeviceFeatures features;
 		vkGetPhysicalDeviceFeatures(adapter, &features);
 
-		uint32_t extension_count = 0;
+		u32 extension_count = 0;
 		vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count, NULL);
 		VkExtensionProperties* available_extensions = (VkExtensionProperties*)edge_allocator_malloc(g_ctx.alloc, extension_count * sizeof(VkExtensionProperties));
 		vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count, available_extensions);
 
-		int32_t adapter_score = 0;
+		i32 adapter_score = 0;
 
 		if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
 			adapter_score += 1000;
@@ -650,11 +652,11 @@ static bool gfx_select_adapter() {
 		}
 
 		const char* enabled_extensions[GFX_DEVICE_EXTENSIONS_MAX];
-		uint32_t enabled_extension_count = 0;
+		u32 enabled_extension_count = 0;
 
 		// Check extensions
 		bool all_required_found = true;
-		for (int32_t j = 0; j < GFX_ARRAY_SIZE(g_device_extensions); ++j) {
+		for (i32 j = 0; j < EDGE_ARRAY_SIZE(g_device_extensions); ++j) {
 			assert(enabled_extension_count < GFX_DEVICE_EXTENSIONS_MAX && "Device extension enables overflow.");
 
 			struct gfx_key_value* ext_pair = &g_device_extensions[j];
@@ -679,16 +681,16 @@ static bool gfx_select_adapter() {
 		}
 
 		VkQueueFamilyProperties queue_families[GFX_QUEUE_FAMILY_MAX];
-		uint32_t queue_family_count = 0;
+		u32 queue_family_count = 0;
 
 		vkGetPhysicalDeviceQueueFamilyProperties(adapter, &queue_family_count, NULL);
-		queue_family_count = min(queue_family_count, GFX_QUEUE_FAMILY_MAX);
+		queue_family_count = em_min(queue_family_count, GFX_QUEUE_FAMILY_MAX);
 		vkGetPhysicalDeviceQueueFamilyProperties(adapter, &queue_family_count, queue_families);
 
 		// Check surface support
 		if (g_ctx.surf != VK_NULL_HANDLE) {
 			VkBool32 surface_supported = VK_FALSE;
-			for (int32_t j = 0; j < queue_family_count; ++j) {
+			for (i32 j = 0; j < queue_family_count; ++j) {
 				adapter_score += queue_families[j].queueCount * 10;
 				if (surface_supported == VK_FALSE) {
 					vkGetPhysicalDeviceSurfaceSupportKHR(adapter, j, g_ctx.surf, &surface_supported);
@@ -726,12 +728,12 @@ static bool gfx_select_adapter() {
 static bool gfx_device_init() {
 	VkDeviceQueueCreateInfo queue_create_infos[GFX_QUEUE_FAMILY_MAX];
 
-	float queue_priorities[32];
-	for (int32_t i = 0; i < 32; ++i) {
+	f32 queue_priorities[32];
+	for (i32 i = 0; i < 32; ++i) {
 		queue_priorities[i] = 1.0f;
 	}
 
-	for (int32_t i = 0; i < g_ctx.queue_family_count; ++i) {
+	for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
 		VkDeviceQueueCreateInfo* queue_create_info = &queue_create_infos[i];
 		queue_create_info->sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
 		queue_create_info->flags = 0;
@@ -808,7 +810,7 @@ static bool gfx_device_init() {
 	create_info.ppEnabledExtensionNames = g_ctx.enabled_extensions;
 	create_info.pNext = &features2;
 
-	for (int32_t i = 0; i < g_ctx.enabled_extension_count; ++i) {
+	for (i32 i = 0; i < g_ctx.enabled_extension_count; ++i) {
 		if (strcmp(g_ctx.enabled_extensions[i], VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME) == 0) {
 			g_ctx.get_memory_requirements_2_enabled = true;
 		}
@@ -924,7 +926,7 @@ bool gfx_context_init(const gfx_context_create_info_t* cteate_info) {
 		goto fatal_error;
 	}
 
-	g_ctx.surf_format_count = min(g_ctx.surf_format_count, GFX_SURFACE_FORMAT_MAX);
+	g_ctx.surf_format_count = em_min(g_ctx.surf_format_count, GFX_SURFACE_FORMAT_MAX);
 
 	result = vkGetPhysicalDeviceSurfaceFormatsKHR(g_ctx.adapter, g_ctx.surf, &g_ctx.surf_format_count, g_ctx.surf_formats);
 	if (result != VK_SUCCESS) {
@@ -936,7 +938,7 @@ bool gfx_context_init(const gfx_context_create_info_t* cteate_info) {
 		goto fatal_error;
 	}
 
-	g_ctx.surf_present_mode_count = min(g_ctx.surf_present_mode_count, GFX_PRESENT_MODES_MAX);
+	g_ctx.surf_present_mode_count = em_min(g_ctx.surf_present_mode_count, GFX_PRESENT_MODES_MAX);
 
 	result = vkGetPhysicalDeviceSurfacePresentModesKHR(g_ctx.adapter, g_ctx.surf, &g_ctx.surf_present_mode_count, g_ctx.surf_present_modes);
 	if (result != VK_SUCCESS) {
@@ -990,7 +992,7 @@ const VkPhysicalDeviceProperties* gfx_get_adapter_props() {
 	return &g_ctx.properties;
 }
 
-static int32_t gfx_queue_calculate_family_score(const gfx_queue_request_t* request, uint32_t family_index) {
+static i32 gfx_queue_calculate_family_score(const gfx_queue_request_t* request, u32 family_index) {
 	if (!request) {
 		return -1;
 	}
@@ -1077,10 +1079,10 @@ bool gfx_get_queue(const gfx_queue_request_t* request, gfx_queue_t* queue) {
 
 	queue->queue_index = 0; // TODO: Select specific index
 
-	int32_t best_score = -1;
+	i32 best_score = -1;
 
-	for (int32_t i = 0; i < g_ctx.queue_family_count; ++i) {
-		int32_t score = gfx_queue_calculate_family_score(request, i);
+	for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
+		i32 score = gfx_queue_calculate_family_score(request, i);
 		if (score > best_score) {
 			best_score = score;
 			queue->family_index = 0;
@@ -1128,7 +1130,7 @@ void gfx_command_pool_destroy(gfx_command_pool_t* command_pool) {
 	vkDestroyCommandPool(g_ctx.dev, command_pool->handle, &g_ctx.vk_alloc);
 }
 
-bool gfx_query_pool_create(VkQueryType type, uint32_t count, gfx_query_pool_t* query_pool) {
+bool gfx_query_pool_create(VkQueryType type, u32 count, gfx_query_pool_t* query_pool) {
 	if (!query_pool) {
 		return false;
 	}
@@ -1174,7 +1176,7 @@ void gfx_descriptor_layout_builder_add_binding(VkDescriptorSetLayoutBinding bind
 		return;
 	}
 
-	uint32_t index = builder->binding_count++;
+	u32 index = builder->binding_count++;
 	builder->bindings[index] = binding;
 	builder->binding_flags[index] = flags;
 }
@@ -1201,7 +1203,7 @@ bool gfx_descriptor_set_layout_create(const gfx_descriptor_layout_builder_t* bui
 		return false;
 	}
 
-	for (int32_t i = 0; i < builder->binding_count; ++i) {
+	for (i32 i = 0; i < builder->binding_count; ++i) {
 		VkDescriptorSetLayoutBinding binding = builder->bindings[i];
 		descriptor_set_layout->descriptor_sizes[binding.descriptorType] += binding.descriptorCount;
 	}
@@ -1217,13 +1219,13 @@ void gfx_descriptor_set_layout_destroy(gfx_descriptor_set_layout_t* descriptor_s
 	vkDestroyDescriptorSetLayout(g_ctx.dev, descriptor_set_layout->handle, &g_ctx.vk_alloc);
 }
 
-bool gfx_descriptor_pool_create(uint32_t* descriptor_sizes, gfx_descriptor_pool_t* descriptor_pool) {
+bool gfx_descriptor_pool_create(u32* descriptor_sizes, gfx_descriptor_pool_t* descriptor_pool) {
 	if (!descriptor_sizes || !descriptor_pool) {
 		return false;
 	}
 
 	VkDescriptorPoolSize pool_sizes[GFX_DESCRIPTOR_SIZES_COUNT];
-	for (int32_t i = 0; i < GFX_DESCRIPTOR_SIZES_COUNT; ++i) {
+	for (i32 i = 0; i < GFX_DESCRIPTOR_SIZES_COUNT; ++i) {
 		VkDescriptorPoolSize* pool_size = &pool_sizes[i];
 		pool_size->type = (VkDescriptorType)i;
 		pool_size->descriptorCount = descriptor_sizes[i] ? descriptor_sizes[i] : 1;
@@ -1241,7 +1243,7 @@ bool gfx_descriptor_pool_create(uint32_t* descriptor_sizes, gfx_descriptor_pool_
 		return false;
 	}
 
-	memcpy(descriptor_pool->descriptor_sizes, descriptor_sizes, GFX_DESCRIPTOR_SIZES_COUNT * sizeof(uint32_t));
+	memcpy(descriptor_pool->descriptor_sizes, descriptor_sizes, GFX_DESCRIPTOR_SIZES_COUNT * sizeof(u32));
 
 	return true;
 }
@@ -1283,7 +1285,7 @@ void gfx_descriptor_set_destroy(gfx_descriptor_set_t* set) {
 	vkFreeDescriptorSets(g_ctx.dev, set->pool->handle, 1, &set->handle);
 }
 
-void gfx_pipeline_layout_builder_add_range(VkShaderStageFlags stage_flags, uint32_t offset, uint32_t size, gfx_pipeline_layout_builder_t* builder) {
+void gfx_pipeline_layout_builder_add_range(VkShaderStageFlags stage_flags, u32 offset, u32 size, gfx_pipeline_layout_builder_t* builder) {
 	if (!builder) {
 		return;
 	}
@@ -1353,8 +1355,8 @@ bool gfx_swapchain_create(const gfx_swapchain_create_info_t* create_info, gfx_sw
 		return false;
 	}
 
-	uint32_t queue_family_indices[GFX_QUEUE_FAMILY_MAX];
-	for (int32_t i = 0; i < g_ctx.queue_family_count; ++i) {
+	u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
+	for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
 		queue_family_indices[i] = i;
 	}
 
@@ -1362,7 +1364,7 @@ bool gfx_swapchain_create(const gfx_swapchain_create_info_t* create_info, gfx_sw
 	swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 	swapchain_create_info.surface = g_ctx.surf;
 	swapchain_create_info.minImageCount = 2;
-	swapchain_create_info.minImageCount = clamp_u32(swapchain_create_info.minImageCount, surf_caps.minImageCount, surf_caps.maxImageCount ? surf_caps.maxImageCount : 16);
+	swapchain_create_info.minImageCount = em_clamp(swapchain_create_info.minImageCount, surf_caps.minImageCount, surf_caps.maxImageCount ? surf_caps.maxImageCount : 16);
 
 	VkSurfaceFormatKHR requested_surface_format;
 	requested_surface_format.format = create_info->preferred_format;
@@ -1381,7 +1383,7 @@ bool gfx_swapchain_create(const gfx_swapchain_create_info_t* create_info, gfx_sw
 	swapchain_create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
 	swapchain_create_info.compositeAlpha = choose_suitable_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surf_caps.supportedCompositeAlpha);
 	swapchain_create_info.presentMode = choose_suitable_present_mode(present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
-		present_mode_priority_list, GFX_ARRAY_SIZE(present_mode_priority_list));
+		present_mode_priority_list, EDGE_ARRAY_SIZE(present_mode_priority_list));
 	swapchain_create_info.oldSwapchain = swapchain->handle;
 
 	result = vkCreateSwapchainKHR(g_ctx.dev, &swapchain_create_info, &g_ctx.vk_alloc, &swapchain->handle);
@@ -1410,8 +1412,8 @@ bool gfx_swapchain_update(gfx_swapchain_t* swapchain) {
 		return false;
 	}
 
-	uint32_t queue_family_indices[GFX_QUEUE_FAMILY_MAX];
-	for (int32_t i = 0; i < g_ctx.queue_family_count; ++i) {
+	u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
+	for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
 		queue_family_indices[i] = i;
 	}
 
@@ -1448,4 +1450,117 @@ void gfx_swapchain_destroy(gfx_swapchain_t* swapchain) {
 	}
 
 	vkDestroySwapchainKHR(g_ctx.dev, swapchain->handle, &g_ctx.vk_alloc);
+}
+
+bool gfx_image_create(const gfx_image_create_info_t* create_info, gfx_image_t* image) {
+	if (!create_info || !image) {
+		return false;
+	}
+
+	u32 max_dimension = (create_info->extent.width > create_info->extent.height) ? create_info->extent.width : create_info->extent.height;
+	u32 max_mip_levels = compute_max_mip_level(max_dimension);
+
+	u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
+	for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
+		queue_family_indices[i] = i;
+	}
+
+	VmaAllocationCreateInfo allocation_create_info = { 0 };
+	allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+
+	VkImageCreateInfo image_create_info = { 0 };
+	image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO; 
+	image_create_info.flags = (create_info->face_count == 6u) ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
+	image_create_info.imageType = (create_info->extent.depth > 1u) ? VK_IMAGE_TYPE_3D : (create_info->extent.height > 1u) ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_1D;
+	image_create_info.format = create_info->format;
+	image_create_info.extent = create_info->extent;
+	image_create_info.mipLevels = em_clamp(create_info->level_count, 1, max_mip_levels);
+	image_create_info.arrayLayers = em_clamp(create_info->layer_count * create_info->face_count, 1, g_ctx.properties.limits.maxImageArrayLayers);
+	image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	image_create_info.usage = create_info->usage_flags;
+	image_create_info.sharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+	image_create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
+	image_create_info.pQueueFamilyIndices = queue_family_indices;
+	image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	bool is_color_attachment = create_info->usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+	bool is_depth_attachment = create_info->usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+	if (is_color_attachment || is_depth_attachment) {
+		allocation_create_info.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+		allocation_create_info.priority = 1.0f;
+	}
+
+	VkResult result = vmaCreateImage(g_ctx.vma, &image_create_info, &allocation_create_info, &image->handle, &image->memory.handle, &image->memory.info);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	image->extent = create_info->extent;
+	image->level_count = create_info->level_count;
+	image->layer_count = create_info->layer_count;
+	image->face_count = create_info->face_count;
+	image->usage_flags = create_info->usage_flags;
+	image->format = create_info->format;
+	image->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	return true;
+}
+
+void gfx_image_destroy(gfx_image_t* image) {
+	if (!image) {
+		return;
+	}
+
+	if (image->handle != VK_NULL_HANDLE && image->memory.handle != VK_NULL_HANDLE) {
+		vmaDestroyImage(g_ctx.vma, image->handle, image->memory.handle);
+	}
+}
+
+bool gfx_buffer_create(const gfx_buffer_create_info_t* create_info, gfx_buffer_t* buffer) {
+	if (!create_info || !buffer) {
+		return false;
+	}
+
+	u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
+	for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
+		queue_family_indices[i] = i;
+	}
+
+	VmaAllocationCreateInfo allocation_create_info = { 0 };
+	allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+
+	VkBufferCreateInfo buffer_create_info = { 0 };
+	buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+	buffer_create_info.size;
+	buffer_create_info.usage = create_info->usage_flags;
+	buffer_create_info.sharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
+	buffer_create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
+	buffer_create_info.pQueueFamilyIndices = queue_family_indices;
+
+	VkResult result = vmaCreateBuffer(g_ctx.vma, &buffer_create_info, &allocation_create_info, &buffer->handle, &buffer->memory.handle, &buffer->memory.info);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	if (create_info->usage_flags & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+		VkBufferDeviceAddressInfo device_address_info = { 0 };
+		device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
+		device_address_info.buffer = buffer->handle;
+		buffer->address = vkGetBufferDeviceAddress(g_ctx.dev, &device_address_info);
+	}
+
+	buffer->usage_flags = create_info->usage_flags;
+
+	return true;
+}
+
+void gfx_buffer_destroy(gfx_buffer_t* buffer) {
+	if (!buffer) {
+		return;
+	}
+
+	if (buffer->handle != VK_NULL_HANDLE && buffer->memory.handle != VK_NULL_HANDLE) {
+		vmaDestroyBuffer(g_ctx.vma, buffer->handle, buffer->memory.handle);
+	}
 }

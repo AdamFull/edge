@@ -3,6 +3,9 @@
 
 #include <stdint.h>
 #include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
+
+#include "edge_base.h"
 
 #define GFX_MAX_BINDING_COUNT 16
 #define GFX_DESCRIPTOR_SIZES_COUNT 11
@@ -16,8 +19,8 @@ extern "C" {
 
 	// Primitives
 	typedef struct gfx_queue {
-		int32_t family_index;
-		int32_t queue_index;
+		i32 family_index;
+		i32 queue_index;
 	} gfx_queue_t;
 
 	typedef struct gfx_command_pool {
@@ -27,17 +30,17 @@ extern "C" {
 	typedef struct gfx_query_pool {
 		VkQueryPool handle;
 		VkQueryType type;
-		uint32_t max_query;
+		u32 max_query;
 	} gfx_query_pool_t;
 
 	typedef struct gfx_descriptor_set_layout {
 		VkDescriptorSetLayout handle;
-		uint32_t descriptor_sizes[GFX_DESCRIPTOR_SIZES_COUNT];
+		u32 descriptor_sizes[GFX_DESCRIPTOR_SIZES_COUNT];
 	} gfx_descriptor_set_layout_t;
 
 	typedef struct {
 		VkDescriptorPool handle;
-		uint32_t descriptor_sizes[GFX_DESCRIPTOR_SIZES_COUNT];
+		u32 descriptor_sizes[GFX_DESCRIPTOR_SIZES_COUNT];
 	} gfx_descriptor_pool_t;
 
 	typedef struct {
@@ -53,11 +56,37 @@ extern "C" {
 		VkSwapchainKHR handle;
 		VkFormat format;
 		VkColorSpaceKHR color_space;
-		uint32_t image_count;
+		u32 image_count;
 		VkExtent2D extent;
 		VkPresentModeKHR present_mode;
 		VkCompositeAlphaFlagBitsKHR composite_alpha;
 	} gfx_swapchain_t;
+
+	typedef struct {
+		VmaAllocation handle;
+		VmaAllocationInfo info;
+	} gfx_device_memory_t;
+
+	typedef struct {
+		VkImage handle;
+		gfx_device_memory_t memory;
+
+		VkExtent3D extent;
+		u32 level_count;
+		u32 layer_count;
+		u32 face_count;
+		VkImageUsageFlags usage_flags;
+		VkFormat format;
+		VkImageLayout layout;
+	} gfx_image_t;
+
+	typedef struct {
+		VkBuffer handle;
+		gfx_device_memory_t memory;
+
+		VkBufferUsageFlags usage_flags;
+		VkDeviceAddress address;
+	} gfx_buffer_t;
 
 	typedef struct gfx_fence {
 		VkFence handle;
