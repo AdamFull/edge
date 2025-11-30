@@ -131,6 +131,11 @@ int edge_main(platform_layout_t* platform_layout) {
 
     while (!platform_context_window_should_close(engine_context.platform_context)) {
 		platform_context_window_process_events(engine_context.platform_context, 0.1f);
+
+		if (gfx_renderer_frame_begin(engine_context.gfx_renderer)) {
+
+			gfx_renderer_frame_end(engine_context.gfx_renderer);
+		}
     }
 
 	edge_cleanup_engine();

@@ -23,9 +23,14 @@ extern "C" {
 		i32 queue_index;
 	} gfx_queue_t;
 
-	typedef struct gfx_command_pool {
+	typedef struct gfx_cmd_pool {
 		VkCommandPool handle;
-	} gfx_command_pool_t;
+	} gfx_cmd_pool_t;
+
+	typedef struct gfx_cmd_buf {
+		VkCommandBuffer handle;
+		const gfx_cmd_pool_t* pool;
+	} gfx_cmd_buf_t;
 
 	typedef struct gfx_query_pool {
 		VkQueryPool handle;
@@ -115,6 +120,8 @@ extern "C" {
 
 	typedef struct gfx_semaphore {
 		VkSemaphore handle;
+		VkSemaphoreType type;
+		u64 value;
 	} gfx_semaphore_t;
 
 	enum gfx_queue_caps_flag {

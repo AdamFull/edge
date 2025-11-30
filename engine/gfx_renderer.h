@@ -19,6 +19,9 @@ extern "C" {
 	gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_info);
 	void gfx_renderer_destroy(gfx_renderer_t* renderer);
 
+	bool gfx_renderer_frame_begin(gfx_renderer_t* renderer);
+	bool gfx_renderer_frame_end(gfx_renderer_t* renderer);
+
 #ifdef __cplusplus
 }
 #endif

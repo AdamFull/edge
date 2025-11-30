@@ -70,12 +70,28 @@ extern "C" {
 
 	bool gfx_get_queue(const gfx_queue_request_t* create_info, gfx_queue_t* queue);
 	void gfx_release_queue(gfx_queue_t* queue);
+	VkQueue get_queue_handle(const gfx_queue_t* queue);
+	bool gfx_queue_submit(const gfx_queue_t* queue, const gfx_fence_t* fence, const VkSubmitInfo2KHR* submit_info);
+	bool gfx_queue_present(const gfx_queue_t* queue, const VkPresentInfoKHR* present_info);
+	void gfx_queue_wait_idle(const gfx_queue_t* queue);
 
-	bool gfx_command_pool_create(const gfx_queue_t* queue, gfx_command_pool_t* cmd_pool);
-	void gfx_command_pool_destroy(gfx_command_pool_t* command_pool);
+	bool gfx_cmd_pool_create(const gfx_queue_t* queue, gfx_cmd_pool_t* cmd_pool);
+	void gfx_cmd_pool_destroy(gfx_cmd_pool_t* command_pool);
+
+	bool gfx_cmd_buf_create(const gfx_cmd_pool_t* cmd_pool, gfx_cmd_buf_t* cmd_buf);
+	bool gfx_cmd_begin(const gfx_cmd_buf_t* cmd_buf);
+	void gfx_cmd_end(const gfx_cmd_buf_t* cmd_buf);
+	bool gfx_cmd_reset(const gfx_cmd_buf_t* cmd_buf);
+	void gfx_cmd_reset_query(const gfx_cmd_buf_t* cmd_buf, const gfx_query_pool_t* query, u32 first_query, u32 query_count);
+	void gfx_cmd_write_timestamp(const gfx_cmd_buf_t* cmd_buf, const gfx_query_pool_t* query, VkPipelineStageFlagBits2 stage, u32 query_index);
+	void gfx_cmd_bind_descriptor(const gfx_cmd_buf_t* cmd_buf, const gfx_pipeline_layout_t* layout, const gfx_descriptor_set_t* descriptor, VkPipelineBindPoint bind_point);
+	void gfx_cmd_buf_destroy(gfx_cmd_buf_t* cmd_buf);
+
+	void gfx_updete_descriptors(const VkWriteDescriptorSet* writes, u32 count);
 
 	bool gfx_query_pool_create(VkQueryType type, u32 count, gfx_query_pool_t* query_pool);
 	void gfx_query_pool_reset(gfx_query_pool_t* query_pool);
+	bool gfx_query_pool_get_data(const gfx_query_pool_t* query_pool, u32 first_query, void* out_data);
 	void gfx_query_pool_destroy(gfx_query_pool_t* query_pool);
 
 	void gfx_descriptor_layout_builder_add_binding(VkDescriptorSetLayoutBinding binding, VkDescriptorBindingFlags flags, gfx_descriptor_layout_builder_t* builder);
@@ -96,6 +112,9 @@ extern "C" {
 
 	bool gfx_swapchain_create(const gfx_swapchain_create_info_t* create_info, gfx_swapchain_t* swapchain);
 	bool gfx_swapchain_update(gfx_swapchain_t* swapchain);
+	bool gfx_swapchain_is_outdated(const gfx_swapchain_t* swapchain);
+	bool gfx_swapchain_get_images(const gfx_swapchain_t* swapchain, gfx_image_t* image_out);
+	bool gfx_swapchain_acquire_next_image(const gfx_swapchain_t* swapchain, u64 timeout, const gfx_semaphore_t* semaphore, u32* next_image_idx);
 	void gfx_swapchain_destroy(gfx_swapchain_t* swapchain);
 
 	void gfx_device_memory_setup(gfx_device_memory_t* mem);
@@ -110,6 +129,14 @@ extern "C" {
 
 	bool gfx_buffer_create(const gfx_buffer_create_info_t* create_info, gfx_buffer_t* buffer);
 	void gfx_buffer_destroy(gfx_buffer_t* buffer);
+
+	bool gfx_semaphore_create(VkSemaphoreType type, u64 value, gfx_semaphore_t* semaphore);
+	void gfx_semaphore_destroy(gfx_semaphore_t* semaphore);
+
+	bool gfx_fence_create(VkFenceCreateFlags flags, gfx_fence_t* fence);
+	bool gfx_fence_wait(const gfx_fence_t* fence, u64 timeout);
+	void gfx_fence_reset(const gfx_fence_t* fence);
+	void gfx_fence_destroy(gfx_fence_t* fence);
 
 #ifdef __cplusplus
 }

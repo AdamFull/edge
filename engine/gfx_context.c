@@ -32,6 +32,7 @@
 #define GFX_QUEUE_FAMILY_MAX 16
 #define GFX_SURFACE_FORMAT_MAX 32
 #define GFX_PRESENT_MODES_MAX 8
+#define GFX_SWAPCHAIN_IMAGES_MAX 8
 
 struct gfx_key_value {
 	const char* key;
@@ -1104,7 +1105,59 @@ void gfx_release_queue(gfx_queue_t* queue) {
 	// TODO: release indices
 }
 
-bool gfx_command_pool_create(const gfx_queue_t* queue, gfx_command_pool_t* cmd_pool) {
+VkQueue get_queue_handle(const gfx_queue_t* queue) {
+	if (!queue) {
+		return VK_NULL_HANDLE;
+	}
+
+	VkQueue handle;
+	vkGetDeviceQueue(g_ctx.dev, queue->family_index, queue->queue_index, &handle);
+
+	return handle;
+}
+
+bool gfx_queue_submit(const gfx_queue_t* queue, const gfx_fence_t* fence, const VkSubmitInfo2KHR* submit_info) {
+	if (!queue || !submit_info) {
+		return false;
+	}
+
+	VkQueue queue_handle = get_queue_handle(queue);
+	if (queue_handle == VK_NULL_HANDLE) {
+		return false;
+	}
+
+	VkResult result = vkQueueSubmit2KHR(queue_handle, 1, submit_info, fence ? fence->handle : VK_NULL_HANDLE);
+	return result == VK_SUCCESS;
+}
+
+bool gfx_queue_present(const gfx_queue_t* queue, const VkPresentInfoKHR* present_info) {
+	if (!queue || !present_info) {
+		return false;
+	}
+
+	VkQueue queue_handle = get_queue_handle(queue);
+	if (queue_handle == VK_NULL_HANDLE) {
+		return false;
+	}
+
+	VkResult result = vkQueuePresentKHR(queue_handle, present_info);
+	return result == VK_SUCCESS;
+}
+
+void gfx_queue_wait_idle(const gfx_queue_t* queue) {
+	if (!queue) {
+		return;
+	}
+
+	VkQueue queue_handle = get_queue_handle(queue);
+	if (queue_handle == VK_NULL_HANDLE) {
+		return;
+	}
+
+	vkQueueWaitIdle(queue_handle);
+}
+
+bool gfx_cmd_pool_create(const gfx_queue_t* queue, gfx_cmd_pool_t* cmd_pool) {
 	if (!queue || !cmd_pool) {
 		return false;
 	}
@@ -1122,12 +1175,99 @@ bool gfx_command_pool_create(const gfx_queue_t* queue, gfx_command_pool_t* cmd_p
 	return true;
 }
 
-void gfx_command_pool_destroy(gfx_command_pool_t* command_pool) {
+void gfx_cmd_pool_destroy(gfx_cmd_pool_t* command_pool) {
 	if (!command_pool) {
 		return;
 	}
 
 	vkDestroyCommandPool(g_ctx.dev, command_pool->handle, &g_ctx.vk_alloc);
+}
+
+bool gfx_cmd_buf_create(const gfx_cmd_pool_t* cmd_pool, gfx_cmd_buf_t* cmd_buf) {
+	if (!cmd_pool || !cmd_buf) {
+		return false;
+	}
+
+	VkCommandBufferAllocateInfo alloc_info = { 0 };
+	alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	alloc_info.commandPool = cmd_pool->handle;
+	alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	alloc_info.commandBufferCount = 1;
+
+	VkResult result = vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &cmd_buf->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	cmd_buf->pool = cmd_pool;
+
+	return true;
+}
+
+bool gfx_cmd_begin(const gfx_cmd_buf_t* cmd_buf) {
+	if (!cmd_buf) {
+		return false;
+	}
+
+	VkCommandBufferBeginInfo begin_info = { 0 };
+	begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	VkResult result = vkBeginCommandBuffer(cmd_buf->handle, &begin_info);
+	return result == VK_SUCCESS;
+}
+
+void gfx_cmd_end(const gfx_cmd_buf_t* cmd_buf) {
+	if (!cmd_buf) {
+		return;
+	}
+
+	VkResult result = vkEndCommandBuffer(cmd_buf->handle);
+}
+
+bool gfx_cmd_reset(const gfx_cmd_buf_t* cmd_buf) {
+	if (!cmd_buf) {
+		return false;
+	}
+
+	VkResult result = vkResetCommandBuffer(cmd_buf->handle, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
+	return result == VK_SUCCESS;
+}
+
+void gfx_cmd_write_timestamp(const gfx_cmd_buf_t* cmd_buf, const gfx_query_pool_t* query, VkPipelineStageFlagBits2 stage, u32 query_index) {
+	if (!cmd_buf || !query) {
+		return;
+	}
+
+	vkCmdWriteTimestamp2KHR(cmd_buf->handle, stage, query->handle, query_index);
+}
+
+void gfx_cmd_bind_descriptor(const gfx_cmd_buf_t* cmd_buf, const gfx_pipeline_layout_t* layout, const gfx_descriptor_set_t* descriptor, VkPipelineBindPoint bind_point) {
+	if (!cmd_buf || !layout || !descriptor) {
+		return;
+	}
+
+	vkCmdBindDescriptorSets(cmd_buf->handle, bind_point, layout->handle, 0u, 1u, &descriptor->handle, 0u, NULL);
+}
+
+void gfx_cmd_buf_destroy(gfx_cmd_buf_t* cmd_buf) {
+	if (!cmd_buf) {
+		return;
+	}
+
+	vkFreeCommandBuffers(g_ctx.dev, cmd_buf->pool->handle, 1, &cmd_buf->handle);
+}
+
+void gfx_updete_descriptors(const VkWriteDescriptorSet* writes, u32 count) {
+	vkUpdateDescriptorSets(g_ctx.dev, count, writes, 0u, NULL);
+}
+
+void gfx_cmd_reset_query(const gfx_cmd_buf_t* cmd_buf, const gfx_query_pool_t* query, u32 first_query, u32 query_count) {
+	if (!cmd_buf || !query) {
+		return;
+	}
+
+	vkCmdResetQueryPool(cmd_buf->handle, query->handle, first_query, query_count);
 }
 
 bool gfx_query_pool_create(VkQueryType type, u32 count, gfx_query_pool_t* query_pool) {
@@ -1161,6 +1301,29 @@ void gfx_query_pool_reset(gfx_query_pool_t* query_pool) {
 	}
 
 	vkResetQueryPoolEXT(g_ctx.dev, query_pool->handle, 0, query_pool->max_query);
+}
+
+bool gfx_query_pool_get_data(const gfx_query_pool_t* query_pool, u32 first_query, void* out_data) {
+	if (!query_pool || !out_data) {
+		return false;
+	}
+
+	VkResult result = VK_SUCCESS;
+	switch (query_pool->type)
+	{
+	case VK_QUERY_TYPE_OCCLUSION: {
+		result = vkGetQueryPoolResults(g_ctx.dev, query_pool->handle, first_query, 1, sizeof(u64), out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
+		break;
+	}
+	case VK_QUERY_TYPE_TIMESTAMP: {
+		result = vkGetQueryPoolResults(g_ctx.dev, query_pool->handle, first_query * 2, 2, sizeof(u64) * 2, out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
+		break;
+	}
+	default:
+		break;
+	}
+
+	return result == VK_SUCCESS;
 }
 
 void gfx_query_pool_destroy(gfx_query_pool_t* query_pool) {
@@ -1444,6 +1607,60 @@ bool gfx_swapchain_update(gfx_swapchain_t* swapchain) {
 	return true;
 }
 
+bool gfx_swapchain_is_outdated(const gfx_swapchain_t* swapchain) {
+	if (!swapchain) {
+		return false;
+	}
+
+	VkSurfaceCapabilitiesKHR surf_caps;
+	VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_ctx.adapter, g_ctx.surf, &surf_caps);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	if (surf_caps.currentExtent.width == 0xFFFFFFFF || surf_caps.currentExtent.height == 0xFFFFFFFF) {
+		return false;
+	}
+
+	return swapchain->extent.width != surf_caps.currentExtent.width || swapchain->extent.height != surf_caps.currentExtent.height;
+}
+
+bool gfx_swapchain_get_images(const gfx_swapchain_t* swapchain, gfx_image_t* image_out) {
+	if (!swapchain || !image_out) {
+		return false;
+	}
+
+	VkImage images[GFX_SWAPCHAIN_IMAGES_MAX];
+	VkResult result = vkGetSwapchainImagesKHR(g_ctx.dev, swapchain->handle, &swapchain->image_count, images);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	for (i32 i = 0; i < swapchain->image_count; ++i) {
+		gfx_image_t* image = &image_out[i];
+		image->handle = images[i];
+		image->extent.width = swapchain->extent.width;
+		image->extent.height = swapchain->extent.height;
+		image->extent.depth = 1;
+		image->level_count = 1;
+		image->layer_count = 1;
+		image->face_count = 1;
+		image->usage_flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		image->format = swapchain->format;
+		image->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+	}
+
+	return true;
+}
+
+bool gfx_swapchain_acquire_next_image(const gfx_swapchain_t* swapchain, u64 timeout, const gfx_semaphore_t* semaphore, u32* next_image_idx) {
+	if (!swapchain || !semaphore || !next_image_idx) {
+		return false;
+	}
+
+	return vkAcquireNextImageKHR(g_ctx.dev, swapchain->handle, timeout, semaphore->handle, VK_NULL_HANDLE, next_image_idx) == VK_SUCCESS;
+}
+
 void gfx_swapchain_destroy(gfx_swapchain_t* swapchain) {
 	if (!swapchain) {
 		return;
@@ -1690,4 +1907,83 @@ void gfx_buffer_destroy(gfx_buffer_t* buffer) {
 	if (buffer->handle != VK_NULL_HANDLE && buffer->memory.handle != VK_NULL_HANDLE) {
 		vmaDestroyBuffer(g_ctx.vma, buffer->handle, buffer->memory.handle);
 	}
+}
+
+bool gfx_semaphore_create(VkSemaphoreType type, u64 value, gfx_semaphore_t* semaphore) {
+	if (!semaphore) {
+		return false;
+	}
+
+	VkSemaphoreTypeCreateInfo type_create_info = { 0 };
+	type_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
+	type_create_info.semaphoreType = type;
+	type_create_info.initialValue = value;
+
+	VkSemaphoreCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	create_info.pNext = &type_create_info;
+
+	VkResult result = vkCreateSemaphore(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &semaphore->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	semaphore->type = type;
+	semaphore->value = value;
+
+	return true;
+}
+
+void gfx_semaphore_destroy(gfx_semaphore_t* semaphore) {
+	if (!semaphore) {
+		return;
+	}
+
+	vkDestroySemaphore(g_ctx.dev, semaphore->handle, &g_ctx.vk_alloc);
+}
+
+bool gfx_fence_create(VkFenceCreateFlags flags, gfx_fence_t* fence) {
+	if (!fence) {
+		return false;
+	}
+
+	VkFenceCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	create_info.flags = flags;
+
+	VkResult result = vkCreateFence(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &fence->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	return true;
+}
+
+bool gfx_fence_wait(const gfx_fence_t* fence, u64 timeout) {
+	if (!fence) {
+		return false;
+	}
+
+	VkResult result = vkWaitForFences(g_ctx.dev, 1, &fence->handle, VK_TRUE, timeout);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	return true;
+}
+
+void gfx_fence_reset(const gfx_fence_t* fence) {
+	if (!fence) {
+		return;
+	}
+
+	vkResetFences(g_ctx.dev, 1, &fence->handle);
+}
+
+void gfx_fence_destroy(gfx_fence_t* fence) {
+	if (!fence) {
+		return;
+	}
+
+	vkDestroyFence(g_ctx.dev, fence->handle, &g_ctx.vk_alloc);
 }
