@@ -60,7 +60,7 @@ extern "C" {
 	typedef struct {
 		VkDeviceSize size;
 		VkDeviceSize alignment;
-		VkBufferUsageFlags usage_flags;
+		gfx_buffer_flags_t flags;
 	} gfx_buffer_create_info_t;
 
 	bool gfx_context_init(const gfx_context_create_info_t* cteate_info);
@@ -97,6 +97,13 @@ extern "C" {
 	bool gfx_swapchain_create(const gfx_swapchain_create_info_t* create_info, gfx_swapchain_t* swapchain);
 	bool gfx_swapchain_update(gfx_swapchain_t* swapchain);
 	void gfx_swapchain_destroy(gfx_swapchain_t* swapchain);
+
+	void gfx_device_memory_setup(gfx_device_memory_t* mem);
+	bool gfx_device_memory_is_mapped(const gfx_device_memory_t* mem);
+	void* gfx_device_memory_map(gfx_device_memory_t* mem);
+	void gfx_device_memory_unmap(gfx_device_memory_t* mem);
+	void gfx_device_memory_flush(gfx_device_memory_t* mem, VkDeviceSize offset, VkDeviceSize size);
+	void gfx_device_memory_update(gfx_device_memory_t* mem, const void* data, VkDeviceSize size, VkDeviceSize offset);
 
 	bool gfx_image_create(const gfx_image_create_info_t* create_info, gfx_image_t* image);
 	void gfx_image_destroy(gfx_image_t* image);

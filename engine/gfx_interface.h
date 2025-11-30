@@ -65,6 +65,9 @@ extern "C" {
 	typedef struct {
 		VmaAllocation handle;
 		VmaAllocationInfo info;
+
+		bool coherent;
+		bool persistent;
 	} gfx_device_memory_t;
 
 	typedef struct {
@@ -80,11 +83,29 @@ extern "C" {
 		VkImageLayout layout;
 	} gfx_image_t;
 
+	typedef enum {
+		GFX_BUFFER_FLAG_NONE = 0,
+		GFX_BUFFER_FLAG_READBACK = 0x01,
+		GFX_BUFFER_FLAG_STAGING = 0x02,
+		GFX_BUFFER_FLAG_DYNAMIC = 0x04,
+		GFX_BUFFER_FLAG_VERTEX = 0x08,
+		GFX_BUFFER_FLAG_INDEX = 0x10,
+		GFX_BUFFER_FLAG_UNIFORM = 0x20,
+		GFX_BUFFER_FLAG_STORAGE = 0x40,
+		GFX_BUFFER_FLAG_INDIRECT = 0x80,
+		GFX_BUFFER_FLAG_DEVICE_ADDRESS = 0x100,
+		GFX_BUFFER_FLAG_ACCELERATION_BUILD = 0x200,
+		GFX_BUFFER_FLAG_ACCELERATION_STORE = 0x400,
+		GFX_BUFFER_FLAG_SHADER_BINDING_TABLE = 0x800,
+	} gfx_buffer_flag_t;
+
+	typedef u16 gfx_buffer_flags_t;
+
 	typedef struct {
 		VkBuffer handle;
 		gfx_device_memory_t memory;
 
-		VkBufferUsageFlags usage_flags;
+		gfx_buffer_flags_t flags;
 		VkDeviceAddress address;
 	} gfx_buffer_t;
 

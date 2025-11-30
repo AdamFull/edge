@@ -1452,6 +1452,80 @@ void gfx_swapchain_destroy(gfx_swapchain_t* swapchain) {
 	vkDestroySwapchainKHR(g_ctx.dev, swapchain->handle, &g_ctx.vk_alloc);
 }
 
+void gfx_device_memory_setup(gfx_device_memory_t* mem) {
+	if (!mem) {
+		return;
+	}
+
+	VkMemoryPropertyFlags memory_properties;
+	vmaGetAllocationMemoryProperties(g_ctx.vma, mem->handle, &memory_properties);
+
+	mem->coherent = memory_properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+	mem->persistent = mem->info.pMappedData != NULL;
+}
+
+bool gfx_device_memory_is_mapped(const gfx_device_memory_t* mem) {
+	if (!mem || mem->handle == VK_NULL_HANDLE) {
+		return false;
+	}
+
+	return mem->info.pMappedData != NULL;
+}
+
+void* gfx_device_memory_map(gfx_device_memory_t* mem) {
+	if (!mem || mem->handle == VK_NULL_HANDLE) {
+		return NULL;
+	}
+
+	if (!mem->persistent && mem->info.pMappedData == NULL) {
+		VkResult result = vmaMapMemory(g_ctx.vma, mem->handle, &mem->info.pMappedData);
+		// TODO: fatal error
+	}
+
+	return mem->info.pMappedData;
+}
+
+void gfx_device_memory_unmap(gfx_device_memory_t* mem) {
+	if (!mem || mem->handle == VK_NULL_HANDLE) {
+		return;
+	}
+
+	if (!mem->persistent && mem->info.pMappedData != NULL) {
+		vmaUnmapMemory(g_ctx.vma, mem->handle);
+		mem->info.pMappedData = NULL;
+	}
+}
+
+void gfx_device_memory_flush(gfx_device_memory_t* mem, VkDeviceSize offset, VkDeviceSize size) {
+	if (!mem || mem->handle == VK_NULL_HANDLE) {
+		return;
+	}
+
+	if (!mem->coherent) {
+		VkResult result = vmaFlushAllocation(g_ctx.vma, mem->handle, offset, size);
+		// TODO: fatal error
+	}
+}
+
+void gfx_device_memory_update(gfx_device_memory_t* mem, const void* data, VkDeviceSize size, VkDeviceSize offset) {
+	if (!mem || mem->handle == VK_NULL_HANDLE) {
+		return;
+	}
+
+	if (mem->persistent) {
+		memcpy((i8*)mem->info.pMappedData + offset, data, size);
+		gfx_device_memory_flush(mem, offset, size);
+	}
+	else {
+		gfx_device_memory_map(mem);
+
+		memcpy((i8*)mem->info.pMappedData + offset, data, size);
+		gfx_device_memory_unmap(mem);
+
+		gfx_device_memory_flush(mem, offset, size);
+	}
+}
+
 bool gfx_image_create(const gfx_image_create_info_t* create_info, gfx_image_t* image) {
 	if (!create_info || !image) {
 		return false;
@@ -1496,6 +1570,8 @@ bool gfx_image_create(const gfx_image_create_info_t* create_info, gfx_image_t* i
 		return false;
 	}
 
+	gfx_device_memory_setup(&image->memory);
+
 	image->extent = create_info->extent;
 	image->level_count = create_info->level_count;
 	image->layer_count = create_info->layer_count;
@@ -1532,25 +1608,76 @@ bool gfx_buffer_create(const gfx_buffer_create_info_t* create_info, gfx_buffer_t
 
 	VkBufferCreateInfo buffer_create_info = { 0 };
 	buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	buffer_create_info.size;
-	buffer_create_info.usage = create_info->usage_flags;
 	buffer_create_info.sharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
 	buffer_create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
 	buffer_create_info.pQueueFamilyIndices = queue_family_indices;
+
+	u32 minimal_alignment = 1;
+	if (create_info->flags & GFX_BUFFER_FLAG_DYNAMIC) {
+		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+		allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
+			VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	}
+	else if (create_info->flags & GFX_BUFFER_FLAG_READBACK) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	}
+	else if (create_info->flags & GFX_BUFFER_FLAG_STAGING) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
+		allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
+	}
+
+	if (create_info->flags & GFX_BUFFER_FLAG_DEVICE_ADDRESS) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
+	}
+
+	if (create_info->flags & GFX_BUFFER_FLAG_UNIFORM) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		minimal_alignment = em_lcm(g_ctx.properties.limits.minUniformBufferOffsetAlignment, g_ctx.properties.limits.nonCoherentAtomSize);
+	}
+	else if (create_info->flags & GFX_BUFFER_FLAG_STORAGE) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		minimal_alignment = em_max(minimal_alignment, g_ctx.properties.limits.minStorageBufferOffsetAlignment);
+	}
+	else if (create_info->flags & GFX_BUFFER_FLAG_VERTEX) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		minimal_alignment = em_max(minimal_alignment, 4ull);
+	}
+	else if (create_info->flags & GFX_BUFFER_FLAG_INDEX) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+		minimal_alignment = em_max(minimal_alignment, 1ull);
+	}
+	else if (create_info->flags & GFX_BUFFER_FLAG_INDIRECT) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	}
+	else if (create_info->flags & GFX_BUFFER_FLAG_ACCELERATION_BUILD) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	}
+	else if (create_info->flags & GFX_BUFFER_FLAG_ACCELERATION_STORE) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	}
+	else if (create_info->flags & GFX_BUFFER_FLAG_SHADER_BINDING_TABLE) {
+		buffer_create_info.usage |= VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+	}
+
+	buffer_create_info.size = em_align_up(create_info->size, minimal_alignment);
 
 	VkResult result = vmaCreateBuffer(g_ctx.vma, &buffer_create_info, &allocation_create_info, &buffer->handle, &buffer->memory.handle, &buffer->memory.info);
 	if (result != VK_SUCCESS) {
 		return false;
 	}
 
-	if (create_info->usage_flags & VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT) {
+	gfx_device_memory_setup(&buffer->memory);
+
+	if (create_info->flags & GFX_BUFFER_FLAG_DEVICE_ADDRESS) {
 		VkBufferDeviceAddressInfo device_address_info = { 0 };
 		device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 		device_address_info.buffer = buffer->handle;
 		buffer->address = vkGetBufferDeviceAddress(g_ctx.dev, &device_address_info);
 	}
 
-	buffer->usage_flags = create_info->usage_flags;
+	buffer->flags = create_info->flags;
 
 	return true;
 }
