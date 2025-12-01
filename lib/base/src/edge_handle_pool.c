@@ -249,3 +249,53 @@ void edge_handle_pool_clear(edge_handle_pool_t* pool) {
 
     pool->count = 0;
 }
+
+u32 edge_handle_pool_foreach(edge_handle_pool_t* pool, edge_handle_visitor_fn visitor, void* user_data) {
+    if (!pool || !visitor) {
+        return 0;
+    }
+
+    u32 visited = 0;
+
+    for (u32 i = 0; i < pool->capacity; i++) {
+        edge_handle_t handle = edge_handle_make(i, pool->versions[i]);
+
+        if (edge_handle_pool_is_valid(pool, handle)) {
+            void* element = (char*)pool->data + (i * pool->element_size);
+
+            bool should_continue = visitor(handle, element, user_data);
+            visited++;
+
+            if (!should_continue) {
+                break;
+            }
+        }
+    }
+
+    return visited;
+}
+
+u32 edge_handle_pool_foreach_const(const edge_handle_pool_t* pool, edge_handle_visitor_fn visitor, void* user_data) {
+    if (!pool || !visitor) {
+        return 0;
+    }
+
+    u32 visited = 0;
+
+    for (u32 i = 0; i < pool->capacity; i++) {
+        edge_handle_t handle = edge_handle_make(i, pool->versions[i]);
+
+        if (edge_handle_pool_is_valid(pool, handle)) {
+            const void* element = (const char*)pool->data + (i * pool->element_size);
+
+            bool should_continue = visitor(handle, (void*)element, user_data);
+            visited++;
+
+            if (!should_continue) {
+                break;
+            }
+        }
+    }
+
+    return visited;
+}

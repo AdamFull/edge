@@ -29,6 +29,8 @@ extern "C" {
 #define EDGE_HANDLE_VERSION_MASK ((1ull << EDGE_HANDLE_VERSION_BITS) - 1)
 #define EDGE_HANDLE_MAX_CAPACITY ((u32)EDGE_HANDLE_INDEX_MASK)
 
+    typedef bool (*edge_handle_visitor_fn)(edge_handle_t handle, void* element, void* user_data);
+
     typedef struct edge_handle_pool {
         void* data;
         edge_ver_t* versions;
@@ -144,6 +146,28 @@ extern "C" {
      * Clear all handles (frees all resources)
      */
     void edge_handle_pool_clear(edge_handle_pool_t* pool);
+
+    /**
+     * Iterate over all active (valid) handles in the pool
+     * Calls the visitor function for each active handle
+     *
+     * @param pool Handle pool
+     * @param visitor Callback function to invoke for each active handle
+     * @param user_data User data to pass to the visitor function
+     * @return Number of handles visited
+     */
+    u32 edge_handle_pool_foreach(edge_handle_pool_t* pool, edge_handle_visitor_fn visitor, void* user_data);
+
+    /**
+     * Iterate over all active (valid) handles in the pool (const version)
+     * Calls the visitor function for each active handle
+     *
+     * @param pool Handle pool (const)
+     * @param visitor Callback function to invoke for each active handle
+     * @param user_data User data to pass to the visitor function
+     * @return Number of handles visited
+     */
+    u32 edge_handle_pool_foreach_const(const edge_handle_pool_t* pool, edge_handle_visitor_fn visitor, void* user_data);
 
     /**
      * Create a handle from index and version
