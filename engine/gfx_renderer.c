@@ -4,6 +4,8 @@
 #include <edge_allocator.h>
 #include <edge_vector.h>
 
+#include <stdatomic.h>
+
 #include <vulkan/vulkan.h>
 
 #define GFX_RENDERER_FRAME_OVERLAP 3
@@ -15,6 +17,8 @@ struct gfx_renderer_frame {
 
 	gfx_cmd_buf_t cmd_buf;
 	bool is_recording;
+
+	edge_vector_t* free_resources;
 };
 
 struct gfx_renderer {
@@ -40,11 +44,22 @@ struct gfx_renderer {
 	struct gfx_renderer_frame* active_frame;
 	u32 frame_number;
 
+	edge_handle_pool_t* resource_handle_pool;
+	edge_handle_t backbuffer_handle;
+
 	gfx_semaphore_t* acquired_semaphore;
 
 	edge_vector_t* write_descriptor_sets;
 	edge_vector_t* image_descriptors;
 	edge_vector_t* buffer_descriptors;
+};
+
+struct gfx_resource {
+	gfx_resource_type_t type;
+	union {
+		gfx_image_t image;
+		gfx_buffer_t buffer;
+	};
 };
 
 gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_info) {
@@ -166,7 +181,25 @@ gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_inf
 			gfx_renderer_destroy(renderer);
 			return NULL;
 		}
+
+		frame->free_resources = edge_vector_create(create_info->alloc, sizeof(gfx_resource_t), 256);
+		if (!frame->free_resources) {
+			gfx_renderer_destroy(renderer);
+			return NULL;
+		}
 	}
+
+	renderer->resource_handle_pool = edge_handle_pool_create(create_info->alloc, sizeof(gfx_resource_t), 65535);
+	if (!renderer->resource_handle_pool) {
+		gfx_renderer_destroy(renderer);
+		return NULL;
+	}
+
+	gfx_resource_t backbuffer_resource = {
+		.type = GFX_RESOURCE_TYPE_IMAGE
+	};
+
+	renderer->backbuffer_handle = edge_handle_pool_allocate_with_data(renderer->resource_handle_pool, &backbuffer_resource);
 
 	renderer->write_descriptor_sets = edge_vector_create(create_info->alloc, sizeof(VkWriteDescriptorSet), 256);
 	if (!renderer->write_descriptor_sets) {
@@ -206,8 +239,16 @@ void gfx_renderer_destroy(gfx_renderer_t* renderer) {
 		edge_vector_destroy(renderer->buffer_descriptors);
 	}
 
+	if (renderer->resource_handle_pool) {
+		edge_handle_pool_destroy(renderer->resource_handle_pool);
+	}
+
 	for (i32 i = 0; i < GFX_RENDERER_FRAME_OVERLAP; ++i) {
 		struct gfx_renderer_frame* frame = &renderer->frames[i];
+
+		if (frame->free_resources) {
+			edge_vector_destroy(frame->free_resources);
+		}
 
 		gfx_cmd_buf_destroy(&frame->cmd_buf);
 		gfx_fence_destroy(&frame->fence);
@@ -225,6 +266,36 @@ void gfx_renderer_destroy(gfx_renderer_t* renderer) {
 
 	const edge_allocator_t* alloc = renderer->alloc;
 	edge_allocator_free(alloc, renderer);
+}
+
+edge_handle_t gfx_renderer_add_resource(gfx_renderer_t* renderer) {
+	if (!renderer) {
+		return EDGE_HANDLE_INVALID;
+	}
+
+	if (edge_handle_pool_is_full(renderer->resource_handle_pool)) {
+		return EDGE_HANDLE_INVALID;
+	}
+
+	return edge_handle_pool_allocate(renderer->resource_handle_pool);
+}
+
+void gfx_renderer_free_resource(gfx_renderer_t* renderer, edge_handle_t handle) {
+	if (!renderer || !renderer->resource_handle_pool) {
+		return;
+	}
+
+	edge_handle_pool_t* handle_pool = renderer->resource_handle_pool;
+	if (edge_handle_pool_is_valid(handle_pool, handle)) {
+		if (renderer->active_frame) {
+			gfx_resource_t* resource = (gfx_resource_t*)edge_handle_pool_get(handle_pool, handle);
+			if (resource->type != GFX_RESOURCE_TYPE_UNKNOWN) {
+				edge_vector_push_back(renderer->active_frame->free_resources, resource);
+			}
+		}
+
+		edge_handle_pool_free(handle_pool, handle);
+	}
 }
 
 bool gfx_renderer_frame_begin(gfx_renderer_t* renderer) {
@@ -256,7 +327,22 @@ bool gfx_renderer_frame_begin(gfx_renderer_t* renderer) {
 
 		gfx_cmd_reset(&current_frame->cmd_buf);
 		current_frame->is_recording = gfx_cmd_begin(&current_frame->cmd_buf);
-		// TODO: Free resources
+		
+		// Resource utilization
+		for (i32 i = 0; i < edge_vector_size(current_frame->free_resources); ++i) {
+			gfx_resource_t* resource = (gfx_resource_t*)edge_vector_get(current_frame->free_resources, i);
+			if (!resource || resource->type == GFX_RESOURCE_TYPE_UNKNOWN) {
+				continue;
+			}
+
+			if (resource->type == GFX_RESOURCE_TYPE_IMAGE) {
+				gfx_image_destroy(&resource->image);
+			}
+			else if (resource->type == GFX_RESOURCE_TYPE_BUFFER) {
+				gfx_buffer_destroy(&resource->buffer);
+			}
+		}
+		edge_vector_clear(current_frame->free_resources);
 	}
 
 	if (!current_frame->is_recording) {
@@ -270,6 +356,10 @@ bool gfx_renderer_frame_begin(gfx_renderer_t* renderer) {
 	}
 
 	renderer->active_frame = current_frame;
+
+	// Update backbuffer resource
+	gfx_resource_t* backbuffer_resource = (gfx_resource_t*)edge_handle_pool_get(renderer->resource_handle_pool, renderer->backbuffer_handle);
+	backbuffer_resource->image = renderer->swapchain_images[renderer->active_image_index];
 
 	u64 timestamps[2] = { 0 };
 	if (gfx_query_pool_get_data(&renderer->frame_timestamp, 0, timestamps)) {
@@ -300,22 +390,24 @@ bool gfx_renderer_frame_end(gfx_renderer_t* renderer) {
 		return false;
 	}
 
-	gfx_image_t* current_image = &renderer->swapchain_images[renderer->active_image_index];
-	if (current_image->layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-		gfx_pipeline_barrier_builder_t barrier_builder = { 0 };
+	gfx_resource_t* backbuffer_resource = (gfx_resource_t*)edge_handle_pool_get(renderer->resource_handle_pool, renderer->backbuffer_handle);
+	if (backbuffer_resource) {
+		if (backbuffer_resource->image.layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+			gfx_pipeline_barrier_builder_t barrier_builder = { 0 };
 
-		VkImageSubresourceRange subresource_range = {
-		.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-		.baseMipLevel = 0u,
-		.levelCount = 1u,
-		.baseArrayLayer = 0u,
-		.layerCount = 1u
-		};
+			VkImageSubresourceRange subresource_range = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0u,
+			.levelCount = 1u,
+			.baseArrayLayer = 0u,
+			.layerCount = 1u
+			};
 
-		gfx_pipeline_barrier_add_image(&barrier_builder, current_image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
-		gfx_cmd_pipeline_barrier(&current_frame->cmd_buf, &barrier_builder);
+			gfx_pipeline_barrier_add_image(&barrier_builder, &backbuffer_resource->image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
+			gfx_cmd_pipeline_barrier(&current_frame->cmd_buf, &barrier_builder);
 
-		current_image->layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+			backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+		}
 	}
 
 	if (!edge_vector_empty(renderer->write_descriptor_sets)) {
