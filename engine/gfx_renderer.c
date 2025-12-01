@@ -532,7 +532,7 @@ bool gfx_renderer_setup_image_resource(gfx_renderer_t* renderer, edge_handle_t h
 		gfx_pipeline_barrier_builder_t builder = { 0 };
 
 		VkImageSubresourceRange subresource_range = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.aspectMask = image_aspect,
 			.baseMipLevel = 0u,
 			.levelCount = image_source->level_count,
 			.baseArrayLayer = 0u,
