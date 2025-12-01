@@ -1180,7 +1180,9 @@ void gfx_cmd_pool_destroy(gfx_cmd_pool_t* command_pool) {
 		return;
 	}
 
-	vkDestroyCommandPool(g_ctx.dev, command_pool->handle, &g_ctx.vk_alloc);
+	if (command_pool->handle != VK_NULL_HANDLE) {
+		vkDestroyCommandPool(g_ctx.dev, command_pool->handle, &g_ctx.vk_alloc);
+	}
 }
 
 bool gfx_cmd_buf_create(const gfx_cmd_pool_t* cmd_pool, gfx_cmd_buf_t* cmd_buf) {
@@ -1276,7 +1278,9 @@ void gfx_cmd_buf_destroy(gfx_cmd_buf_t* cmd_buf) {
 		return;
 	}
 
-	vkFreeCommandBuffers(g_ctx.dev, cmd_buf->pool->handle, 1, &cmd_buf->handle);
+	if (cmd_buf->handle != VK_NULL_HANDLE) {
+		vkFreeCommandBuffers(g_ctx.dev, cmd_buf->pool->handle, 1, &cmd_buf->handle);
+	}
 }
 
 void gfx_updete_descriptors(const VkWriteDescriptorSet* writes, u32 count) {
@@ -1288,7 +1292,9 @@ void gfx_cmd_reset_query(const gfx_cmd_buf_t* cmd_buf, const gfx_query_pool_t* q
 		return;
 	}
 
-	vkCmdResetQueryPool(cmd_buf->handle, query->handle, first_query, query_count);
+	if (query->handle != VK_NULL_HANDLE) {
+		vkCmdResetQueryPool(cmd_buf->handle, query->handle, first_query, query_count);
+	}
 }
 
 bool gfx_query_pool_create(VkQueryType type, u32 count, gfx_query_pool_t* query_pool) {
@@ -1352,7 +1358,9 @@ void gfx_query_pool_destroy(gfx_query_pool_t* query_pool) {
 		return;
 	}
 
-	vkDestroyQueryPool(g_ctx.dev, query_pool->handle, &g_ctx.vk_alloc);
+	if (query_pool->handle != VK_NULL_HANDLE) {
+		vkDestroyQueryPool(g_ctx.dev, query_pool->handle, &g_ctx.vk_alloc);
+	}
 }
 
 void gfx_descriptor_layout_builder_add_binding(VkDescriptorSetLayoutBinding binding, VkDescriptorBindingFlags flags, gfx_descriptor_layout_builder_t* builder) {
@@ -1400,7 +1408,9 @@ void gfx_descriptor_set_layout_destroy(gfx_descriptor_set_layout_t* descriptor_s
 		return;
 	}
 
-	vkDestroyDescriptorSetLayout(g_ctx.dev, descriptor_set_layout->handle, &g_ctx.vk_alloc);
+	if (descriptor_set_layout->handle != VK_NULL_HANDLE) {
+		vkDestroyDescriptorSetLayout(g_ctx.dev, descriptor_set_layout->handle, &g_ctx.vk_alloc);
+	}
 }
 
 bool gfx_descriptor_pool_create(u32* descriptor_sizes, gfx_descriptor_pool_t* descriptor_pool) {
@@ -1437,7 +1447,9 @@ void gfx_descriptor_pool_destroy(gfx_descriptor_pool_t* descriptor_pool) {
 		return;
 	}
 
-	vkDestroyDescriptorPool(g_ctx.dev, descriptor_pool->handle, &g_ctx.vk_alloc);
+	if (descriptor_pool->handle != VK_NULL_HANDLE) {
+		vkDestroyDescriptorPool(g_ctx.dev, descriptor_pool->handle, &g_ctx.vk_alloc);
+	}
 }
 
 bool gfx_descriptor_set_create(const gfx_descriptor_pool_t* pool, const gfx_descriptor_set_layout_t* layouts, gfx_descriptor_set_t* set) {
@@ -1516,7 +1528,9 @@ void gfx_pipeline_layout_destroy(gfx_pipeline_layout_t* pipeline_layout) {
 		return;
 	}
 
-	vkDestroyPipelineLayout(g_ctx.dev, pipeline_layout->handle, &g_ctx.vk_alloc);
+	if (pipeline_layout->handle != VK_NULL_HANDLE) {
+		vkDestroyPipelineLayout(g_ctx.dev, pipeline_layout->handle, &g_ctx.vk_alloc);
+	}
 }
 
 bool gfx_swapchain_create(const gfx_swapchain_create_info_t* create_info, gfx_swapchain_t* swapchain) {
@@ -1689,7 +1703,9 @@ void gfx_swapchain_destroy(gfx_swapchain_t* swapchain) {
 		return;
 	}
 
-	vkDestroySwapchainKHR(g_ctx.dev, swapchain->handle, &g_ctx.vk_alloc);
+	if (swapchain->handle != VK_NULL_HANDLE) {
+		vkDestroySwapchainKHR(g_ctx.dev, swapchain->handle, &g_ctx.vk_alloc);
+	}
 }
 
 void gfx_device_memory_setup(gfx_device_memory_t* mem) {
@@ -1830,6 +1846,43 @@ void gfx_image_destroy(gfx_image_t* image) {
 
 	if (image->handle != VK_NULL_HANDLE && image->memory.handle != VK_NULL_HANDLE) {
 		vmaDestroyImage(g_ctx.vma, image->handle, image->memory.handle);
+	}
+}
+
+bool gfx_image_view_create(const gfx_image_t* image, VkImageViewType type, VkImageSubresourceRange subresource_range, gfx_image_view_t* view) {
+	if (!image || !view) {
+		return false;
+	}
+
+	VkImageViewCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	create_info.image = image->handle;
+	create_info.viewType = type;
+	create_info.format = image->format;
+	create_info.components.r = VK_COMPONENT_SWIZZLE_R;
+	create_info.components.g = VK_COMPONENT_SWIZZLE_G;
+	create_info.components.b = VK_COMPONENT_SWIZZLE_B;
+	create_info.components.a = VK_COMPONENT_SWIZZLE_A;
+	create_info.subresourceRange = subresource_range;
+
+	VkResult result = vkCreateImageView(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &view->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	view->type = type;
+	view->range = subresource_range;
+
+	return true;
+}
+
+void gfx_image_view_destroy(gfx_image_view_t* view) {
+	if (!view) {
+		return;
+	}
+
+	if (view->handle != VK_NULL_HANDLE) {
+		vkDestroyImageView(g_ctx.dev, view->handle, &g_ctx.vk_alloc);
 	}
 }
 
@@ -2110,4 +2163,15 @@ bool gfx_pipeline_barrier_add_image(gfx_pipeline_barrier_builder_t* builder, con
 	barrier->subresourceRange = subresource_range;
 
 	return true;
+}
+
+void gfx_pipeline_barrier_builder_reset(gfx_pipeline_barrier_builder_t* builder) {
+	if (!builder) {
+		return;
+	}
+
+	builder->memory_barrier_count = 0;
+	builder->buffer_barrier_count = 0;
+	builder->image_barrier_count = 0;
+	builder->dependency_flags = 0;
 }

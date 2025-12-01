@@ -28,6 +28,8 @@ extern "C" {
 	void gfx_renderer_destroy(gfx_renderer_t* renderer);
 
 	edge_handle_t gfx_renderer_add_resource(gfx_renderer_t* renderer);
+	bool gfx_renderer_setup_image_resource(gfx_renderer_t* renderer, edge_handle_t handle, const gfx_image_t* resource);
+	bool gfx_renderer_setup_buffer_resource(gfx_renderer_t* renderer, edge_handle_t handle, const gfx_buffer_t* resource);
 	void gfx_renderer_free_resource(gfx_renderer_t* renderer, edge_handle_t handle);
 
 	bool gfx_renderer_frame_begin(gfx_renderer_t* renderer);

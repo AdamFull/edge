@@ -3,12 +3,21 @@
 
 #include <edge_allocator.h>
 #include <edge_vector.h>
+#include <edge_free_index_list.h>
 
 #include <stdatomic.h>
 
 #include <vulkan/vulkan.h>
 
 #define GFX_RENDERER_FRAME_OVERLAP 3
+
+#define GFX_RENDERER_UAV_MAX 16
+
+#define GFX_RENDERER_SAMPLER_SLOT 0
+#define GFX_RENDERER_SRV_SLOT 1
+#define GFX_RENDERER_UAV_SLOT 2
+
+#define GFX_RENDERER_HANDLE_MAX 65535
 
 struct gfx_renderer_frame {
 	gfx_semaphore_t image_available;
@@ -38,6 +47,7 @@ struct gfx_renderer {
 
 	gfx_swapchain_t swapchain;
 	gfx_image_t swapchain_images[8];
+	gfx_image_view_t swapchain_image_views[8];
 	u32 active_image_index;
 
 	struct gfx_renderer_frame frames[GFX_RENDERER_FRAME_OVERLAP];
@@ -46,6 +56,12 @@ struct gfx_renderer {
 
 	edge_handle_pool_t* resource_handle_pool;
 	edge_handle_t backbuffer_handle;
+
+	edge_free_list_t* sampler_indices_list;
+	edge_free_list_t* srv_indices_list;
+	edge_free_list_t* uav_indices_list;
+
+	gfx_pipeline_barrier_builder_t barrier_builder;
 
 	gfx_semaphore_t* acquired_semaphore;
 
@@ -60,7 +76,90 @@ struct gfx_resource {
 		gfx_image_t image;
 		gfx_buffer_t buffer;
 	};
+
+	gfx_image_view_t srv;
+	u32 srv_index;
+
+	gfx_image_view_t uav[GFX_RENDERER_UAV_MAX];
+	u32 uav_index;
 };
+
+static bool gfx_renderer_frame_release_pending_resources(gfx_renderer_t* renderer, struct gfx_renderer_frame* frame) {
+	if (!renderer || !frame) {
+		return false;
+	}
+
+	for (i32 i = 0; i < edge_vector_size(frame->free_resources); ++i) {
+		gfx_resource_t* resource = (gfx_resource_t*)edge_vector_get(frame->free_resources, i);
+		if (!resource || resource->type == GFX_RESOURCE_TYPE_UNKNOWN) {
+			continue;
+		}
+
+		if (resource->type == GFX_RESOURCE_TYPE_IMAGE) {
+			gfx_image_view_destroy(&resource->srv);
+			edge_free_list_free(renderer->srv_indices_list, resource->srv_index);
+
+			for (i32 j = 0; j < resource->image.level_count; ++j) {
+				gfx_image_view_destroy(&resource->uav[j]);
+				edge_free_list_free(renderer->uav_indices_list, resource->uav_index + j);
+			}
+
+			gfx_image_destroy(&resource->image);
+		}
+		else if (resource->type == GFX_RESOURCE_TYPE_BUFFER) {
+			gfx_buffer_destroy(&resource->buffer);
+		}
+	}
+	edge_vector_clear(frame->free_resources);
+
+	return true;
+}
+
+static bool gfx_renderer_frame_init(gfx_renderer_t* renderer, struct gfx_renderer_frame* frame) {
+	if (!renderer || !frame) {
+		return false;
+	}
+
+	if (!gfx_semaphore_create(VK_SEMAPHORE_TYPE_BINARY, 0, &frame->image_available)) {
+		return false;
+	}
+
+	if (!gfx_semaphore_create(VK_SEMAPHORE_TYPE_BINARY, 0, &frame->rendering_finished)) {
+		return false;
+	}
+
+	if (!gfx_fence_create(VK_FENCE_CREATE_SIGNALED_BIT, &frame->fence)) {
+		return false;
+	}
+
+	if (!gfx_cmd_buf_create(&renderer->cmd_pool, &frame->cmd_buf)) {
+		return false;
+	}
+
+	frame->free_resources = edge_vector_create(renderer->alloc, sizeof(gfx_resource_t), 256);
+	if (!frame->free_resources) {
+		return false;
+	}
+
+	return true;
+}
+
+static void gfx_renderer_frame_destroy(gfx_renderer_t* renderer, struct gfx_renderer_frame* frame) {
+	if (!renderer || !frame) {
+		return;
+	}
+
+	gfx_renderer_frame_release_pending_resources(renderer, frame);
+
+	if (frame->free_resources) {
+		edge_vector_destroy(frame->free_resources);
+	}
+
+	gfx_cmd_buf_destroy(&frame->cmd_buf);
+	gfx_fence_destroy(&frame->fence);
+	gfx_semaphore_destroy(&frame->rendering_finished);
+	gfx_semaphore_destroy(&frame->image_available);
+}
 
 gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_info) {
 	if (!create_info || !create_info->alloc || !create_info->main_queue) {
@@ -95,25 +194,25 @@ gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_inf
 	gfx_descriptor_layout_builder_t descriptor_layout_builder = { 0 };
 
 	VkDescriptorSetLayoutBinding samplers_binding = {
-		.binding = 0,
+		.binding = GFX_RENDERER_SAMPLER_SLOT,
 		.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-		.descriptorCount = 65535,
+		.descriptorCount = GFX_RENDERER_HANDLE_MAX,
 		.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = NULL
 	};
 
 	VkDescriptorSetLayoutBinding srv_image_binding = {
-		.binding = 1,
+		.binding = GFX_RENDERER_SRV_SLOT,
 		.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-		.descriptorCount = 65535,
+		.descriptorCount = GFX_RENDERER_HANDLE_MAX,
 		.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = NULL
 	};
 
 	VkDescriptorSetLayoutBinding uav_image_binding = {
-		.binding = 2,
+		.binding = GFX_RENDERER_UAV_SLOT,
 		.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-		.descriptorCount = 65535,
+		.descriptorCount = GFX_RENDERER_HANDLE_MAX,
 		.stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT,
 		.pImmutableSamplers = NULL
 	};
@@ -159,37 +258,33 @@ gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_inf
 		return NULL;
 	}
 
-	for (i32 i = 0; i < GFX_RENDERER_FRAME_OVERLAP; ++i) {
-		struct gfx_renderer_frame* frame = &renderer->frames[i];
+	for (i32 i = 0; i < renderer->swapchain.image_count; ++i) {
+		VkImageSubresourceRange subresource_range = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0u,
+			.levelCount = 1u,
+			.baseArrayLayer = 0u,
+			.layerCount = 1u
+		};
 
-		if (!gfx_semaphore_create(VK_SEMAPHORE_TYPE_BINARY, 0, &frame->image_available)) {
-			gfx_renderer_destroy(renderer);
-			return NULL;
-		}
+		const gfx_image_t* image = &renderer->swapchain_images[i];
+		gfx_image_view_t* image_view = &renderer->swapchain_image_views[i];
 
-		if (!gfx_semaphore_create(VK_SEMAPHORE_TYPE_BINARY, 0, &frame->rendering_finished)) {
-			gfx_renderer_destroy(renderer);
-			return NULL;
-		}
-
-		if (!gfx_fence_create(VK_FENCE_CREATE_SIGNALED_BIT, &frame->fence)) {
-			gfx_renderer_destroy(renderer);
-			return NULL;
-		}
-
-		if (!gfx_cmd_buf_create(&renderer->cmd_pool, &frame->cmd_buf)) {
-			gfx_renderer_destroy(renderer);
-			return NULL;
-		}
-
-		frame->free_resources = edge_vector_create(create_info->alloc, sizeof(gfx_resource_t), 256);
-		if (!frame->free_resources) {
+		if (!gfx_image_view_create(image, VK_IMAGE_VIEW_TYPE_2D, subresource_range, image_view)) {
 			gfx_renderer_destroy(renderer);
 			return NULL;
 		}
 	}
 
-	renderer->resource_handle_pool = edge_handle_pool_create(create_info->alloc, sizeof(gfx_resource_t), 65535);
+	for (i32 i = 0; i < GFX_RENDERER_FRAME_OVERLAP; ++i) {
+		struct gfx_renderer_frame* frame = &renderer->frames[i];
+		if (!gfx_renderer_frame_init(renderer, frame)) {
+			gfx_renderer_destroy(renderer);
+			return NULL;
+		}
+	}
+
+	renderer->resource_handle_pool = edge_handle_pool_create(create_info->alloc, sizeof(gfx_resource_t), GFX_RENDERER_HANDLE_MAX * 2);
 	if (!renderer->resource_handle_pool) {
 		gfx_renderer_destroy(renderer);
 		return NULL;
@@ -200,6 +295,24 @@ gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_inf
 	};
 
 	renderer->backbuffer_handle = edge_handle_pool_allocate_with_data(renderer->resource_handle_pool, &backbuffer_resource);
+
+	renderer->sampler_indices_list = edge_free_list_create(create_info->alloc, GFX_RENDERER_HANDLE_MAX);
+	if (!renderer->sampler_indices_list) {
+		gfx_renderer_destroy(renderer);
+		return NULL;
+	}
+
+	renderer->srv_indices_list = edge_free_list_create(create_info->alloc, GFX_RENDERER_HANDLE_MAX);
+	if (!renderer->srv_indices_list) {
+		gfx_renderer_destroy(renderer);
+		return NULL;
+	}
+
+	renderer->uav_indices_list = edge_free_list_create(create_info->alloc, GFX_RENDERER_HANDLE_MAX);
+	if (!renderer->uav_indices_list) {
+		gfx_renderer_destroy(renderer);
+		return NULL;
+	}
 
 	renderer->write_descriptor_sets = edge_vector_create(create_info->alloc, sizeof(VkWriteDescriptorSet), 256);
 	if (!renderer->write_descriptor_sets) {
@@ -222,10 +335,43 @@ gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_inf
 	return renderer;
 }
 
+static bool gfx_cleanup_resource_visitor(edge_handle_t handle, void* element, void* user_data) {
+	gfx_renderer_t* renderer = (gfx_renderer_t*)user_data;
+	gfx_resource_t* resource = (gfx_resource_t*)element;
+
+	if (!resource || resource->type == GFX_RESOURCE_TYPE_UNKNOWN) {
+		return true;
+	}
+
+	// TODO: Ignore backbuffer
+	if (resource->type == GFX_RESOURCE_TYPE_IMAGE) {
+		gfx_image_view_destroy(&resource->srv);
+		if (renderer->srv_indices_list) {
+			edge_free_list_free(renderer->srv_indices_list, resource->srv_index);
+		}
+
+		for (i32 mip = 0; mip < resource->image.level_count; ++mip) {
+			gfx_image_view_destroy(&resource->uav[mip]);
+			if (renderer->uav_indices_list) {
+				edge_free_list_free(renderer->uav_indices_list, resource->uav_index + mip);
+			}
+		}
+
+		gfx_image_destroy(&resource->image);
+	}
+	else if (resource->type == GFX_RESOURCE_TYPE_BUFFER) {
+		gfx_buffer_destroy(&resource->buffer);
+	}
+
+	return true;
+}
+
 void gfx_renderer_destroy(gfx_renderer_t* renderer) {
 	if (!renderer) {
 		return;
 	}
+
+	gfx_queue_wait_idle(renderer->queue);
 
 	if (renderer->write_descriptor_sets) {
 		edge_vector_destroy(renderer->write_descriptor_sets);
@@ -239,21 +385,32 @@ void gfx_renderer_destroy(gfx_renderer_t* renderer) {
 		edge_vector_destroy(renderer->buffer_descriptors);
 	}
 
+	if (renderer->uav_indices_list) {
+		edge_free_list_destroy(renderer->uav_indices_list);
+	}
+
+	if (renderer->srv_indices_list) {
+		edge_free_list_destroy(renderer->srv_indices_list);
+	}
+
+	if (renderer->sampler_indices_list) {
+		edge_free_list_destroy(renderer->sampler_indices_list);
+	}
+
+	edge_handle_pool_foreach(renderer->resource_handle_pool, gfx_cleanup_resource_visitor, renderer);
+
 	if (renderer->resource_handle_pool) {
 		edge_handle_pool_destroy(renderer->resource_handle_pool);
 	}
 
 	for (i32 i = 0; i < GFX_RENDERER_FRAME_OVERLAP; ++i) {
 		struct gfx_renderer_frame* frame = &renderer->frames[i];
+		gfx_renderer_frame_destroy(renderer, frame);
+	}
 
-		if (frame->free_resources) {
-			edge_vector_destroy(frame->free_resources);
-		}
-
-		gfx_cmd_buf_destroy(&frame->cmd_buf);
-		gfx_fence_destroy(&frame->fence);
-		gfx_semaphore_destroy(&frame->rendering_finished);
-		gfx_semaphore_destroy(&frame->image_available);
+	for (i32 i = 0; i < renderer->swapchain.image_count; ++i) {
+		gfx_image_view_t* image_view = &renderer->swapchain_image_views[i];
+		gfx_image_view_destroy(image_view);
 	}
 
 	gfx_swapchain_destroy(&renderer->swapchain);
@@ -278,6 +435,134 @@ edge_handle_t gfx_renderer_add_resource(gfx_renderer_t* renderer) {
 	}
 
 	return edge_handle_pool_allocate(renderer->resource_handle_pool);
+}
+
+bool gfx_renderer_setup_image_resource(gfx_renderer_t* renderer, edge_handle_t handle, const gfx_image_t* image) {
+	if (!renderer || !image) {
+		return false;
+	}
+
+	gfx_resource_t* resource = (gfx_resource_t*)edge_handle_pool_get(renderer->resource_handle_pool, handle);
+#if 0
+	if (!resource || resource->type != GFX_RESOURCE_TYPE_IMAGE) {
+		return false;
+	}
+#else
+	resource->type = GFX_RESOURCE_TYPE_IMAGE;
+#endif
+
+	memcpy(&resource->image, image, sizeof(gfx_image_t));
+
+	gfx_image_t* image_source = &resource->image;
+
+	if (image_source->usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+		VkImageSubresourceRange srv_subresource_range = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, // TODO: Detect aspect (depends on usage)
+			.baseMipLevel = 0u,
+			.levelCount = image_source->level_count,
+			.baseArrayLayer = 0u,
+			.layerCount = image_source->layer_count * image_source->face_count
+		};
+
+
+		if (!gfx_image_view_create(image_source, VK_IMAGE_VIEW_TYPE_2D, srv_subresource_range, &resource->srv)) {
+			return false;
+		}
+
+		if (!edge_free_list_allocate(renderer->srv_indices_list, &resource->srv_index)) {
+			return false;
+		}
+	}
+
+	if (image_source->usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
+		VkImageSubresourceRange uav_subresource_range = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, // TODO: Detect aspect (depends on usage)
+			.baseMipLevel = 0u,
+			.levelCount = 1u,
+			.baseArrayLayer = 0u,
+			.layerCount = image_source->layer_count * image_source->face_count
+		};
+
+		for (i32 i = 0; i < image_source->level_count; ++i) {
+			uav_subresource_range.baseMipLevel = i;
+
+			if (!gfx_image_view_create(image_source, VK_IMAGE_VIEW_TYPE_2D, uav_subresource_range, &resource->uav[i])) {
+				return false;
+			}
+
+			u32 uav_index;
+			if (!edge_free_list_allocate(renderer->uav_indices_list, &uav_index)) {
+				return false;
+			}
+
+			if (i == 0) {
+				resource->uav_index = uav_index;
+			}
+		}
+	}
+
+	bool is_attachment = (image_source->usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) || (image_source->usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+	if (!is_attachment && image_source->layout != VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR) {
+		gfx_pipeline_barrier_builder_t builder = { 0 };
+
+		VkImageSubresourceRange subresource_range = {
+			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+			.baseMipLevel = 0u,
+			.levelCount = image_source->level_count,
+			.baseArrayLayer = 0u,
+			.layerCount = image_source->layer_count
+		};
+
+		// TODO: Make batching updates
+		gfx_pipeline_barrier_add_image(&builder, image_source, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
+		gfx_cmd_pipeline_barrier(&renderer->active_frame->cmd_buf, &builder);
+
+		image_source->layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
+	}
+
+	VkWriteDescriptorSet descriptor_write = { 0 };
+	descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptor_write.dstSet = renderer->descriptor_set.handle;
+	descriptor_write.descriptorCount = 1u;
+
+	if (image_source->usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+		VkDescriptorImageInfo image_descriptor = { 0 };
+		image_descriptor.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
+		image_descriptor.imageView = resource->srv.handle;
+		edge_vector_push_back(renderer->image_descriptors, &image_descriptor);
+
+		descriptor_write.dstBinding = GFX_RENDERER_SRV_SLOT;
+		descriptor_write.dstArrayElement = resource->srv_index;
+		descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+		descriptor_write.pImageInfo = (const VkDescriptorImageInfo*)edge_vector_back(renderer->image_descriptors);
+		edge_vector_push_back(renderer->write_descriptor_sets, &descriptor_write);
+	}
+
+	if (image_source->usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
+		descriptor_write.dstBinding = GFX_RENDERER_UAV_SLOT;
+		descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+
+		for (i32 mip = 0; mip < image_source->level_count; ++mip) {
+			VkDescriptorImageInfo image_descriptor = { 0 };
+			image_descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+			image_descriptor.imageView = resource->uav[mip].handle;
+			edge_vector_push_back(renderer->image_descriptors, &image_descriptor);
+
+			descriptor_write.dstArrayElement = resource->uav_index + mip;
+			descriptor_write.pImageInfo = (const VkDescriptorImageInfo*)edge_vector_back(renderer->image_descriptors);
+			edge_vector_push_back(renderer->write_descriptor_sets, &descriptor_write);
+		}
+	}
+
+	return true;
+}
+
+bool gfx_renderer_setup_buffer_resource(gfx_renderer_t* renderer, edge_handle_t handle, const gfx_buffer_t* buffer) {
+	if (!renderer || !buffer) {
+		return false;
+	}
+
+	return true;
 }
 
 void gfx_renderer_free_resource(gfx_renderer_t* renderer, edge_handle_t handle) {
@@ -305,7 +590,10 @@ bool gfx_renderer_frame_begin(gfx_renderer_t* renderer) {
 
 	bool surface_updated = false;
 	if (gfx_swapchain_is_outdated(&renderer->swapchain)) {
-		gfx_queue_wait_idle(renderer->queue);
+
+		if (renderer->queue) {
+			gfx_queue_wait_idle(renderer->queue);
+		}
 
 		if (!gfx_swapchain_update(&renderer->swapchain)) {
 			return false;
@@ -313,6 +601,28 @@ bool gfx_renderer_frame_begin(gfx_renderer_t* renderer) {
 
 		if (!gfx_swapchain_get_images(&renderer->swapchain, renderer->swapchain_images)) {
 			return false;
+		}
+
+		for (i32 i = 0; i < renderer->swapchain.image_count; ++i) {
+			VkImageSubresourceRange subresource_range = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0u,
+				.levelCount = 1u,
+				.baseArrayLayer = 0u,
+				.layerCount = 1u
+			};
+
+			const gfx_image_t* image = &renderer->swapchain_images[i];
+			gfx_image_view_t* image_view = &renderer->swapchain_image_views[i];
+
+			if (image_view->handle != VK_NULL_HANDLE) {
+				gfx_image_view_destroy(image_view);
+				image_view->handle = VK_NULL_HANDLE;
+			}
+
+			if (!gfx_image_view_create(image, VK_IMAGE_VIEW_TYPE_2D, subresource_range, image_view)) {
+				return false;
+			}
 		}
 
 		renderer->active_frame = NULL;
@@ -327,22 +637,8 @@ bool gfx_renderer_frame_begin(gfx_renderer_t* renderer) {
 
 		gfx_cmd_reset(&current_frame->cmd_buf);
 		current_frame->is_recording = gfx_cmd_begin(&current_frame->cmd_buf);
-		
-		// Resource utilization
-		for (i32 i = 0; i < edge_vector_size(current_frame->free_resources); ++i) {
-			gfx_resource_t* resource = (gfx_resource_t*)edge_vector_get(current_frame->free_resources, i);
-			if (!resource || resource->type == GFX_RESOURCE_TYPE_UNKNOWN) {
-				continue;
-			}
 
-			if (resource->type == GFX_RESOURCE_TYPE_IMAGE) {
-				gfx_image_destroy(&resource->image);
-			}
-			else if (resource->type == GFX_RESOURCE_TYPE_BUFFER) {
-				gfx_buffer_destroy(&resource->buffer);
-			}
-		}
-		edge_vector_clear(current_frame->free_resources);
+		gfx_renderer_frame_release_pending_resources(renderer, current_frame);
 	}
 
 	if (!current_frame->is_recording) {

@@ -144,6 +144,9 @@ extern "C" {
 	bool gfx_image_create(const gfx_image_create_info_t* create_info, gfx_image_t* image);
 	void gfx_image_destroy(gfx_image_t* image);
 
+	bool gfx_image_view_create(const gfx_image_t* image, VkImageViewType type, VkImageSubresourceRange subresource_range, gfx_image_view_t* view);
+	void gfx_image_view_destroy(gfx_image_view_t* view);
+
 	bool gfx_buffer_create(const gfx_buffer_create_info_t* create_info, gfx_buffer_t* buffer);
 	void gfx_buffer_destroy(gfx_buffer_t* buffer);
 
@@ -160,6 +163,7 @@ extern "C" {
 	bool gfx_pipeline_barrier_add_buffer(gfx_pipeline_barrier_builder_t* builder, const gfx_buffer_t* buffer, VkPipelineStageFlags2 src_stage_mask,
 		VkAccessFlags2 src_access_mask, VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask, VkDeviceSize offset, VkDeviceSize size);
 	bool gfx_pipeline_barrier_add_image(gfx_pipeline_barrier_builder_t* builder, const gfx_image_t* image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range);
+	void gfx_pipeline_barrier_builder_reset(gfx_pipeline_barrier_builder_t* builder);
 
 #ifdef __cplusplus
 }

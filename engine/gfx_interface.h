@@ -88,6 +88,12 @@ extern "C" {
 		VkImageLayout layout;
 	} gfx_image_t;
 
+	typedef struct {
+		VkImageView handle;
+		VkImageViewType type;
+		VkImageSubresourceRange range;
+	} gfx_image_view_t;
+
 	typedef enum {
 		GFX_BUFFER_FLAG_NONE = 0,
 		GFX_BUFFER_FLAG_READBACK = 0x01,
