@@ -336,15 +336,6 @@ static bool is_surface_format_hdr(const VkSurfaceFormatKHR* format) {
 	return is_hdr_format(format->format) && is_hdr_color_space(format->colorSpace);
 }
 
-static bool is_depth_format(VkFormat format) {
-	return format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D32_SFLOAT;
-}
-
-static bool is_depth_stencil_format(VkFormat format) {
-	return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D16_UNORM_S8_UINT ||
-		format == VK_FORMAT_D24_UNORM_S8_UINT;
-}
-
 static bool surface_format_equal(const VkSurfaceFormatKHR* a, const VkSurfaceFormatKHR* b, bool full_match) {
 	if (full_match) {
 		return a->format == b->format && a->colorSpace == b->colorSpace;
