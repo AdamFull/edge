@@ -84,6 +84,15 @@ struct gfx_resource {
 	u32 uav_index;
 };
 
+static bool is_depth_format(VkFormat format) {
+	return format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D32_SFLOAT;
+}
+
+static bool is_depth_stencil_format(VkFormat format) {
+	return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D16_UNORM_S8_UINT ||
+		format == VK_FORMAT_D24_UNORM_S8_UINT;
+}
+
 static bool gfx_renderer_frame_release_pending_resources(gfx_renderer_t* renderer, struct gfx_renderer_frame* frame) {
 	if (!renderer || !frame) {
 		return false;
@@ -455,17 +464,34 @@ bool gfx_renderer_setup_image_resource(gfx_renderer_t* renderer, edge_handle_t h
 
 	gfx_image_t* image_source = &resource->image;
 
+	VkImageAspectFlags image_aspect = (image_source->usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+
+	VkImageViewType view_type = 0;
+	if (image_source->extent.depth > 1) {
+		view_type = VK_IMAGE_VIEW_TYPE_3D;
+	}
+	else if (image_source->extent.height > 1) {
+		if (image_source->layer_count > 1) {
+			view_type = (image_source->face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		}
+		else {
+			view_type = (image_source->face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+		}
+	}
+	else if (image_source->extent.width > 1) {
+		view_type = image_source->layer_count > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
+	}
+
 	if (image_source->usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
 		VkImageSubresourceRange srv_subresource_range = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, // TODO: Detect aspect (depends on usage)
+			.aspectMask = image_aspect,
 			.baseMipLevel = 0u,
 			.levelCount = image_source->level_count,
 			.baseArrayLayer = 0u,
 			.layerCount = image_source->layer_count * image_source->face_count
 		};
 
-
-		if (!gfx_image_view_create(image_source, VK_IMAGE_VIEW_TYPE_2D, srv_subresource_range, &resource->srv)) {
+		if (!gfx_image_view_create(image_source, view_type, srv_subresource_range, &resource->srv)) {
 			return false;
 		}
 
@@ -476,7 +502,7 @@ bool gfx_renderer_setup_image_resource(gfx_renderer_t* renderer, edge_handle_t h
 
 	if (image_source->usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
 		VkImageSubresourceRange uav_subresource_range = {
-			.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, // TODO: Detect aspect (depends on usage)
+			.aspectMask = image_aspect,
 			.baseMipLevel = 0u,
 			.levelCount = 1u,
 			.baseArrayLayer = 0u,
@@ -486,7 +512,7 @@ bool gfx_renderer_setup_image_resource(gfx_renderer_t* renderer, edge_handle_t h
 		for (i32 i = 0; i < image_source->level_count; ++i) {
 			uav_subresource_range.baseMipLevel = i;
 
-			if (!gfx_image_view_create(image_source, VK_IMAGE_VIEW_TYPE_2D, uav_subresource_range, &resource->uav[i])) {
+			if (!gfx_image_view_create(image_source, view_type, uav_subresource_range, &resource->uav[i])) {
 				return false;
 			}
 
