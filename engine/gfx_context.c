@@ -1652,8 +1652,10 @@ bool gfx_swapchain_get_images(const gfx_swapchain_t* swapchain, gfx_image_t* ima
 	}
 
 	VkImage images[GFX_SWAPCHAIN_IMAGES_MAX];
-	VkResult result = vkGetSwapchainImagesKHR(g_ctx.dev, swapchain->handle, &swapchain->image_count, images);
-	if (result != VK_SUCCESS) {
+
+	u32 image_count;
+	VkResult result = vkGetSwapchainImagesKHR(g_ctx.dev, swapchain->handle, &image_count, images);
+	if (result != VK_SUCCESS || image_count != swapchain->image_count) {
 		return false;
 	}
 
