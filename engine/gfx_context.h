@@ -96,7 +96,7 @@ extern "C" {
 
 	bool gfx_cmd_buf_create(const gfx_cmd_pool_t* cmd_pool, gfx_cmd_buf_t* cmd_buf);
 	bool gfx_cmd_begin(const gfx_cmd_buf_t* cmd_buf);
-	void gfx_cmd_end(const gfx_cmd_buf_t* cmd_buf);
+	bool gfx_cmd_end(const gfx_cmd_buf_t* cmd_buf);
 	bool gfx_cmd_reset(const gfx_cmd_buf_t* cmd_buf);
 	void gfx_cmd_reset_query(const gfx_cmd_buf_t* cmd_buf, const gfx_query_pool_t* query, u32 first_query, u32 query_count);
 	void gfx_cmd_write_timestamp(const gfx_cmd_buf_t* cmd_buf, const gfx_query_pool_t* query, VkPipelineStageFlagBits2 stage, u32 query_index);

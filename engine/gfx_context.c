@@ -1217,12 +1217,13 @@ bool gfx_cmd_begin(const gfx_cmd_buf_t* cmd_buf) {
 	return result == VK_SUCCESS;
 }
 
-void gfx_cmd_end(const gfx_cmd_buf_t* cmd_buf) {
+bool gfx_cmd_end(const gfx_cmd_buf_t* cmd_buf) {
 	if (!cmd_buf) {
-		return;
+		return false;
 	}
 
 	VkResult result = vkEndCommandBuffer(cmd_buf->handle);
+	return result == VK_SUCCESS;
 }
 
 bool gfx_cmd_reset(const gfx_cmd_buf_t* cmd_buf) {
