@@ -10,6 +10,7 @@ option(EDGE_BASE_BUILD_EXAMPLES "Build examples" OFF)
 set(EDGE_BASE_SOURCES
     "src/edge_allocator.c"
     "src/edge_arena.c"
+    "src/edge_handle_pool.c"
     "src/edge_hashmap.c"
     "src/edge_list.c"
     "src/edge_queue.c"
@@ -24,6 +25,7 @@ set(EDGE_BASE_SOURCES
 set(EDGE_BASE_HEADERS
     "include/edge_allocator.h"
     "include/edge_arena.h"
+    "include/edge_handle_pool.h"
     "include/edge_bitarray.h"
     "include/edge_hashmap.h"
     "include/edge_list.h"
