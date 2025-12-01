@@ -118,7 +118,7 @@ void edge_hashmap_clear(edge_hashmap_t* map) {
         return;
     }
 
-    for (i32 i = 0; i < map->bucket_count; i++) {
+    for (i32 i = 0; i < (i32)map->bucket_count; i++) {
         edge_hashmap_entry_t* entry = map->buckets[i];
         while (entry) {
             edge_hashmap_entry_t* next = entry->next;
@@ -143,7 +143,7 @@ bool edge_hashmap_rehash(edge_hashmap_t* map, size_t new_bucket_count) {
     }
 
     /* Rehash all entries */
-    for (i32 i = 0; i < map->bucket_count; i++) {
+    for (i32 i = 0; i < (i32)map->bucket_count; i++) {
         edge_hashmap_entry_t* entry = map->buckets[i];
         while (entry) {
             edge_hashmap_entry_t* next = entry->next;
@@ -283,7 +283,7 @@ edge_hashmap_iterator_t edge_hashmap_begin(const edge_hashmap_t* map) {
 
     if (map) {
         /* Find first non-empty bucket */
-        for (i32 i = 0; i < map->bucket_count; i++) {
+        for (i32 i = 0; i < (i32)map->bucket_count; i++) {
             if (map->buckets[i]) {
                 it.bucket_index = i;
                 it.current = map->buckets[i];
@@ -311,7 +311,7 @@ void edge_hashmap_iterator_next(edge_hashmap_iterator_t* it) {
     }
 
     /* Find next non-empty bucket */
-    for (i32 i = it->bucket_index + 1; i < it->map->bucket_count; i++) {
+    for (i32 i = it->bucket_index + 1; i < (i32)it->map->bucket_count; i++) {
         if (it->map->buckets[i]) {
             it->bucket_index = i;
             it->current = it->map->buckets[i];

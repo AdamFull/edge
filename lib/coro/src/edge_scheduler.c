@@ -648,7 +648,4 @@ void edge_sched_await(edge_coro_fn func, void* payload, edge_sched_priority_t pr
     if (!func) {
         return;
     }
-
-    edge_job_t* parent = edge_sched_current_job();
-    // TODO: Not implemented for now
 }

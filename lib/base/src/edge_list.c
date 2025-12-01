@@ -206,7 +206,7 @@ void* edge_list_get(const edge_list_t* list, size_t index) {
     }
     else {
         current = list->tail;
-        for (i32 i = list->size - 1; i > index; i--) {
+        for (i32 i = list->size - 1; i > (i32)index; i--) {
             current = current->prev;
         }
     }
@@ -233,7 +233,7 @@ bool edge_list_insert(edge_list_t* list, size_t index, const void* element) {
     }
 
     edge_list_node_t* current = list->head;
-    for (i32 i = 0; i < index; i++) {
+    for (i32 i = 0; i < (i32)index; i++) {
         current = current->next;
     }
 
@@ -260,7 +260,7 @@ bool edge_list_remove(edge_list_t* list, size_t index, void* out_element) {
     }
 
     edge_list_node_t* current = list->head;
-    for (i32 i = 0; i < index; i++) {
+    for (i32 i = 0; i < (i32)index; i++) {
         current = current->next;
     }
 

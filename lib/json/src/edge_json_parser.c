@@ -37,7 +37,6 @@ static char* parse_string_content(edge_json_parser_t* parser, size_t* out_length
 
     parser->pos++; /* Skip opening quote */
 
-    size_t start = parser->pos;
     size_t capacity = 32;
     size_t length = 0;
     char* result = (char*)edge_allocator_malloc(parser->allocator, capacity);
