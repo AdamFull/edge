@@ -195,8 +195,6 @@ gfx_renderer_t* gfx_renderer_create(const gfx_renderer_create_info_t* create_inf
 		return NULL;
 	}
 
-	gfx_query_pool_reset(&renderer->frame_timestamp);
-
 	const VkPhysicalDeviceProperties* props = gfx_get_adapter_props();
 	renderer->timestamp_freq = props->limits.timestampPeriod;
 	
@@ -683,14 +681,16 @@ bool gfx_renderer_frame_begin(gfx_renderer_t* renderer) {
 	gfx_resource_t* backbuffer_resource = (gfx_resource_t*)edge_handle_pool_get(renderer->resource_handle_pool, renderer->backbuffer_handle);
 	backbuffer_resource->image = renderer->swapchain_images[renderer->active_image_index];
 
-	u64 timestamps[2] = { 0 };
-	if (gfx_query_pool_get_data(&renderer->frame_timestamp, 0, timestamps)) {
-		u64 elapsed_time = timestamps[1] - timestamps[0];
-		if (timestamps[1] <= timestamps[0]) {
-			elapsed_time = 0ull;
-		}
+	if (renderer->frame_number > 0) {
+		u64 timestamps[2] = { 0 };
+		if (gfx_query_pool_get_data(&renderer->frame_timestamp, 0, timestamps)) {
+			u64 elapsed_time = timestamps[1] - timestamps[0];
+			if (timestamps[1] <= timestamps[0]) {
+				elapsed_time = 0ull;
+			}
 
-		renderer->gpu_delta_time = (double)elapsed_time * renderer->timestamp_freq / 1000000.0;
+			renderer->gpu_delta_time = (double)elapsed_time * renderer->timestamp_freq / 1000000.0;
+		}
 	}
 
 	gfx_cmd_reset_query(&current_frame->cmd_buf, &renderer->frame_timestamp, 0u, 2u);

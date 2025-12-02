@@ -50,7 +50,9 @@ static const char* g_instance_layers[] = {
 
 static VkValidationFeatureEnableEXT g_validation_features_enable[] = {
 #if defined(USE_VALIDATION_LAYER_FEATURES)
+#if defined(EDGE_VK_USE_DEBUG_PRINTF)
 	VK_VALIDATION_FEATURE_ENABLE_DEBUG_PRINTF_EXT,
+#endif
 #if defined(EDGE_VK_USE_GPU_ASSISTED_VALIDATION)
 	VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_RESERVE_BINDING_SLOT_EXT,
 	VK_VALIDATION_FEATURE_ENABLE_GPU_ASSISTED_EXT,
@@ -121,7 +123,6 @@ static struct gfx_key_value g_device_extensions[] = {
 	{ VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, true },
 	{ VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, true },
 	{ VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME, true },
-	{ VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME, true },
 #if USE_NSIGHT_AFTERMATH
 	{ VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME, false },
 	{ VK_NV_DEVICE_DIAGNOSTICS_CONFIG_EXTENSION_NAME, false },
@@ -159,12 +160,6 @@ struct gfx_context {
 	u32 queue_family_count;
 
 	VkDevice dev;
-
-	bool get_memory_requirements_2_enabled;
-	bool memory_budget_enabled;
-	bool memory_priority_enabled;
-	bool bind_memory_enabled;
-	bool amd_device_coherent_memory_enabled;
 
 	VmaAllocator vma;
 };
@@ -802,24 +797,6 @@ static bool gfx_device_init() {
 	create_info.ppEnabledExtensionNames = g_ctx.enabled_extensions;
 	create_info.pNext = &features2;
 
-	for (i32 i = 0; i < g_ctx.enabled_extension_count; ++i) {
-		if (strcmp(g_ctx.enabled_extensions[i], VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME) == 0) {
-			g_ctx.get_memory_requirements_2_enabled = true;
-		}
-		else if (strcmp(g_ctx.enabled_extensions[i], VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) == 0) {
-			g_ctx.memory_budget_enabled = true;
-		}
-		else if (strcmp(g_ctx.enabled_extensions[i], VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME) == 0) {
-			g_ctx.memory_priority_enabled = true;
-		}
-		else if (strcmp(g_ctx.enabled_extensions[i], VK_KHR_BIND_MEMORY_2_EXTENSION_NAME) == 0) {
-			g_ctx.bind_memory_enabled = true;
-		}
-		else if (strcmp(g_ctx.enabled_extensions[i], VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME) == 0) {
-			g_ctx.amd_device_coherent_memory_enabled = true;
-		}
-	}
-
 	VkResult result = vkCreateDevice(g_ctx.adapter, &create_info, &g_ctx.vk_alloc, &g_ctx.dev);
 	if (result != VK_SUCCESS) {
 		return false;
@@ -843,23 +820,23 @@ static bool gfx_allocator_init() {
 	create_info.pAllocationCallbacks = &g_ctx.vk_alloc;
 	create_info.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
 
-	if(g_ctx.get_memory_requirements_2_enabled) {
+	if(gfx_context_is_extension_enabled(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME)) {
 		create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
 	}
 
-	if (g_ctx.memory_budget_enabled) {
+	if (gfx_context_is_extension_enabled(VK_EXT_MEMORY_BUDGET_EXTENSION_NAME)) {
 		create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
 	}
 
-	if (g_ctx.memory_priority_enabled) {
+	if (gfx_context_is_extension_enabled(VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME)) {
 		create_info.flags |= VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT;
 	}
 
-	if (g_ctx.bind_memory_enabled) {
+	if (gfx_context_is_extension_enabled(VK_KHR_BIND_MEMORY_2_EXTENSION_NAME)) {
 		create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT;
 	}
 
-	if (g_ctx.amd_device_coherent_memory_enabled) {
+	if (gfx_context_is_extension_enabled(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME)) {
 		create_info.flags |= VMA_ALLOCATOR_CREATE_AMD_DEVICE_COHERENT_MEMORY_BIT;
 	}
 
@@ -978,6 +955,15 @@ void gfx_context_shutdown() {
 	}
 
 	volkFinalize();
+}
+
+bool gfx_context_is_extension_enabled(const char* name) {
+	for (i32 i = 0; i < g_ctx.enabled_extension_count; ++i) {
+		if (strcmp(g_ctx.enabled_extensions[i], name) == 0) {
+			return true;
+		}
+	}
+	return false;
 }
 
 const VkPhysicalDeviceProperties* gfx_get_adapter_props() {
@@ -1309,6 +1295,7 @@ bool gfx_query_pool_create(VkQueryType type, u32 count, gfx_query_pool_t* query_
 
 	query_pool->type = type;
 	query_pool->max_query = create_info.queryCount;
+	query_pool->host_reset_enabled = gfx_context_is_extension_enabled(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
 
 	return true;
 }
@@ -1521,6 +1508,93 @@ void gfx_pipeline_layout_destroy(gfx_pipeline_layout_t* pipeline_layout) {
 
 	if (pipeline_layout->handle != VK_NULL_HANDLE) {
 		vkDestroyPipelineLayout(g_ctx.dev, pipeline_layout->handle, &g_ctx.vk_alloc);
+	}
+}
+
+bool gfx_pipeline_cache_create(const u8* data, size_t data_size, gfx_pipeline_cache_t* pipeline_cache) {
+	if (!pipeline_cache) {
+		return false;
+	}
+
+	VkPipelineCacheCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+	create_info.initialDataSize = data_size;
+	create_info.pInitialData = data;
+
+	VkResult result = vkCreatePipelineCache(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_cache->handle);
+	return result == VK_SUCCESS;
+}
+
+void gfx_pipeline_cache_destroy(gfx_pipeline_cache_t* pipeline_cache) {
+	if (!pipeline_cache) {
+		return;
+	}
+
+	if (pipeline_cache->handle != VK_NULL_HANDLE) {
+		vkDestroyPipelineCache(g_ctx.dev, pipeline_cache->handle, &g_ctx.vk_alloc);
+	}
+}
+
+bool gfx_shader_module_create(const u32* code, size_t size, gfx_shader_module_t* shader_module) {
+	if (!shader_module) {
+		return false;
+	}
+
+	VkShaderModuleCreateInfo create_info = { 0 };
+	create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+	create_info.codeSize = size;
+	create_info.pCode = code;
+
+	VkResult result = vkCreateShaderModule(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &shader_module->handle);
+	return result == VK_SUCCESS;
+}
+
+void gfx_shader_module_destroy(gfx_shader_module_t* shader_module) {
+	if (!shader_module) {
+		return;
+	}
+
+	if (shader_module->handle != VK_NULL_HANDLE) {
+		vkDestroyShaderModule(g_ctx.dev, shader_module->handle, &g_ctx.vk_alloc);
+	}
+}
+
+void gfx_graphics_pipeline_builder_add_stage(gfx_graphics_pipeline_builder_t* builder, VkShaderStageFlagBits stage, const gfx_shader_module_t* module) {
+	if (!builder || !module) {
+		return;
+	}
+
+}
+
+bool gfx_pipeline_compute_create(const gfx_compute_pipeline_create_info_t* create_info, gfx_pipeline_t* pipeline) {
+	if (!create_info || !pipeline) {
+		return false;
+	}
+
+	VkComputePipelineCreateInfo pipeline_create_info = { 0 };
+	pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	pipeline_create_info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	pipeline_create_info.stage.module = create_info->layout->handle;
+	pipeline_create_info.stage.pName = "main";
+	pipeline_create_info.layout = create_info->layout->handle;
+
+	VkResult result = vkCreateComputePipelines(g_ctx.dev, create_info->cache ? create_info->cache->handle : VK_NULL_HANDLE, 1, &pipeline_create_info, &g_ctx.vk_alloc, &pipeline->handle);
+	if (result != VK_SUCCESS) {
+		return false;
+	}
+
+	pipeline->bind_point = VK_PIPELINE_BIND_POINT_COMPUTE;
+
+	return true;
+}
+
+void gfx_pipeline_destroy(gfx_pipeline_t* pipeline) {
+	if (!pipeline) {
+		return;
+	}
+
+	if (pipeline->handle != VK_NULL_HANDLE) {
+		vkDestroyPipeline(g_ctx.dev, pipeline->handle, &g_ctx.vk_alloc);
 	}
 }
 

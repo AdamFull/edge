@@ -79,8 +79,16 @@ extern "C" {
 		VkDependencyFlags dependency_flags;
 	} gfx_pipeline_barrier_builder_t;
 
+	typedef struct {
+		const gfx_shader_module_t* shader_module;
+		const gfx_pipeline_layout_t* layout;
+		const gfx_pipeline_cache_t* cache;
+	} gfx_compute_pipeline_create_info_t;
+
 	bool gfx_context_init(const gfx_context_create_info_t* cteate_info);
 	void gfx_context_shutdown();
+
+	bool gfx_context_is_extension_enabled(const char* name);
 
 	const VkPhysicalDeviceProperties* gfx_get_adapter_props();
 
@@ -126,6 +134,17 @@ extern "C" {
 
 	bool gfx_pipeline_layout_create(const gfx_pipeline_layout_builder_t* builder, gfx_pipeline_layout_t* pipeline_layout);
 	void gfx_pipeline_layout_destroy(gfx_pipeline_layout_t* pipeline_layout);
+
+	bool gfx_pipeline_cache_create(const u8* data, size_t data_size, gfx_pipeline_cache_t* pipeline_cache);
+	void gfx_pipeline_cache_destroy(gfx_pipeline_cache_t* pipeline_cache);
+
+	bool gfx_shader_module_create(const u32* code, size_t size, gfx_shader_module_t* shader_module);
+	void gfx_shader_module_destroy(gfx_shader_module_t* shader_module);
+
+	void gfx_graphics_pipeline_builder_add_stage(gfx_graphics_pipeline_builder_t* builder, VkShaderStageFlagBits stage, const gfx_shader_module_t* module);
+
+	bool gfx_pipeline_compute_create(const gfx_compute_pipeline_create_info_t* create_info, gfx_pipeline_t* pipeline);
+	void gfx_pipeline_destroy(gfx_pipeline_t* pipeline);
 
 	bool gfx_swapchain_create(const gfx_swapchain_create_info_t* create_info, gfx_swapchain_t* swapchain);
 	bool gfx_swapchain_update(gfx_swapchain_t* swapchain);

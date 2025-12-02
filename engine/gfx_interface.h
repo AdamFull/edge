@@ -36,6 +36,7 @@ extern "C" {
 		VkQueryPool handle;
 		VkQueryType type;
 		u32 max_query;
+		bool host_reset_enabled;
 	} gfx_query_pool_t;
 
 	typedef struct gfx_descriptor_set_layout {
@@ -93,6 +94,19 @@ extern "C" {
 		VkImageViewType type;
 		VkImageSubresourceRange range;
 	} gfx_image_view_t;
+
+	typedef struct {
+		VkPipelineCache handle;
+	} gfx_pipeline_cache_t;
+
+	typedef struct {
+		VkShaderModule handle;
+	} gfx_shader_module_t;
+
+	typedef struct gfx_pipeline {
+		VkPipeline handle;
+		VkPipelineBindPoint bind_point;
+	} gfx_pipeline_t;
 
 	typedef enum {
 		GFX_BUFFER_FLAG_NONE = 0,
