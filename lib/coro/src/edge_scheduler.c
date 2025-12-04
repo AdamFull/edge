@@ -10,7 +10,7 @@
 #include <edge_arena.h>
 #include <edge_threads.h>
 #include <edge_list.h>
-#include <edge_queue.h>
+#include <edge_mpmc_queue.h>
 #include <edge_vector.h>
 
 // TODO: Add valgrind support
@@ -46,9 +46,7 @@ struct edge_sched {
     edge_mtx_t stack_mutex;
 
     // Global work queue
-    edge_queue_t* queues[EDGE_SCHED_PRIORITY_COUNT];
-    edge_mtx_t queue_mutex;
-    edge_cnd_t queue_cond;
+    edge_mpmc_queue_t* queues[EDGE_SCHED_PRIORITY_COUNT];
 
     edge_vector_t* worker_threads;
 
@@ -283,21 +281,16 @@ static edge_job_t* edge_sched_pick_job(edge_sched_t* sched) {
         return NULL;
     }
 
-    edge_mtx_lock(&sched->queue_mutex);
-
     edge_job_t* job = NULL;
 
-    /* Pick highest priority job */
     for (int i = EDGE_SCHED_PRIORITY_COUNT - 1; i >= 0; i--) {
         uintptr_t job_addr;
-        if (edge_queue_dequeue(sched->queues[i], &job_addr)) {
+        if (edge_mpmc_queue_dequeue(sched->queues[i], &job_addr)) {
             job = (edge_job_t*)job_addr;
             atomic_fetch_sub_explicit(&sched->queued_jobs, 1, memory_order_release);
             break;
         }
     }
-
-    edge_mtx_unlock(&sched->queue_mutex);
 
     return job;
 }
@@ -307,17 +300,12 @@ static void edge_sched_enqueue_job(edge_sched_t* sched, edge_job_t* job) {
         return;
     }
 
-    edge_mtx_lock(&sched->queue_mutex);
-
     uintptr_t job_addr = (uintptr_t)job;
-    bool enqueued = edge_queue_enqueue(sched->queues[job->priority], &job_addr);
+    bool enqueued = edge_mpmc_queue_enqueue(sched->queues[job->priority], &job_addr);
 
     if (enqueued) {
         atomic_fetch_add_explicit(&sched->queued_jobs, 1, memory_order_release);
-        edge_cnd_broadcast(&sched->queue_cond);
     }
-
-    edge_mtx_unlock(&sched->queue_mutex);
 }
 
 static int sched_worker_thread(void* payload) {
@@ -333,21 +321,9 @@ static int sched_worker_thread(void* payload) {
                 break;
             }
 
-            /* Wait for work */
-            edge_mtx_lock(&sched->queue_mutex);
-
             if (atomic_load_explicit(&sched->queued_jobs, memory_order_acquire) == 0) {
-                struct timespec ts;
-                timespec_get(&ts, TIME_UTC);
-                ts.tv_nsec += 10000000; /* 10ms */
-                if (ts.tv_nsec >= 1000000000) {
-                    ts.tv_sec++;
-                    ts.tv_nsec -= 1000000000;
-                }
-                edge_cnd_timedwait(&sched->queue_cond, &sched->queue_mutex, &ts);
+                edge_thrd_yield();
             }
-
-            edge_mtx_unlock(&sched->queue_mutex);
             continue;
         }
 
@@ -377,12 +353,6 @@ static int sched_worker_thread(void* payload) {
 
             size_t prev_active = atomic_fetch_sub_explicit(&sched->active_jobs, 1, memory_order_acq_rel);
             atomic_fetch_add_explicit(&sched->jobs_completed, 1, memory_order_relaxed);
-
-            if (prev_active == 1) {
-                edge_mtx_lock(&sched->queue_mutex);
-                edge_cnd_broadcast(&sched->queue_cond);
-                edge_mtx_unlock(&sched->queue_mutex);
-            }
         }
         else if (job_state == EDGE_CORO_STATE_SUSPENDED) {
             /* Re-queue for later */
@@ -422,19 +392,11 @@ edge_sched_t* edge_sched_create(edge_allocator_t* allocator) {
     }
 
     for (int i = 0; i < EDGE_SCHED_PRIORITY_COUNT; ++i) {
-        edge_queue_t* queue = edge_queue_create(allocator, sizeof(uintptr_t), 16);
+        edge_mpmc_queue_t* queue = edge_mpmc_queue_create(allocator, sizeof(uintptr_t), 1024);
         if (!queue) {
             goto failed;
         }
         sched->queues[i] = queue;
-    }
-
-    if (edge_mtx_init(&sched->queue_mutex, edge_mtx_plain) != edge_thrd_success) {
-        goto failed;
-    }
-
-    if (edge_cnd_init(&sched->queue_cond) != edge_thrd_success) {
-        goto failed;
     }
 
     edge_cpu_info_t cpu_info[256];
@@ -489,7 +451,6 @@ failed:
             }
 
             atomic_store_explicit(&sched->shutdown, true, memory_order_release);
-            edge_cnd_broadcast(&sched->queue_cond);
 
             for (size_t i = 0; i < edge_vector_size(sched->worker_threads); ++i) {
                 worker_thread_t* worker = (worker_thread_t*)edge_vector_at(sched->worker_threads, i);
@@ -499,13 +460,10 @@ failed:
             edge_vector_destroy(sched->worker_threads);
         }
 
-        edge_cnd_destroy(&sched->queue_cond);
-        edge_mtx_destroy(&sched->queue_mutex);
-
         for (int i = 0; i < EDGE_SCHED_PRIORITY_COUNT; ++i) {
-            edge_queue_t* queue = sched->queues[i];
+            edge_mpmc_queue_t* queue = sched->queues[i];
             if (queue) {
-                edge_queue_destroy(queue);
+                edge_mpmc_queue_destroy(queue);
             }
         }
 
@@ -531,7 +489,6 @@ void edge_sched_destroy(edge_sched_t* sched) {
     }
 
     atomic_store_explicit(&sched->shutdown, true, memory_order_release);
-    edge_cnd_broadcast(&sched->queue_cond);
 
     if (sched->worker_threads) {
         for (int i = 0; i < edge_vector_size(sched->worker_threads); ++i) {
@@ -543,15 +500,12 @@ void edge_sched_destroy(edge_sched_t* sched) {
         edge_vector_destroy(sched->worker_threads);
     }
 
-    edge_cnd_destroy(&sched->queue_cond);
-    edge_mtx_destroy(&sched->queue_mutex);
-
     for (int i = 0; i < EDGE_SCHED_PRIORITY_COUNT; ++i) {
-        edge_queue_t* queue = sched->queues[i];
+        edge_mpmc_queue_t* queue = sched->queues[i];
         if (queue) {
             while (true) {
                 uintptr_t job_addr;
-                if (!edge_queue_dequeue(queue, &job_addr)) {
+                if (!edge_mpmc_queue_dequeue(queue, &job_addr)) {
                     break;
                 }
 
@@ -559,7 +513,7 @@ void edge_sched_destroy(edge_sched_t* sched) {
                 edge_job_destroy(sched, job);
             }
 
-            edge_queue_destroy(queue);
+            edge_mpmc_queue_destroy(queue);
         }
     }
 
@@ -610,15 +564,11 @@ void edge_sched_run(edge_sched_t* sched) {
         return;
     }
 
-    edge_mtx_lock(&sched->queue_mutex);
-
     while (
         atomic_load_explicit(&sched->active_jobs, memory_order_acquire) > 0 &&
         !atomic_load_explicit(&sched->shutdown, memory_order_acquire)) {
-        edge_cnd_wait(&sched->queue_cond, &sched->queue_mutex);
+        edge_thrd_yield();
     }
-
-    edge_mtx_unlock(&sched->queue_mutex);
 }
 
 void edge_sched_yield(void) {
