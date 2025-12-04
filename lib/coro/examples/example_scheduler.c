@@ -46,6 +46,8 @@ static void job_b(void* payload) {
     edge_sched_event_wait(completion_event);
     printf("[Thread %d] [Job B] subtask completed\n", thread_id);
 
+    edge_sched_event_destroy(completion_event);
+
     for (int i = 0; i < 100; i += 2) {
         printf("[Thread %d] [Job B] Processing downloaded data: %d%%\n", thread_id, i);
         edge_sched_yield();
