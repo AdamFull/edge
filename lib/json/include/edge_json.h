@@ -13,12 +13,14 @@
 #ifndef EDGE_JSON_H
 #define EDGE_JSON_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <edge_base.h>
 
 #include <stddef.h>
 #include <stdint.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define EDGE_JSON_VERSION_MAJOR 1
 #define EDGE_JSON_VERSION_MINOR 0
@@ -57,7 +59,7 @@ edge_json_value_t* edge_json_null(const edge_allocator_t* allocator);
  * @param value Boolean value (0 = false, non-zero = true)
  * @return JSON value
  */
-edge_json_value_t* edge_json_bool(int value, const edge_allocator_t* allocator);
+edge_json_value_t* edge_json_bool(bool value, const edge_allocator_t* allocator);
 
 /**
  * Create a number value
@@ -65,7 +67,7 @@ edge_json_value_t* edge_json_bool(int value, const edge_allocator_t* allocator);
  * @param value Number value
  * @return JSON value
  */
-edge_json_value_t* edge_json_number(double value, const edge_allocator_t* allocator);
+edge_json_value_t* edge_json_number(f64 value, const edge_allocator_t* allocator);
 
 /**
  * Create an integer number value
@@ -73,7 +75,7 @@ edge_json_value_t* edge_json_number(double value, const edge_allocator_t* alloca
  * @param value Integer value
  * @return JSON value
  */
-edge_json_value_t* edge_json_int(int64_t value, const edge_allocator_t* allocator);
+edge_json_value_t* edge_json_int(i64 value, const edge_allocator_t* allocator);
 
 /**
  * Create a string value
@@ -125,32 +127,32 @@ edge_json_type_t edge_json_type(const edge_json_value_t* value);
 /**
  * Check if value is null
  */
-int edge_json_is_null(const edge_json_value_t* value);
+bool edge_json_is_null(const edge_json_value_t* value);
 
 /**
  * Check if value is boolean
  */
-int edge_json_is_bool(const edge_json_value_t* value);
+bool edge_json_is_bool(const edge_json_value_t* value);
 
 /**
  * Check if value is number
  */
-int edge_json_is_number(const edge_json_value_t* value);
+bool edge_json_is_number(const edge_json_value_t* value);
 
 /**
  * Check if value is string
  */
-int edge_json_is_string(const edge_json_value_t* value);
+bool edge_json_is_string(const edge_json_value_t* value);
 
 /**
  * Check if value is array
  */
-int edge_json_is_array(const edge_json_value_t* value);
+bool edge_json_is_array(const edge_json_value_t* value);
 
 /**
  * Check if value is object
  */
-int edge_json_is_object(const edge_json_value_t* value);
+bool edge_json_is_object(const edge_json_value_t* value);
 
 /**
  * Get boolean value
@@ -159,7 +161,7 @@ int edge_json_is_object(const edge_json_value_t* value);
  * @param default_value Default value if not boolean
  * @return Boolean value (0 = false, 1 = true)
  */
-int edge_json_get_bool(const edge_json_value_t* value, int default_value);
+bool edge_json_get_bool(const edge_json_value_t* value, bool default_value);
 
 /**
  * Get number value
@@ -168,7 +170,7 @@ int edge_json_get_bool(const edge_json_value_t* value, int default_value);
  * @param default_value Default value if not number
  * @return Number value
  */
-double edge_json_get_number(const edge_json_value_t* value, double default_value);
+f64 edge_json_get_number(const edge_json_value_t* value, f64 default_value);
 
 /**
  * Get integer value
@@ -177,7 +179,7 @@ double edge_json_get_number(const edge_json_value_t* value, double default_value
  * @param default_value Default value if not number
  * @return Integer value
  */
-int64_t edge_json_get_int(const edge_json_value_t* value, int64_t default_value);
+i64 edge_json_get_int(const edge_json_value_t* value, i64 default_value);
 
 /**
  * Get string value
@@ -221,7 +223,7 @@ edge_json_value_t* edge_json_array_get(const edge_json_value_t* array, size_t in
  * @param value Value to append
  * @return 1 on success, 0 on failure
  */
-int edge_json_array_append(edge_json_value_t* array, edge_json_value_t* value);
+bool edge_json_array_append(edge_json_value_t* array, edge_json_value_t* value);
 
 /**
  * Insert element at index
@@ -231,7 +233,7 @@ int edge_json_array_append(edge_json_value_t* array, edge_json_value_t* value);
  * @param value Value to insert
  * @return 1 on success, 0 on failure
  */
-int edge_json_array_insert(edge_json_value_t* array, size_t index, edge_json_value_t* value);
+bool edge_json_array_insert(edge_json_value_t* array, size_t index, edge_json_value_t* value);
 
 /**
  * Remove element at index
@@ -240,7 +242,7 @@ int edge_json_array_insert(edge_json_value_t* array, size_t index, edge_json_val
  * @param index Element index
  * @return 1 on success, 0 on failure
  */
-int edge_json_array_remove(edge_json_value_t* array, size_t index);
+bool edge_json_array_remove(edge_json_value_t* array, size_t index);
 
 /**
  * Clear all elements from array
@@ -276,7 +278,7 @@ edge_json_value_t* edge_json_object_get(const edge_json_value_t* object, const c
  * @param value Value to set
  * @return 1 on success, 0 on failure
  */
-int edge_json_object_set(edge_json_value_t* object, const char* key, edge_json_value_t* value);
+bool edge_json_object_set(edge_json_value_t* object, const char* key, edge_json_value_t* value);
 
 /**
  * Remove key from object
@@ -285,7 +287,7 @@ int edge_json_object_set(edge_json_value_t* object, const char* key, edge_json_v
  * @param key Key name
  * @return 1 on success, 0 if key not found
  */
-int edge_json_object_remove(edge_json_value_t* object, const char* key);
+bool edge_json_object_remove(edge_json_value_t* object, const char* key);
 
 /**
  * Check if object has key
@@ -294,7 +296,7 @@ int edge_json_object_remove(edge_json_value_t* object, const char* key);
  * @param key Key name
  * @return 1 if key exists, 0 otherwise
  */
-int edge_json_object_has(const edge_json_value_t* object, const char* key);
+bool edge_json_object_has(const edge_json_value_t* object, const char* key);
 
 /**
  * Clear all keys from object
@@ -378,7 +380,7 @@ edge_json_value_t* edge_json_clone(const edge_json_value_t* value);
  * @param b Second value
  * @return 1 if equal, 0 otherwise
  */
-int edge_json_equals(const edge_json_value_t* a, const edge_json_value_t* b);
+bool edge_json_equals(const edge_json_value_t* a, const edge_json_value_t* b);
 
 /**
  * Merge two objects (shallow merge)
@@ -389,7 +391,7 @@ int edge_json_equals(const edge_json_value_t* a, const edge_json_value_t* b);
  * @param source Source object
  * @return 1 on success, 0 on failure
  */
-int edge_json_object_merge(edge_json_value_t* dest, const edge_json_value_t* source);
+bool edge_json_object_merge(edge_json_value_t* dest, const edge_json_value_t* source);
 
 /**
  * Create object and set values in one call

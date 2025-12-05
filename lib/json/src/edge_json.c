@@ -51,63 +51,75 @@ edge_json_value_t* edge_json_null(const edge_allocator_t* allocator) {
     const edge_allocator_t* allocation_callbacks = edge_json_pick_allocator(allocator);
 
     edge_json_value_t* value = (edge_json_value_t*)edge_allocator_malloc(allocation_callbacks, sizeof(edge_json_value_t));
-    if (!value) return NULL;
+    if (!value) {
+        return NULL;
+    }
+
     value->type = EDGE_JSON_TYPE_NULL;
     value->allocator = allocation_callbacks;
     return value;
 }
 
-edge_json_value_t* edge_json_bool(int val, const edge_allocator_t* allocator) {
+edge_json_value_t* edge_json_bool(bool val, const edge_allocator_t* allocator) {
     const edge_allocator_t* allocation_callbacks = edge_json_pick_allocator(allocator);
 
     edge_json_value_t* value = (edge_json_value_t*)edge_allocator_malloc(allocation_callbacks, sizeof(edge_json_value_t));
-    if (!value) return NULL;
+    if (!value) {
+        return NULL;
+    }
+
     value->type = EDGE_JSON_TYPE_BOOL;
     value->as.bool_value = val ? 1 : 0;
     value->allocator = allocation_callbacks;
     return value;
 }
 
-edge_json_value_t* edge_json_number(double val, const edge_allocator_t* allocator) {
+edge_json_value_t* edge_json_number(f64 val, const edge_allocator_t* allocator) {
     const edge_allocator_t* allocation_callbacks = edge_json_pick_allocator(allocator);
 
     edge_json_value_t* value = (edge_json_value_t*)edge_allocator_malloc(allocation_callbacks, sizeof(edge_json_value_t));
-    if (!value) return NULL;
+    if (!value) {
+        return NULL;
+    }
+
     value->type = EDGE_JSON_TYPE_NUMBER;
     value->as.number_value = val;
     value->allocator = allocation_callbacks;
     return value;
 }
 
-edge_json_value_t* edge_json_int(int64_t val, const edge_allocator_t* allocator) {
+edge_json_value_t* edge_json_int(i64 val, const edge_allocator_t* allocator) {
     const edge_allocator_t* allocation_callbacks = edge_json_pick_allocator(allocator);
-    return edge_json_number((double)val, allocation_callbacks);
+    return edge_json_number((f64)val, allocation_callbacks);
 }
 
 edge_json_value_t* edge_json_string(const char* str, const edge_allocator_t* allocator) {
     const edge_allocator_t* allocation_callbacks = edge_json_pick_allocator(allocator);
-    if (!str) return edge_json_null(allocation_callbacks);
+    if (!str) {
+        return edge_json_null(allocation_callbacks);
+    }
     return edge_json_string_len(str, strlen(str), allocation_callbacks);
 }
 
 edge_json_value_t* edge_json_string_len(const char* str, size_t length, const edge_allocator_t* allocator) {
     const edge_allocator_t* allocation_callbacks = edge_json_pick_allocator(allocator);
 
-    if (!str) return edge_json_null(allocation_callbacks);
+    if (!str) {
+        return edge_json_null(allocation_callbacks);
+    }
 
     edge_json_value_t* value = (edge_json_value_t*)edge_allocator_malloc(allocation_callbacks, sizeof(edge_json_value_t));
-    if (!value) return NULL;
+    if (!value) {
+        return NULL;
+    }
 
     value->type = EDGE_JSON_TYPE_STRING;
-    value->as.string_value.data = (char*)edge_allocator_malloc(allocation_callbacks, length + 1);
-    if (!value->as.string_value.data) {
+    value->as.string_value = edge_string_create_from_buffer(allocation_callbacks, str, length);
+    if (!value->as.string_value) {
         edge_allocator_free(allocation_callbacks, value);
         return NULL;
     }
 
-    memcpy(value->as.string_value.data, str, length);
-    value->as.string_value.data[length] = '\0';
-    value->as.string_value.length = length;
     value->allocator = allocation_callbacks;
 
     return value;
@@ -117,12 +129,17 @@ edge_json_value_t* edge_json_array(const edge_allocator_t* allocator) {
     const edge_allocator_t* allocation_callbacks = edge_json_pick_allocator(allocator);
 
     edge_json_value_t* value = (edge_json_value_t*)edge_allocator_malloc(allocation_callbacks, sizeof(edge_json_value_t));
-    if (!value) return NULL;
+    if (!value) {
+        return NULL;
+    }
 
     value->type = EDGE_JSON_TYPE_ARRAY;
-    value->as.array_value.elements = NULL;
-    value->as.array_value.size = 0;
-    value->as.array_value.capacity = 0;
+    value->as.array_value = edge_vector_create(allocation_callbacks, sizeof(edge_json_value_t*), 0);
+    if (!value->as.array_value) {
+        edge_allocator_free(allocation_callbacks, value);
+        return NULL;
+    }
+
     value->allocator = allocation_callbacks;
 
     return value;
@@ -132,40 +149,51 @@ edge_json_value_t* edge_json_object(const edge_allocator_t* allocator) {
     const edge_allocator_t* allocation_callbacks = edge_json_pick_allocator(allocator);
 
     edge_json_value_t* value = (edge_json_value_t*)edge_allocator_malloc(allocation_callbacks, sizeof(edge_json_value_t));
-    if (!value) return NULL;
+    if (!value) {
+        return NULL;
+    }
 
     value->type = EDGE_JSON_TYPE_OBJECT;
-    value->as.object_value.entries = NULL;
-    value->as.object_value.size = 0;
-    value->as.object_value.capacity = 0;
+    value->as.object_value = edge_vector_create(allocation_callbacks, sizeof(edge_json_object_entry_t), 0);
+    if (!value->as.object_value) {
+        edge_allocator_free(allocation_callbacks, value);
+        return NULL;
+    }
+
     value->allocator = allocation_callbacks;
 
     return value;
 }
 
 void edge_json_free_value(edge_json_value_t* value) {
-    if (!value) return;
+    if (!value) {
+        return;
+    }
 
     switch (value->type) {
-    case EDGE_JSON_TYPE_STRING:
-        edge_allocator_free(value->allocator, value->as.string_value.data);
+    case EDGE_JSON_TYPE_STRING: {
+        edge_string_destroy(value->as.string_value);
         break;
-
-    case EDGE_JSON_TYPE_ARRAY:
-        for (size_t i = 0; i < value->as.array_value.size; i++) {
-            edge_json_free_value(value->as.array_value.elements[i]);
+    }
+    case EDGE_JSON_TYPE_ARRAY: {
+        size_t size = edge_vector_size(value->as.array_value);
+        for (size_t i = 0; i < size; i++) {
+            edge_json_value_t** elem_ptr = (edge_json_value_t**)edge_vector_at(value->as.array_value, i);
+            edge_json_free_value(*elem_ptr);
         }
-        edge_allocator_free(value->allocator, value->as.array_value.elements);
+        edge_vector_destroy(value->as.array_value);
         break;
-
-    case EDGE_JSON_TYPE_OBJECT:
-        for (size_t i = 0; i < value->as.object_value.size; i++) {
-            edge_allocator_free(value->allocator, value->as.object_value.entries[i].key);
-            edge_json_free_value(value->as.object_value.entries[i].value);
+    }
+    case EDGE_JSON_TYPE_OBJECT: {
+        size_t size = edge_vector_size(value->as.object_value);
+        for (size_t i = 0; i < size; i++) {
+            edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(value->as.object_value, i);
+            edge_string_destroy(entry->key);
+            edge_json_free_value(entry->value);
         }
-        edge_allocator_free(value->allocator, value->as.object_value.entries);
+        edge_vector_destroy(value->as.object_value);
         break;
-
+    }
     default:
         break;
     }
@@ -177,163 +205,109 @@ edge_json_type_t edge_json_type(const edge_json_value_t* value) {
     return value ? value->type : EDGE_JSON_TYPE_NULL;
 }
 
-int edge_json_is_null(const edge_json_value_t* value) {
+bool edge_json_is_null(const edge_json_value_t* value) {
     return value && value->type == EDGE_JSON_TYPE_NULL;
 }
 
-int edge_json_is_bool(const edge_json_value_t* value) {
+bool edge_json_is_bool(const edge_json_value_t* value) {
     return value && value->type == EDGE_JSON_TYPE_BOOL;
 }
 
-int edge_json_is_number(const edge_json_value_t* value) {
+bool edge_json_is_number(const edge_json_value_t* value) {
     return value && value->type == EDGE_JSON_TYPE_NUMBER;
 }
 
-int edge_json_is_string(const edge_json_value_t* value) {
+bool edge_json_is_string(const edge_json_value_t* value) {
     return value && value->type == EDGE_JSON_TYPE_STRING;
 }
 
-int edge_json_is_array(const edge_json_value_t* value) {
+bool edge_json_is_array(const edge_json_value_t* value) {
     return value && value->type == EDGE_JSON_TYPE_ARRAY;
 }
 
-int edge_json_is_object(const edge_json_value_t* value) {
+bool edge_json_is_object(const edge_json_value_t* value) {
     return value && value->type == EDGE_JSON_TYPE_OBJECT;
 }
 
-int edge_json_get_bool(const edge_json_value_t* value, int default_value) {
+bool edge_json_get_bool(const edge_json_value_t* value, bool default_value) {
     if (!value || value->type != EDGE_JSON_TYPE_BOOL) {
         return default_value;
     }
     return value->as.bool_value;
 }
 
-double edge_json_get_number(const edge_json_value_t* value, double default_value) {
+f64 edge_json_get_number(const edge_json_value_t* value, f64 default_value) {
     if (!value || value->type != EDGE_JSON_TYPE_NUMBER) {
         return default_value;
     }
     return value->as.number_value;
 }
 
-int64_t edge_json_get_int(const edge_json_value_t* value, int64_t default_value) {
+i64 edge_json_get_int(const edge_json_value_t* value, i64 default_value) {
     if (!value || value->type != EDGE_JSON_TYPE_NUMBER) {
         return default_value;
     }
-    return (int64_t)value->as.number_value;
+    return (i64)value->as.number_value;
 }
 
 const char* edge_json_get_string(const edge_json_value_t* value, const char* default_value) {
     if (!value || value->type != EDGE_JSON_TYPE_STRING) {
         return default_value;
     }
-    return value->as.string_value.data;
+    return edge_string_cstr(value->as.string_value);
 }
 
 size_t edge_json_get_string_length(const edge_json_value_t* value) {
     if (!value || value->type != EDGE_JSON_TYPE_STRING) {
         return 0;
     }
-    return value->as.string_value.length;
+    return value->as.string_value->length;
 }
 
 size_t edge_json_array_size(const edge_json_value_t* array) {
     if (!array || array->type != EDGE_JSON_TYPE_ARRAY) {
         return 0;
     }
-    return array->as.array_value.size;
+    return edge_vector_size(array->as.array_value);
 }
 
 edge_json_value_t* edge_json_array_get(const edge_json_value_t* array, size_t index) {
     if (!array || array->type != EDGE_JSON_TYPE_ARRAY) {
         return NULL;
     }
-    if (index >= array->as.array_value.size) {
-        return NULL;
-    }
-    return array->as.array_value.elements[index];
+
+    edge_json_value_t** elem_ptr = (edge_json_value_t**)edge_vector_get(array->as.array_value, index);
+    return elem_ptr ? *elem_ptr : NULL;
 }
 
-int edge_json_array_append(edge_json_value_t* array, edge_json_value_t* value) {
+bool edge_json_array_append(edge_json_value_t* array, edge_json_value_t* value) {
     if (!array || array->type != EDGE_JSON_TYPE_ARRAY || !value) {
-        return 0;
+        return false;
     }
 
-    /* Resize if needed */
-    if (array->as.array_value.size >= array->as.array_value.capacity) {
-        size_t new_capacity = array->as.array_value.capacity == 0 ? 8 : array->as.array_value.capacity * 2;
-        edge_json_value_t** new_elements = (edge_json_value_t**)edge_allocator_realloc(
-            array->allocator,
-            array->as.array_value.elements,
-            new_capacity * sizeof(edge_json_value_t*)
-        );
-        if (!new_elements) return 0;
-
-        array->as.array_value.elements = new_elements;
-        array->as.array_value.capacity = new_capacity;
-    }
-
-    array->as.array_value.elements[array->as.array_value.size++] = value;
-    return 1;
+    return edge_vector_push_back(array->as.array_value, &value);
 }
 
-int edge_json_array_insert(edge_json_value_t* array, size_t index, edge_json_value_t* value) {
+bool edge_json_array_insert(edge_json_value_t* array, size_t index, edge_json_value_t* value) {
     if (!array || array->type != EDGE_JSON_TYPE_ARRAY || !value) {
-        return 0;
+        return false;
     }
 
-    if (index > array->as.array_value.size) {
-        return 0;
-    }
-
-    if (index == array->as.array_value.size) {
-        return edge_json_array_append(array, value);
-    }
-
-    /* Ensure capacity */
-    if (array->as.array_value.size >= array->as.array_value.capacity) {
-        size_t new_capacity = array->as.array_value.capacity == 0 ? 8 : array->as.array_value.capacity * 2;
-        edge_json_value_t** new_elements = (edge_json_value_t**)edge_allocator_realloc(
-            array->allocator,
-            array->as.array_value.elements,
-            new_capacity * sizeof(edge_json_value_t*)
-        );
-        if (!new_elements) return 0;
-
-        array->as.array_value.elements = new_elements;
-        array->as.array_value.capacity = new_capacity;
-    }
-
-    /* Shift elements */
-    memmove(&array->as.array_value.elements[index + 1],
-        &array->as.array_value.elements[index],
-        (array->as.array_value.size - index) * sizeof(edge_json_value_t*));
-
-    array->as.array_value.elements[index] = value;
-    array->as.array_value.size++;
-
-    return 1;
+    return edge_vector_insert(array->as.array_value, index, &value);
 }
 
-int edge_json_array_remove(edge_json_value_t* array, size_t index) {
+bool edge_json_array_remove(edge_json_value_t* array, size_t index) {
     if (!array || array->type != EDGE_JSON_TYPE_ARRAY) {
-        return 0;
+        return false;
     }
 
-    if (index >= array->as.array_value.size) {
-        return 0;
+    edge_json_value_t* removed_value = NULL;
+    if (!edge_vector_remove(array->as.array_value, index, &removed_value)) {
+        return false;
     }
 
-    edge_json_free_value(array->as.array_value.elements[index]);
-
-    /* Shift elements */
-    if (index < array->as.array_value.size - 1) {
-        memmove(&array->as.array_value.elements[index],
-            &array->as.array_value.elements[index + 1],
-            (array->as.array_value.size - index - 1) * sizeof(edge_json_value_t*));
-    }
-
-    array->as.array_value.size--;
-    return 1;
+    edge_json_free_value(removed_value);
+    return true;
 }
 
 void edge_json_array_clear(edge_json_value_t* array) {
@@ -341,18 +315,20 @@ void edge_json_array_clear(edge_json_value_t* array) {
         return;
     }
 
-    for (size_t i = 0; i < array->as.array_value.size; i++) {
-        edge_json_free_value(array->as.array_value.elements[i]);
+    size_t size = edge_vector_size(array->as.array_value);
+    for (size_t i = 0; i < size; i++) {
+        edge_json_value_t** elem_ptr = (edge_json_value_t**)edge_vector_at(array->as.array_value, i);
+        edge_json_free_value(*elem_ptr);
     }
 
-    array->as.array_value.size = 0;
+    edge_vector_clear(array->as.array_value);
 }
 
 size_t edge_json_object_size(const edge_json_value_t* object) {
     if (!object || object->type != EDGE_JSON_TYPE_OBJECT) {
         return 0;
     }
-    return object->as.object_value.size;
+    return edge_vector_size(object->as.object_value);
 }
 
 edge_json_value_t* edge_json_object_get(const edge_json_value_t* object, const char* key) {
@@ -360,80 +336,71 @@ edge_json_value_t* edge_json_object_get(const edge_json_value_t* object, const c
         return NULL;
     }
 
-    for (size_t i = 0; i < object->as.object_value.size; i++) {
-        if (strcmp(object->as.object_value.entries[i].key, key) == 0) {
-            return object->as.object_value.entries[i].value;
+    size_t size = edge_vector_size(object->as.object_value);
+    for (size_t i = 0; i < size; i++) {
+        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(object->as.object_value, i);
+        if (edge_string_compare(entry->key, key) == 0) {
+            return entry->value;
         }
     }
 
     return NULL;
 }
 
-int edge_json_object_set(edge_json_value_t* object, const char* key, edge_json_value_t* value) {
+bool edge_json_object_set(edge_json_value_t* object, const char* key, edge_json_value_t* value) {
     if (!object || object->type != EDGE_JSON_TYPE_OBJECT || !key || !value) {
-        return 0;
+        return false;
     }
 
-    /* Check if key exists */
-    for (size_t i = 0; i < object->as.object_value.size; i++) {
-        if (strcmp(object->as.object_value.entries[i].key, key) == 0) {
-            /* Replace existing value */
-            edge_json_free_value(object->as.object_value.entries[i].value);
-            object->as.object_value.entries[i].value = value;
-            return 1;
+    /* Check if key exists and replace value */
+    size_t size = edge_vector_size(object->as.object_value);
+    for (size_t i = 0; i < size; i++) {
+        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(object->as.object_value, i);
+        if (edge_string_compare(entry->key, key) == 0) {
+            edge_json_free_value(entry->value);
+            entry->value = value;
+            return true;
         }
     }
 
     /* Add new entry */
-    if (object->as.object_value.size >= object->as.object_value.capacity) {
-        size_t new_capacity = object->as.object_value.capacity == 0 ? 8 : object->as.object_value.capacity * 2;
-        edge_json_object_entry_t* new_entries = (edge_json_object_entry_t*)edge_allocator_realloc(
-            object->allocator,
-            object->as.object_value.entries,
-            new_capacity * sizeof(edge_json_object_entry_t)
-        );
-        if (!new_entries) return 0;
-
-        object->as.object_value.entries = new_entries;
-        object->as.object_value.capacity = new_capacity;
+    edge_json_object_entry_t new_entry;
+    new_entry.key = edge_string_create_from(object->allocator, key);
+    if (!new_entry.key) {
+        return false;
     }
 
-    char* key_copy = edge_allocator_strdup(object->allocator, key);
-    if (!key_copy) return 0;
+    new_entry.value = value;
 
-    object->as.object_value.entries[object->as.object_value.size].key = key_copy;
-    object->as.object_value.entries[object->as.object_value.size].value = value;
-    object->as.object_value.size++;
+    if (!edge_vector_push_back(object->as.object_value, &new_entry)) {
+        edge_string_destroy(new_entry.key);
+        return false;
+    }
 
-    return 1;
+    return true;
 }
 
-int edge_json_object_remove(edge_json_value_t* object, const char* key) {
+bool edge_json_object_remove(edge_json_value_t* object, const char* key) {
     if (!object || object->type != EDGE_JSON_TYPE_OBJECT || !key) {
-        return 0;
+        return false;
     }
 
-    for (size_t i = 0; i < object->as.object_value.size; i++) {
-        if (strcmp(object->as.object_value.entries[i].key, key) == 0) {
-            edge_allocator_free(object->allocator, object->as.object_value.entries[i].key);
-            edge_json_free_value(object->as.object_value.entries[i].value);
+    size_t size = edge_vector_size(object->as.object_value);
+    for (size_t i = 0; i < size; i++) {
+        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(object->as.object_value, i);
+        if (edge_string_compare(entry->key, key) == 0) {
+            edge_string_destroy(entry->key);
+            edge_json_free_value(entry->value);
 
-            /* Shift entries */
-            if (i < object->as.object_value.size - 1) {
-                memmove(&object->as.object_value.entries[i],
-                    &object->as.object_value.entries[i + 1],
-                    (object->as.object_value.size - i - 1) * sizeof(edge_json_object_entry_t));
-            }
-
-            object->as.object_value.size--;
-            return 1;
+            edge_vector_remove(object->as.object_value, i, NULL);
+            return true;
         }
     }
 
-    return 0;
+    return false;
 }
 
-int edge_json_object_has(const edge_json_value_t* object, const char* key) {
+bool edge_json_object_has(const edge_json_value_t* object, const char* key) {
     return edge_json_object_get(object, key) != NULL;
 }
 
@@ -442,37 +409,39 @@ void edge_json_object_clear(edge_json_value_t* object) {
         return;
     }
 
-    for (size_t i = 0; i < object->as.object_value.size; i++) {
-        edge_allocator_free(object->allocator, object->as.object_value.entries[i].key);
-        edge_json_free_value(object->as.object_value.entries[i].value);
+    size_t size = edge_vector_size(object->as.object_value);
+    for (size_t i = 0; i < size; i++) {
+        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(object->as.object_value, i);
+        edge_string_destroy(entry->key);
+        edge_json_free_value(entry->value);
     }
 
-    object->as.object_value.size = 0;
+    edge_vector_clear(object->as.object_value);
 }
 
 const char* edge_json_object_get_key(const edge_json_value_t* object, size_t index) {
     if (!object || object->type != EDGE_JSON_TYPE_OBJECT) {
         return NULL;
     }
-    if (index >= object->as.object_value.size) {
-        return NULL;
-    }
-    return object->as.object_value.entries[index].key;
+
+    edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_get(object->as.object_value, index);
+    return entry ? edge_string_cstr(entry->key) : NULL;
 }
 
 edge_json_value_t* edge_json_object_get_value_at(const edge_json_value_t* object, size_t index) {
     if (!object || object->type != EDGE_JSON_TYPE_OBJECT) {
         return NULL;
     }
-    if (index >= object->as.object_value.size) {
-        return NULL;
-    }
-    return object->as.object_value.entries[index].value;
+    
+    edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_get(object->as.object_value, index);
+    return entry ? entry->value : NULL;
 }
 
 /* Clone */
 edge_json_value_t* edge_json_clone(const edge_json_value_t* value) {
-    if (!value) return NULL;
+    if (!value) {
+        return NULL;
+    }
 
     switch (value->type) {
     case EDGE_JSON_TYPE_NULL:
@@ -485,14 +454,18 @@ edge_json_value_t* edge_json_clone(const edge_json_value_t* value) {
         return edge_json_number(value->as.number_value, value->allocator);
 
     case EDGE_JSON_TYPE_STRING:
-        return edge_json_string_len(value->as.string_value.data, value->as.string_value.length, value->allocator);
+        return edge_json_string_len(edge_string_cstr(value->as.string_value), value->as.string_value->length, value->allocator);
 
     case EDGE_JSON_TYPE_ARRAY: {
         edge_json_value_t* array = edge_json_array(value->allocator);
-        if (!array) return NULL;
+        if (!array) {
+            return NULL;
+        }
 
-        for (size_t i = 0; i < value->as.array_value.size; i++) {
-            edge_json_value_t* elem = edge_json_clone(value->as.array_value.elements[i]);
+        size_t size = edge_vector_size(value->as.array_value);
+        for (size_t i = 0; i < size; i++) {
+            edge_json_value_t** elem_ptr = (edge_json_value_t**)edge_vector_at(value->as.array_value, i);
+            edge_json_value_t* elem = edge_json_clone(*elem_ptr);
             if (!elem || !edge_json_array_append(array, elem)) {
                 if (elem) edge_json_free_value(elem);
                 edge_json_free_value(array);
@@ -505,11 +478,15 @@ edge_json_value_t* edge_json_clone(const edge_json_value_t* value) {
 
     case EDGE_JSON_TYPE_OBJECT: {
         edge_json_value_t* object = edge_json_object(value->allocator);
-        if (!object) return NULL;
+        if (!object) {
+            return NULL;
+        }
 
-        for (size_t i = 0; i < value->as.object_value.size; i++) {
-            const char* key = value->as.object_value.entries[i].key;
-            edge_json_value_t* val = edge_json_clone(value->as.object_value.entries[i].value);
+        size_t size = edge_vector_size(value->as.object_value);
+        for (size_t i = 0; i < size; i++) {
+            edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(value->as.object_value, i);
+            const char* key = edge_string_cstr(entry->key);
+            edge_json_value_t* val = edge_json_clone(entry->value);
 
             if (!val || !edge_json_object_set(object, key, val)) {
                 if (val) edge_json_free_value(val);
@@ -526,74 +503,89 @@ edge_json_value_t* edge_json_clone(const edge_json_value_t* value) {
 }
 
 /* Equals */
-int edge_json_equals(const edge_json_value_t* a, const edge_json_value_t* b) {
-    if (a == b) return 1;
-    if (!a || !b) return 0;
-    if (a->type != b->type) return 0;
+bool edge_json_equals(const edge_json_value_t* a, const edge_json_value_t* b) {
+    if (a == b) {
+        return true;
+    }
+
+    if (!a || !b) {
+        return false;
+    }
+
+    if (a->type != b->type) {
+        return false;
+    }
 
     switch (a->type) {
     case EDGE_JSON_TYPE_NULL:
-        return 1;
-
+        return true;
     case EDGE_JSON_TYPE_BOOL:
         return a->as.bool_value == b->as.bool_value;
-
     case EDGE_JSON_TYPE_NUMBER:
         return a->as.number_value == b->as.number_value;
-
     case EDGE_JSON_TYPE_STRING:
-        return a->as.string_value.length == b->as.string_value.length &&
-            memcmp(a->as.string_value.data, b->as.string_value.data, a->as.string_value.length) == 0;
-
+        return edge_string_compare_string(a->as.string_value, b->as.string_value) == 0;
     case EDGE_JSON_TYPE_ARRAY: {
-        if (a->as.array_value.size != b->as.array_value.size) return 0;
+        size_t size_a = edge_vector_size(a->as.array_value);
+        size_t size_b = edge_vector_size(b->as.array_value);
+        if (size_a != size_b) {
+            return false;
+        }
 
-        for (size_t i = 0; i < a->as.array_value.size; i++) {
-            if (!edge_json_equals(a->as.array_value.elements[i], b->as.array_value.elements[i])) {
-                return 0;
+        for (size_t i = 0; i < size_a; i++) {
+            edge_json_value_t** elem_a = (edge_json_value_t**)edge_vector_at(a->as.array_value, i);
+            edge_json_value_t** elem_b = (edge_json_value_t**)edge_vector_at(b->as.array_value, i);
+            if (!edge_json_equals(*elem_a, *elem_b)) {
+                return false;
             }
         }
 
-        return 1;
+        return true;
     }
 
     case EDGE_JSON_TYPE_OBJECT: {
-        if (a->as.object_value.size != b->as.object_value.size) return 0;
+        size_t size_a = edge_vector_size(a->as.object_value);
+        size_t size_b = edge_vector_size(b->as.object_value);
+        if (size_a != size_b) {
+            return false;
+        }
 
-        for (size_t i = 0; i < a->as.object_value.size; i++) {
-            const char* key = a->as.object_value.entries[i].key;
-            edge_json_value_t* val_a = a->as.object_value.entries[i].value;
+        for (size_t i = 0; i < size_a; i++) {
+            edge_json_object_entry_t* entry_a = (edge_json_object_entry_t*)edge_vector_at(a->as.object_value, i);
+            const char* key = edge_string_cstr(entry_a->key);
             edge_json_value_t* val_b = edge_json_object_get(b, key);
 
-            if (!val_b || !edge_json_equals(val_a, val_b)) {
-                return 0;
+            if (!val_b || !edge_json_equals(entry_a->value, val_b)) {
+                return false;
             }
         }
 
-        return 1;
+        return true;
     }
     }
 
-    return 0;
+    return false;
 }
 
 /* Merge */
-int edge_json_object_merge(edge_json_value_t* dest, const edge_json_value_t* source) {
+bool edge_json_object_merge(edge_json_value_t* dest, const edge_json_value_t* source) {
     if (!dest || !source || dest->type != EDGE_JSON_TYPE_OBJECT || source->type != EDGE_JSON_TYPE_OBJECT) {
-        return 0;
+        return false;
     }
 
-    for (size_t i = 0; i < source->as.object_value.size; i++) {
-        const char* key = source->as.object_value.entries[i].key;
-        edge_json_value_t* value = edge_json_clone(source->as.object_value.entries[i].value);
+    size_t size = edge_vector_size(source->as.object_value);
+    for (size_t i = 0; i < size; i++) {
+        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(source->as.object_value, i);
+        const char* key = edge_string_cstr(entry->key);
+        edge_json_value_t* value = edge_json_clone(entry->value);
 
         if (!value || !edge_json_object_set(dest, key, value)) {
             if (value) edge_json_free_value(value);
-            return 0;
+            return false;
         }
     }
 
-    return 1;
+    return true;
 }
 
 /* Builder functions */
@@ -601,7 +593,9 @@ edge_json_value_t* edge_json_build_object(const edge_allocator_t* allocator, con
     const edge_allocator_t* allocation_callbacks = edge_json_pick_allocator(allocator);
 
     edge_json_value_t* object = edge_json_object(allocation_callbacks);
-    if (!object) return NULL;
+    if (!object) {
+        return NULL;
+    }
 
     va_list args;
     va_start(args, key);
@@ -624,7 +618,9 @@ edge_json_value_t* edge_json_build_object(const edge_allocator_t* allocator, con
 
 edge_json_value_t* edge_json_build_array(edge_json_value_t* value, ...) {
     edge_json_value_t* array = edge_json_array(value->allocator);
-    if (!array) return NULL;
+    if (!array) {
+        return NULL;
+    }
 
     va_list args;
     va_start(args, value);
