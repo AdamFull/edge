@@ -17,6 +17,25 @@
 static int g_default_allocator_initialized = 0;
 static char g_error_message[256];
 
+static size_t string_hash(const void* key, size_t key_size) {
+    (void)key_size;
+    const char* str = *(const char**)key;
+
+    size_t hash = 2166136261u;
+    while (*str) {
+        hash ^= (unsigned char)*str++;
+        hash *= 16777619u;
+    }
+    return hash;
+}
+
+static i32 string_compare(const void* key1, const void* key2, size_t key_size) {
+    (void)key_size;
+    const char* str1 = *(const char**)key1;
+    const char* str2 = *(const char**)key2;
+    return strcmp(str1, str2);
+}
+
 const edge_allocator_t* edge_json_pick_allocator(const edge_allocator_t* allocator) {
     static edge_allocator_t default_allocator;
     if (g_default_allocator_initialized == 0) {
@@ -154,7 +173,15 @@ edge_json_value_t* edge_json_object(const edge_allocator_t* allocator) {
     }
 
     value->type = EDGE_JSON_TYPE_OBJECT;
-    value->as.object_value = edge_vector_create(allocation_callbacks, sizeof(edge_json_object_entry_t), 0);
+    value->as.object_value = edge_hashmap_create_custom(
+        allocation_callbacks,
+        sizeof(char*),
+        sizeof(edge_json_value_t*), 
+        0,
+        string_hash,
+        string_compare
+    );
+
     if (!value->as.object_value) {
         edge_allocator_free(allocation_callbacks, value);
         return NULL;
@@ -185,13 +212,17 @@ void edge_json_free_value(edge_json_value_t* value) {
         break;
     }
     case EDGE_JSON_TYPE_OBJECT: {
-        size_t size = edge_vector_size(value->as.object_value);
-        for (size_t i = 0; i < size; i++) {
-            edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(value->as.object_value, i);
-            edge_string_destroy(entry->key);
-            edge_json_free_value(entry->value);
+        edge_hashmap_iterator_t it = edge_hashmap_begin(value->as.object_value);
+        while (edge_hashmap_iterator_valid(&it)) {
+            char** key_ptr = (char**)edge_hashmap_iterator_key(&it);
+            edge_json_value_t** val_ptr = (edge_json_value_t**)edge_hashmap_iterator_value(&it);
+
+            edge_allocator_free(value->allocator, *key_ptr);
+            edge_json_free_value(*val_ptr);
+
+            edge_hashmap_iterator_next(&it);
         }
-        edge_vector_destroy(value->as.object_value);
+        edge_hashmap_destroy(value->as.object_value);
         break;
     }
     default:
@@ -328,7 +359,7 @@ size_t edge_json_object_size(const edge_json_value_t* object) {
     if (!object || object->type != EDGE_JSON_TYPE_OBJECT) {
         return 0;
     }
-    return edge_vector_size(object->as.object_value);
+    return edge_hashmap_size(object->as.object_value);
 }
 
 edge_json_value_t* edge_json_object_get(const edge_json_value_t* object, const char* key) {
@@ -336,15 +367,8 @@ edge_json_value_t* edge_json_object_get(const edge_json_value_t* object, const c
         return NULL;
     }
 
-    size_t size = edge_vector_size(object->as.object_value);
-    for (size_t i = 0; i < size; i++) {
-        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(object->as.object_value, i);
-        if (edge_string_compare(entry->key, key) == 0) {
-            return entry->value;
-        }
-    }
-
-    return NULL;
+    edge_json_value_t** val_ptr = (edge_json_value_t**)edge_hashmap_get(object->as.object_value, &key);
+    return val_ptr ? *val_ptr : NULL;
 }
 
 bool edge_json_object_set(edge_json_value_t* object, const char* key, edge_json_value_t* value) {
@@ -352,28 +376,20 @@ bool edge_json_object_set(edge_json_value_t* object, const char* key, edge_json_
         return false;
     }
 
-    /* Check if key exists and replace value */
-    size_t size = edge_vector_size(object->as.object_value);
-    for (size_t i = 0; i < size; i++) {
-        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(object->as.object_value, i);
-        if (edge_string_compare(entry->key, key) == 0) {
-            edge_json_free_value(entry->value);
-            entry->value = value;
-            return true;
-        }
+    edge_json_value_t** existing_val = (edge_json_value_t**)edge_hashmap_get(object->as.object_value, &key);
+    if (existing_val) {
+        edge_json_free_value(*existing_val);
+        *existing_val = value;
+        return true;
     }
 
-    /* Add new entry */
-    edge_json_object_entry_t new_entry;
-    new_entry.key = edge_string_create_from(object->allocator, key);
-    if (!new_entry.key) {
+    char* key_copy = edge_allocator_strdup(object->allocator, key);
+    if (!key_copy) {
         return false;
     }
 
-    new_entry.value = value;
-
-    if (!edge_vector_push_back(object->as.object_value, &new_entry)) {
-        edge_string_destroy(new_entry.key);
+    if (!edge_hashmap_insert(object->as.object_value, &key_copy, &value)) {
+        edge_allocator_free(object->allocator, key_copy);
         return false;
     }
 
@@ -385,19 +401,22 @@ bool edge_json_object_remove(edge_json_value_t* object, const char* key) {
         return false;
     }
 
-    size_t size = edge_vector_size(object->as.object_value);
-    for (size_t i = 0; i < size; i++) {
-        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(object->as.object_value, i);
-        if (edge_string_compare(entry->key, key) == 0) {
-            edge_string_destroy(entry->key);
-            edge_json_free_value(entry->value);
-
-            edge_vector_remove(object->as.object_value, i, NULL);
-            return true;
-        }
+    char** stored_key_ptr = (char**)edge_hashmap_get(object->as.object_value, &key);
+    if (!stored_key_ptr) {
+        return false;
     }
 
-    return false;
+    char* stored_key = *stored_key_ptr;
+    edge_json_value_t* removed_value = NULL;
+
+    if (!edge_hashmap_remove(object->as.object_value, &key, &removed_value)) {
+        return false;
+    }
+
+    edge_allocator_free(object->allocator, stored_key);
+    edge_json_free_value(removed_value);
+
+    return true;
 }
 
 bool edge_json_object_has(const edge_json_value_t* object, const char* key) {
@@ -409,14 +428,18 @@ void edge_json_object_clear(edge_json_value_t* object) {
         return;
     }
 
-    size_t size = edge_vector_size(object->as.object_value);
-    for (size_t i = 0; i < size; i++) {
-        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(object->as.object_value, i);
-        edge_string_destroy(entry->key);
-        edge_json_free_value(entry->value);
+    edge_hashmap_iterator_t it = edge_hashmap_begin(object->as.object_value);
+    while (edge_hashmap_iterator_valid(&it)) {
+        char** key_ptr = (char**)edge_hashmap_iterator_key(&it);
+        edge_json_value_t** val_ptr = (edge_json_value_t**)edge_hashmap_iterator_value(&it);
+
+        edge_allocator_free(object->allocator, *key_ptr);
+        edge_json_free_value(*val_ptr);
+
+        edge_hashmap_iterator_next(&it);
     }
 
-    edge_vector_clear(object->as.object_value);
+    edge_hashmap_clear(object->as.object_value);
 }
 
 const char* edge_json_object_get_key(const edge_json_value_t* object, size_t index) {
@@ -424,8 +447,19 @@ const char* edge_json_object_get_key(const edge_json_value_t* object, size_t ind
         return NULL;
     }
 
-    edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_get(object->as.object_value, index);
-    return entry ? edge_string_cstr(entry->key) : NULL;
+    edge_hashmap_iterator_t it = edge_hashmap_begin(object->as.object_value);
+    size_t current = 0;
+
+    while (edge_hashmap_iterator_valid(&it)) {
+        if (current == index) {
+            char** key_ptr = (char**)edge_hashmap_iterator_key(&it);
+            return *key_ptr;
+        }
+        current++;
+        edge_hashmap_iterator_next(&it);
+    }
+
+    return NULL;
 }
 
 edge_json_value_t* edge_json_object_get_value_at(const edge_json_value_t* object, size_t index) {
@@ -433,8 +467,19 @@ edge_json_value_t* edge_json_object_get_value_at(const edge_json_value_t* object
         return NULL;
     }
     
-    edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_get(object->as.object_value, index);
-    return entry ? entry->value : NULL;
+    edge_hashmap_iterator_t it = edge_hashmap_begin(object->as.object_value);
+    size_t current = 0;
+
+    while (edge_hashmap_iterator_valid(&it)) {
+        if (current == index) {
+            edge_json_value_t** val_ptr = (edge_json_value_t**)edge_hashmap_iterator_value(&it);
+            return *val_ptr;
+        }
+        current++;
+        edge_hashmap_iterator_next(&it);
+    }
+
+    return NULL;
 }
 
 /* Clone */
@@ -478,21 +523,23 @@ edge_json_value_t* edge_json_clone(const edge_json_value_t* value) {
 
     case EDGE_JSON_TYPE_OBJECT: {
         edge_json_value_t* object = edge_json_object(value->allocator);
-        if (!object) {
-            return NULL;
-        }
+        if (!object) return NULL;
 
-        size_t size = edge_vector_size(value->as.object_value);
-        for (size_t i = 0; i < size; i++) {
-            edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(value->as.object_value, i);
-            const char* key = edge_string_cstr(entry->key);
-            edge_json_value_t* val = edge_json_clone(entry->value);
+        edge_hashmap_iterator_t it = edge_hashmap_begin(value->as.object_value);
+        while (edge_hashmap_iterator_valid(&it)) {
+            char** key_ptr = (char**)edge_hashmap_iterator_key(&it);
+            edge_json_value_t** val_ptr = (edge_json_value_t**)edge_hashmap_iterator_value(&it);
+
+            const char* key = *key_ptr;
+            edge_json_value_t* val = edge_json_clone(*val_ptr);
 
             if (!val || !edge_json_object_set(object, key, val)) {
                 if (val) edge_json_free_value(val);
                 edge_json_free_value(object);
                 return NULL;
             }
+
+            edge_hashmap_iterator_next(&it);
         }
 
         return object;
@@ -544,20 +591,23 @@ bool edge_json_equals(const edge_json_value_t* a, const edge_json_value_t* b) {
     }
 
     case EDGE_JSON_TYPE_OBJECT: {
-        size_t size_a = edge_vector_size(a->as.object_value);
-        size_t size_b = edge_vector_size(b->as.object_value);
-        if (size_a != size_b) {
-            return false;
-        }
+        size_t size_a = edge_hashmap_size(a->as.object_value);
+        size_t size_b = edge_hashmap_size(b->as.object_value);
+        if (size_a != size_b) return 0;
 
-        for (size_t i = 0; i < size_a; i++) {
-            edge_json_object_entry_t* entry_a = (edge_json_object_entry_t*)edge_vector_at(a->as.object_value, i);
-            const char* key = edge_string_cstr(entry_a->key);
+        edge_hashmap_iterator_t it = edge_hashmap_begin(a->as.object_value);
+        while (edge_hashmap_iterator_valid(&it)) {
+            char** key_ptr = (char**)edge_hashmap_iterator_key(&it);
+            edge_json_value_t** val_a_ptr = (edge_json_value_t**)edge_hashmap_iterator_value(&it);
+
+            const char* key = *key_ptr;
             edge_json_value_t* val_b = edge_json_object_get(b, key);
 
-            if (!val_b || !edge_json_equals(entry_a->value, val_b)) {
-                return false;
+            if (!val_b || !edge_json_equals(*val_a_ptr, val_b)) {
+                return 0;
             }
+
+            edge_hashmap_iterator_next(&it);
         }
 
         return true;
@@ -573,16 +623,20 @@ bool edge_json_object_merge(edge_json_value_t* dest, const edge_json_value_t* so
         return false;
     }
 
-    size_t size = edge_vector_size(source->as.object_value);
-    for (size_t i = 0; i < size; i++) {
-        edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(source->as.object_value, i);
-        const char* key = edge_string_cstr(entry->key);
-        edge_json_value_t* value = edge_json_clone(entry->value);
+    edge_hashmap_iterator_t it = edge_hashmap_begin(source->as.object_value);
+    while (edge_hashmap_iterator_valid(&it)) {
+        char** key_ptr = (char**)edge_hashmap_iterator_key(&it);
+        edge_json_value_t** val_ptr = (edge_json_value_t**)edge_hashmap_iterator_value(&it);
+
+        const char* key = *key_ptr;
+        edge_json_value_t* value = edge_json_clone(*val_ptr);
 
         if (!value || !edge_json_object_set(dest, key, value)) {
             if (value) edge_json_free_value(value);
             return false;
         }
+
+        edge_hashmap_iterator_next(&it);
     }
 
     return true;

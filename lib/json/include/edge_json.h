@@ -345,7 +345,7 @@ edge_json_value_t* edge_json_parse_len(const char* json, size_t length, const ed
  *
  * @return Error message, or NULL if no error
  */
-const char* edge_json_get_error();
+const char* edge_json_get_error(void);
 
 /**
  * Serialize JSON to string

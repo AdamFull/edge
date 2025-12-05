@@ -141,7 +141,7 @@ static bool stringify_value(edge_string_t* sb, const edge_json_value_t* value, c
             return false;
         }
 
-        size_t size = edge_vector_size(value->as.object_value);
+        size_t size = edge_hashmap_size(value->as.object_value);
 
         if (size > 0 && indent) {
             if (!edge_string_append_char(sb, '\n')) {
@@ -149,16 +149,23 @@ static bool stringify_value(edge_string_t* sb, const edge_json_value_t* value, c
             }
         }
 
-        for (size_t i = 0; i < size; i++) {
+        size_t count = 0;
+        edge_hashmap_iterator_t it = edge_hashmap_begin(value->as.object_value);
+
+        while (edge_hashmap_iterator_valid(&it)) {
             if (indent) {
                 if (!stringify_indent(sb, indent, depth + 1)) {
                     return false;
                 }
             }
 
-            edge_json_object_entry_t* entry = (edge_json_object_entry_t*)edge_vector_at(value->as.object_value, i);
+            char** key_ptr = (char**)edge_hashmap_iterator_key(&it);
+            edge_json_value_t** val_ptr = (edge_json_value_t**)edge_hashmap_iterator_value(&it);
 
-            if (!append_escaped_string(sb, edge_string_cstr(entry->key), entry->key->length)) {
+            const char* key = *key_ptr;
+            size_t key_len = strlen(key);
+
+            if (!append_escaped_string(sb, key, key_len)) {
                 return false;
             }
 
@@ -172,11 +179,12 @@ static bool stringify_value(edge_string_t* sb, const edge_json_value_t* value, c
                 }
             }
 
-            if (!stringify_value(sb, entry->value, indent, depth + 1)) {
+            if (!stringify_value(sb, *val_ptr, indent, depth + 1)) {
                 return false;
             }
 
-            if (i < size - 1) {
+            count++;
+            if (count < size) {
                 if (!edge_string_append_char(sb, ',')) {
                     return false;
                 }
@@ -187,6 +195,8 @@ static bool stringify_value(edge_string_t* sb, const edge_json_value_t* value, c
                     return false;
                 }
             }
+
+            edge_hashmap_iterator_next(&it);
         }
 
         if (size > 0 && indent) {

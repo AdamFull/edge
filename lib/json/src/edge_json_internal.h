@@ -4,11 +4,7 @@
 #include "edge_json.h"
 #include "edge_string.h"
 #include "edge_vector.h"
-
-typedef struct edge_json_object_entry {
-    edge_string_t* key;
-    edge_json_value_t* value;
-} edge_json_object_entry_t;
+#include "edge_hashmap.h"
 
 struct edge_json_value {
     edge_json_type_t type;
@@ -17,7 +13,7 @@ struct edge_json_value {
         f64 number_value;
         edge_string_t* string_value;
         edge_vector_t* array_value;
-        edge_vector_t* object_value;
+        edge_hashmap_t* object_value;
     } as;
 
     const edge_allocator_t* allocator;
