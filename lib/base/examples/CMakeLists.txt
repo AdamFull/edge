@@ -1,2 +1,5 @@
 add_executable(edge_containers_test containers_test.c)
 target_link_libraries(edge_containers_test PRIVATE edge_base)
+
+add_executable(edge_random_test random_test.c)
+target_link_libraries(edge_random_test PRIVATE edge_base)
