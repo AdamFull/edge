@@ -306,6 +306,109 @@ bool edge_rng_bool(edge_rng_t* rng, f32 probability) {
     return edge_rng_f32(rng) < probability;
 }
 
+f32 edge_rng_normal_f32(edge_rng_t* rng, f32 mean, f32 stddev) {
+    if (!rng) {
+        return 0.0f;
+    }
+
+    static bool has_spare = false;
+    static f32 spare;
+
+    if (has_spare) {
+        has_spare = false;
+        return mean + stddev * spare;
+    }
+
+    f32 u, v, s;
+    do {
+        u = edge_rng_f32_range(rng, -1.0f, 1.0f);
+        v = edge_rng_f32_range(rng, -1.0f, 1.0f);
+        s = u * u + v * v;
+    } while (s >= 1.0f || s == 0.0f);
+
+    // TODO: Too slow
+    s = sqrtf(-2.0f * logf(s) / s);
+    spare = v * s;
+    has_spare = true;
+
+    return mean + stddev * u * s;
+}
+
+f64 edge_rng_normal_f64(edge_rng_t* rng, f64 mean, f64 stddev) {
+    if (!rng) {
+        return 0.0;
+    }
+
+    static bool has_spare = false;
+    static f64 spare;
+
+    if (has_spare) {
+        has_spare = false;
+        return mean + stddev * spare;
+    }
+
+    f64 u, v, s;
+    do {
+        u = edge_rng_f64_range(rng, -1.0, 1.0);
+        v = edge_rng_f64_range(rng, -1.0, 1.0);
+        s = u * u + v * v;
+    } while (s >= 1.0 || s == 0.0);
+
+    // TODO: Too slow
+    s = sqrt(-2.0 * log(s) / s);
+    spare = v * s;
+    has_spare = true;
+
+    return mean + stddev * u * s;
+}
+
+f32 edge_rng_exp_f32(edge_rng_t* rng, f32 lambda) {
+    if (!rng || lambda <= 0.0f) {
+        return 0.0f;
+    }
+
+    return -logf(1.0f - edge_rng_f32(rng)) / lambda;
+}
+
+f64 edge_rng_exp_f64(edge_rng_t* rng, f64 lambda) {
+    if (!rng || lambda <= 0.0) {
+        return 0.0;
+    }
+
+    return -log(1.0 - edge_rng_f64(rng)) / lambda;
+}
+
+void edge_rng_shuffle(edge_rng_t* rng, const edge_allocator_t* alloc, void* array, size_t count, size_t element_size) {
+    if (!rng || !alloc || !array || count == 0) {
+        return;
+    }
+
+    u8* arr = (u8*)array;
+    u8* temp = (u8*)edge_allocator_malloc(alloc, element_size);
+    if (!temp) {
+        return;
+    }
+
+    for (size_t i = count - 1; i > 0; i--) {
+        size_t j = edge_rng_u32_bounded(rng, (u32)(i + 1));
+
+        memcpy(temp, arr + j * element_size, element_size);
+        memcpy(arr + j * element_size, arr + i * element_size, element_size);
+        memcpy(arr + i * element_size, temp, element_size);
+    }
+
+    edge_allocator_free(alloc, temp);
+}
+
+void edge_rng_choice(edge_rng_t* rng, const void* array, size_t count, size_t element_size, void* out_element) {
+    if (!rng || !array || count == 0) {
+        return;
+    }
+
+    size_t index = edge_rng_u32_bounded(rng, (u32)count);
+    memcpy(out_element, (const u8*)array + index * element_size, element_size);
+}
+
 void edge_rng_bytes(edge_rng_t* rng, void* buffer, size_t size) {
     if (!buffer || size == 0) {
         return;

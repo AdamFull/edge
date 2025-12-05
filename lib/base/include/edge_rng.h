@@ -7,6 +7,8 @@
 extern "C" {
 #endif
 
+    typedef struct edge_allocator edge_allocator_t;
+
     typedef struct edge_re_pcg {
         u64 state;
         u64 inc;
@@ -56,6 +58,14 @@ extern "C" {
 
     bool edge_rng_bool(edge_rng_t* rng, f32 probability);
 
+    f32 edge_rng_normal_f32(edge_rng_t* rng, f32 mean, f32 stddev);
+    f64 edge_rng_normal_f64(edge_rng_t* rng, f64 mean, f64 stddev);
+
+    f32 edge_rng_exp_f32(edge_rng_t* rng, f32 lambda);
+    f64 edge_rng_exp_f64(edge_rng_t* rng, f64 lambda);
+
+    void edge_rng_shuffle(edge_rng_t* rng, const edge_allocator_t* alloc, void* array, size_t count, size_t element_size);
+    void edge_rng_choice(edge_rng_t* rng, const void* array, size_t count, size_t element_size, void* out_element);
     void edge_rng_bytes(edge_rng_t* rng, void* buffer, size_t size);
 
 #ifdef __cplusplus
