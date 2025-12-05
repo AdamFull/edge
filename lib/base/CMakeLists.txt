@@ -5,7 +5,7 @@ project(libedgebase VERSION 1.0.0 LANGUAGES C)
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-option(EDGE_BASE_BUILD_EXAMPLES "Build examples" OFF)
+option(EDGE_BASE_BUILD_EXAMPLES "Build examples" ON)
 
 set(EDGE_BASE_SOURCES
     "src/edge_allocator.c"
@@ -16,10 +16,12 @@ set(EDGE_BASE_SOURCES
     "src/edge_list.c"
     "src/edge_mpmc_queue.c"
     "src/edge_queue.c"
+    "src/edge_rng.c"
     "src/edge_stack.c"
     "src/edge_string.c"
     "src/edge_testing.c"
     "src/edge_threads.c"
+    "src/edge_uuid.c"
     "src/edge_vector.c"
     "src/edge_vmem.c"
 )
@@ -34,10 +36,12 @@ set(EDGE_BASE_HEADERS
     "include/edge_list.h"
     "include/edge_mpmc_queue.h"
     "include/edge_queue.h"
+    "include/edge_rng.h"
     "include/edge_stack.h"
     "include/edge_string.h"
     "include/edge_testing.h"
     "include/edge_threads.h"
+    "include/edge_uuid.h"
     "include/edge_vector.h"
     "include/edge_vmem.h"
 )
