@@ -76,9 +76,9 @@ edge_thrd_t edge_thrd_current(void) {
     return thr;
 }
 
-unsigned i32 edge_thrd_current_thread_id(void) {
+u32 edge_thrd_current_thread_id(void) {
     edge_thrd_t thrd = edge_thrd_current();
-    return (unsigned i32)thrd.handle;
+    return (u32)thrd.handle;
 }
 
 i32 edge_thrd_equal(edge_thrd_t lhs, edge_thrd_t rhs) {
