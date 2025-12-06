@@ -91,7 +91,9 @@
       "inherits": "base",
       "cacheVariables": {
         "CMAKE_C_COMPILER": "/usr/bin/gcc",
-        "CMAKE_CXX_COMPILER": "/usr/bin/g++"
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++",
+        "GLFW_BUILD_WAYLAND": "ON",
+        "GLFW_BUILD_X11":  "ON"
       }
     },
     {
