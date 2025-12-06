@@ -2,6 +2,7 @@
 #define EDGE_BASE_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 
 #define EDGE_ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
