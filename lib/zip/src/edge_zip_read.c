@@ -4,11 +4,14 @@
  */
 
 #include "edge_zip_internal.h"
+
+#include <edge_platform_detect.h>
+#include <edge_hash.h>
 #include <string.h>
 
-#ifdef _WIN32
+#ifdef EDGE_HAS_WINDOWS_API
 #include <direct.h>
-#else
+#elif EDGE_PLATFORM_POSIX
 #include <sys/stat.h>
 #endif
 
@@ -189,7 +192,7 @@ int edge_zip_entry_read(edge_zip_entry_t* entry, void* buffer, size_t buffer_siz
     zip_free(archive, compressed_data);
 
     /* Verify CRC-32 */
-    uint32_t calculated_crc = edge_zip_crc32(buffer, entry->uncompressed_size);
+    uint32_t calculated_crc = edge_hash_crc32(buffer, entry->uncompressed_size);
     if (calculated_crc != entry->crc32) {
         return EDGE_ZIP_ERROR_CORRUPT_ARCHIVE;
     }

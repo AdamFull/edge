@@ -6,6 +6,8 @@
 #include "edge_zip_internal.h"
 #include <string.h>
 
+#include <edge_hash.h>
+
 int write_local_file_header(edge_zip_archive_t* archive, const edge_zip_entry_t* entry, uint32_t* offset) {
     if (!archive || !archive->file || !entry) {
         return EDGE_ZIP_ERROR_INVALID_ARGUMENT;
@@ -157,7 +159,7 @@ int edge_zip_add_entry(edge_zip_archive_t* archive, const char* entry_name, cons
     time_t_to_dos(now, &entry->last_mod_date, &entry->last_mod_time);
 
     /* Calculate CRC-32 */
-    entry->crc32 = edge_zip_crc32(data, data_size);
+    entry->crc32 = edge_hash_crc32(data, data_size);
 
     /* Compress data if needed */
     void* compressed_data = NULL;

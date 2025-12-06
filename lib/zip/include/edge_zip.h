@@ -273,14 +273,6 @@ int edge_zip_add_directory(edge_zip_archive_t* archive, const char* directory_na
 const char* edge_zip_error_string(edge_zip_error_t error);
 
 /**
- * @brief Calculate CRC-32 checksum
- * @param data Input data
- * @param size Size of data
- * @return CRC-32 checksum
- */
-uint32_t edge_zip_crc32(const void* data, size_t size);
-
-/**
  * @brief Get library version string
  * @return Version string (e.g., "1.0.0")
  */
