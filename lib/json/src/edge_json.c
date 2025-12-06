@@ -13,20 +13,14 @@
 #include <errno.h>
 
 #include <edge_allocator.h>
+#include <edge_hash.h>
 
 static int g_default_allocator_initialized = 0;
 static char g_error_message[256];
 
 static size_t string_hash(const void* key, size_t key_size) {
-    (void)key_size;
     const char* str = *(const char**)key;
-
-    size_t hash = 2166136261u;
-    while (*str) {
-        hash ^= (unsigned char)*str++;
-        hash *= 16777619u;
-    }
-    return hash;
+    return edge_hash_string_64(str);
 }
 
 static i32 string_compare(const void* key1, const void* key2, size_t key_size) {
