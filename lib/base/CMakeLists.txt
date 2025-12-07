@@ -10,6 +10,7 @@ option(EDGE_BASE_BUILD_EXAMPLES "Build examples" ON)
 set(EDGE_BASE_SOURCES
     "src/edge_allocator.c"
     "src/edge_arena.c"
+    "src/edge_cpu_detect.c"
     "src/edge_handle_pool.c"
     "src/edge_free_index_list.c"
     "src/edge_hash.c"
@@ -30,6 +31,7 @@ set(EDGE_BASE_SOURCES
 set(EDGE_BASE_HEADERS
     "include/edge_allocator.h"
     "include/edge_arena.h"
+    "include/edge_cpu_detect.h"
     "include/edge_handle_pool.h"
     "include/edge_bitarray.h"
     "include/edge_free_index_list.h"
@@ -70,7 +72,7 @@ endif()
 
 if (UNIX)
     find_package(Threads REQUIRED)
-    target_link_libraries(edge_base PRIVATE Threads::Threads)
+    target_link_libraries(edge_base PRIVATE Threads::Threads m)
     target_compile_definitions(edge_base PRIVATE _GNU_SOURCE)
 endif()
 
