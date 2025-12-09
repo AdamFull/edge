@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.12)
 
 # Test executable
-add_executable(edge_json_test test_edge_json.c)
+add_executable(edge_json_test test_edge_json.cpp)
 
 # Include directories
 target_include_directories(edge_json_test PRIVATE
@@ -9,15 +9,7 @@ target_include_directories(edge_json_test PRIVATE
     ${CMAKE_SOURCE_DIR}/include
 )
 
-# Link with JSON library
-if(EDGE_JSON_BUILD_SHARED)
-    target_link_libraries(edge_json_test PRIVATE edge_json edge_base)
-else()
-    target_link_libraries(edge_json_test PRIVATE edge_json_static edge_base)
-endif()
-
-# Link with math library
-#target_link_libraries(edge_json_test PRIVATE m)
+target_link_libraries(edge_json_test PRIVATE edge_json edge_base)
 
 # Compiler flags
 target_compile_options(edge_json_test PRIVATE -Wall)

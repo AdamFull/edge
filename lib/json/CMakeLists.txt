@@ -2,70 +2,47 @@ cmake_minimum_required(VERSION 3.12)
 
 project(libedgejson
     VERSION 1.0.0
-    DESCRIPTION "Foundation json C library of edge engine"
-    LANGUAGES C
+    DESCRIPTION "Foundation json CXX library of edge engine"
+    LANGUAGES C CXX
 )
 
 # C standard
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Build options
-option(EDGE_JSON_BUILD_SHARED "Build shared library" OFF)
-option(EDGE_JSON_BUILD_STATIC "Build static library" ON)
-option(EDGE_JSON_BUILD_EXAMPLES "Build examples" OFF)
 option(EDGE_JSON_BUILD_TESTS "Build tests" ON)
 
 # Library sources
 set(EDGE_JSON_SOURCES
-    "src/edge_json.c"
-    "src/edge_json_parser.c"
-    "src/edge_json_serializer.c"
+    #"src/edge_json.c"
+    #"src/edge_json_parser.c"
+    #"src/edge_json_serializer.c"
+    "src/json.cpp"
+    "src/json_parser.cpp"
+    "src/json_serializer.cpp"
 )
 
 set(EDGE_JSON_HEADERS
-    "include/edge_json.h"
+    #"include/edge_json.h"
+    "include/json.hpp"
 )
 
-# Shared library
-if(EDGE_JSON_BUILD_SHARED)
-    add_library(edge_json SHARED ${EDGE_JSON_SOURCES})
-    target_include_directories(edge_json
-        PUBLIC
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-            $<INSTALL_INTERFACE:include>
-    )
-    
-    set_target_properties(edge_json PROPERTIES
-        VERSION ${PROJECT_VERSION}
-        SOVERSION ${PROJECT_VERSION_MAJOR}
-        PUBLIC_HEADER "${EDGE_JSON_HEADERS}"
-    )
-    
-    target_link_libraries(edge_json PRIVATE edge_base)
-endif()
+add_library(edge_json STATIC ${EDGE_JSON_SOURCES})
+target_include_directories(edge_json
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+)
 
-# Static library
-if(EDGE_JSON_BUILD_STATIC)
-    add_library(edge_json_static STATIC ${EDGE_JSON_SOURCES})
-    target_include_directories(edge_json_static
-        PUBLIC
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-            $<INSTALL_INTERFACE:include>
-    )
-    
-    set_target_properties(edge_json_static PROPERTIES
-        OUTPUT_NAME edge_json
-        PUBLIC_HEADER "${EDGE_JSON_HEADERS}"
-    )
-    
-    target_link_libraries(edge_json_static PRIVATE edge_base)
-endif()
+set_target_properties(edge_json PROPERTIES
+    OUTPUT_NAME edge_json
+    PUBLIC_HEADER "${EDGE_JSON_HEADERS}"
+)
 
-# Examples
-if(EDGE_JSON_BUILD_EXAMPLES)
-    #add_subdirectory(examples)
-endif()
+target_link_libraries(edge_json PRIVATE edge_base)
 
 # Tests
 if(EDGE_JSON_BUILD_TESTS)
@@ -76,24 +53,12 @@ endif()
 # Installation
 include(GNUInstallDirs)
 
-if(EDGE_JSON_BUILD_SHARED)
-    install(TARGETS edge_json
-        EXPORT edgeJsonTargets
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    )
-endif()
-
-if(EDGE_JSON_BUILD_STATIC)
-    install(TARGETS edge_json_static
-        EXPORT edgeJsonTargets
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    )
-endif()
+install(TARGETS edge_json
+    EXPORT edgeJsonTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
 # Export targets
 install(EXPORT edgeJsonTargets
@@ -139,8 +104,6 @@ install(FILES
 message(STATUS "")
 message(STATUS "libedgejson Configuration Summary:")
 message(STATUS "  Version:          ${PROJECT_VERSION}")
-message(STATUS "  Build shared:     ${EDGE_JSON_BUILD_SHARED}")
-message(STATUS "  Build static:     ${EDGE_JSON_BUILD_STATIC}")
 message(STATUS "  Build examples:   ${EDGE_JSON_BUILD_EXAMPLES}")
 message(STATUS "  Build tests:      ${EDGE_JSON_BUILD_TESTS}")
 message(STATUS "  Install prefix:   ${CMAKE_INSTALL_PREFIX}")
