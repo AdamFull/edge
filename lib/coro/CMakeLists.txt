@@ -1,9 +1,11 @@
 cmake_minimum_required(VERSION 3.10)
-project(libedgejobcoro VERSION 0.0.1 LANGUAGES C ASM)
+project(libedgejobcoro VERSION 0.0.1 LANGUAGES C CXX ASM)
 
 # Set C standard
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 enable_language(ASM)
 
@@ -14,15 +16,15 @@ option(EDGE_CORO_BUILD_EXAMPLES "Build examples" ON)
 
 # Library source files
 set(EDGE_COROUTINE_SOURCES
-    "src/edge_coro.c"
-    "src/edge_fiber.c"
-    "src/edge_scheduler.c"
+    "src/coro.cpp"
+    "src/fiber.cpp"
+    "src/scheduler.cpp"
 )
 
 set(EDGE_COROUTINE_HEADERS
-    "include/edge_coro.h"
-    "include/edge_fiber.h"
-    "include/edge_scheduler.h"
+    "include/coro.hpp"
+    "include/fiber.hpp"
+    "include/scheduler.hpp"
 )
 
 # Determine architecture and select appropriate assembly file
