@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(libedgejobcoro VERSION 0.0.1 LANGUAGES C)
+project(libedgejobcoro VERSION 0.0.1 LANGUAGES C CXX)
 
 # Set C standard
 set(CMAKE_C_STANDARD 11)
@@ -7,19 +7,19 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Library source files
 set(EDGE_LOGGER_SOURCES
-    "src/edge_logger.c"
-    "src/edge_logger_file_output.c"
-    "src/edge_logger_stdout_output.c"
+    "src/logger.cpp"
+    "src/logger_file_output.cpp"
+    "src/logger_stdout_output.cpp"
 )
 
 set(EDGE_LOGGER_HEADERS
-    "include/edge_logger.h"
+    "include/logger.hpp"
 )
 
 if(WIN32)
-    set(EDGE_LOGGER_SOURCES ${EDGE_LOGGER_SOURCES} "src/edge_logger_debug_output.c")
+    set(EDGE_LOGGER_SOURCES ${EDGE_LOGGER_SOURCES} "src/logger_debug_output.cpp")
 elseif(ANDROID)
-    set(EDGE_LOGGER_SOURCES ${EDGE_LOGGER_SOURCES} "src/edge_logger_logcat_output.c")
+    set(EDGE_LOGGER_SOURCES ${EDGE_LOGGER_SOURCES} "src/logger_logcat_output.cpp")
 endif()
 
 add_library(edge_logger STATIC ${EDGE_LOGGER_SOURCES})
