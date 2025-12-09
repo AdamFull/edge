@@ -269,7 +269,7 @@ namespace edge {
 		return h64;
 	}
 
-	u32 hash_murmur3_32(const void* data, usize size, u32 seed = 0) {
+	u32 hash_murmur3_32(const void* data, usize size, u32 seed) {
 		const u8* bytes = static_cast<const u8*>(data);
 		const usize nblocks = size / 4;
 
@@ -312,7 +312,7 @@ namespace edge {
 		return h1;
 	}
 
-	Hash128 hash_murmur3_128(const void* data, usize size, u32 seed = 0) {
+	Hash128 hash_murmur3_128(const void* data, usize size, u32 seed) {
 		const u8* bytes = static_cast<const u8*>(data);
 		const usize nblocks = size / 16;
 
