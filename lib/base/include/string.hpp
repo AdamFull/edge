@@ -21,32 +21,6 @@ namespace edge {
 	using U16String = BasicString<char16_t>;
 	using U32String = BasicString<char32_t>;
 
-	template<Character CharT>
-	struct BasicStringView {
-		const CharT* m_data;
-		usize m_length;
-
-		constexpr BasicStringView() : m_data(nullptr), m_length(0) {}
-
-		constexpr BasicStringView(const CharT* str)
-			: m_data(str), m_length(str ? detail::char_strlen(str) : 0) {
-		}
-
-		constexpr BasicStringView(const CharT* str, usize len)
-			: m_data(str), m_length(len) {
-		}
-
-		constexpr BasicStringView(const BasicString<CharT>& str)
-			: m_data(str.m_data), m_length(str.m_length) {
-		}
-	};
-
-	using StringView = BasicStringView<char>;
-	using WStringView = BasicStringView<wchar_t>;
-	using U8StringView = BasicStringView<char8_t>;
-	using U16StringView = BasicStringView<char16_t>;
-	using U32StringView = BasicStringView<char32_t>;
-
 	namespace detail {
 		constexpr usize STRING_DEFAULT_CAPACITY = 16;
 
@@ -110,6 +84,32 @@ namespace edge {
 			}
 		}
 	}
+
+	template<Character CharT>
+	struct BasicStringView {
+		const CharT* m_data;
+		usize m_length;
+
+		constexpr BasicStringView() : m_data(nullptr), m_length(0) {}
+
+		constexpr BasicStringView(const CharT* str)
+			: m_data(str), m_length(str ? detail::char_strlen(str) : 0) {
+		}
+
+		constexpr BasicStringView(const CharT* str, usize len)
+			: m_data(str), m_length(len) {
+		}
+
+		constexpr BasicStringView(const BasicString<CharT>& str)
+			: m_data(str.m_data), m_length(str.m_length) {
+		}
+	};
+
+	using StringView = BasicStringView<char>;
+	using WStringView = BasicStringView<wchar_t>;
+	using U8StringView = BasicStringView<char8_t>;
+	using U16StringView = BasicStringView<char16_t>;
+	using U32StringView = BasicStringView<char32_t>;
 
 	template<Character CharT>
 	inline bool string_create(const Allocator* alloc, BasicString<CharT>* str, usize initial_capacity = 0) {
