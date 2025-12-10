@@ -6,8 +6,6 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # Build options
-option(EDGE_TAR_BUILD_SHARED "Build shared library" OFF)
-option(EDGE_TAR_BUILD_STATIC "Build static library" ON)
 option(EDGE_TAR_BUILD_EXAMPLES "Build examples" ON)
 
 # Library source files
@@ -23,70 +21,33 @@ set(EDGE_TAR_HEADERS
     "src/edge_tar_internal.h"
 )
 
-# Shared library
-if(EDGE_TAR_BUILD_SHARED)
-    add_library(edge_tar SHARED ${EDGE_TAR_SOURCES})
-    target_include_directories(edge_tar
-        PUBLIC
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-            $<INSTALL_INTERFACE:include>
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
-    
-    target_link_libraries(edge_tar PRIVATE edge_base)
+add_library(edge_tar STATIC ${EDGE_TAR_SOURCES})
+target_include_directories(edge_tar
+    PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+        $<INSTALL_INTERFACE:include>
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
-    set_target_properties(edge_tar PROPERTIES
-        VERSION ${PROJECT_VERSION}
-        SOVERSION ${PROJECT_VERSION_MAJOR}
-        PUBLIC_HEADER "${EDGE_TAR_HEADERS}"
-    )
+target_link_libraries(edge_tar PRIVATE edge_base)
 
-    # Platform-specific settings
-    if(UNIX AND NOT APPLE)
-        target_compile_definitions(edge_tar PRIVATE _POSIX_C_SOURCE=200809L)
-    endif()
-    
-    # Compiler warnings
-    if(MSVC)
-        target_compile_options(edge_tar PRIVATE /W4)
-    else()
-        target_compile_options(edge_tar PRIVATE -Wall -pedantic)
-    endif()
+set_target_properties(edge_tar PROPERTIES
+    OUTPUT_NAME edge_tar
+    PUBLIC_HEADER "${EDGE_ZIP_HEADERS}"
+)
 
-    target_compile_definitions(edge_tar PRIVATE _CRT_SECURE_NO_WARNINGS)
+# Platform-specific settings
+if(UNIX AND NOT APPLE)
+    target_compile_definitions(edge_tar PRIVATE _POSIX_C_SOURCE=200809L)
 endif()
 
-# Static library
-if(EDGE_TAR_BUILD_STATIC)
-    add_library(edge_tar_static STATIC ${EDGE_TAR_SOURCES})
-    target_include_directories(edge_tar_static
-        PUBLIC
-            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
-            $<INSTALL_INTERFACE:include>
-        PRIVATE
-            ${CMAKE_CURRENT_SOURCE_DIR}/src
-    )
-
-    target_link_libraries(edge_tar_static PRIVATE edge_base)
-    
-    set_target_properties(edge_tar_static PROPERTIES
-        OUTPUT_NAME edge_tar
-        PUBLIC_HEADER "${EDGE_ZIP_HEADERS}"
-    )
-
-    # Platform-specific settings
-    if(UNIX AND NOT APPLE)
-        target_compile_definitions(edge_tar_static PRIVATE _POSIX_C_SOURCE=200809L)
-    endif()
-    
-    # Compiler warnings
-    if(MSVC)
-        target_compile_options(edge_tar_static PRIVATE /W4)
-        target_compile_definitions(edge_tar_static PRIVATE _CRT_SECURE_NO_WARNINGS)
-    else()
-        target_compile_options(edge_tar_static PRIVATE -Wall -pedantic)
-    endif()
+# Compiler warnings
+if(MSVC)
+    target_compile_options(edge_tar PRIVATE /W4)
+    target_compile_definitions(edge_tar PRIVATE _CRT_SECURE_NO_WARNINGS)
+else()
+    target_compile_options(edge_tar PRIVATE -Wall -pedantic)
 endif()
 
 # Examples
@@ -97,24 +58,12 @@ endif()
 # Installation
 include(GNUInstallDirs)
 
-if(EDGE_TAR_BUILD_SHARED)
-    install(TARGETS edge_tar
-        EXPORT edgeTarTargets
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    )
-endif()
-
-if(EDGE_TAR_BUILD_STATIC)
-    install(TARGETS edge_tar_static
-        EXPORT edgeTarTargets
-        LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-        PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-    )
-endif()
+install(TARGETS edge_tar
+    EXPORT edgeTarTargets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    PUBLIC_HEADER DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
 
 # Export targets
 install(EXPORT edgeTarTargets
@@ -160,8 +109,6 @@ install(FILES
 message(STATUS "")
 message(STATUS "libedgetar Configuration Summary:")
 message(STATUS "  Version:          ${PROJECT_VERSION}")
-message(STATUS "  Build shared:     ${EDGE_TAR_BUILD_SHARED}")
-message(STATUS "  Build static:     ${EDGE_TAR_BUILD_STATIC}")
 message(STATUS "  Build examples:   ${EDGE_TAR_BUILD_EXAMPLES}")
 message(STATUS "  Install prefix:   ${CMAKE_INSTALL_PREFIX}")
 message(STATUS "")
