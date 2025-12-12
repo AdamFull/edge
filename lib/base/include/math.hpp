@@ -5,6 +5,13 @@
 
 #include <cmath>
 
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+
 namespace edge {
 	inline constexpr f32 PI_F32 = 3.14159265358979323846f;
 	inline constexpr f64 PI_F64 = 3.14159265358979323846;
