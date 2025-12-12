@@ -7,10 +7,10 @@ set(ENABLE_VULKAN_VALIDATION_LAYERS_SYNCHRONIZATION ON CACHE BOOL "Enable synchr
 set(ENABLE_VULKAN_DEBUG ON CACHE BOOL "Enable VK_EXT_debug_utils or VK_EXT_debug_marker if supported.")
 
 set(EDGE_ENGINE_SOURCES
-    "event_dispatcher.c"
-    "gfx_context.c"
-    "gfx_renderer.c"
-    "main.c"
+    "event_dispatcher.cpp"
+    "gfx_context.cpp"
+    "gfx_renderer.cpp"
+    "main.cpp"
 )
 
 if(ANDROID)

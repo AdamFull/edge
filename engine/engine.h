@@ -4,32 +4,29 @@
 #include "runtime/platform.h"
 #include "gfx_interface.h"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace edge {
+	struct Logger;
+	struct Scheduler;
+	struct EventDispatcher;
 
-	typedef struct edge_logger edge_logger_t;
-	typedef struct edge_sched edge_sched_t;
-	typedef struct event_dispatcher event_dispatcher_t;
+	namespace gfx {
+		struct Queue;
+		struct Renderer;
+	}
 
-	typedef struct gfx_renderer gfx_renderer_t;
+	struct EngineContext {
+		const Allocator* allocator;
+		Logger* logger;
+		Scheduler* sched;
 
-	typedef struct edge_engine_context {
-		edge_allocator_t* allocator;
-		edge_logger_t* logger;
-		edge_sched_t* sched;
+		EventDispatcher* event_dispatcher;
 
-		event_dispatcher_t* event_dispatcher;
+		PlatformLayout* platform_layout;
+		PlatformContext* platform_context;
 
-		platform_layout_t* platform_layout;
-		platform_context_t* platform_context;
-
-		gfx_queue_t gfx_main_queue;
-		gfx_renderer_t* gfx_renderer;
-	} edge_engine_context_t;
-
-#ifdef __cplusplus
+		gfx::Queue main_queue;
+		gfx::Renderer* renderer;
+	};
 }
-#endif
 
 #endif //EDGE_ENGINE_H
