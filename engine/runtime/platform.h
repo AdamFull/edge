@@ -1,66 +1,60 @@
 #ifndef PLATFORM_CONTEXT_H
 #define PLATFORM_CONTEXT_H
 
-#include <stdbool.h>
+#include <stddef.hpp>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace edge {
+	struct Allocator;
+	struct EventDispatcher;
 
-	typedef struct edge_allocator edge_allocator_t;
-	typedef struct event_dispatcher event_dispatcher_t;
+	struct PlatformLayout;
+	struct PlatformContext;
 
-	typedef struct platform_layout platform_layout_t;
-	typedef struct platform_context platform_context_t;
+	struct PlatformContextCreateInfo {
+		const Allocator* alloc;
+		PlatformLayout* layout;
+		EventDispatcher* event_dispatcher;
+	};
 
-	typedef struct platform_context_create_info {
-		edge_allocator_t* alloc;
-		platform_layout_t* layout;
-		event_dispatcher_t* event_dispatcher;
-	} platform_context_create_info_t;
+	enum class WindowMode {
+		Fullscreen,
+		FullscreenBorderless,
+		Default
+	};
 
-	typedef enum window_mode {
-		WINDOW_MODE_FULLSCREEN,
-		WINDOW_MODE_FULLSCREEN_BORDERLESS,
-		WINDOW_MODE_DEFAULT
-	} window_mode_t;
+	enum class WindowVsyncMode {
+		Off,
+		On, 
+		Default
+	};
 
-	typedef enum window_vsync_mode {
-		WINDOW_VSYNC_MODE_OFF,
-		WINDOW_VSYNC_MODE_ON,
-		WINDOW_VSYNC_MODE_DEFAULT
-	} window_vsync_mode_t;
-
-	typedef struct window_create_info {
+	struct WindowCreateInfo {
 		const char* title;
-		window_mode_t mode;
+		WindowMode mode;
 		bool resizable;
-		window_vsync_mode_t vsync_mode;
+		WindowVsyncMode vsync_mode;
 
-		int width;
-		int height;
-	} window_create_info_t;
+		i32 width;
+		i32 height;
+	};
 
-	platform_context_t* platform_context_create(platform_context_create_info_t* create_info);
-	void platform_context_destroy(platform_context_t* ctx);
+	PlatformContext* platform_context_create(PlatformContextCreateInfo* create_info);
+	void platform_context_destroy(PlatformContext* ctx);
 
-	void platform_context_get_surface(platform_context_t* ctx, void* surface_info);
+	void platform_context_get_surface(PlatformContext* ctx, void* surface_info);
 
-	bool platform_context_window_init(platform_context_t* ctx, window_create_info_t* create_info);
+	bool platform_context_window_init(PlatformContext* ctx, WindowCreateInfo* create_info);
 
-    bool platform_context_window_should_close(platform_context_t* ctx);
-	void platform_context_window_process_events(platform_context_t* ctx, float delta_time);
+	bool platform_context_window_should_close(PlatformContext* ctx);
+	void platform_context_window_process_events(PlatformContext* ctx, f32 delta_time);
 
-	void platform_context_window_show(platform_context_t* ctx);
-	void platform_context_window_hide(platform_context_t* ctx);
+	void platform_context_window_show(PlatformContext* ctx);
+	void platform_context_window_hide(PlatformContext* ctx);
 
-	void platform_context_window_set_title(platform_context_t* ctx, const char* title);
+	void platform_context_window_set_title(PlatformContext* ctx, const char* title);
 
-	float platform_context_window_dpi_scale_factor(platform_context_t* ctx);
-	float platform_context_window_content_scale_factor(platform_context_t* ctx);
-
-#ifdef __cplusplus
+	f32 platform_context_window_dpi_scale_factor(PlatformContext* ctx);
+	f32 platform_context_window_content_scale_factor(PlatformContext* ctx);
 }
-#endif
 
 #endif //PLATFORM_CONTEXT_H

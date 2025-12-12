@@ -4,87 +4,81 @@
 #include "input.h"
 #include "../event_dispatcher.h"
 
-#define EDGE_INPUT_EVENT_MASK (1 << 0)
-#define EDGE_INPUT_EVENT_START_INDEX 1
+namespace edge {
+	constexpr u64 INPUT_EVENT_MASK = 1 << 0;
+	constexpr u64 INPUT_EVENT_START_INDEX = 1;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+	enum class InputEventType {
+		Keyboard = INPUT_EVENT_START_INDEX,
+		MouseMove,
+		MouseBtn,
+		MouseScroll,
+		TextInput,
+		PadConnection,
+		PadButton,
+		PadAxis
+	};
 
-	typedef enum input_event_type {
-		INPUT_EVENT_TYPE_KEYBOARD = EDGE_INPUT_EVENT_START_INDEX,
-		INPUT_EVENT_TYPE_MOUSE_MOVE,
-		INPUT_EVENT_TYPE_MOUSE_BTN,
-		INPUT_EVENT_TYPE_MOUSE_SCROLL,
-		INPUT_EVENT_TYPE_TEXT_INPUT,
-		INPUT_EVENT_TYPE_PAD_CONNECTION,
-		INPUT_EVENT_TYPE_PAD_BUTTON,
-		INPUT_EVENT_TYPE_PAD_AXIS
-	} input_event_type_t;
+	struct InputKeyboardEvent {
+		EventHeader header;
+		InputKeyboardKey key;
+		InputKeyAction action;
+	};
 
-	typedef struct input_keyboard_event {
-		event_header_t header;
-		input_keyboard_key_t key;
-		input_key_action_t action;
-	} input_keyboard_event_t;
+	struct InputMouseMoveEvent {
+		EventHeader header;
+		f32 x, y, dx, dy;
+	};
 
-	typedef struct input_mouse_move_event {
-		event_header_t header;
-		float x, y, dx, dy;
-	} input_mouse_move_event_t;
+	struct InputMouseBtnEvent {
+		EventHeader header;
+		InputMouseBtn btn;
+		InputKeyAction action;
+	};
 
-	typedef struct input_mouse_btn_event {
-		event_header_t header;
-		input_mouse_btn_t btn;
-		input_key_action_t action;
-	} input_mouse_btn_event_t;
+	struct InputMouseScrollEvent {
+		EventHeader header;
+		f32 xoffset, yoffset;
+	};
 
-	typedef struct input_mouse_scroll_event {
-		event_header_t header;
-		float xoffset, yoffset;
-	} input_mouse_scroll_event_t;
+	struct InputTextInputEvent {
+		EventHeader header;
+		u32 codepoint;
+	};
 
-	typedef struct input_text_input_event {
-		event_header_t header;
-		uint32_t codepoint;
-	} input_text_input_event_t;
-
-	typedef struct input_pad_connection_event {
-		event_header_t header;
-		int32_t pad_id;
-		int32_t vendor_id;
-		int32_t product_id;
-		int32_t device_id;
+	struct InputPadConnectionEvent {
+		EventHeader header;
+		i32 pad_id;
+		i32 vendor_id;
+		i32 product_id;
+		i32 device_id;
 		bool connected;
 		char name[256];
-	} input_pad_connection_event_t;
+	};
 
-	typedef struct input_pad_button_event {
-		event_header_t header;
-		int32_t pad_id;
-		input_pad_btn_t btn;
-		input_key_action_t state;
-	} input_pad_button_event_t;
+	struct InputPadButtonEvent {
+		EventHeader header;
+		i32 pad_id;
+		InputPadBtn btn;
+		InputKeyAction state;
+	};
 
-	typedef struct input_pad_axis_event {
-		event_header_t header;
-		int32_t pad_id;
-		input_pad_axis_t axis;
-		float x, y, z;
-	} input_pad_axis_event_t;
+	struct InputPadAxisEvent {
+		EventHeader header;
+		i32 pad_id;
+		InputPadAxis axis;
+		f32 x, y, z;
+	};
 
-	void input_update_keyboard_state(input_state_t* state, event_dispatcher_t* dispatcher, input_keyboard_key_t key, input_key_action_t new_state);
-	void input_update_mouse_move_state(input_state_t* state, event_dispatcher_t* dispatcher, float x, float y);
-	void input_update_mouse_btn_state(input_state_t* state, event_dispatcher_t* dispatcher, input_mouse_btn_t key, input_key_action_t new_state);
-	void input_update_pad_btn_state(input_state_t* state, event_dispatcher_t* dispatcher, int32_t pad_id, input_pad_btn_t btn, input_key_action_t new_state);
-	void input_update_pad_axis_state(input_state_t* state, event_dispatcher_t* dispatcher, int32_t pad_id, input_pad_axis_t axis, float x, float y, float z);
+	void input_update_keyboard_state(InputState* state, EventDispatcher* dispatcher, InputKeyboardKey key, InputKeyAction new_state);
+	void input_update_mouse_move_state(InputState* state, EventDispatcher* dispatcher, f32 x, f32 y);
+	void input_update_mouse_btn_state(InputState* state, EventDispatcher* dispatcher, InputMouseBtn key, InputKeyAction new_state);
+	void input_update_pad_btn_state(InputState* state, EventDispatcher* dispatcher, i32 pad_id, InputPadBtn btn, InputKeyAction new_state);
+	void input_update_pad_axis_state(InputState* state, EventDispatcher* dispatcher, i32 pad_id, InputPadAxis axis, f32 x, f32 y, f32 z);
 
-	void input_mouse_scroll_event_init(input_mouse_scroll_event_t* evt, float xoffset, float yoffset);
-	void input_text_input_event_init(input_text_input_event_t* evt, uint32_t codepoint);
-	void input_pad_connection_event_init(input_pad_connection_event_t* evt, int32_t pad_id, int32_t vendor_id, int32_t product_id, int32_t device_id, bool connected, const char* name);
-
-#ifdef __cplusplus
+	void input_mouse_scroll_event_init(InputMouseScrollEvent* evt, f32 xoffset, f32 yoffset);
+	void input_text_input_event_init(InputTextInputEvent* evt, u32 codepoint);
+	void input_pad_connection_event_init(InputPadConnectionEvent* evt, i32 pad_id, i32 vendor_id, i32 product_id, i32 device_id, bool connected, const char* name);
 }
-#endif
 
 #endif // EDGE_INPUT_EVENTS_H

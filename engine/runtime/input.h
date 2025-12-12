@@ -1,221 +1,214 @@
 #ifndef EDGE_INPUT_H
 #define EDGE_INPUT_H
 
-#include <stdint.h>
-#include <edge_bitarray.h>
-#include <edge_platform_detect.h>
+#include <bitarray.hpp>
+#include <platform_detect.hpp>
 
-#define EDGE_MAX_PAD_SLOTS 8
+namespace edge {
+	constexpr usize MAX_PAD_SLOTS = 8;
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+	enum class InputKeyAction {
+		Unknown = -1,
+		Up,
+		Down
+	};
 
-	typedef enum input_key_action {
-		INPUT_KEY_ACTION_UNKNOWN = -1,
-		INPUT_KEY_ACTION_UP,
-		INPUT_KEY_ACTION_DOWN
-	} input_key_action_t;
-
-	typedef enum input_keyboard_key {
-		INPUT_KEY_UNKNOWN = -1,
-		INPUT_KEY_SPACE,
-		INPUT_KEY_APOSTROPHE, /* ' */
-		INPUT_KEY_COMMA, /* , */
-		INPUT_KEY_MINUS, /* - */
-		INPUT_KEY_PERIOD, /* . */
-		INPUT_KEY_SLASH, /* / */
-		INPUT_KEY_0,
-		INPUT_KEY_1,
-		INPUT_KEY_2,
-		INPUT_KEY_3,
-		INPUT_KEY_4,
-		INPUT_KEY_5,
-		INPUT_KEY_6,
-		INPUT_KEY_7,
-		INPUT_KEY_8,
-		INPUT_KEY_9,
-		INPUT_KEY_SEMICOLON, /* ; */
-		INPUT_KEY_EQ, /* = */
-		INPUT_KEY_A,
-		INPUT_KEY_B,
-		INPUT_KEY_C,
-		INPUT_KEY_D,
-		INPUT_KEY_E,
-		INPUT_KEY_F,
-		INPUT_KEY_G,
-		INPUT_KEY_H,
-		INPUT_KEY_I,
-		INPUT_KEY_J,
-		INPUT_KEY_K,
-		INPUT_KEY_L,
-		INPUT_KEY_M,
-		INPUT_KEY_N,
-		INPUT_KEY_O,
-		INPUT_KEY_P,
-		INPUT_KEY_Q,
-		INPUT_KEY_R,
-		INPUT_KEY_S,
-		INPUT_KEY_T,
-		INPUT_KEY_U,
-		INPUT_KEY_V,
-		INPUT_KEY_W,
-		INPUT_KEY_X,
-		INPUT_KEY_Y,
-		INPUT_KEY_Z,
-		INPUT_KEY_LEFT_BRACKET, /* [ */
-		INPUT_KEY_BACKSLASH, /* \ */
-		INPUT_KEY_RIGHT_BRACKET, /* ] */
-		INPUT_KEY_GRAVE_ACCENT, /* ` */
+	enum class InputKeyboardKey {
+		Unknown = -1,
+		Space,
+		Apostrophe, /* ' */
+		Comma, /* , */
+		Minus, /* - */
+		Period, /* . */
+		Slash, /* / */
+		_0,
+		_1,
+		_2,
+		_3,
+		_4,
+		_5,
+		_6,
+		_7,
+		_8,
+		_9,
+		Semicolon, /* ; */
+		Eq, /* = */
+		A,
+		B,
+		C,
+		D,
+		E,
+		F,
+		G,
+		H,
+		I,
+		J,
+		K,
+		L,
+		M,
+		N,
+		O,
+		P,
+		Q,
+		R,
+		S,
+		T,
+		U,
+		V,
+		W,
+		X,
+		Y,
+		Z,
+		LeftBracket, /* [ */
+		Backslash, /* \ */
+		RightBracket, /* ] */
+		GraveAccent, /* ` */
 
 		/* Function keys */
-		INPUT_KEY_ESC,
-		INPUT_KEY_ENTER,
-		INPUT_KEY_TAB,
-		INPUT_KEY_BACKSPACE,
-		INPUT_KEY_INSERT,
-		INPUT_KEY_DEL,
-		INPUT_KEY_RIGHT,
-		INPUT_KEY_LEFT,
-		INPUT_KEY_DOWN,
-		INPUT_KEY_UP,
-		INPUT_KEY_PAGE_UP,
-		INPUT_KEY_PAGE_DOWN,
-		INPUT_KEY_HOME,
-		INPUT_KEY_END,
-		INPUT_KEY_CAPS_LOCK,
-		INPUT_KEY_SCROLL_LOCK,
-		INPUT_KEY_NUM_LOCK,
-		INPUT_KEY_PRINT_SCREEN,
-		INPUT_KEY_PAUSE,
-		INPUT_KEY_F1,
-		INPUT_KEY_F2,
-		INPUT_KEY_F3,
-		INPUT_KEY_F4,
-		INPUT_KEY_F5,
-		INPUT_KEY_F6,
-		INPUT_KEY_F7,
-		INPUT_KEY_F8,
-		INPUT_KEY_F9,
-		INPUT_KEY_F10,
-		INPUT_KEY_F11,
-		INPUT_KEY_F12,
-		INPUT_KEY_F13,
-		INPUT_KEY_F14,
-		INPUT_KEY_F15,
-		INPUT_KEY_F16,
-		INPUT_KEY_F17,
-		INPUT_KEY_F18,
-		INPUT_KEY_F19,
-		INPUT_KEY_F20,
-		INPUT_KEY_F21,
-		INPUT_KEY_F22,
-		INPUT_KEY_F23,
-		INPUT_KEY_F24,
-		INPUT_KEY_F25,
-		INPUT_KEY_KP_0,
-		INPUT_KEY_KP_1,
-		INPUT_KEY_KP_2,
-		INPUT_KEY_KP_3,
-		INPUT_KEY_KP_4,
-		INPUT_KEY_KP_5,
-		INPUT_KEY_KP_6,
-		INPUT_KEY_KP_7,
-		INPUT_KEY_KP_8,
-		INPUT_KEY_KP_9,
-		INPUT_KEY_KP_DEC,
-		INPUT_KEY_KP_DIV,
-		INPUT_KEY_KP_MUL,
-		INPUT_KEY_KP_SUB,
-		INPUT_KEY_KP_ADD,
-		INPUT_KEY_KP_ENTER,
-		INPUT_KEY_KP_EQ,
-		INPUT_KEY_LEFT_SHIFT,
-		INPUT_KEY_LEFT_CONTROL,
-		INPUT_KEY_LEFT_ALT,
-		INPUT_KEY_LEFT_SUPER,
-		INPUT_KEY_RIGHT_SHIFT,
-		INPUT_KEY_RIGHT_CONTROL,
-		INPUT_KEY_RIGHT_ALT,
-		INPUT_KEY_RIGHT_SUPER,
-		INPUT_KEY_MENU,
+		Esc,
+		Enter,
+		Tab,
+		Backspace,
+		Insert,
+		Del,
+		Right,
+		Left,
+		Down,
+		Up,
+		PageUp,
+		PageDown,
+		Home,
+		End,
+		CapsLock,
+		ScrollLock,
+		NumLock,
+		PrintScreen,
+		Pause,
+		F1,
+		F2,
+		F3,
+		F4,
+		F5,
+		F6,
+		F7,
+		F8,
+		F9,
+		F10,
+		F11,
+		F12,
+		F13,
+		F14,
+		F15,
+		F16,
+		F17,
+		F18,
+		F19,
+		F20,
+		F21,
+		F22,
+		F23,
+		F24,
+		F25,
+		Kp0,
+		Kp1,
+		Kp2,
+		Kp3,
+		Kp4,
+		Kp5,
+		Kp6,
+		Kp7,
+		Kp8,
+		Kp9,
+		KpDec,
+		KpDiv,
+		KpMul,
+		KpSub,
+		KpAdd,
+		KpEnter,
+		KpEq,
+		LeftShift,
+		LeftControl,
+		LeftAlt,
+		LeftSuper,
+		RightShift,
+		RightControl,
+		RightAlt,
+		RightSuper,
+		Menu,
 
-		INPUT_KEY_COUNT
+		Count
 
-	} input_keyboard_key_t;
+	};
 
-	typedef enum input_mouse_btn {
-		INPUT_MOUSE_BTN_UNKNOWN = -1,
-		INPUT_MOUSE_BTN_LEFT,
-		INPUT_MOUSE_BTN_RIGHT,
-		INPUT_MOUSE_BTN_MIDDLE,
-		INPUT_MOUSE_BTN_4,
-		INPUT_MOUSE_BTN_5,
-		INPUT_MOUSE_BTN_6,
-		INPUT_MOUSE_BTN_7,
-		INPUT_MOUSE_BTN_8,
-		INPUT_MOUSE_BTN_COUNT
-	} input_mouse_btn_t;
+	enum class InputMouseBtn {
+		Unknown = -1,
+		Left,
+		Right,
+		Middle,
+		_4,
+		_5,
+		_6,
+		_7,
+		_8,
+		Count
+	};
 
-	typedef enum input_pad_btn {
-		INPUT_PAD_UNKNOWN = -1,
-		INPUT_PAD_A,
-		INPUT_PAD_B,
-		INPUT_PAD_X,
-		INPUT_PAD_Y,
-		INPUT_PAD_CROSS = INPUT_PAD_A,
-		INPUT_PAD_CIRCLE = INPUT_PAD_B,
-		INPUT_PAD_SQUARE = INPUT_PAD_X,
-		INPUT_PAD_TRIANGLE = INPUT_PAD_Y,
-		INPUT_PAD_BUMPER_LEFT,
-		INPUT_PAD_TRIGGER_LEFT,
-		INPUT_PAD_BUMPER_RIGHT,
-		INPUT_PAD_TRIGGER_RIGHT,
-		INPUT_PAD_BACK,
-		INPUT_PAD_START,
-		INPUT_PAD_GUIDE,
-		INPUT_PAD_THUMB_LEFT,
-		INPUT_PAD_THUMB_RIGHT,
-		INPUT_PAD_DPAD_UP,
-		INPUT_PAD_DPAD_RIGHT,
-		INPUT_PAD_DPAD_DOWN,
-		INPUT_PAD_DPAD_LEFT,
-		INPUT_PAD_COUNT
-	} input_pad_btn_t;
+	enum class InputPadBtn {
+		Unknown = -1,
+		A,
+		B,
+		X,
+		Y,
+		Cross = A,
+		Circle = B,
+		Square = X,
+		Triangle = Y,
+		BumperLeft,
+		TriggerLeft,
+		BumperRight,
+		TriggerRight,
+		Back,
+		Start,
+		Guide,
+		ThumbLeft,
+		ThumbRight,
+		DpadUp,
+		DpadRight,
+		DpadDown,
+		DpadLeft,
+		Count
+	};
 
-	typedef enum input_pad_axis {
-		INPUT_PAD_AXIS_UNKNOWN = -1,
-		INPUT_PAD_AXIS_STICK_LEFT = 0,
-		INPUT_PAD_AXIS_STICK_RIGHT,
-		INPUT_PAD_AXIS_TRIGGER_LEFT,
-		INPUT_PAD_AXIS_TRIGGER_RIGHT,
-		INPUT_PAD_AXIS_ACCEL,
-		INPUT_PAD_AXIS_GYRO,
-		INPUT_PAD_AXIS_COUNT
-	} input_pad_axis_t;
+	enum class InputPadAxis {
+		Unknown = -1,
+		StickLeft = 0,
+		StickRight,
+		TriggerLeft,
+		TriggerRight,
+		Accel,
+		Gyro,
+		Count
+	};
 
-	typedef EDGE_ALIGN(16) struct input_pad_state {
-		uint8_t btn_states[EDGE_BITARRAY_SIZE(INPUT_PAD_COUNT)];
-		float stick_left_x, stick_left_y;
-		float stick_right_x, stick_right_y;
-		float trigger_left, trigger_right;
-		float accel_x, accel_y, accel_z;
-		float gyro_x, gyro_y, gyro_z;
-	} input_pad_state_t;
+	EDGE_ALIGN(16) struct InputPadState {
+		BitArray<(usize)InputPadBtn::Count> btn_states;
+		f32 stick_left_x, stick_left_y;
+		f32 stick_right_x, stick_right_y;
+		f32 trigger_left, trigger_right;
+		f32 accel_x, accel_y, accel_z;
+		f32 gyro_x, gyro_y, gyro_z;
+	};
 
-	typedef EDGE_ALIGN(16) struct input_mouse_state {
-		uint8_t btn_states[EDGE_BITARRAY_SIZE(INPUT_MOUSE_BTN_COUNT)];
-		float x, y;
-	} input_mouse_state_t;
+	EDGE_ALIGN(16) struct InputMouseState {
+		BitArray<(usize)InputMouseBtn::Count> btn_states;
+		f32 x, y;
+	};
 
-	typedef EDGE_ALIGN(16) struct input_state {
-		uint8_t key_states[EDGE_BITARRAY_SIZE(INPUT_KEY_COUNT)];
-		input_mouse_state_t mouse;
-		input_pad_state_t pads[EDGE_MAX_PAD_SLOTS];
-	} input_state_t;
-
-#ifdef __cplusplus
+	EDGE_ALIGN(16) struct InputState {
+		BitArray<(usize)InputKeyboardKey::Count> btn_states;
+		InputMouseState mouse;
+		InputPadState pads[MAX_PAD_SLOTS];
+	};
 }
-#endif
 
 #endif // EDGE_INPUT_H

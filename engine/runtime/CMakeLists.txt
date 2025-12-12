@@ -2,7 +2,7 @@ include(FetchContent)
 
 target_sources(${PROJECT_NAME}
     PRIVATE
-    "input_events.c"
+    "input_events.cpp"
 )
 
 # Platform categories
@@ -27,7 +27,7 @@ endif()
 if(WIN32)
     # Windows-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
-        "windows_platform.c"
+        "windows_platform.cpp"
     )
 elseif(ANDROID)
     find_package(games-controller REQUIRED CONFIG)
