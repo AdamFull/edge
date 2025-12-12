@@ -1,34 +1,27 @@
 #ifndef EDGE_EVENT_DISPATCHER_H
 #define EDGE_EVENT_DISPATCHER_H
 
-#include <stddef.h>
-#include <stdint.h>
+#include <stddef.hpp>
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+namespace edge {
+	struct Allocator;
 
-	typedef struct edge_allocator edge_allocator_t;
+	struct EventHeader {
+		u64 categories;
+		u64 type;
+	};
 
-	typedef struct event_header {
-		uint64_t categories; // Contain flags for filtering
-		uint64_t type;
-	} event_header_t;
+	using EventListenerFn = void (*)(EventHeader* evt, void* user_data);
 
-	typedef void (*event_listener_fn)(event_header_t* evt, void* user_data);
+	struct EventDispatcher;
 
-	typedef struct event_dispatcher event_dispatcher_t;
+	EventDispatcher* event_dispatcher_create(const Allocator* alloc);
+	void event_dispatcher_destroy(EventDispatcher* dispatcher);
 
-	event_dispatcher_t* event_dispatcher_create(edge_allocator_t* alloc);
-	void event_dispatcher_destroy(event_dispatcher_t* dispatcher);
+	uint64_t event_dispatcher_add_listener(EventDispatcher* dispatcher, u64 listen_categories, EventListenerFn listener_fn, void* user_data);
+	void event_dispatcher_remove_listener(EventDispatcher* dispatcher, u64 listener_id);
 
-	uint64_t event_dispatcher_add_listener(event_dispatcher_t* dispatcher, uint64_t listen_categories, event_listener_fn listener_fn, void* user_data);
-	void event_dispatcher_remove_listener(event_dispatcher_t* dispatcher, uint64_t listener_id);
-
-	void event_dispatcher_dispatch(event_dispatcher_t* dispatcher, event_header_t* event);
-
-#ifdef __cplusplus
+	void event_dispatcher_dispatch(EventDispatcher* dispatcher, EventHeader* event);
 }
-#endif
 
 #endif // EDGE_EVENT_DISPATCHER_H
