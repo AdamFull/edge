@@ -516,6 +516,6 @@ namespace edge {
 }
 
 extern "C" void android_main(struct android_app* state) {
-    PlatformLayout platform_layout = { 0 };
+    PlatformLayout platform_layout = {};
     edge_main(&platform_layout);
 }
