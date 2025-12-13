@@ -94,6 +94,7 @@ target_compile_definitions(${PROJECT_NAME} PUBLIC
     $<$<CONFIG:Release>:EDGE_RELEASE>
 )
 
+add_subdirectory(imgui)
 add_subdirectory(runtime)
 
 target_link_libraries(${PROJECT_NAME}
