@@ -12,7 +12,7 @@
 #include <assert.h>
 #include <mimalloc.h>
 
-static edge::EngineContext engine_context = { 0 };
+static edge::EngineContext engine_context = {};
 
 static void edge_cleanup_engine(void) {
 	if (engine_context.renderer) {
@@ -55,7 +55,8 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 
 	engine_context.logger = edge::logger_create(&allocator, edge::LogLevel::Trace);
 	if (!engine_context.logger) {
-		goto fatal_error;
+		edge_cleanup_engine();
+		return -1;
 	}
 
 	edge::logger_set_global(engine_context.logger);
@@ -68,12 +69,14 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 
 	engine_context.sched = edge::sched_create(&allocator);
 	if (!engine_context.sched) {
-		goto fatal_error;
+		edge_cleanup_engine();
+		return -1;
 	}
 
 	engine_context.event_dispatcher = event_dispatcher_create(&allocator);
 	if (!engine_context.event_dispatcher) {
-		goto fatal_error;
+		edge_cleanup_engine();
+		return -1;
 	}
 
 	edge::PlatformContextCreateInfo platform_context_create_info = {};
@@ -83,13 +86,14 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 
 	engine_context.platform_context = platform_context_create(&platform_context_create_info);
 	if (!engine_context.platform_context) {
-		goto fatal_error;
+		edge_cleanup_engine();
+		return -1;
 	}
 
 	EDGE_LOG_INFO("Context initialization finished.");
 	edge::logger_flush(edge::logger_get_global());
 
-	edge::WindowCreateInfo window_create_info = { 0 };
+	edge::WindowCreateInfo window_create_info = {};
 	window_create_info.title = "Window";
 	window_create_info.mode = edge::WindowMode::Default;
 	window_create_info.resizable = true;
@@ -98,15 +102,17 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 	window_create_info.height = 720;
 
 	if (!platform_context_window_init(engine_context.platform_context, &window_create_info)) {
-		goto fatal_error;
+		edge_cleanup_engine();
+		return -1;
 	}
 
-	edge::gfx::ContextCreateInfo gfx_cteate_info = { 0 };
+	edge::gfx::ContextCreateInfo gfx_cteate_info = {};
 	gfx_cteate_info.alloc = &allocator;
 	gfx_cteate_info.platform_context = engine_context.platform_context;
 
 	if (!edge::gfx::context_init(&gfx_cteate_info)) {
-		goto fatal_error;
+		edge_cleanup_engine();
+		return -1;
 	}
 
 	edge::gfx::QueueRequest queue_request;
@@ -116,7 +122,8 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 	queue_request.prefer_separate_family = false;
 
 	if (!edge::gfx::get_queue(&queue_request, &engine_context.main_queue)) {
-		goto fatal_error;
+		edge_cleanup_engine();
+		return -1;
 	}
 
 	edge::gfx::RendererCreateInfo renderer_create_info;
@@ -125,7 +132,8 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 
 	engine_context.renderer = edge::gfx::renderer_create(&renderer_create_info);
 	if (!engine_context.renderer) {
-		goto fatal_error;
+		edge_cleanup_engine();
+		return -1;
 	}
 
     while (!platform_context_window_should_close(engine_context.platform_context)) {
@@ -139,8 +147,4 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 
 	edge_cleanup_engine();
 	return 0;
-
-fatal_error:
-	edge_cleanup_engine();
-	return -1;
 }
