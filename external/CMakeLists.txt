@@ -259,27 +259,27 @@ add_library(GPUOpen::VulkanMemoryAllocator ALIAS vma)
 #)
 #
 #target_include_directories(stb PUBLIC ${STB_DIR})
-#
-## glm
-#add_library(glm INTERFACE)
-#set(GLM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/glm")
-#target_sources(glm INTERFACE "${GLM_DIR}/glm/glm.hpp")
-#target_include_directories(glm SYSTEM INTERFACE ${GLM_DIR})
-#
-#target_compile_definitions(glm INTERFACE
-#    GLM_FORCE_SWIZZLE
-#    GLM_FORCE_RADIANS
-#    GLM_FORCE_CTOR_INIT
-#    GLM_ENABLE_EXPERIMENTAL
-#    GLM_FORCE_DEPTH_ZERO_TO_ONE
-#)
-#if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
-#    target_compile_definitions(glm INTERFACE GLM_FORCE_CXX20)
-#endif()
-#
-#add_library(glm::glm ALIAS glm)
-#
-## rapidyaml
+
+# glm
+add_library(glm INTERFACE)
+set(GLM_DIR "${CMAKE_CURRENT_SOURCE_DIR}/glm")
+target_sources(glm INTERFACE "${GLM_DIR}/glm/glm.hpp")
+target_include_directories(glm SYSTEM INTERFACE ${GLM_DIR})
+
+target_compile_definitions(glm INTERFACE
+    GLM_FORCE_SWIZZLE
+    GLM_FORCE_RADIANS
+    GLM_FORCE_CTOR_INIT
+    GLM_ENABLE_EXPERIMENTAL
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
+)
+if(NOT CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+    target_compile_definitions(glm INTERFACE GLM_FORCE_CXX20)
+endif()
+
+add_library(glm::glm ALIAS glm)
+
+# rapidyaml
 #add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/rapidyaml")
 
 # mimalloc
@@ -321,7 +321,7 @@ target_link_libraries(${PROJECT_NAME}
     #KTX::ktx
     #stb
 
-    #glm::glm
+    glm::glm
 
     Vulkan::Headers
     volk::volk
