@@ -601,7 +601,7 @@ namespace edge {
 }
 
 i32 APIENTRY WinMain(HINSTANCE hinst, HINSTANCE prev_hinst, PSTR cmd_line, INT cmd_show) {
-	edge::PlatformLayout platform_layout = { 0 };
+	edge::PlatformLayout platform_layout = {};
 	platform_layout.hinst = hinst;
 	platform_layout.prev_hinst = prev_hinst;
 	platform_layout.cmd_line = cmd_line;
