@@ -18,9 +18,6 @@
 [submodule "external/glm"]
 	path = external/glm
 	url = https://github.com/g-truc/glm.git
-[submodule "external/rapidyaml"]
-	path = external/rapidyaml
-	url = https://github.com/biojppm/rapidyaml.git
 [submodule "external/mimalloc"]
 	path = external/mimalloc
 	url = https://github.com/microsoft/mimalloc.git
