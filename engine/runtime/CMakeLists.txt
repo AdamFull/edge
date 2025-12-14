@@ -3,6 +3,7 @@ include(FetchContent)
 target_sources(${PROJECT_NAME}
     PRIVATE
     "input_events.cpp"
+    "window_events.cpp"
 )
 
 # Platform categories
