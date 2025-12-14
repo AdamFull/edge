@@ -9,8 +9,7 @@ add_shader_compile_multi(
     DEFINES
         __SLANG__=1
     SLANGC_FLAGS
-        -fvk-use-dx-layout
-        -fvk-use-scalar-layout
+        -profile spirv_1_2
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -18,3 +17,8 @@ target_link_libraries(${PROJECT_NAME}
     imgui_vs
     imgui_fs
 )
+
+target_sources(${PROJECT_NAME} PRIVATE 
+        "imgui_layer.cpp"
+        "imgui_renderer.cpp"
+    )
