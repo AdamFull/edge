@@ -6,10 +6,9 @@
 
 namespace edge {
 	constexpr u64 INPUT_EVENT_MASK = 1 << 0;
-	constexpr u64 INPUT_EVENT_START_INDEX = 1;
 
 	enum class InputEventType {
-		Keyboard = INPUT_EVENT_START_INDEX,
+		Keyboard = 1,
 		MouseMove,
 		MouseBtn,
 		MouseScroll,
