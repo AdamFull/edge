@@ -9,9 +9,13 @@ namespace edge {
 	struct Scheduler;
 	struct EventDispatcher;
 
+	struct ImGuiLayer;
+
 	namespace gfx {
 		struct Queue;
 		struct Renderer;
+
+		struct ImGuiRenderer;
 	}
 
 	struct EngineContext {
@@ -26,6 +30,9 @@ namespace edge {
 
 		gfx::Queue main_queue;
 		gfx::Renderer* renderer;
+
+		ImGuiLayer* imgui_layer;
+		gfx::ImGuiRenderer* imgui_renderer;
 	};
 }
 
