@@ -1,5 +1,6 @@
 #include "platform.h"
 #include "input_events.h"
+#include "window_events.h"
 
 #include <allocator.hpp>
 #include <logger.hpp>
@@ -268,7 +269,10 @@ namespace edge {
 		if (!ctx) {
 			return;
 		}
-		// TODO: DISPATCH EVENTS
+
+		WindowCloseEvent evt;
+		window_close_event_init(&evt);
+		event_dispatcher_dispatch(ctx->event_dispatcher, (EventHeader*)&evt);
 	}
 
 	static void window_size_cb(GLFWwindow* window, i32 width, i32 height) {
@@ -276,7 +280,10 @@ namespace edge {
 		if (!ctx) {
 			return;
 		}
-		// TODO: DISPATCH EVENTS
+
+		WindowResizeEvent evt;
+		window_resize_event_init(&evt, width, height);
+		event_dispatcher_dispatch(ctx->event_dispatcher, (EventHeader*)&evt);
 	}
 
 	static void window_focus_cb(GLFWwindow* window, i32 focused) {
@@ -284,7 +291,10 @@ namespace edge {
 		if (!ctx) {
 			return;
 		}
-		// TODO: DISPATCH EVENTS
+
+		WindowFocusEvent evt;
+		window_focus_event_init(&evt, focused == 1);
+		event_dispatcher_dispatch(ctx->event_dispatcher, (EventHeader*)&evt);
 	}
 
 	static void window_key_cb(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods) {
@@ -564,6 +574,14 @@ namespace edge {
 		}
 
 		glfwSetWindowTitle(ctx->wnd->handle, title);
+	}
+
+	void platform_context_window_get_size(PlatformContext* ctx, i32* width, i32* height) {
+		if (!ctx || !width || !height) {
+			return;
+		}
+
+		glfwGetWindowSize(ctx->wnd->handle, width, height);
 	}
 
 	f32 platform_context_window_dpi_scale_factor(PlatformContext* ctx) {

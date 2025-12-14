@@ -53,6 +53,8 @@ namespace edge {
 
 	void platform_context_window_set_title(PlatformContext* ctx, const char* title);
 
+	void platform_context_window_get_size(PlatformContext* ctx, i32* width, i32* height);
+
 	f32 platform_context_window_dpi_scale_factor(PlatformContext* ctx);
 	f32 platform_context_window_content_scale_factor(PlatformContext* ctx);
 }
