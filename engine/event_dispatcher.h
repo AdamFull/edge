@@ -1,7 +1,7 @@
 #ifndef EDGE_EVENT_DISPATCHER_H
 #define EDGE_EVENT_DISPATCHER_H
 
-#include <stddef.hpp>
+#include <callable.hpp>
 
 namespace edge {
 	struct Allocator;
@@ -11,14 +11,14 @@ namespace edge {
 		u64 type;
 	};
 
-	using EventListenerFn = void (*)(EventHeader* evt, void* user_data);
+	using EventListenerFn = Callable<void(EventHeader* evt)>;
 
 	struct EventDispatcher;
 
 	EventDispatcher* event_dispatcher_create(const Allocator* alloc);
 	void event_dispatcher_destroy(EventDispatcher* dispatcher);
 
-	uint64_t event_dispatcher_add_listener(EventDispatcher* dispatcher, u64 listen_categories, EventListenerFn listener_fn, void* user_data);
+	u64 event_dispatcher_add_listener(EventDispatcher* dispatcher, u64 listen_categories, EventListenerFn listener_fn);
 	void event_dispatcher_remove_listener(EventDispatcher* dispatcher, u64 listener_id);
 
 	void event_dispatcher_dispatch(EventDispatcher* dispatcher, EventHeader* event);

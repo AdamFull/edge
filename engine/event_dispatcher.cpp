@@ -7,7 +7,6 @@ namespace edge {
 		u64 id;
 		u64 listen_categories;
 		EventListenerFn listener_fn;
-		void* user_data;
 	};
 
 	struct EventDispatcher {
@@ -46,8 +45,8 @@ namespace edge {
 		deallocate(dispatcher->allocator, dispatcher);
 	}
 
-	u64 event_dispatcher_add_listener(EventDispatcher* dispatcher, u64 listen_categories, EventListenerFn listener_fn, void* user_data) {
-		if (!dispatcher || !listener_fn) {
+	u64 event_dispatcher_add_listener(EventDispatcher* dispatcher, u64 listen_categories, EventListenerFn listener_fn) {
+		if (!dispatcher || !callable_is_valid(&listener_fn)) {
 			return 0;
 		}
 
@@ -55,7 +54,6 @@ namespace edge {
 		listener.id = dispatcher->next_listener_id++;
 		listener.listen_categories = listen_categories;
 		listener.listener_fn = listener_fn;
-		listener.user_data = user_data;
 
 		if (!array_push_back(&dispatcher->listeners, listener)) {
 			return 0;
@@ -94,7 +92,7 @@ namespace edge {
 
 			/* Check if any of the event's category flags match the listener's categories */
 			if ((event->categories & listener->listen_categories) != 0) {
-				listener->listener_fn(event, listener->user_data);
+				callable_invoke(&listener->listener_fn, event);
 			}
 		}
 	}
