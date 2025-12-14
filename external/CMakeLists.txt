@@ -27,14 +27,6 @@ include(FetchContent)
 #  FetchContent_MakeAvailable(zstd)
 #endif()
 
-# Fetch spdlog
-#FetchContent_Declare(
-#    spdlog
-#    GIT_REPOSITORY https://github.com/gabime/spdlog.git
-#    GIT_TAG        v1.15.3
-#)
-#FetchContent_MakeAvailable(spdlog)
-
 # vulkan
 add_library(vulkan INTERFACE)
 set(VULKAN_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/include)
@@ -128,10 +120,6 @@ endif()
 
 add_library(GPUOpen::VulkanMemoryAllocator ALIAS vma)
 
-#add_library(argparse INTERFACE)
-#set(ARGPARSE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/argparse")
-#target_include_directories(argparse SYSTEM INTERFACE "${ARGPARSE_DIR}/include")
-#
 ## KTX-Software
 #set(KTX_SOFTWARE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/KTX-Software")
 #
@@ -279,9 +267,6 @@ endif()
 
 add_library(glm::glm ALIAS glm)
 
-# rapidyaml
-#add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/rapidyaml")
-
 # mimalloc
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/mimalloc")
 
@@ -315,9 +300,6 @@ target_link_libraries(${PROJECT_NAME}
 
     mimalloc-static
 
-    #argparse
-    #spdlog::spdlog
-
     #KTX::ktx
     #stb
 
@@ -328,6 +310,4 @@ target_link_libraries(${PROJECT_NAME}
     GPUOpen::VulkanMemoryAllocator
 
     imgui
-
-    #ryml::ryml
 )
