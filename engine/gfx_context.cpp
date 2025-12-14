@@ -111,7 +111,7 @@ static struct gfx_key_value g_device_extensions[] = {
 	{ VK_EXT_MEMORY_BUDGET_EXTENSION_NAME, false },
 	{ VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, false },
 	{ VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME, false },
-	{ VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, false },
+	{ VK_KHR_BUFFER_DEVICE_ADDRESS_EXTENSION_NAME, true },
 	{ VK_KHR_PERFORMANCE_QUERY_EXTENSION_NAME, false },
 	{ VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME, false },
 	{ VK_EXT_MEMORY_PRIORITY_EXTENSION_NAME, false },
@@ -727,17 +727,29 @@ namespace edge::gfx {
 			queue_create_info->pQueuePriorities = queue_priorities;
 		}
 
-		VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = {};
-		sync2_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR;
-		sync2_features.pNext = nullptr;
+		VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR,
+		};
 
-		VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = {};
-		dynamic_rendering_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR;
-		sync2_features.pNext = &dynamic_rendering_features;
+		VkPhysicalDeviceBufferDeviceAddressFeaturesKHR buffer_device_address_features = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR
+		};
+		sync2_features.pNext = &buffer_device_address_features;
 
-		VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptor_indexing_features = {};
-		descriptor_indexing_features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT;
+		VkPhysicalDeviceDynamicRenderingFeaturesKHR dynamic_rendering_features = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DYNAMIC_RENDERING_FEATURES_KHR
+		};
+		buffer_device_address_features.pNext = &dynamic_rendering_features;
+
+		VkPhysicalDeviceDescriptorIndexingFeaturesEXT descriptor_indexing_features = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT
+		};
 		dynamic_rendering_features.pNext = &descriptor_indexing_features;
+
+		VkPhysicalDeviceShaderFloat16Int8FeaturesKHR shader_float16_int8_features = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES_KHR
+		};
+		descriptor_indexing_features.pNext = &shader_float16_int8_features;
 
 		void* last_feature = &sync2_features;
 
