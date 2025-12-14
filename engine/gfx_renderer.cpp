@@ -402,8 +402,8 @@ namespace edge::gfx {
 		return handle_pool_allocate(&renderer->resource_handle_pool);
 	}
 
-	bool renderer_setup_image_resource(Renderer* renderer, Handle handle, const Image* image) {
-		if (!renderer || !image) {
+	bool renderer_setup_image_resource(Renderer* renderer, Handle handle, Image image) {
+		if (!renderer) {
 			return false;
 		}
 
@@ -416,7 +416,7 @@ namespace edge::gfx {
 		resource->type = ResourceType::Image;
 #endif
 
-		memcpy(&resource->image, image, sizeof(Image));
+		memcpy(&resource->image, &image, sizeof(Image));
 
 		Image* image_source = &resource->image;
 
@@ -539,12 +539,46 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool renderer_setup_buffer_resource(Renderer* renderer, Handle handle, const Buffer* buffer) {
-		if (!renderer || !buffer) {
+	bool renderer_setup_buffer_resource(Renderer* renderer, Handle handle, Buffer buffer) {
+		if (!renderer) {
 			return false;
 		}
 
+		Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
+		resource->type = ResourceType::Buffer;
+		memcpy(&resource->buffer, &buffer, sizeof(Buffer));
+
 		return true;
+	}
+
+	void renderer_update_image_resource(Renderer* renderer, Handle handle, Image image) {
+		if (!renderer || !handle_pool_is_valid(&renderer->resource_handle_pool, handle)) {
+			return;
+		}
+		
+		if (renderer->active_frame) {
+			Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
+			if (resource->type != ResourceType::Unknown) {
+				array_push_back(&renderer->active_frame->free_resources, *resource);
+			}
+		}
+
+		renderer_setup_image_resource(renderer, handle, image);
+	}
+
+	void renderer_update_buffer_resource(Renderer* renderer, Handle handle, Buffer buffer) {
+		if (!renderer || !handle_pool_is_valid(&renderer->resource_handle_pool, handle)) {
+			return;
+		}
+
+		if (renderer->active_frame) {
+			Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
+			if (resource->type != ResourceType::Unknown) {
+				array_push_back(&renderer->active_frame->free_resources, *resource);
+			}
+		}
+
+		renderer_setup_buffer_resource(renderer, handle, buffer);
 	}
 
 	void renderer_free_resource(Renderer* renderer, Handle handle) {

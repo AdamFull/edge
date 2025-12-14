@@ -23,8 +23,10 @@ namespace edge::gfx {
 	void renderer_destroy(Renderer* renderer);
 
 	Handle renderer_add_resource(Renderer* renderer);
-	bool renderer_setup_image_resource(Renderer* renderer, Handle handle, const Image* resource);
-	bool renderer_setup_buffer_resource(Renderer* renderer, Handle handle, const Buffer* resource);
+	bool renderer_setup_image_resource(Renderer* renderer, Handle handle, Image resource);
+	bool renderer_setup_buffer_resource(Renderer* renderer, Handle handle, Buffer resource);
+	void renderer_update_image_resource(Renderer* renderer, Handle handle, Image image);
+	void renderer_update_buffer_resource(Renderer* renderer, Handle handle, Buffer buffer);
 	void renderer_free_resource(Renderer* renderer, Handle handle);
 
 	bool renderer_frame_begin(Renderer* renderer);
