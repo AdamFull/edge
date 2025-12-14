@@ -4,6 +4,9 @@
 #include "gfx_context.h"
 #include "gfx_renderer.h"
 
+#include "imgui/imgui_layer.h"
+#include "imgui/imgui_renderer.h"
+
 #include <allocator.hpp>
 #include <logger.hpp>
 #include <scheduler.hpp>
@@ -15,6 +18,14 @@
 static edge::EngineContext engine_context = {};
 
 static void edge_cleanup_engine(void) {
+	if (engine_context.imgui_layer) {
+		edge::imgui_layer_destroy(engine_context.imgui_layer);
+	}
+
+	if (engine_context.imgui_renderer) {
+		edge::gfx::imgui_renderer_destroy(engine_context.imgui_renderer);
+	}
+
 	if (engine_context.renderer) {
 		edge::gfx::renderer_destroy(engine_context.renderer);
 	}
@@ -136,8 +147,33 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 		return -1;
 	}
 
+	edge::ImGuiLayerInitInfo imgui_init_info = {
+		.alocator = engine_context.allocator,
+		.event_dispatcher = engine_context.event_dispatcher,
+		.platform_context = engine_context.platform_context
+	};
+
+	engine_context.imgui_layer = edge::imgui_layer_create(&imgui_init_info);
+	if (!engine_context.imgui_layer) {
+		edge_cleanup_engine();
+		return -1;
+	}
+
+	edge::gfx::ImGuiRendererCreateInfo imgui_renderer_create_info = {
+		.allocator = engine_context.allocator,
+		.renderer = engine_context.renderer
+	};
+
+	engine_context.imgui_renderer = edge::gfx::imgui_renderer_create(&imgui_renderer_create_info);
+	if (engine_context.imgui_renderer) {
+		edge_cleanup_engine();
+		return -1;
+	}
+
     while (!platform_context_window_should_close(engine_context.platform_context)) {
 		platform_context_window_process_events(engine_context.platform_context, 0.1f);
+
+		edge::imgui_layer_update(engine_context.imgui_layer, 0.1f);
 
 		if (edge::gfx::renderer_frame_begin(engine_context.renderer)) {
 
