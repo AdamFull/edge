@@ -21,7 +21,7 @@ using isize = ptrdiff_t;
 
 namespace edge {
 	template<typename T>
-	concept TrivialType = std::is_trivially_constructible_v<T> || std::is_trivially_destructible_v<T> || std::is_trivially_copyable_v<T>;
+	concept TrivialType = std::is_trivially_destructible_v<T> || std::is_trivially_copyable_v<T>;
 
     template<typename T>
     concept Character = 
