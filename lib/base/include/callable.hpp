@@ -7,15 +7,6 @@
 #include "allocator.hpp"
 
 namespace edge {
-	template<typename>
-	struct Callable;
-
-	template<typename R, typename... Args>
-	struct Callable<R(Args...)> {
-		R(*invoke_fn)(void* data, Args... args);
-		void* data;
-	};
-
 	template<typename T>
 	struct callable_traits : callable_traits<decltype(&T::operator())> {};
 
@@ -35,6 +26,15 @@ namespace edge {
 	struct callable_traits<R(*)(Args...)> {
 		using signature = R(Args...);
 		using return_type = R;
+	};
+
+	template<typename>
+	struct Callable;
+
+	template<typename R, typename... Args>
+	struct Callable<R(Args...)> {
+		R(*invoke_fn)(void* data, Args... args);
+		void* data;
 	};
 
 	template<typename R, typename... Args>
