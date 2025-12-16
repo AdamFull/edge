@@ -41,8 +41,7 @@ namespace edge {
 	inline Callable<R(Args...)> callable_create_from_func(const Allocator* alloc, R(*fn)(Args...)) {
 		using FnPtr = R(*)(Args...);
 
-		FnPtr* stored = allocate<FnPtr>(alloc);
-		*stored = fn;
+		FnPtr* stored = allocate<FnPtr>(alloc, fn);
 
 		Callable<R(Args...)> result;
 		result.invoke_fn = [](void* data, Args... args) -> R {
@@ -58,8 +57,7 @@ namespace edge {
 		using FType = std::decay_t<F>;
 		using Sig = typename callable_traits<FType>::signature;
 
-		FType* stored = allocate<FType>(alloc);
-		new (stored) FType(std::forward<F>(functor));
+		FType* stored = allocate<FType>(alloc, std::forward<F>(functor));
 
 		return[=]<typename R, typename... Args>(R(*)(Args...)) {
 			Callable<R(Args...)> result;
@@ -70,46 +68,6 @@ namespace edge {
 			result.data = stored;
 			return result;
 		}(static_cast<Sig*>(nullptr));
-	}
-
-	template<typename C, typename R, typename... Args>
-	inline Callable<R(Args...)> callable_create_from_member(const Allocator* alloc, R(C::* fn)(Args...), C* instance) {
-		struct MemberData {
-			R(C::* fn)(Args...);
-			C* instance;
-		};
-
-		MemberData* stored = allocate<MemberData>(alloc);
-		stored->fn = fn;
-		stored->instance = instance;
-
-		Callable<R(Args...)> result;
-		result.invoke_fn = [](void* data, Args... args) -> R {
-			MemberData* md = static_cast<MemberData*>(data);
-			return (md->instance->*(md->fn))(std::forward<Args>(args)...);
-			};
-		result.data = stored;
-		return result;
-	}
-
-	template<typename C, typename R, typename... Args>
-	inline Callable<R(Args...)> callable_create_from_const_member(const Allocator* alloc, R(C::* fn)(Args...) const, const C* instance) {
-		struct MemberData {
-			R(C::* fn)(Args...) const;
-			const C* instance;
-		};
-
-		MemberData* stored = allocate<MemberData>(alloc);
-		stored->fn = fn;
-		stored->instance = instance;
-
-		Callable<R(Args...)> result;
-		result.invoke_fn = [](void* data, Args... args) -> R {
-			MemberData* md = static_cast<MemberData*>(data);
-			return (md->instance->*(md->fn))(std::forward<Args>(args)...);
-			};
-		result.data = stored;
-		return result;
 	}
 
 	template<typename R, typename... Args>
