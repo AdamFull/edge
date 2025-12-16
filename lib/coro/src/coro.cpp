@@ -20,7 +20,7 @@ namespace edge {
 		const Allocator* allocator;
 
 		Arena* stack_arena;
-		Array<uintptr_t>* free_stacks;
+		Array<uintptr_t> free_stacks;
 
 		Coro* current_coro;
 		Coro main_coro;
@@ -65,7 +65,7 @@ namespace edge {
 		CoroThreadContext* ctx = &thread_context;
 
 		uintptr_t ptr_addr = 0x0;
-		if (!array_pop_back(ctx->free_stacks, &ptr_addr)) {
+		if (!ctx->free_stacks.pop_back(&ptr_addr)) {
 			return arena_alloc_ex(thread_context.stack_arena, EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
 		}
 
@@ -80,7 +80,7 @@ namespace edge {
 		CoroThreadContext* ctx = &thread_context;
 
 		uintptr_t ptr_addr = reinterpret_cast<uintptr_t>(ptr);
-		if (!array_push_back(ctx->free_stacks, ptr_addr)) {
+		if (!ctx->free_stacks.push_back(ctx->allocator, ptr_addr)) {
 			return;
 		}
 	}
@@ -90,8 +90,7 @@ namespace edge {
 			thread_context.stack_arena = allocate<Arena>(allocator);
 			arena_create(allocator, thread_context.stack_arena, 0);
 
-			thread_context.free_stacks = allocate<Array<uintptr_t>>(allocator);
-			array_create(allocator, thread_context.free_stacks, 16);
+			thread_context.free_stacks.reserve(allocator, 16);
 
 			thread_context.allocator = allocator;
 			thread_context.main_context = fiber_context_create(allocator, nullptr, nullptr, 0);
@@ -107,9 +106,7 @@ namespace edge {
 				fiber_context_destroy(thread_context.allocator, thread_context.main_context);
 			}
 
-			if (thread_context.free_stacks) {
-				array_destroy(thread_context.free_stacks);
-			}
+			thread_context.free_stacks.destroy(thread_context.allocator);
 
 			if (thread_context.stack_arena) {
 				arena_destroy(thread_context.stack_arena);

@@ -32,12 +32,12 @@ namespace edge {
 		const Allocator* allocator;
 
 		Arena* protected_arena;
-		Array<uintptr_t>* free_stacks;
+		Array<uintptr_t> free_stacks;
 		Mutex stack_mutex;
 
 		MPMCQueue<uintptr_t>* queues[static_cast<usize>(SchedulerPriority::Count)];
 
-		Array<WorkerThread*>* worker_threads;
+		Array<WorkerThread*> worker_threads;
 
 		std::atomic<usize> active_jobs;
 		std::atomic<usize> queued_jobs;
@@ -152,7 +152,7 @@ namespace edge {
 		mutex_lock(&sched->stack_mutex);
 
 		uintptr_t ptr_addr = 0;
-		if (!array_pop_back(sched->free_stacks, &ptr_addr)) {
+		if (!sched->free_stacks.pop_back(&ptr_addr)) {
 			mutex_unlock(&sched->stack_mutex);
 			return arena_alloc_ex(sched->protected_arena, EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
 		}
@@ -169,7 +169,7 @@ namespace edge {
 		mutex_lock(&sched->stack_mutex);
 
 		uintptr_t ptr_addr = reinterpret_cast<uintptr_t>(ptr);
-		array_push_back(sched->free_stacks, ptr_addr);
+		sched->free_stacks.push_back(sched->allocator, ptr_addr);
 
 		mutex_unlock(&sched->stack_mutex);
 	}
@@ -364,8 +364,7 @@ namespace edge {
 			goto failed;
 		}
 
-		sched->free_stacks = allocate<Array<uintptr_t>>(allocator);
-		if (!array_create(allocator, sched->free_stacks, 16)) {
+		if (!sched->free_stacks.reserve(allocator, 16)) {
 			goto failed;
 		}
 
@@ -388,8 +387,7 @@ namespace edge {
 			num_cores = 4;
 		}
 
-		sched->worker_threads = allocate<Array<WorkerThread*>>(allocator);
-		if (!array_create(allocator, sched->worker_threads, num_cores)) {
+		if (!sched->worker_threads.reserve(allocator, num_cores)) {
 			goto failed;
 		}
 
@@ -414,7 +412,7 @@ namespace edge {
 				goto failed;
 			}
 
-			if (!array_push_back(sched->worker_threads, worker)) {
+			if (!sched->worker_threads.push_back(sched->allocator, worker)) {
 				thread_join(worker->thread, nullptr);
 				deallocate(allocator, worker);
 				goto failed;
@@ -431,9 +429,9 @@ namespace edge {
 
 	failed:
 		if (sched) {
-			if (sched->worker_threads) {
-				for (usize i = 0; i < array_size(sched->worker_threads); ++i) {
-					WorkerThread** worker_ptr = array_at(sched->worker_threads, i);
+			if (sched->worker_threads.m_data) {
+				for (usize i = 0; i < sched->worker_threads.m_size; ++i) {
+					WorkerThread** worker_ptr = sched->worker_threads.get(i);
 					if (worker_ptr && *worker_ptr) {
 						(*worker_ptr)->should_exit.store(true, std::memory_order_release);
 					}
@@ -441,15 +439,15 @@ namespace edge {
 
 				sched->shutdown.store(true, std::memory_order_release);
 
-				for (usize i = 0; i < array_size(sched->worker_threads); ++i) {
-					WorkerThread** worker_ptr = array_at(sched->worker_threads, i);
+				for (usize i = 0; i < sched->worker_threads.m_size; ++i) {
+					WorkerThread** worker_ptr = sched->worker_threads.get(i);
 					if (worker_ptr && *worker_ptr) {
 						thread_join((*worker_ptr)->thread, nullptr);
 						deallocate(allocator, *worker_ptr);
 					}
 				}
 
-				array_destroy(sched->worker_threads);
+				sched->worker_threads.destroy(sched->allocator);
 			}
 
 			for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
@@ -462,9 +460,8 @@ namespace edge {
 
 			mutex_destroy(&sched->stack_mutex);
 
-			if (sched->free_stacks) {
-				array_destroy(sched->free_stacks);
-				deallocate(allocator, sched->free_stacks);
+			if (sched->free_stacks.m_data) {
+				sched->free_stacks.destroy(sched->allocator);
 			}
 
 			if (sched->protected_arena) {
@@ -485,9 +482,9 @@ namespace edge {
 
 		sched->shutdown.store(true, std::memory_order_release);
 
-		if (sched->worker_threads) {
-			for (usize i = 0; i < array_size(sched->worker_threads); ++i) {
-				WorkerThread** worker_ptr = array_at(sched->worker_threads, i);
+		if (sched->worker_threads.m_data) {
+			for (usize i = 0; i < sched->worker_threads.m_size; ++i) {
+				WorkerThread** worker_ptr = sched->worker_threads.get(i);
 				if (worker_ptr && *worker_ptr) {
 					(*worker_ptr)->should_exit.store(true, std::memory_order_release);
 					thread_join((*worker_ptr)->thread, nullptr);
@@ -495,8 +492,7 @@ namespace edge {
 				}
 			}
 
-			array_destroy(sched->worker_threads);
-			deallocate(sched->allocator, sched->worker_threads);
+			sched->worker_threads.destroy(sched->allocator);
 		}
 
 		for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
@@ -519,9 +515,8 @@ namespace edge {
 
 		mutex_destroy(&sched->stack_mutex);
 
-		if (sched->free_stacks) {
-			array_destroy(sched->free_stacks);
-			deallocate(sched->allocator, sched->free_stacks);
+		if (sched->free_stacks.m_data) {
+			sched->free_stacks.destroy(sched->allocator);
 		}
 
 		if (sched->protected_arena) {

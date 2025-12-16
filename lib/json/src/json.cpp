@@ -29,7 +29,7 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate<JsonValue>(alloc);
+        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
         if (!value) {
             return nullptr;
         }
@@ -44,7 +44,7 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate<JsonValue>(alloc);
+        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
         if (!value) {
             return nullptr;
         }
@@ -60,7 +60,7 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate<JsonValue>(alloc);
+        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
         if (!value) {
             return nullptr;
         }
@@ -95,7 +95,7 @@ namespace edge {
             return json_null(alloc);
         }
 
-        JsonValue* value = allocate<JsonValue>(alloc);
+        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
         if (!value) {
             return nullptr;
         }
@@ -116,13 +116,13 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate<JsonValue>(alloc);
+        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
         if (!value) {
             return nullptr;
         }
 
         value->m_type = JsonType::Array;
-        if (!array_create(alloc, &value->as.array_value, 8)) {
+        if (!value->as.array_value.reserve(alloc, 8)) {
             deallocate(alloc, value);
             return nullptr;
         }
@@ -137,7 +137,7 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate<JsonValue>(alloc);
+        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
         if (!value) {
             return nullptr;
         }
@@ -169,12 +169,11 @@ namespace edge {
             break;
         }
         case JsonType::Array: {
-            size_t size = array_size(&value->as.array_value);
-            for (size_t i = 0; i < size; i++) {
-                JsonValue** elem_ptr = array_at(&value->as.array_value, i);
+            for (size_t i = 0; i < value->as.array_value.m_size; i++) {
+                JsonValue** elem_ptr = value->as.array_value.get(i);
                 json_free_value(*elem_ptr);
             }
-            array_destroy(&value->as.array_value);
+            value->as.array_value.destroy(value->m_allocator);
             break;
         }
         case JsonType::Object: {
@@ -225,7 +224,7 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue** elem_ptr = array_get(&array->as.array_value, index);
+        JsonValue* const* elem_ptr = array->as.array_value.get(index);
         return elem_ptr ? *elem_ptr : nullptr;
     }
 
@@ -233,7 +232,7 @@ namespace edge {
         if (!array || array->m_type != JsonType::Array || !value) {
             return false;
         }
-        return array_push_back(&array->as.array_value, value);
+        return array->as.array_value.push_back(array->m_allocator, value);
     }
 
     bool json_array_insert(JsonValue* array, size_t index, JsonValue* value) {
@@ -241,7 +240,7 @@ namespace edge {
             return false;
         }
 
-        return array_insert(&array->as.array_value, index, value);
+        return array->as.array_value.insert(array->m_allocator, index, value);
     }
 
     bool json_array_remove(JsonValue* array, size_t index) {
@@ -250,7 +249,7 @@ namespace edge {
         }
 
         JsonValue* removed_value = nullptr;
-        if (!array_remove(&array->as.array_value, index, &removed_value)) {
+        if (!array->as.array_value.remove(index, &removed_value)) {
             return false;
         }
 
@@ -263,13 +262,12 @@ namespace edge {
             return;
         }
 
-        size_t size = array_size(&array->as.array_value);
-        for (size_t i = 0; i < size; i++) {
-            JsonValue** elem_ptr = array_at(&array->as.array_value, i);
+        for (size_t i = 0; i < array->as.array_value.m_size; i++) {
+            JsonValue** elem_ptr = array->as.array_value.get(i);
             json_free_value(*elem_ptr);
         }
 
-        array_clear(&array->as.array_value);
+        array->as.array_value.clear();
     }
 
     size_t json_object_size(const JsonValue* object) {
@@ -425,9 +423,8 @@ namespace edge {
                 return nullptr;
             }
 
-            usize size = array_size(&value->as.array_value);
-            for (usize i = 0; i < size; i++) {
-                JsonValue** elem_ptr = array_at(&value->as.array_value, i);
+            for (usize i = 0; i < value->as.array_value.m_size; i++) {
+                JsonValue* const* elem_ptr = value->as.array_value.get(i);
                 JsonValue* elem = json_clone(*elem_ptr);
                 if (!elem || !json_array_append(array, elem)) {
                     if (elem) json_free_value(elem);
@@ -488,15 +485,13 @@ namespace edge {
             return string_compare_string(&a->as.string_value, &b->as.string_value) == 0;
 
         case JsonType::Array: {
-            usize size_a = array_size(&a->as.array_value);
-            usize size_b = array_size(&b->as.array_value);
-            if (size_a != size_b) {
+            if (a->as.array_value.m_size != b->as.array_value.m_size) {
                 return false;
             }
 
-            for (usize i = 0; i < size_a; i++) {
-                JsonValue** elem_a = array_at(&a->as.array_value, i);
-                JsonValue** elem_b = array_at(&b->as.array_value, i);
+            for (usize i = 0; i < a->as.array_value.m_size; i++) {
+                JsonValue* const* elem_a = a->as.array_value.get(i);
+                JsonValue* const* elem_b = b->as.array_value.get(i);
                 if (!json_equals(*elem_a, *elem_b)) {
                     return false;
                 }

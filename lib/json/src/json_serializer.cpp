@@ -94,27 +94,25 @@ namespace edge {
 					return false;
 				}
 
-				usize size = array_size(&value->as.array_value);
-
-				if (size > 0 && indent) {
+				if (value->as.array_value.m_size > 0 && indent) {
 					if (!string_append_char(sb, '\n')) {
 						return false;
 					}
 				}
 
-				for (usize i = 0; i < size; i++) {
+				for (usize i = 0; i < value->as.array_value.m_size; i++) {
 					if (indent) {
 						if (!stringify_indent(sb, indent, depth + 1)) {
 							return false;
 						}
 					}
 
-					JsonValue** elem_ptr = array_at(&value->as.array_value, i);
+					JsonValue* const* elem_ptr = value->as.array_value.get(i);
 					if (!stringify_value(sb, *elem_ptr, indent, depth + 1)) {
 						return false;
 					}
 
-					if (i < size - 1) {
+					if (i < value->as.array_value.m_size - 1) {
 						if (!string_append_char(sb, ',')) {
 							return false;
 						}
@@ -127,7 +125,7 @@ namespace edge {
 					}
 				}
 
-				if (size > 0 && indent) {
+				if (value->as.array_value.m_size > 0 && indent) {
 					if (!stringify_indent(sb, indent, depth)) {
 						return false;
 					}

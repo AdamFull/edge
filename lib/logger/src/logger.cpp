@@ -99,13 +99,13 @@ namespace edge {
 		logger->min_level = min_level;
 		logger->allocator = allocator;
 
-		if (!array_create(allocator, &logger->outputs, 4)) {
+		if (!logger->outputs.reserve(allocator, 4)) {
 			deallocate(allocator, logger);
 			return nullptr;
 		}
 
 		if (mutex_init(&logger->mutex, MutexType::Plain) != ThreadResult::Success) {
-			array_destroy(&logger->outputs);
+			logger->outputs.destroy(allocator);
 			deallocate(allocator, logger);
 			return nullptr;
 		}
@@ -118,9 +118,9 @@ namespace edge {
 			return;
 		}
 
-		usize count = array_size(&logger->outputs);
+		usize count = logger->outputs.m_size;
 		for (usize i = 0; i < count; i++) {
-			LoggerOutput** output_ptr = array_at(&logger->outputs, i);
+			LoggerOutput** output_ptr = logger->outputs.get(i);
 			if (output_ptr && *output_ptr) {
 				LoggerOutput* output = *output_ptr;
 				if (output->vtable && output->vtable->destroy) {
@@ -128,7 +128,7 @@ namespace edge {
 				}
 			}
 		}
-		array_destroy(&logger->outputs);
+		logger->outputs.destroy(logger->allocator);
 
 		mutex_destroy(&logger->mutex);
 		deallocate(logger->allocator, logger);
@@ -140,7 +140,7 @@ namespace edge {
 		}
 
 		mutex_lock(&logger->mutex);
-		bool result = array_push_back(&logger->outputs, output);
+		bool result = logger->outputs.push_back(logger->allocator, output);
 		mutex_unlock(&logger->mutex);
 
 		return result;
@@ -159,9 +159,9 @@ namespace edge {
 
 		mutex_lock(&logger->mutex);
 
-		usize count = array_size(&logger->outputs);
+		usize count = logger->outputs.m_size;
 		for (usize i = 0; i < count; i++) {
-			LoggerOutput** output_ptr = array_at(&logger->outputs, i);
+			LoggerOutput** output_ptr = logger->outputs.get(i);
 			if (output_ptr && *output_ptr) {
 				LoggerOutput* output = *output_ptr;
 				if (output->vtable && output->vtable->flush) {
@@ -203,9 +203,9 @@ namespace edge {
 
 		mutex_lock(&logger->mutex);
 
-		usize count = array_size(&logger->outputs);
+		usize count = logger->outputs.m_size;
 		for (usize i = 0; i < count; i++) {
-			LoggerOutput** output_ptr = array_at(&logger->outputs, i);
+			LoggerOutput** output_ptr = logger->outputs.get(i);
 			if (output_ptr && *output_ptr) {
 				LoggerOutput* output = *output_ptr;
 				if (output->vtable && output->vtable->write) {
