@@ -10,237 +10,166 @@
 namespace edge {
 	template<TrivialType T>
 	struct Array {
-		T* m_data;
-		usize m_size;
-		usize m_capacity;
-		const Allocator* m_allocator;
-	};
+		T* m_data = nullptr;
+		usize m_size = 0ull;
+		usize m_capacity = 0ull;
 
-	template<TrivialType T>
-	bool array_create(const Allocator* alloc, Array<T>* arr, usize initial_capacity) {
-		if (!alloc || !arr) {
-			return false;
+		void destroy(const Allocator* alloc) {
+			if (m_data) {
+				deallocate_array(alloc, m_data, m_capacity);
+			}
 		}
 
-		if (initial_capacity == 0) {
-			initial_capacity = 16;
+		void clear() {
+			// TODO: Call destructor for not trivially destructable
+			m_size = 0;
 		}
 
-		arr->m_data = allocate<T>(alloc, initial_capacity);
-		if (!arr->m_data) {
-			return false;
-		}
+		bool reserve(const Allocator* alloc, usize capacity) {
+			if (capacity <= m_capacity) {
+				return true;
+			}
 
-		arr->m_size = 0;
-		arr->m_capacity = initial_capacity;
-		arr->m_allocator = alloc;
+			T* new_data = allocate_array<T>(alloc, capacity);
+			if (!new_data) {
+				return false;
+			}
 
-		return true;
-	}
+			if (m_data) {
+				memcpy(new_data, m_data, sizeof(T) * m_size);
+				deallocate_array(alloc, m_data, m_capacity);
+			}
 
-	template<TrivialType T>
-	void array_destroy(Array<T>* arr) {
-		if (!arr) {
-			return;
-		}
+			m_data = new_data;
+			m_capacity = capacity;
 
-		if (arr->m_data) {
-			deallocate(arr->m_allocator, arr->m_data);
-		}
-	}
-
-	template<TrivialType T>
-	void array_clear(Array<T>* arr) {
-		if (!arr) {
-			return;
-		}
-
-		arr->m_size = 0;
-	}
-
-	template<TrivialType T>
-	bool array_reserve(Array<T>* arr, usize capacity) {
-		if (!arr) {
-			return false;
-		}
-
-		if (capacity <= arr->m_capacity) {
 			return true;
 		}
 
-		T* new_data = allocate<T>(arr->m_allocator, capacity);
-		if (!new_data) {
-			return false;
-		}
-
-		if (arr->m_data) {
-			memcpy(new_data, arr->m_data, sizeof(T) * arr->m_size);
-			deallocate(arr->m_allocator, arr->m_data);
-		}
-
-		arr->m_data = new_data;
-		arr->m_capacity = capacity;
-
-		return true;
-	}
-
-	template<TrivialType T>
-	bool array_resize(Array<T>* arr, usize new_size) {
-		if (!arr) {
-			return false;
-		}
-
-		if (new_size > arr->m_capacity) {
-			usize new_capacity = arr->m_capacity;
-			while (new_capacity < new_size) {
-				new_capacity *= 2;
+		bool resize(const Allocator* alloc, usize new_size) {
+			if (new_size > m_capacity) {
+				usize new_capacity = m_capacity;
+				while (new_capacity < new_size) {
+					new_capacity *= 2;
+				}
+				if (!reserve(alloc, new_capacity)) {
+					return false;
+				}
 			}
-			if (!array_reserve(arr, new_capacity)) {
+
+			if (new_size > m_size) {
+				memset(&m_data[m_size], 0, sizeof(T) * (new_size - m_size));
+			}
+
+			m_size = new_size;
+			return true;
+		}
+
+		bool empty() const noexcept {
+			return m_size == 0;
+		}
+
+		T* get(usize index) {
+			if (index >= m_size) {
+				return nullptr;
+			}
+			return &m_data[index];
+		}
+
+		T const* get(usize index) const {
+			if (index >= m_size) {
+				return nullptr;
+			}
+			return &m_data[index];
+		}
+
+		bool set(usize index, const T& element) {
+			if (index >= m_size) {
 				return false;
 			}
+			m_data[index] = element;
+			return true;
 		}
 
-		if (new_size > arr->m_size) {
-			memset(&arr->m_data[arr->m_size], 0, sizeof(T) * (new_size - arr->m_size));
+		T* front() {
+			if (m_size == 0) {
+				return nullptr;
+			}
+			return &m_data[0];
 		}
 
-		arr->m_size = new_size;
-		return true;
-	}
-
-	template<TrivialType T>
-	usize array_size(const Array<T>* arr) {
-		return arr ? arr->m_size : 0;
-	}
-
-	template<TrivialType T>
-	usize array_capacity(const Array<T>* arr) {
-		return arr ? arr->m_capacity : 0;
-	}
-
-	template<TrivialType T>
-	bool array_empty(const Array<T>* arr) {
-		return !arr || arr->m_size == 0;
-	}
-
-	template<TrivialType T>
-	T* array_at(const Array<T>* arr, usize index) {
-		if (!arr) {
-			return nullptr;
-		}
-		return &arr->m_data[index];
-	}
-
-	template<TrivialType T>
-	T* array_get(const Array<T>* arr, usize index) {
-		if (!arr || index >= arr->m_size) {
-			return nullptr;
-		}
-		return &arr->m_data[index];
-	}
-
-	template<TrivialType T>
-	bool array_set(Array<T>* arr, usize index, const T& element) {
-		if (!arr || index >= arr->m_size) {
-			return false;
-		}
-		arr->m_data[index] = element;
-		return true;
-	}
-
-	template<TrivialType T>
-	T* array_front(const Array<T>* arr) {
-		if (!arr || arr->m_size == 0) {
-			return nullptr;
-		}
-		return &arr->m_data[0];
-	}
-
-	template<TrivialType T>
-	T* array_back(const Array<T>* arr) {
-		if (!arr || arr->m_size == 0) {
-			return nullptr;
-		}
-		return &arr->m_data[arr->m_size - 1];
-	}
-
-	template<TrivialType T>
-	T* array_data(const Array<T>* arr) {
-		return arr ? arr->m_data : nullptr;
-	}
-
-	template<TrivialType T>
-	bool array_push_back(Array<T>* arr, const T& element) {
-		if (!arr) {
-			return false;
+		T* back() {
+			if (m_size == 0) {
+				return nullptr;
+			}
+			return &m_data[m_size - 1];
 		}
 
-		if (arr->m_size >= arr->m_capacity) {
-			usize new_capacity = arr->m_capacity * 2;
-			if (!array_reserve(arr, new_capacity)) {
+		bool push_back(const Allocator* alloc, const T& element) {
+			if (m_size >= m_capacity) {
+				usize new_capacity = m_capacity * 2;
+				if (!reserve(alloc, new_capacity)) {
+					return false;
+				}
+			}
+
+			memcpy(&m_data[m_size], &element, sizeof(T));
+			m_size++;
+
+			return true;
+		}
+
+		bool pop_back(T* out_element) {
+			if (m_size == 0) {
 				return false;
 			}
+
+			m_size--;
+			if (out_element) {
+				memcpy(out_element, &m_data[m_size], sizeof(T));
+			}
+
+			return true;
 		}
 
-		memcpy(&arr->m_data[arr->m_size], &element, sizeof(T));
-		arr->m_size++;
-
-		return true;
-	}
-
-	template<TrivialType T>
-	bool array_pop_back(Array<T>* arr, T* out_element) {
-		if (!arr || arr->m_size == 0) {
-			return false;
-		}
-
-		arr->m_size--;
-		if (out_element) {
-			memcpy(out_element, &arr->m_data[arr->m_size], sizeof(T));
-		}
-
-		return true;
-	}
-
-	template<TrivialType T>
-	bool array_insert(Array<T>* arr, usize index, const T& element) {
-		if (!arr || index > arr->m_size) {
-			return false;
-		}
-
-		if (arr->m_size >= arr->m_capacity) {
-			if (!array_reserve(arr, arr->m_capacity * 2)) {
+		bool insert(const Allocator* alloc, usize index, const T& element) {
+			if (index > m_size) {
 				return false;
 			}
+
+			if (m_size >= m_capacity) {
+				if (!reserve(alloc, m_capacity * 2)) {
+					return false;
+				}
+			}
+
+			if (index < m_size) {
+				memmove(&m_data[index + 1], &m_data[index], sizeof(T) * (m_size - index));
+			}
+
+			memcpy(&m_data[index], &element, sizeof(T));
+			m_size++;
+			return true;
 		}
 
-		if (index < arr->m_size) {
-			memmove(&arr->m_data[index + 1], &arr->m_data[index], sizeof(T) * (arr->m_size - index));
+		bool remove(usize index, T* out_element) {
+			if (index >= m_size) {
+				return false;
+			}
+
+			if (out_element) {
+				memcpy(out_element, &m_data[index], sizeof(T));
+			}
+
+			if (index < m_size - 1) {
+				memmove(&m_data[index], &m_data[index + 1], sizeof(T) * (m_size - index - 1));
+			}
+
+			m_size--;
+
+			return true;
 		}
-
-		memcpy(&arr->m_data[index], &element, sizeof(T));
-		arr->m_size++;
-		return true;
-	}
-
-	template<TrivialType T>
-	bool array_remove(Array<T>* arr, usize index, T* out_element) {
-		if (!arr || index >= arr->m_size) {
-			return false;
-		}
-
-		if (out_element) {
-			memcpy(out_element, &arr->m_data[index], sizeof(T));
-		}
-
-		if (index < arr->m_size - 1) {
-			memmove(&arr->m_data[index], &arr->m_data[index + 1], sizeof(T) * (arr->m_size - index - 1));
-		}
-
-		arr->m_size--;
-
-		return true;
-	}
+	};
 
 	template<TrivialType T>
 	inline T* begin(Array<T>& arr) {
