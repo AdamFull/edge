@@ -26,12 +26,12 @@ namespace edge {
 
     template<TrivialType T>
     struct HandlePool {
-        T* m_data;
-        HandleVersion* m_versions;
+        T* m_data = nullptr;
+        HandleVersion* m_versions = nullptr;
         Array<u32> m_free_indices;
-        u32 m_capacity;
-        u32 m_count;
-        const Allocator* m_allocator;
+        u32 m_capacity = 0ull;
+        u32 m_count = 0ull;
+        const Allocator* m_allocator = nullptr;
     };
 
     /**
@@ -146,20 +146,20 @@ namespace edge {
             return false;
         }
 
-        pool->m_data = allocate_zeroed<T>(alloc, capacity);
+        pool->m_data = allocate_array<T>(alloc, capacity);
         if (!pool->m_data) {
             return false;
         }
 
-        pool->m_versions = allocate_zeroed<HandleVersion>(alloc, capacity);
+        pool->m_versions = allocate_array<HandleVersion>(alloc, capacity);
         if (!pool->m_versions) {
-            deallocate(alloc, pool->m_data);
+            deallocate_array(alloc, pool->m_data, pool->m_capacity);
             return false;
         }
 
         if (!array_create(alloc, &pool->m_free_indices, capacity)) {
-            deallocate(alloc, pool->m_versions);
-            deallocate(alloc, pool->m_data);
+            deallocate_array(alloc, pool->m_versions, pool->m_capacity);
+            deallocate_array(alloc, pool->m_data, pool->m_capacity);;
             return false;
         }
 
@@ -170,7 +170,7 @@ namespace edge {
         // Initialize free indices in reverse order (so 0 is allocated first)
         for (u32 i = 0; i < capacity; i++) {
             u32 index = capacity - 1 - i;
-            array_push_back(&pool->m_free_indices, index);
+            array_push_back(alloc, &pool->m_free_indices, index);
         }
 
         return true;
@@ -185,14 +185,14 @@ namespace edge {
             return;
         }
 
-        array_destroy(&pool->m_free_indices);
+        array_destroy(pool ->m_allocator, &pool->m_free_indices);
 
         if (pool->m_versions) {
-            deallocate(pool->m_allocator, pool->m_versions);
+            deallocate_array(pool->m_allocator, pool->m_versions, pool->m_capacity);
         }
 
         if (pool->m_data) {
-            deallocate(pool->m_allocator, pool->m_data);
+            deallocate_array(pool->m_allocator, pool->m_data, pool->m_capacity);
         }
     }
 
@@ -279,7 +279,7 @@ namespace edge {
         // Clear the element data
         memset(&pool->m_data[index], 0, sizeof(T));
 
-        array_push_back(&pool->m_free_indices, index);
+        array_push_back(pool->m_allocator , &pool->m_free_indices, index);
         pool->m_count--;
 
         return true;
