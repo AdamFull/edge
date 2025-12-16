@@ -5,10 +5,10 @@
 
 namespace edge {
 	struct FreeIndexList {
-		u32* m_indices;
-		u32 m_capacity;
-		u32 m_count;
-		const Allocator* m_allocator;
+		u32* m_indices = nullptr;
+		u32 m_capacity = 0ull;
+		u32 m_count = 0ull;
+		const Allocator* m_allocator = nullptr;
 	};
 
 	/**
@@ -25,7 +25,7 @@ namespace edge {
 			return false;
 		}
 
-		list->m_indices = allocate<u32>(alloc, capacity);
+		list->m_indices = allocate_array<u32>(alloc, capacity);
 		if (!list->m_indices) {
 			return false;
 		}
@@ -52,7 +52,7 @@ namespace edge {
 		}
 
 		if (list->m_indices) {
-			deallocate(list->m_allocator, list->m_indices);
+			deallocate_array(list->m_allocator, list->m_indices, list->m_capacity);
 		}
 	}
 
