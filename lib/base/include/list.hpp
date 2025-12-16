@@ -7,16 +7,16 @@ namespace edge {
 	template<TrivialType T>
 	struct ListNode {
 		T data;
-		ListNode* next;
-		ListNode* prev;
+		ListNode* next = nullptr;
+		ListNode* prev = nullptr;
 	};
 
 	template<TrivialType T>
 	struct List {
-		ListNode<T>* m_head;
-		ListNode<T>* m_tail;
-		usize m_size;
-		const Allocator* m_allocator;
+		ListNode<T>* m_head = nullptr;
+		ListNode<T>* m_tail = nullptr;
+		usize m_size = 0ull;
+		const Allocator* m_allocator = nullptr;
 	};
 
 	template<TrivialType T>
@@ -69,14 +69,10 @@ namespace edge {
 	namespace detail {
 		template<TrivialType T>
 		ListNode<T>* create_node(const Allocator* alloc, const T& element) {
-			ListNode<T>* node = allocate<ListNode<T>>(alloc);
+			ListNode<T>* node = allocate<ListNode<T>>(alloc, element, nullptr, nullptr);
 			if (!node) {
 				return nullptr;
 			}
-
-			node->data = element;
-			node->next = nullptr;
-			node->prev = nullptr;
 
 			return node;
 		}
@@ -174,6 +170,8 @@ namespace edge {
 			detail::destroy_node(list->m_allocator, current);
 			current = next;
 		}
+
+		// TODO: Call destructor for not trivially destructable
 
 		list->m_head = nullptr;
 		list->m_tail = nullptr;
