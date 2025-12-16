@@ -16,12 +16,12 @@ namespace edge {
 
 	template<TrivialType T>
 	struct MPMCQueue {
-		MPMCNode<T>* m_buffer;
-		usize m_capacity;
-		usize m_mask;
-		alignas(64) std::atomic<usize> m_enqueue_pos;
-		alignas(64) std::atomic<usize> m_dequeue_pos;
-		alignas(64) const Allocator* m_allocator;
+		MPMCNode<T>* m_buffer = nullptr;
+		usize m_capacity = 0ull;
+		usize m_mask = 0ull;
+		alignas(64) std::atomic<usize> m_enqueue_pos = 0ull;
+		alignas(64) std::atomic<usize> m_dequeue_pos = 0ull;
+		alignas(64) const Allocator* m_allocator = nullptr;
 	};
 
 	template<TrivialType T>
@@ -38,7 +38,7 @@ namespace edge {
 			return false;
 		}
 
-		queue->m_buffer = allocate<MPMCNode<T>>(alloc, capacity);
+		queue->m_buffer = allocate_array<MPMCNode<T>>(alloc, capacity);
 		if (!queue->m_buffer) {
 			return false;
 		}
@@ -64,7 +64,7 @@ namespace edge {
 		}
 
 		if (queue->m_buffer) {
-			deallocate(queue->m_allocator, queue->m_buffer);
+			deallocate_array(queue->m_allocator, queue->m_buffer, queue->m_capacity);
 		}
 	}
 
