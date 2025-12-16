@@ -3,6 +3,7 @@
 
 #include "stddef.hpp"
 #include <atomic>
+#include <new>
 
 namespace edge {
 	namespace detail {
@@ -168,14 +169,43 @@ namespace edge {
 		return copy;
 	}
 
-	template<typename T>
-	inline T* allocate(const Allocator* alloc, usize count = 1) {
-		return (T*)allocator_malloc(alloc, sizeof(T) * count);
+	template<typename T, typename... Args>
+	inline T* allocate(const Allocator* alloc, Args&&... args) {
+		T* ptr = (T*)allocator_malloc(alloc, sizeof(T));
+		if (!ptr) {
+			return nullptr;
+		}
+
+		if constexpr (!std::is_trivially_constructible_v<T, Args...>) {
+			new (ptr) T(std::forward<Args>(args)...);
+		}
+
+		return ptr;
 	}
 
 	template<typename T>
 	inline T* allocate_zeroed(const Allocator* alloc, usize count = 1) {
 		return (T*)allocator_calloc(alloc, count, sizeof(T));
+	}
+
+	template<typename T>
+	inline T* allocate_array(const Allocator* alloc, usize count) {
+		if (count == 0) {
+			return nullptr;
+		}
+
+		T* ptr = (T*)allocator_malloc(alloc, sizeof(T) * count);
+		if (!ptr) {
+			return nullptr;
+		}
+
+		if constexpr (!std::is_trivially_constructible_v<T>) {
+			for (usize i = 0; i < count; ++i) {
+				new (&ptr[i]) T();
+			}
+		}
+
+		return ptr;
 	}
 
 	template<typename T>
@@ -185,6 +215,29 @@ namespace edge {
 
 	template<typename T>
 	inline void deallocate(const Allocator* alloc, T* ptr) {
+		if (!ptr) {
+			return;
+		}
+
+		if constexpr (!std::is_trivially_destructible_v<T>) {
+			ptr->~T();
+		}
+
+		allocator_free(alloc, ptr);
+	}
+
+	template<typename T>
+	inline void deallocate_array(const Allocator* alloc, T* ptr, usize count) {
+		if (!ptr) {
+			return;
+		}
+
+		if constexpr (!std::is_trivially_destructible_v<T>) {
+			for (usize i = count; i > 0; --i) {
+				ptr[i - 1].~T();
+			}
+		}
+
 		allocator_free(alloc, ptr);
 	}
 }
