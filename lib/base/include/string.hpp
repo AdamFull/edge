@@ -9,10 +9,10 @@
 namespace edge {
 	template<Character CharT>
 	struct BasicString {
-		CharT* m_data;
-		usize m_length;
-		usize m_capacity;
-		const Allocator* m_allocator;
+		CharT* m_data = nullptr;
+		usize m_length = 0ull;
+		usize m_capacity = 0ull;
+		const Allocator* m_allocator = nullptr;
 	};
 
 	using String = BasicString<char>;
@@ -121,7 +121,7 @@ namespace edge {
 			initial_capacity = detail::STRING_DEFAULT_CAPACITY;
 		}
 
-		str->m_data = allocate<CharT>(alloc, initial_capacity);
+		str->m_data = allocate_array<CharT>(alloc, initial_capacity);
 		if (!str->m_data) {
 			return false;
 		}
@@ -175,7 +175,7 @@ namespace edge {
 		}
 
 		if (str->m_data) {
-			deallocate(str->m_allocator, str->m_data);
+			deallocate_array(str->m_allocator, str->m_data, str->m_capacity);
 		}
 	}
 
