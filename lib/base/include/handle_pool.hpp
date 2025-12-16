@@ -157,7 +157,7 @@ namespace edge {
             return false;
         }
 
-        if (!array_create(alloc, &pool->m_free_indices, capacity)) {
+        if (!pool->m_free_indices.reserve(alloc, capacity)) {
             deallocate_array(alloc, pool->m_versions, pool->m_capacity);
             deallocate_array(alloc, pool->m_data, pool->m_capacity);;
             return false;
@@ -170,7 +170,7 @@ namespace edge {
         // Initialize free indices in reverse order (so 0 is allocated first)
         for (u32 i = 0; i < capacity; i++) {
             u32 index = capacity - 1 - i;
-            array_push_back(alloc, &pool->m_free_indices, index);
+            pool->m_free_indices.push_back(alloc, index);
         }
 
         return true;
@@ -185,7 +185,7 @@ namespace edge {
             return;
         }
 
-        array_destroy(pool ->m_allocator, &pool->m_free_indices);
+        pool->m_free_indices.destroy(pool->m_allocator);
 
         if (pool->m_versions) {
             deallocate_array(pool->m_allocator, pool->m_versions, pool->m_capacity);
@@ -205,12 +205,12 @@ namespace edge {
      */
     template<TrivialType T>
     Handle handle_pool_allocate(HandlePool<T>* pool) {
-        if (!pool || array_empty(&pool->m_free_indices)) {
+        if (!pool || pool->m_free_indices.empty()) {
             return HANDLE_INVALID;
         }
 
         u32 index;
-        if (!array_pop_back(&pool->m_free_indices, &index)) {
+        if (!pool->m_free_indices.pop_back(&index)) {
             return HANDLE_INVALID;
         }
 
@@ -231,12 +231,12 @@ namespace edge {
      */
     template<TrivialType T>
     Handle handle_pool_allocate_with_data(HandlePool<T>* pool, const T& element) {
-        if (!pool || array_empty(&pool->m_free_indices)) {
+        if (!pool || pool->m_free_indices.empty()) {
             return HANDLE_INVALID;
         }
 
         u32 index;
-        if (!array_pop_back(&pool->m_free_indices, &index)) {
+        if (!pool->m_free_indices.pop_back(&index)) {
             return HANDLE_INVALID;
         }
 
@@ -279,7 +279,7 @@ namespace edge {
         // Clear the element data
         memset(&pool->m_data[index], 0, sizeof(T));
 
-        array_push_back(pool->m_allocator , &pool->m_free_indices, index);
+        pool->m_free_indices.push_back(pool->m_allocator, index);
         pool->m_count--;
 
         return true;
@@ -408,7 +408,7 @@ namespace edge {
      */
     template<TrivialType T>
     bool handle_pool_is_full(const HandlePool<T>* pool) {
-        return pool ? array_empty(&pool->m_free_indices) : true;
+        return pool ? pool->m_free_indices.empty() : true;
     }
 
     /**
