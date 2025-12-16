@@ -15,13 +15,12 @@ namespace edge {
 	};
 
 	struct Arena {
-		const Allocator* m_allocator;
-		void* m_base;
-		usize m_reserved;
-		usize m_committed;
-		usize m_offset;
-		usize m_page_size;
-		//std::recursive_mutex m_mutex;
+		const Allocator* m_allocator = nullptr;
+		void* m_base = nullptr;
+		usize m_reserved = 0ull;
+		usize m_committed = 0ull;
+		usize m_offset = 0ull;
+		usize m_page_size = 0ull;
 	};
 
 	bool arena_create(const Allocator* alloc, Arena* arena, usize size = 0);
