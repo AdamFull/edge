@@ -25,7 +25,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		if (!array_create(alloc, &dispatcher->listeners, 16)) {
+		if (!dispatcher->listeners.reserve(alloc, 16)) {
 			deallocate(alloc, dispatcher);
 			return nullptr;
 		}
@@ -41,7 +41,7 @@ namespace edge {
 			return;
 		}
 
-		array_destroy(&dispatcher->listeners);
+		dispatcher->listeners.destroy(dispatcher->allocator);
 		deallocate(dispatcher->allocator, dispatcher);
 	}
 
@@ -55,7 +55,7 @@ namespace edge {
 		listener.listen_categories = listen_categories;
 		listener.listener_fn = listener_fn;
 
-		if (!array_push_back(&dispatcher->listeners, listener)) {
+		if (!dispatcher->listeners.push_back(dispatcher->allocator, listener)) {
 			return 0;
 		}
 
@@ -67,12 +67,11 @@ namespace edge {
 			return;
 		}
 
-		usize count = array_size(&dispatcher->listeners);
-		for (usize i = 0; i < count; i++) {
-			EventListener* listener = array_at(&dispatcher->listeners, i);
+		for (usize i = 0; i < dispatcher->listeners.m_size; i++) {
+			EventListener* listener = dispatcher->listeners.get(i);
 			if (listener && listener->id == listener_id) {
 				EventListener out_elem;
-				array_remove(&dispatcher->listeners, i, &out_elem);
+				dispatcher->listeners.remove(i, &out_elem);
 				return;
 			}
 		}
@@ -83,9 +82,8 @@ namespace edge {
 			return;
 		}
 
-		usize count = array_size(&dispatcher->listeners);
-		for (usize i = 0; i < count; i++) {
-			EventListener* listener = array_at(&dispatcher->listeners, i);
+		for (usize i = 0; i < dispatcher->listeners.m_size; i++) {
+			EventListener* listener = dispatcher->listeners.get(i);
 			if (!listener) {
 				continue;
 			}
