@@ -17,6 +17,7 @@ namespace edge::gfx {
 
 		ShaderModule vertex_shader;
 		ShaderModule fragment_shader;
+		Pipeline pipeline;
 
 		Handle vertex_buffer;
 		u64 vertex_buffer_capacity;

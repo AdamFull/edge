@@ -2,88 +2,13 @@
 #include "gfx_context.h"
 
 #include <array.hpp>
-#include <free_index_list.hpp>
+#include <logger.hpp>
 
 #include <atomic>
 
 #include <vulkan/vulkan.h>
 
 namespace edge::gfx {
-	constexpr usize RENDERER_FRAME_OVERLAP = 3;
-
-	constexpr usize RENDERER_UAV_MAX = 16;
-
-	constexpr usize RENDERER_SAMPLER_SLOT = 0;
-	constexpr usize RENDERER_SRV_SLOT = 1;
-	constexpr usize RENDERER_UAV_SLOT = 2;
-
-	constexpr usize RENDERER_HANDLE_MAX = 65535;
-
-	struct Resource {
-		ResourceType type;
-		union {
-			Image image;
-			Buffer buffer;
-		};
-
-		ImageView srv;
-		u32 srv_index;
-
-		ImageView uav[RENDERER_UAV_MAX];
-		u32 uav_index;
-	};
-
-	struct RendererFrame {
-		Semaphore image_available;
-		Semaphore rendering_finished;
-		Fence fence;
-
-		CmdBuf cmd_buf;
-		bool is_recording;
-
-		Array<Resource> free_resources;
-	};
-
-	struct Renderer {
-		const Allocator* alloc;
-		const Queue* queue;
-
-		CmdPool cmd_pool;
-
-		QueryPool frame_timestamp;
-		double timestamp_freq;
-		double gpu_delta_time;
-
-		DescriptorSetLayout descriptor_layout;
-		DescriptorPool descriptor_pool;
-		DescriptorSet descriptor_set;
-		PipelineLayout pipeline_layout;
-
-		Swapchain swapchain;
-		Image swapchain_images[8];
-		ImageView swapchain_image_views[8];
-		u32 active_image_index;
-
-		RendererFrame frames[RENDERER_FRAME_OVERLAP];
-		RendererFrame* active_frame;
-		u32 frame_number;
-
-		HandlePool<Resource> resource_handle_pool;
-		Handle backbuffer_handle;
-
-		FreeIndexList sampler_indices_list;
-		FreeIndexList srv_indices_list;
-		FreeIndexList uav_indices_list;
-
-		PipelineBarrierBuilder barrier_builder;
-
-		Semaphore* acquired_semaphore;
-
-		Array<VkWriteDescriptorSet> write_descriptor_sets;
-		Array<VkDescriptorImageInfo> image_descriptors;
-		Array<VkDescriptorBufferInfo> buffer_descriptors;
-	};
-
 	inline bool is_depth_format(VkFormat format) {
 		return format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D32_SFLOAT;
 	}
@@ -119,7 +44,7 @@ namespace edge::gfx {
 			}
 		}
 
-		array_clear(&frame->free_resources);
+		frame->free_resources.clear();
 
 		return true;
 	}
@@ -145,7 +70,7 @@ namespace edge::gfx {
 			return false;
 		}
 
-		if (!array_create(renderer->alloc, &frame->free_resources, 256)) {
+		if (!frame->free_resources.reserve(renderer->alloc, 256)) {
 			return false;
 		}
 
@@ -158,7 +83,7 @@ namespace edge::gfx {
 		}
 
 		renderer_frame_release_pending_resources(renderer, frame);
-		array_destroy(&frame->free_resources);
+		frame->free_resources.destroy(renderer->alloc);
 
 		cmd_buf_destroy(&frame->cmd_buf);
 		fence_destroy(&frame->fence);
@@ -310,19 +235,26 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
-		if (!array_create(create_info->alloc, &renderer->write_descriptor_sets, 256)) {
+		if (!renderer->write_descriptor_sets.reserve(create_info->alloc, 256)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
-		if (!array_create(create_info->alloc, &renderer->image_descriptors, 256)) {
+		if (!renderer->image_descriptors.reserve(create_info->alloc, 256)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
-		if (!array_create(create_info->alloc, &renderer->buffer_descriptors, 256)) {
+		if (!renderer->buffer_descriptors.reserve(create_info->alloc, 256)) {
 			renderer_destroy(renderer);
 			return nullptr;
+		}
+
+		if constexpr (std::is_trivially_constructible_v<ResourceSet>) {
+			EDGE_LOG_DEBUG("Biba");
+		}
+		else {
+			EDGE_LOG_DEBUG("Boba");
 		}
 
 		return renderer;
@@ -335,9 +267,9 @@ namespace edge::gfx {
 
 		queue_wait_idle(renderer->queue);
 
-		array_destroy(&renderer->write_descriptor_sets);
-		array_destroy(&renderer->image_descriptors);
-		array_destroy(&renderer->buffer_descriptors);
+		renderer->write_descriptor_sets.destroy(renderer->alloc);
+		renderer->image_descriptors.destroy(renderer->alloc);
+		renderer->buffer_descriptors.destroy(renderer->alloc);
 
 		for (auto entry : renderer->resource_handle_pool) {
 			Resource* resource = entry.element;
@@ -511,13 +443,13 @@ namespace edge::gfx {
 			VkDescriptorImageInfo image_descriptor = {};
 			image_descriptor.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
 			image_descriptor.imageView = resource->srv.handle;
-			array_push_back(&renderer->image_descriptors, image_descriptor);
+			renderer->image_descriptors.push_back(renderer->alloc, image_descriptor);
 
 			descriptor_write.dstBinding = RENDERER_SRV_SLOT;
 			descriptor_write.dstArrayElement = resource->srv_index;
 			descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-			descriptor_write.pImageInfo = array_back(&renderer->image_descriptors);
-			array_push_back(&renderer->write_descriptor_sets, descriptor_write);
+			descriptor_write.pImageInfo = renderer->image_descriptors.back();
+			renderer->write_descriptor_sets.push_back(renderer->alloc, descriptor_write);
 		}
 
 		if (image_source->usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
@@ -528,11 +460,11 @@ namespace edge::gfx {
 				VkDescriptorImageInfo image_descriptor = {};
 				image_descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 				image_descriptor.imageView = resource->uav[mip].handle;
-				array_push_back(&renderer->image_descriptors, image_descriptor);
+				renderer->image_descriptors.push_back(renderer->alloc, image_descriptor);
 
 				descriptor_write.dstArrayElement = resource->uav_index + mip;
-				descriptor_write.pImageInfo = array_back(&renderer->image_descriptors);
-				array_push_back(&renderer->write_descriptor_sets, descriptor_write);
+				descriptor_write.pImageInfo = renderer->image_descriptors.back();
+				renderer->write_descriptor_sets.push_back(renderer->alloc, descriptor_write);
 			}
 		}
 
@@ -559,7 +491,7 @@ namespace edge::gfx {
 		if (renderer->active_frame) {
 			Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
 			if (resource->type != ResourceType::Unknown) {
-				array_push_back(&renderer->active_frame->free_resources, *resource);
+				renderer->active_frame->free_resources.push_back(renderer->alloc, *resource);
 			}
 		}
 
@@ -574,7 +506,7 @@ namespace edge::gfx {
 		if (renderer->active_frame) {
 			Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
 			if (resource->type != ResourceType::Unknown) {
-				array_push_back(&renderer->active_frame->free_resources, *resource);
+				renderer->active_frame->free_resources.push_back(renderer->alloc, *resource);
 			}
 		}
 
@@ -590,7 +522,7 @@ namespace edge::gfx {
 			if (renderer->active_frame) {
 				Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
 				if (resource->type != ResourceType::Unknown) {
-					array_push_back(&renderer->active_frame->free_resources, *resource);
+					renderer->active_frame->free_resources.push_back(renderer->alloc, *resource);
 				}
 			}
 
@@ -723,12 +655,12 @@ namespace edge::gfx {
 			}
 		}
 
-		if (!array_empty(&renderer->write_descriptor_sets)) {
-			updete_descriptors(array_data(&renderer->write_descriptor_sets), array_size(&renderer->write_descriptor_sets));
+		if (!renderer->write_descriptor_sets.empty()) {
+			updete_descriptors(renderer->write_descriptor_sets.m_data, renderer->write_descriptor_sets.m_size);
 
-			array_clear(&renderer->write_descriptor_sets);
-			array_clear(&renderer->image_descriptors);
-			array_clear(&renderer->buffer_descriptors);
+			renderer->write_descriptor_sets.clear();
+			renderer->image_descriptors.clear();
+			renderer->buffer_descriptors.clear();
 		}
 
 		cmd_write_timestamp(&current_frame->cmd_buf, &renderer->frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 1u);

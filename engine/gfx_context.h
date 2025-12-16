@@ -141,7 +141,7 @@ namespace edge::gfx {
 	bool shader_module_create(const u32* code, size_t size, ShaderModule* shader_module);
 	void shader_module_destroy(ShaderModule* shader_module);
 
-	bool pipeline_graphics_create(const GraphicsPipelineCreateInfo* create_info, Pipeline* pipeline);
+	bool pipeline_graphics_create(const VkGraphicsPipelineCreateInfo* create_info, Pipeline* pipeline);
 	bool pipeline_compute_create(const ComputePipelineCreateInfo* create_info, Pipeline* pipeline);
 	void pipeline_destroy(Pipeline* pipeline);
 
