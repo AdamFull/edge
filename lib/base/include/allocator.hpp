@@ -85,161 +85,164 @@ namespace edge {
 		free_fn m_free;
 		realloc_fn m_realloc;
 		void* user_data;
+
+		static Allocator create(malloc_fn malloc_pfn, free_fn free_pfn, realloc_fn realloc_pfn, void* user_data) {
+			return { malloc_pfn, free_pfn, realloc_pfn, user_data };
+		}
+
+		static Allocator create_default() {
+			return create(
+				[](usize size, void*) { return ::malloc(size); },
+				[](void* ptr, void*) { ::free(ptr); },
+				[](void* ptr, usize size, void*) { return ::realloc(ptr, size); },
+				nullptr);
+		}
+
+		static Allocator create_tracking() {
+			static detail::AllocatorStats stats = {};
+			return create(
+				detail::tracked_malloc,
+				detail::tracked_free,
+				detail::tracked_realloc,
+				&stats
+			);
+		}
+
+		usize get_net() const noexcept {
+			detail::AllocatorStats* stats = (detail::AllocatorStats*)user_data;
+			if (!stats) {
+				return ~0ull;
+			}
+
+			return stats->alloc_bytes.load() - stats->free_bytes.load();
+		}
+
+		void* malloc(usize size) const noexcept {
+			if (!m_malloc) {
+				return nullptr;
+			}
+			return m_malloc(size, user_data);
+		}
+
+		void free(void* ptr) const noexcept {
+			if (!m_free) {
+				return;
+			}
+			return m_free(ptr, user_data);
+		}
+
+		void* realloc(void* ptr, usize size) const noexcept {
+			if (!m_realloc) {
+				return nullptr;
+			}
+			return m_realloc(ptr, size, user_data);
+		}
+
+		void* zeroed(usize nmemb, usize size) const noexcept {
+			usize total = nmemb * size;
+			void* ptr = malloc(total);
+			if (ptr) {
+				memset(ptr, 0, total);
+			}
+			return ptr;
+		}
+
+		char* strdup(const char* str) const noexcept {
+			if (!str) {
+				return nullptr;
+			}
+
+			usize len = strlen(str);
+			char* copy = (char*)malloc(len + 1);
+			if (copy) {
+				memcpy(copy, str, len + 1);
+			}
+			return copy;
+		}
+
+		char* strndup(const char* str, usize n) const noexcept {
+			if (!str) {
+				return nullptr;
+			}
+
+			usize len = strlen(str);
+			if (n < len) len = n;
+
+			char* copy = (char*)malloc(len + 1);
+			if (copy) {
+				memcpy(copy, str, len);
+				copy[len] = '\0';
+			}
+			return copy;
+		}
+
+		template<typename T, typename... Args>
+		T* allocate(Args&&... args) const noexcept {
+			T* ptr = (T*)malloc(sizeof(T));
+			if (!ptr) {
+				return nullptr;
+			}
+
+			if constexpr (!std::is_trivially_constructible_v<T, Args...>) {
+				new (ptr) T(std::forward<Args>(args)...);
+			}
+
+			return ptr;
+		}
+
+		template<typename T>
+		T* allocate_zeroed(usize count = 1) const noexcept {
+			return (T*)calloc(count, sizeof(T));
+		}
+
+		template<typename T>
+		T* allocate_array(usize count) const noexcept {
+			if (count == 0) {
+				return nullptr;
+			}
+
+			T* ptr = (T*)malloc(sizeof(T) * count);
+			if (!ptr) {
+				return nullptr;
+			}
+
+			if constexpr (!std::is_trivially_constructible_v<T>) {
+				for (usize i = 0; i < count; ++i) {
+					new (&ptr[i]) T();
+				}
+			}
+
+			return ptr;
+		}
+
+		template<typename T>
+		void deallocate(T* ptr) const noexcept {
+			if (!ptr) {
+				return;
+			}
+
+			if constexpr (!std::is_trivially_destructible_v<T>) {
+				ptr->~T();
+			}
+
+			free(ptr);
+		}
+
+		template<typename T>
+		void deallocate_array(T* ptr, usize count) const noexcept {
+			if (!ptr) {
+				return;
+			}
+
+			if constexpr (!std::is_trivially_destructible_v<T>) {
+				for (usize i = count; i > 0; --i) {
+					ptr[i - 1].~T();
+				}
+			}
+
+			free(ptr);
+		}
 	};
-
-	inline Allocator allocator_create(malloc_fn malloc_pfn, free_fn free_pfn, realloc_fn realloc_pfn, void* user_data) {
-		return { malloc_pfn, free_pfn, realloc_pfn, user_data };
-	}
-
-	inline Allocator allocator_create_default() {
-		return allocator_create(
-			[](usize size, void*) { return malloc(size); },
-			[](void* ptr, void*) { free(ptr); },
-			[](void* ptr, usize size, void*) { return realloc(ptr, size); },
-			nullptr);
-	}
-
-	inline Allocator allocator_create_tracking() {
-		static detail::AllocatorStats stats = {};
-		return allocator_create(
-			detail::tracked_malloc,
-			detail::tracked_free,
-			detail::tracked_realloc,
-			&stats
-		);
-	}
-
-	inline usize allocator_get_net(const edge::Allocator* alloc) {
-		detail::AllocatorStats* stats = (detail::AllocatorStats*)alloc->user_data;
-		if (!stats) {
-			return ~0ull;
-		}
-
-		return stats->alloc_bytes.load() - stats->free_bytes.load();
-	}
-
-	inline void* allocator_malloc(const Allocator* alloc, usize size) {
-		if (!alloc || !alloc->m_malloc) return nullptr;
-		return alloc->m_malloc(size, alloc->user_data);
-	}
-
-	inline void allocator_free(const Allocator* alloc, void* ptr) {
-		if (!alloc || !alloc->m_free) return;
-		return alloc->m_free(ptr, alloc->user_data);
-	}
-
-	inline void* allocator_realloc(const Allocator* alloc, void* ptr, usize size) {
-		if (!alloc || !alloc->m_realloc) return nullptr;
-		return alloc->m_realloc(ptr, size, alloc->user_data);
-	}
-
-	inline void* allocator_calloc(const Allocator* alloc, usize nmemb, usize size) {
-		if (!alloc) return nullptr;
-
-		usize total = nmemb * size;
-		void* ptr = allocator_malloc(alloc, total);
-		if (ptr) {
-			memset(ptr, 0, total);
-		}
-		return ptr;
-	}
-
-	inline char* allocator_strdup(const Allocator* alloc, const char* str) {
-		if (!alloc || !str) return nullptr;
-
-		usize len = strlen(str);
-		char* copy = (char*)allocator_malloc(alloc, len + 1);
-		if (copy) {
-			memcpy(copy, str, len + 1);
-		}
-		return copy;
-	}
-
-	inline char* allocator_strndup(const Allocator* alloc, const char* str, usize n) {
-		if (!alloc || !str) return nullptr;
-
-		usize len = strlen(str);
-		if (n < len) len = n;
-
-		char* copy = (char*)allocator_malloc(alloc, len + 1);
-		if (copy) {
-			memcpy(copy, str, len);
-			copy[len] = '\0';
-		}
-		return copy;
-	}
-
-	template<typename T, typename... Args>
-	inline T* allocate(const Allocator* alloc, Args&&... args) {
-		T* ptr = (T*)allocator_malloc(alloc, sizeof(T));
-		if (!ptr) {
-			return nullptr;
-		}
-
-		if constexpr (!std::is_trivially_constructible_v<T, Args...>) {
-			new (ptr) T(std::forward<Args>(args)...);
-		}
-
-		return ptr;
-	}
-
-	template<typename T>
-	inline T* allocate_zeroed(const Allocator* alloc, usize count = 1) {
-		return (T*)allocator_calloc(alloc, count, sizeof(T));
-	}
-
-	template<typename T>
-	inline T* allocate_array(const Allocator* alloc, usize count) {
-		if (count == 0) {
-			return nullptr;
-		}
-
-		T* ptr = (T*)allocator_malloc(alloc, sizeof(T) * count);
-		if (!ptr) {
-			return nullptr;
-		}
-
-		if constexpr (!std::is_trivially_constructible_v<T>) {
-			for (usize i = 0; i < count; ++i) {
-				new (&ptr[i]) T();
-			}
-		}
-
-		return ptr;
-	}
-
-	template<typename T>
-	inline T* reallocate(const Allocator* alloc, T* ptr, usize count) {
-		return (T*)allocator_realloc(alloc, ptr, sizeof(T) * count);
-	}
-
-	template<typename T>
-	inline void deallocate(const Allocator* alloc, T* ptr) {
-		if (!ptr) {
-			return;
-		}
-
-		if constexpr (!std::is_trivially_destructible_v<T>) {
-			ptr->~T();
-		}
-
-		allocator_free(alloc, ptr);
-	}
-
-	template<typename T>
-	inline void deallocate_array(const Allocator* alloc, T* ptr, usize count) {
-		if (!ptr) {
-			return;
-		}
-
-		if constexpr (!std::is_trivially_destructible_v<T>) {
-			for (usize i = count; i > 0; --i) {
-				ptr[i - 1].~T();
-			}
-		}
-
-		allocator_free(alloc, ptr);
-	}
 }
 
 #endif
