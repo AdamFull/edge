@@ -6,6 +6,9 @@
 
 namespace edge {
 	namespace detail {
+		constexpr usize HASHMAP_DEFAULT_BUCKET_COUNT = 16;
+		constexpr f32 HASHMAP_MAX_LOAD_FACTOR = 0.75f;
+
 		template<TrivialType K>
 		inline usize default_hash(const K& key) {
 			const u8* data = (const u8*)&key;
@@ -19,22 +22,10 @@ namespace edge {
 	}
 
 	template<TrivialType K, TrivialType V>
-	struct HashMapEntry {
-		K key;
-		V value;
-		usize hash;
-		HashMapEntry* next;
-	};
+	struct HashMapEntry;
 
 	template<TrivialType K, TrivialType V>
-	struct HashMap {
-		HashMapEntry<K, V>** m_buckets;
-		usize m_bucket_count = 0ull;
-		usize m_size = 0ull;
-		const Allocator* m_allocator = 0ull;
-		usize(*m_hash_func)(const K&);
-		i32(*m_compare_func)(const K&, const K&);
-	};
+	struct HashMap;
 
 	template<TrivialType K, TrivialType V>
 	struct HashMapIterator {
@@ -90,256 +81,222 @@ namespace edge {
 		}
 	};
 
-	namespace detail {
-		constexpr usize HASHMAP_DEFAULT_BUCKET_COUNT = 16;
-		constexpr f32 HASHMAP_MAX_LOAD_FACTOR = 0.75f;
+	template<TrivialType K, TrivialType V>
+	struct HashMapEntry {
+		K key = {};
+		V value = {};
+		usize hash = 0;
+		HashMapEntry* next = nullptr;
+	};
 
-		template<TrivialType K, TrivialType V>
-		HashMapEntry<K, V>* create_entry(const Allocator* alloc, const K& key, const V& value, usize hash) {
-			HashMapEntry<K, V>* entry = alloc->allocate<HashMapEntry<K, V>>(key, value, hash, nullptr);
-			if (!entry) {
-				return nullptr;
+	template<TrivialType K, TrivialType V>
+	struct HashMap {
+		HashMapEntry<K, V>** m_buckets = nullptr;
+		usize m_bucket_count = 0ull;
+		usize m_size = 0ull;
+		usize(*m_hash_func)(const K&) = nullptr;
+		i32(*m_compare_func)(const K&, const K&) = nullptr;
+
+		bool create(NotNull<const Allocator*> alloc, usize initial_bucket_count = 0ull) {
+			if (initial_bucket_count == 0ull) {
+				initial_bucket_count = detail::HASHMAP_DEFAULT_BUCKET_COUNT;
 			}
 
-			return entry;
-		}
-
-		template<TrivialType K, TrivialType V>
-		void destroy_entry(const Allocator* alloc, HashMapEntry<K, V>* entry) {
-			if (!entry) {
-				return;
+			m_buckets = alloc->allocate_array<HashMapEntry<K, V>*>(initial_bucket_count);
+			if (!m_buckets) {
+				return false;
 			}
-			alloc->deallocate(entry);
-		}
-	}
 
-	template<TrivialType K, TrivialType V>
-	bool hashmap_create(const Allocator* alloc, HashMap<K, V>* map, usize initial_bucket_count = 0) {
-		if (!alloc || !map) {
-			return false;
-		}
+			m_bucket_count = initial_bucket_count;
+			m_size = 0ull;
+			m_hash_func = detail::default_hash<K>;
+			m_compare_func = detail::default_compare<K>;
 
-		if (initial_bucket_count == 0) {
-			initial_bucket_count = detail::HASHMAP_DEFAULT_BUCKET_COUNT;
+			return true;
 		}
 
-		map->m_buckets = alloc->allocate_array<HashMapEntry<K, V>*>(initial_bucket_count);
-		if (!map->m_buckets) {
-			return false;
+		bool create(NotNull<const Allocator*> alloc, usize initial_bucket_count,
+			usize(*hash_func)(const K&), i32(*compare_func)(const K&, const K&)) {
+			if (!create(alloc, initial_bucket_count)) {
+				return false;
+			}
+
+			if (hash_func) {
+				m_hash_func = hash_func;
+			}
+			if (compare_func) {
+				m_compare_func = compare_func;
+			}
+
+			return true;
 		}
 
-		map->m_bucket_count = initial_bucket_count;
-		map->m_size = 0;
-		map->m_allocator = alloc;
-		map->m_hash_func = detail::default_hash<K>;
-		map->m_compare_func = detail::default_compare<K>;
+		void destroy(NotNull<const Allocator*> alloc) {
+			clear(alloc);
 
-		return true;
-	}
-
-	template<TrivialType K, TrivialType V>
-	bool hashmap_create_custom(const Allocator* alloc, HashMap<K, V>* map,
-		usize initial_bucket_count,
-		usize(*hash_func)(const K&),
-		i32(*compare_func)(const K&, const K&)) {
-		if (!hashmap_create(alloc, map, initial_bucket_count)) {
-			return false;
+			if (m_buckets) {
+				alloc->deallocate_array(m_buckets, m_bucket_count);
+			}
 		}
 
-		if (hash_func) {
-			map->m_hash_func = hash_func;
-		}
-		if (compare_func) {
-			map->m_compare_func = compare_func;
-		}
+		void clear(NotNull<const Allocator*> alloc) {
+			for (usize i = 0; i < m_bucket_count; i++) {
+				HashMapEntry<K, V>* entry = m_buckets[i];
+				while (entry) {
+					HashMapEntry<K, V>* next = entry->next;
+					alloc->deallocate(entry);
+					entry = next;
+				}
+				m_buckets[i] = nullptr;
+			}
 
-		return true;
-	}
+			// TODO: Call destructor for not trivially destructable
 
-	template<TrivialType K, TrivialType V>
-	void hashmap_destroy(HashMap<K, V>* map) {
-		if (!map) {
-			return;
-		}
-
-		hashmap_clear(map);
-
-		if (map->m_buckets) {
-			map->m_allocator->deallocate_array(map->m_buckets, map->m_bucket_count);
-		}
-	}
-
-	template<TrivialType K, TrivialType V>
-	void hashmap_clear(HashMap<K, V>* map) {
-		if (!map) {
-			return;
+			m_size = 0;
 		}
 
-		for (usize i = 0; i < map->m_bucket_count; i++) {
-			HashMapEntry<K, V>* entry = map->m_buckets[i];
+		bool rehash(NotNull<const Allocator*> alloc, usize new_bucket_count) {
+			if (new_bucket_count == 0) {
+				return false;
+			}
+
+			HashMapEntry<K, V>** new_buckets = alloc->allocate_array<HashMapEntry<K, V>*>(new_bucket_count);
+			if (!new_buckets) {
+				return false;
+			}
+
+			// Rehash all entries
+			for (usize i = 0; i < m_bucket_count; i++) {
+				HashMapEntry<K, V>* entry = m_buckets[i];
+				while (entry) {
+					HashMapEntry<K, V>* next = entry->next;
+
+					usize bucket_index = entry->hash % new_bucket_count;
+					entry->next = new_buckets[bucket_index];
+					new_buckets[bucket_index] = entry;
+
+					entry = next;
+				}
+			}
+
+			alloc->deallocate_array(m_buckets, m_bucket_count);
+			m_buckets = new_buckets;
+			m_bucket_count = new_bucket_count;
+
+			return true;
+		}
+
+		f32 load_factor() const noexcept {
+			if (m_bucket_count == 0) {
+				return 0.0f;
+			}
+			return (f32)m_size / (f32)m_bucket_count;
+		}
+
+		bool insert(NotNull<const Allocator*> alloc, const K& key, const V& value) {
+			// Check load factor and rehash if needed
+			if (load_factor() >= detail::HASHMAP_MAX_LOAD_FACTOR) {
+				rehash(alloc, m_bucket_count * 2);
+			}
+
+			usize hash = m_hash_func(key);
+			usize bucket_index = hash % m_bucket_count;
+
+			// Check if key already exists
+			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
 			while (entry) {
-				HashMapEntry<K, V>* next = entry->next;
-				detail::destroy_entry(map->m_allocator, entry);
-				entry = next;
+				if (entry->hash == hash && m_compare_func(entry->key, key) == 0) {
+					// Update existing value
+					entry->value = value;
+					return true;
+				}
+				entry = entry->next;
 			}
-			map->m_buckets[i] = nullptr;
+
+			// Create new entry
+			HashMapEntry<K, V>* new_entry = alloc->allocate<HashMapEntry<K, V>>(key, value, hash, nullptr);
+			if (!new_entry) {
+				return false;
+			}
+
+			new_entry->next = m_buckets[bucket_index];
+			m_buckets[bucket_index] = new_entry;
+			m_size++;
+
+			return true;
 		}
 
-		// TODO: Call destructor for not trivially destructable
+		V* get(const K& key) noexcept {
+			usize hash = m_hash_func(key);
+			usize bucket_index = hash % m_bucket_count;
 
-		map->m_size = 0;
-	}
-
-	template<TrivialType K, TrivialType V>
-	bool hashmap_rehash(HashMap<K, V>* map, usize new_bucket_count) {
-		if (!map || new_bucket_count == 0) {
-			return false;
-		}
-
-		HashMapEntry<K, V>** new_buckets = map->m_allocator->allocate_array<HashMapEntry<K, V>*>(new_bucket_count);
-		if (!new_buckets) {
-			return false;
-		}
-
-		// Rehash all entries
-		for (usize i = 0; i < map->m_bucket_count; i++) {
-			HashMapEntry<K, V>* entry = map->m_buckets[i];
+			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
 			while (entry) {
-				HashMapEntry<K, V>* next = entry->next;
-
-				usize bucket_index = entry->hash % new_bucket_count;
-				entry->next = new_buckets[bucket_index];
-				new_buckets[bucket_index] = entry;
-
-				entry = next;
+				if (entry->hash == hash && m_compare_func(entry->key, key) == 0) {
+					return &entry->value;
+				}
+				entry = entry->next;
 			}
-		}
 
-		map->m_allocator->deallocate_array(map->m_buckets, map->m_bucket_count);
-		map->m_buckets = new_buckets;
-		map->m_bucket_count = new_bucket_count;
-
-		return true;
-	}
-
-	template<TrivialType K, TrivialType V>
-	f32 hashmap_load_factor(const HashMap<K, V>* map) {
-		if (!map || map->m_bucket_count == 0) {
-			return 0.0f;
-		}
-		return (f32)map->m_size / (f32)map->m_bucket_count;
-	}
-
-	template<TrivialType K, TrivialType V>
-	bool hashmap_insert(HashMap<K, V>* map, const K& key, const V& value) {
-		if (!map) {
-			return false;
-		}
-
-		// Check load factor and rehash if needed
-		if (hashmap_load_factor(map) >= detail::HASHMAP_MAX_LOAD_FACTOR) {
-			hashmap_rehash(map, map->m_bucket_count * 2);
-		}
-
-		usize hash = map->m_hash_func(key);
-		usize bucket_index = hash % map->m_bucket_count;
-
-		// Check if key already exists
-		HashMapEntry<K, V>* entry = map->m_buckets[bucket_index];
-		while (entry) {
-			if (entry->hash == hash && map->m_compare_func(entry->key, key) == 0) {
-				// Update existing value
-				entry->value = value;
-				return true;
-			}
-			entry = entry->next;
-		}
-
-		// Create new entry
-		HashMapEntry<K, V>* new_entry = detail::create_entry(map->m_allocator, key, value, hash);
-		if (!new_entry) {
-			return false;
-		}
-
-		new_entry->next = map->m_buckets[bucket_index];
-		map->m_buckets[bucket_index] = new_entry;
-		map->m_size++;
-
-		return true;
-	}
-
-	template<TrivialType K, TrivialType V>
-	V* hashmap_get(const HashMap<K, V>* map, const K& key) {
-		if (!map) {
 			return nullptr;
 		}
 
-		usize hash = map->m_hash_func(key);
-		usize bucket_index = hash % map->m_bucket_count;
+		V const* get(const K& key) const noexcept {
+			usize hash = m_hash_func(key);
+			usize bucket_index = hash % m_bucket_count;
 
-		HashMapEntry<K, V>* entry = map->m_buckets[bucket_index];
-		while (entry) {
-			if (entry->hash == hash && map->m_compare_func(entry->key, key) == 0) {
-				return &entry->value;
+			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
+			while (entry) {
+				if (entry->hash == hash && m_compare_func(entry->key, key) == 0) {
+					return &entry->value;
+				}
+				entry = entry->next;
 			}
-			entry = entry->next;
+
+			return nullptr;
 		}
 
-		return nullptr;
-	}
+		bool remove(NotNull<const Allocator*> alloc, const K& key, V* out_value) {
+			usize hash = m_hash_func(key);
+			usize bucket_index = hash % m_bucket_count;
 
-	template<TrivialType K, TrivialType V>
-	bool hashmap_remove(HashMap<K, V>* map, const K& key, V* out_value) {
-		if (!map) {
+			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
+			HashMapEntry<K, V>* prev = nullptr;
+
+			while (entry) {
+				if (entry->hash == hash && m_compare_func(entry->key, key) == 0) {
+					if (out_value) {
+						*out_value = entry->value;
+					}
+
+					if (prev) {
+						prev->next = entry->next;
+					}
+					else {
+						m_buckets[bucket_index] = entry->next;
+					}
+
+					alloc->deallocate(entry);
+					m_size--;
+
+					return true;
+				}
+
+				prev = entry;
+				entry = entry->next;
+			}
+
 			return false;
 		}
 
-		usize hash = map->m_hash_func(key);
-		usize bucket_index = hash % map->m_bucket_count;
-
-		HashMapEntry<K, V>* entry = map->m_buckets[bucket_index];
-		HashMapEntry<K, V>* prev = nullptr;
-
-		while (entry) {
-			if (entry->hash == hash && map->m_compare_func(entry->key, key) == 0) {
-				if (out_value) {
-					*out_value = entry->value;
-				}
-
-				if (prev) {
-					prev->next = entry->next;
-				}
-				else {
-					map->m_buckets[bucket_index] = entry->next;
-				}
-
-				detail::destroy_entry(map->m_allocator, entry);
-				map->m_size--;
-
-				return true;
-			}
-
-			prev = entry;
-			entry = entry->next;
+		bool contains(const K& key) const noexcept {
+			return get(key) != nullptr;
 		}
 
-		return false;
-	}
-
-	template<TrivialType K, TrivialType V>
-	bool hashmap_contains(const HashMap<K, V>* map, const K& key) {
-		return hashmap_get(map, key) != nullptr;
-	}
-
-	template<TrivialType K, TrivialType V>
-	usize hashmap_size(const HashMap<K, V>* map) {
-		return map ? map->m_size : 0;
-	}
-
-	template<TrivialType K, TrivialType V>
-	bool hashmap_empty(const HashMap<K, V>* map) {
-		return !map || map->m_size == 0;
-	}
+		bool empty() const noexcept {
+			return m_size == 0;
+		}
+	};
 
 	template<TrivialType K, TrivialType V>
 	inline HashMapIterator<K, V> begin(HashMap<K, V>& map) {
