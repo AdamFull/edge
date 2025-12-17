@@ -146,20 +146,20 @@ namespace edge {
             return false;
         }
 
-        pool->m_data = allocate_array<T>(alloc, capacity);
+        pool->m_data = alloc->allocate_array<T>(capacity);
         if (!pool->m_data) {
             return false;
         }
 
-        pool->m_versions = allocate_array<HandleVersion>(alloc, capacity);
+        pool->m_versions = alloc->allocate_array<HandleVersion>(capacity);
         if (!pool->m_versions) {
-            deallocate_array(alloc, pool->m_data, pool->m_capacity);
+            alloc->deallocate_array(pool->m_data, pool->m_capacity);
             return false;
         }
 
         if (!pool->m_free_indices.reserve(alloc, capacity)) {
-            deallocate_array(alloc, pool->m_versions, pool->m_capacity);
-            deallocate_array(alloc, pool->m_data, pool->m_capacity);;
+            alloc->deallocate_array(pool->m_versions, pool->m_capacity);
+            alloc->deallocate_array(pool->m_data, pool->m_capacity);;
             return false;
         }
 
@@ -188,11 +188,11 @@ namespace edge {
         pool->m_free_indices.destroy(pool->m_allocator);
 
         if (pool->m_versions) {
-            deallocate_array(pool->m_allocator, pool->m_versions, pool->m_capacity);
+            pool->m_allocator->deallocate_array(pool->m_versions, pool->m_capacity);
         }
 
         if (pool->m_data) {
-            deallocate_array(pool->m_allocator, pool->m_data, pool->m_capacity);
+            pool->m_allocator->deallocate_array(pool->m_data, pool->m_capacity);
         }
     }
 

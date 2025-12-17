@@ -121,7 +121,7 @@ namespace edge {
 			initial_capacity = detail::STRING_DEFAULT_CAPACITY;
 		}
 
-		str->m_data = allocate_array<CharT>(alloc, initial_capacity);
+		str->m_data = alloc->allocate_array<CharT>(initial_capacity);
 		if (!str->m_data) {
 			return false;
 		}
@@ -175,7 +175,7 @@ namespace edge {
 		}
 
 		if (str->m_data) {
-			deallocate_array(str->m_allocator, str->m_data, str->m_capacity);
+			str->m_allocator->deallocate_array(str->m_data, str->m_capacity);
 		}
 	}
 
@@ -201,7 +201,7 @@ namespace edge {
 			return true;
 		}
 
-		CharT* new_data = reallocate(str->m_allocator, str->m_data, capacity);
+		CharT* new_data = (CharT*)str->m_allocator->realloc(str->m_data, capacity);
 		if (!new_data) {
 			return false;
 		}

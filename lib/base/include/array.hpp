@@ -16,7 +16,7 @@ namespace edge {
 
 		void destroy(const Allocator* alloc) {
 			if (m_data) {
-				deallocate_array(alloc, m_data, m_capacity);
+				alloc->deallocate_array(m_data, m_capacity);
 			}
 		}
 
@@ -30,14 +30,14 @@ namespace edge {
 				return true;
 			}
 
-			T* new_data = allocate_array<T>(alloc, capacity);
+			T* new_data = alloc->allocate_array<T>(capacity);
 			if (!new_data) {
 				return false;
 			}
 
 			if (m_data) {
 				memcpy(new_data, m_data, sizeof(T) * m_size);
-				deallocate_array(alloc, m_data, m_capacity);
+				alloc->deallocate_array(m_data, m_capacity);
 			}
 
 			m_data = new_data;

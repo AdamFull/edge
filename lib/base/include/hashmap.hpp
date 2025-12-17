@@ -96,7 +96,7 @@ namespace edge {
 
 		template<TrivialType K, TrivialType V>
 		HashMapEntry<K, V>* create_entry(const Allocator* alloc, const K& key, const V& value, usize hash) {
-			HashMapEntry<K, V>* entry = allocate<HashMapEntry<K, V>>(alloc, key, value, hash, nullptr);
+			HashMapEntry<K, V>* entry = alloc->allocate<HashMapEntry<K, V>>(key, value, hash, nullptr);
 			if (!entry) {
 				return nullptr;
 			}
@@ -109,7 +109,7 @@ namespace edge {
 			if (!entry) {
 				return;
 			}
-			deallocate(alloc, entry);
+			alloc->deallocate(entry);
 		}
 	}
 
@@ -123,7 +123,7 @@ namespace edge {
 			initial_bucket_count = detail::HASHMAP_DEFAULT_BUCKET_COUNT;
 		}
 
-		map->m_buckets = allocate_array<HashMapEntry<K, V>*>(alloc, initial_bucket_count);
+		map->m_buckets = alloc->allocate_array<HashMapEntry<K, V>*>(initial_bucket_count);
 		if (!map->m_buckets) {
 			return false;
 		}
@@ -165,7 +165,7 @@ namespace edge {
 		hashmap_clear(map);
 
 		if (map->m_buckets) {
-			deallocate_array(map->m_allocator, map->m_buckets, map->m_bucket_count);
+			map->m_allocator->deallocate_array(map->m_buckets, map->m_bucket_count);
 		}
 	}
 
@@ -196,7 +196,7 @@ namespace edge {
 			return false;
 		}
 
-		HashMapEntry<K, V>** new_buckets = allocate_array<HashMapEntry<K, V>*>(map->m_allocator, new_bucket_count);
+		HashMapEntry<K, V>** new_buckets = map->m_allocator->allocate_array<HashMapEntry<K, V>*>(new_bucket_count);
 		if (!new_buckets) {
 			return false;
 		}
@@ -215,7 +215,7 @@ namespace edge {
 			}
 		}
 
-		deallocate_array(map->m_allocator, map->m_buckets, map->m_bucket_count);
+		map->m_allocator->deallocate_array(map->m_buckets, map->m_bucket_count);
 		map->m_buckets = new_buckets;
 		map->m_bucket_count = new_bucket_count;
 

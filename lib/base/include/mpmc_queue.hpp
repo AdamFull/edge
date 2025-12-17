@@ -38,7 +38,7 @@ namespace edge {
 			return false;
 		}
 
-		queue->m_buffer = allocate_array<MPMCNode<T>>(alloc, capacity);
+		queue->m_buffer = alloc->allocate_array<MPMCNode<T>>(capacity);
 		if (!queue->m_buffer) {
 			return false;
 		}
@@ -64,7 +64,7 @@ namespace edge {
 		}
 
 		if (queue->m_buffer) {
-			deallocate_array(queue->m_allocator, queue->m_buffer, queue->m_capacity);
+			queue->m_allocator->deallocate_array(queue->m_buffer, queue->m_capacity);
 		}
 	}
 

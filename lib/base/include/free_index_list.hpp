@@ -25,7 +25,7 @@ namespace edge {
 			return false;
 		}
 
-		list->m_indices = allocate_array<u32>(alloc, capacity);
+		list->m_indices = alloc->allocate_array<u32>(capacity);
 		if (!list->m_indices) {
 			return false;
 		}
@@ -52,7 +52,7 @@ namespace edge {
 		}
 
 		if (list->m_indices) {
-			deallocate_array(list->m_allocator, list->m_indices, list->m_capacity);
+			list->m_allocator->deallocate_array(list->m_indices, list->m_capacity);
 		}
 	}
 

@@ -41,7 +41,7 @@ namespace edge {
 	inline Callable<R(Args...)> callable_create_from_func(const Allocator* alloc, R(*fn)(Args...)) {
 		using FnPtr = R(*)(Args...);
 
-		FnPtr* stored = allocate<FnPtr>(alloc, fn);
+		FnPtr* stored = alloc->allocate<FnPtr>(fn);
 
 		Callable<R(Args...)> result;
 		result.invoke_fn = [](void* data, Args... args) -> R {
@@ -57,7 +57,7 @@ namespace edge {
 		using FType = std::decay_t<F>;
 		using Sig = typename callable_traits<FType>::signature;
 
-		FType* stored = allocate<FType>(alloc, std::forward<F>(functor));
+		FType* stored = alloc->allocate<FType>(std::forward<F>(functor));
 
 		return[=]<typename R, typename... Args>(R(*)(Args...)) {
 			Callable<R(Args...)> result;
@@ -78,7 +78,7 @@ namespace edge {
 	template<typename R, typename... Args>
 	inline void callable_destroy(const Allocator* alloc, Callable<R(Args...)>* callable) {
 		if (alloc && callable->data) {
-			deallocate(alloc, callable->data);
+			alloc->deallocate(callable->data);
 		}
 		callable->data = nullptr;
 	}
