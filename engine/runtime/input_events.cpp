@@ -8,7 +8,7 @@ namespace edge {
 			return;
 		}
 		
-		InputKeyAction current_state = (InputKeyAction)bitarray_get(&state->btn_states, (usize)key);
+		InputKeyAction current_state = (InputKeyAction)state->btn_states.get((usize)key);
 		if (current_state == new_state) {
 			return;
 		}
@@ -21,7 +21,7 @@ namespace edge {
 
 		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
 
-		bitarray_put(&state->btn_states, (usize)key, (bool)new_state);
+		state->btn_states.put((usize)key, (bool)new_state);
 	}
 
 	void input_update_mouse_move_state(InputState* state, EventDispatcher* dispatcher, f32 x, f32 y) {
@@ -52,7 +52,7 @@ namespace edge {
 			return;
 		}
 
-		InputKeyAction current_state = (InputKeyAction)bitarray_get(&state->mouse.btn_states, (usize)btn);
+		InputKeyAction current_state = (InputKeyAction)state->mouse.btn_states.get((usize)btn);
 		if (current_state == new_state) {
 			return;
 		}
@@ -64,7 +64,7 @@ namespace edge {
 		evt.action = new_state;
 		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
 
-		bitarray_put(&state->mouse.btn_states, (usize)btn, (bool)new_state);
+		state->mouse.btn_states.put((usize)btn, (bool)new_state);
 	}
 
 	void input_update_pad_btn_state(InputState* state, EventDispatcher* dispatcher, i32 pad_id, InputPadBtn btn, InputKeyAction new_state) {
@@ -72,7 +72,7 @@ namespace edge {
 			return;
 		}
 
-		InputKeyAction current_state = (InputKeyAction)bitarray_get(&state->pads->btn_states, (usize)btn);
+		InputKeyAction current_state = (InputKeyAction)state->pads->btn_states.get((usize)btn);
 		if (current_state == new_state) {
 			return;
 		}
@@ -85,7 +85,7 @@ namespace edge {
 		evt.state = new_state;
 		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
 
-		bitarray_put(&state->pads->btn_states, (usize)btn, (bool)new_state);
+		state->pads->btn_states.put((usize)btn, (bool)new_state);
 	}
 
 	void input_update_pad_axis_state(InputState* state, EventDispatcher* dispatcher, i32 pad_id, InputPadAxis axis, f32 x, f32 y, f32 z) {
