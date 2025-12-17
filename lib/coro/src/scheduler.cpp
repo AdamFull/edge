@@ -85,7 +85,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		SchedulerEvent* event = allocate_zeroed<SchedulerEvent>(sched->allocator, 1);
+		SchedulerEvent* event = sched->allocator->allocate<SchedulerEvent>();
 		if (!event) {
 			return nullptr;
 		}
@@ -105,7 +105,7 @@ namespace edge {
 			return;
 		}
 
-		deallocate(thread_context.scheduler->allocator, event);
+		thread_context.scheduler->allocator->deallocate(event);
 	}
 
 	void sched_event_wait(SchedulerEvent* event) {
@@ -195,7 +195,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		Job* job = allocate_zeroed<Job>(sched->allocator, 1);
+		Job* job = sched->allocator->allocate<Job>();
 		if (!job) {
 			return nullptr;
 		}
@@ -230,7 +230,7 @@ namespace edge {
 				fiber_context_destroy(sched->allocator, job->context);
 			}
 
-			deallocate(sched->allocator, job);
+			sched->allocator->deallocate(job);
 		}
 
 		return nullptr;
@@ -250,7 +250,7 @@ namespace edge {
 			fiber_context_destroy(sched->allocator, job->context);
 		}
 
-		deallocate(sched->allocator, job);
+		sched->allocator->deallocate(job);
 	}
 
 	static bool job_state_update(Job* job, CoroState expected_state, CoroState new_state) {
@@ -352,14 +352,14 @@ namespace edge {
 			return nullptr;
 		}
 
-		Scheduler* sched = allocate_zeroed<Scheduler>(allocator, 1);
+		Scheduler* sched = allocator->allocate<Scheduler>();
 		if (!sched) {
 			return nullptr;
 		}
 
 		sched->allocator = allocator;
 
-		sched->protected_arena = allocate<Arena>(allocator);
+		sched->protected_arena = allocator->allocate<Arena>();
 		if (!arena_create(allocator, sched->protected_arena, 0)) {
 			goto failed;
 		}
@@ -373,7 +373,7 @@ namespace edge {
 		}
 
 		for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
-			sched->queues[i] = allocate<MPMCQueue<uintptr_t>>(allocator);
+			sched->queues[i] = allocator->allocate<MPMCQueue<uintptr_t>>();
 			if (!mpmc_queue_create(allocator, sched->queues[i], 1024)) {
 				goto failed;
 			}
@@ -398,7 +398,7 @@ namespace edge {
 		sched->jobs_failed.store(0, std::memory_order_relaxed);
 
 		for (i32 i = 0; i < num_cores; ++i) {
-			WorkerThread* worker = allocate<WorkerThread>(allocator);
+			WorkerThread* worker = allocator->allocate<WorkerThread>();
 			if (!worker) {
 				goto failed;
 			}
@@ -408,13 +408,13 @@ namespace edge {
 			worker->should_exit.store(false, std::memory_order_relaxed);
 
 			if (thread_create(&worker->thread, sched_worker_thread, worker) != ThreadResult::Success) {
-				deallocate(allocator, worker);
+				allocator->deallocate(worker);
 				goto failed;
 			}
 
 			if (!sched->worker_threads.push_back(sched->allocator, worker)) {
 				thread_join(worker->thread, nullptr);
-				deallocate(allocator, worker);
+				allocator->deallocate(worker);
 				goto failed;
 			}
 
@@ -443,7 +443,7 @@ namespace edge {
 					WorkerThread** worker_ptr = sched->worker_threads.get(i);
 					if (worker_ptr && *worker_ptr) {
 						thread_join((*worker_ptr)->thread, nullptr);
-						deallocate(allocator, *worker_ptr);
+						allocator->deallocate(*worker_ptr);
 					}
 				}
 
@@ -454,7 +454,7 @@ namespace edge {
 				MPMCQueue<uintptr_t>* queue = sched->queues[i];
 				if (queue) {
 					mpmc_queue_destroy(queue);
-					deallocate(allocator, queue);
+					allocator->deallocate(queue);
 				}
 			}
 
@@ -466,10 +466,10 @@ namespace edge {
 
 			if (sched->protected_arena) {
 				arena_destroy(sched->protected_arena);
-				deallocate(allocator, sched->protected_arena);
+				allocator->deallocate(sched->protected_arena);
 			}
 
-			deallocate(allocator, sched);
+			allocator->deallocate(sched);
 		}
 
 		return nullptr;
@@ -488,7 +488,7 @@ namespace edge {
 				if (worker_ptr && *worker_ptr) {
 					(*worker_ptr)->should_exit.store(true, std::memory_order_release);
 					thread_join((*worker_ptr)->thread, nullptr);
-					deallocate(sched->allocator, *worker_ptr);
+					sched->allocator->deallocate(*worker_ptr);
 				}
 			}
 
@@ -509,7 +509,7 @@ namespace edge {
 				}
 
 				mpmc_queue_destroy(queue);
-				deallocate(sched->allocator, queue);
+				sched->allocator->deallocate(queue);
 			}
 		}
 
@@ -521,11 +521,11 @@ namespace edge {
 
 		if (sched->protected_arena) {
 			arena_destroy(sched->protected_arena);
-			deallocate(sched->allocator, sched->protected_arena);
+			sched->allocator->deallocate(sched->protected_arena);
 		}
 
 		const Allocator* alloc = sched->allocator;
-		deallocate(alloc, sched);
+		alloc->deallocate(sched);
 	}
 
 	void sched_schedule_job(Scheduler* sched, CoroFn func, void* payload, SchedulerPriority priority) {

@@ -108,7 +108,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		FiberContext* ctx = allocate_zeroed<FiberContext>(allocator, 1);
+		FiberContext* ctx = allocator->allocate<FiberContext>();
 		if (!ctx) {
 			return nullptr;
 		}
@@ -154,7 +154,7 @@ namespace edge {
 			__tsan_destroy_fiber(ctx->tsan_fiber);
 		}
 
-		deallocate(allocator, ctx);
+		allocator->deallocate(ctx);
 	}
 
 	void* fiber_get_stack_ptr(FiberContext* ctx) {
