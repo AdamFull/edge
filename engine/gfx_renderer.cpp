@@ -210,7 +210,7 @@ namespace edge::gfx {
 			}
 		}
 
-		if (!handle_pool_create(create_info->alloc, &renderer->resource_handle_pool, RENDERER_HANDLE_MAX * 2)) {
+		if (!renderer->resource_handle_pool.create(create_info->alloc, RENDERER_HANDLE_MAX * 2)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
@@ -218,7 +218,7 @@ namespace edge::gfx {
 		Resource backbuffer_resource = {
 			.type = ResourceType::Image
 		};
-		renderer->backbuffer_handle = handle_pool_allocate_with_data(&renderer->resource_handle_pool, backbuffer_resource);
+		renderer->backbuffer_handle = renderer->resource_handle_pool.allocate_with_data(backbuffer_resource);
 
 		if (!renderer->sampler_indices_list.create(create_info->alloc, RENDERER_HANDLE_MAX)) {
 			renderer_destroy(renderer);
@@ -298,7 +298,7 @@ namespace edge::gfx {
 		renderer->srv_indices_list.destroy(renderer->alloc);
 		renderer->sampler_indices_list.destroy(renderer->alloc);
 
-		handle_pool_destroy(&renderer->resource_handle_pool);
+		renderer->resource_handle_pool.destroy(renderer->alloc);
 
 		for (i32 i = 0; i < RENDERER_FRAME_OVERLAP; ++i) {
 			RendererFrame* frame = &renderer->frames[i];
@@ -327,11 +327,11 @@ namespace edge::gfx {
 			return HANDLE_INVALID;
 		}
 
-		if (handle_pool_is_full(&renderer->resource_handle_pool)) {
+		if (renderer->resource_handle_pool.is_full()) {
 			return HANDLE_INVALID;
 		}
 
-		return handle_pool_allocate(&renderer->resource_handle_pool);
+		return renderer->resource_handle_pool.allocate();
 	}
 
 	bool renderer_setup_image_resource(Renderer* renderer, Handle handle, Image image) {
@@ -339,7 +339,7 @@ namespace edge::gfx {
 			return false;
 		}
 
-		Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
+		Resource* resource = renderer->resource_handle_pool.get(handle);
 #if 0
 		if (!resource || resource->type != ResourceType::Image) {
 			return false;
@@ -476,7 +476,7 @@ namespace edge::gfx {
 			return false;
 		}
 
-		Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
+		Resource* resource = renderer->resource_handle_pool.get(handle);
 		resource->type = ResourceType::Buffer;
 		memcpy(&resource->buffer, &buffer, sizeof(Buffer));
 
@@ -484,12 +484,12 @@ namespace edge::gfx {
 	}
 
 	void renderer_update_image_resource(Renderer* renderer, Handle handle, Image image) {
-		if (!renderer || !handle_pool_is_valid(&renderer->resource_handle_pool, handle)) {
+		if (!renderer || !renderer->resource_handle_pool.is_valid(handle)) {
 			return;
 		}
 		
 		if (renderer->active_frame) {
-			Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
+			Resource* resource = renderer->resource_handle_pool.get(handle);
 			if (resource->type != ResourceType::Unknown) {
 				renderer->active_frame->free_resources.push_back(renderer->alloc, *resource);
 			}
@@ -499,12 +499,12 @@ namespace edge::gfx {
 	}
 
 	void renderer_update_buffer_resource(Renderer* renderer, Handle handle, Buffer buffer) {
-		if (!renderer || !handle_pool_is_valid(&renderer->resource_handle_pool, handle)) {
+		if (!renderer || !renderer->resource_handle_pool.is_valid(handle)) {
 			return;
 		}
 
 		if (renderer->active_frame) {
-			Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
+			Resource* resource = renderer->resource_handle_pool.get(handle);
 			if (resource->type != ResourceType::Unknown) {
 				renderer->active_frame->free_resources.push_back(renderer->alloc, *resource);
 			}
@@ -518,15 +518,15 @@ namespace edge::gfx {
 			return;
 		}
 
-		if (handle_pool_is_valid(&renderer->resource_handle_pool, handle)) {
+		if (renderer->resource_handle_pool.is_valid(handle)) {
 			if (renderer->active_frame) {
-				Resource* resource = handle_pool_get(&renderer->resource_handle_pool, handle);
+				Resource* resource = renderer->resource_handle_pool.get(handle);
 				if (resource->type != ResourceType::Unknown) {
 					renderer->active_frame->free_resources.push_back(renderer->alloc, *resource);
 				}
 			}
 
-			handle_pool_free(&renderer->resource_handle_pool, handle);
+			renderer->resource_handle_pool.free(renderer->alloc, handle);
 		}
 	}
 
@@ -601,7 +601,7 @@ namespace edge::gfx {
 		renderer->active_frame = current_frame;
 
 		// Update backbuffer resource
-		Resource* backbuffer_resource = handle_pool_get(&renderer->resource_handle_pool, renderer->backbuffer_handle);
+		Resource* backbuffer_resource = renderer->resource_handle_pool.get(renderer->backbuffer_handle);
 		backbuffer_resource->image = renderer->swapchain_images[renderer->active_image_index];
 
 		if (renderer->frame_number > 0) {
@@ -635,7 +635,7 @@ namespace edge::gfx {
 			return false;
 		}
 
-		Resource* backbuffer_resource = handle_pool_get(&renderer->resource_handle_pool, renderer->backbuffer_handle);
+		Resource* backbuffer_resource = renderer->resource_handle_pool.get(renderer->backbuffer_handle);
 		if (backbuffer_resource) {
 			if (backbuffer_resource->image.layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
 				PipelineBarrierBuilder barrier_builder = {};
