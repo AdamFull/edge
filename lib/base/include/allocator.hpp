@@ -183,9 +183,9 @@ namespace edge {
 				return nullptr;
 			}
 
-			if constexpr (!std::is_trivially_constructible_v<T, Args...>) {
+			//if constexpr (!std::is_trivially_constructible_v<T, Args...>) {
 				new (ptr) T(std::forward<Args>(args)...);
-			}
+			//}
 
 			return ptr;
 		}
