@@ -14,7 +14,7 @@ namespace edge {
 		usize m_size = 0ull;
 		usize m_capacity = 0ull;
 
-		void destroy(const Allocator* alloc) {
+		void destroy(NotNull<const Allocator*> alloc) {
 			if (m_data) {
 				alloc->deallocate_array(m_data, m_capacity);
 			}
@@ -25,7 +25,7 @@ namespace edge {
 			m_size = 0;
 		}
 
-		bool reserve(const Allocator* alloc, usize capacity) {
+		bool reserve(NotNull<const Allocator*> alloc, usize capacity) {
 			if (capacity <= m_capacity) {
 				return true;
 			}
@@ -46,7 +46,7 @@ namespace edge {
 			return true;
 		}
 
-		bool resize(const Allocator* alloc, usize new_size) {
+		bool resize(NotNull<const Allocator*> alloc, usize new_size) {
 			if (new_size > m_capacity) {
 				usize new_capacity = m_capacity;
 				while (new_capacity < new_size) {
@@ -105,7 +105,7 @@ namespace edge {
 			return &m_data[m_size - 1];
 		}
 
-		bool push_back(const Allocator* alloc, const T& element) {
+		bool push_back(NotNull<const Allocator*> alloc, const T& element) {
 			if (m_size >= m_capacity) {
 				usize new_capacity = m_capacity * 2;
 				if (!reserve(alloc, new_capacity)) {
@@ -132,7 +132,7 @@ namespace edge {
 			return true;
 		}
 
-		bool insert(const Allocator* alloc, usize index, const T& element) {
+		bool insert(NotNull<const Allocator*> alloc, usize index, const T& element) {
 			if (index > m_size) {
 				return false;
 			}
