@@ -46,7 +46,7 @@ namespace edge {
 	}
 
 	u64 event_dispatcher_add_listener(EventDispatcher* dispatcher, u64 listen_categories, EventListenerFn listener_fn) {
-		if (!dispatcher || !callable_is_valid(&listener_fn)) {
+		if (!dispatcher || !listener_fn.is_valid()) {
 			return 0;
 		}
 
@@ -90,7 +90,7 @@ namespace edge {
 
 			/* Check if any of the event's category flags match the listener's categories */
 			if ((event->categories & listener->listen_categories) != 0) {
-				callable_invoke(&listener->listener_fn, event);
+				listener->listener_fn.invoke(event);
 			}
 		}
 	}
