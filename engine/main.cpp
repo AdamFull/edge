@@ -165,7 +165,7 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 	};
 
 	engine_context.imgui_renderer = edge::gfx::imgui_renderer_create(&imgui_renderer_create_info);
-	if (engine_context.imgui_renderer) {
+	if (!engine_context.imgui_renderer) {
 		edge_cleanup_engine();
 		return -1;
 	}
