@@ -67,7 +67,7 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
-		ImGuiRenderer* imgui_renderer = allocate<ImGuiRenderer>(create_info->allocator);
+		ImGuiRenderer* imgui_renderer = create_info->allocator->allocate<ImGuiRenderer>();
 		if (!imgui_renderer) {
 			return nullptr;
 		}
@@ -235,7 +235,7 @@ namespace edge::gfx {
 		renderer_free_resource(imgui_renderer->renderer, imgui_renderer->vertex_buffer);
 
 		const Allocator* allocator = imgui_renderer->allocator;
-		deallocate(allocator, imgui_renderer);
+		allocator->deallocate(imgui_renderer);
 	}
 
 	void imgui_renderer_execute(ImGuiRenderer* imgui_renderer) {

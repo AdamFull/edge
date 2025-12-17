@@ -214,7 +214,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		ImGuiLayer* layer = allocate<ImGuiLayer>(init_info->alocator);
+		ImGuiLayer* layer = init_info->alocator->allocate<ImGuiLayer>();
 		if (!layer) {
 			return nullptr;
 		}
@@ -225,11 +225,11 @@ namespace edge {
 		ImGui::SetAllocatorFunctions(
 			[](size_t size, void* user_data) -> void* {
 				const Allocator* allocator = (const Allocator*)user_data;
-				return allocator_malloc(allocator, size);
+				return allocator->malloc(size);
 			},
 			[](void* ptr, void* user_data) -> void {
 				const Allocator* allocator = (const Allocator*)user_data;
-				allocator_free(allocator, ptr);
+				allocator->free(ptr);
 			}, (void*)init_info->alocator);
 
 		ImGuiContext* ctx = ImGui::CreateContext();
@@ -385,7 +385,7 @@ namespace edge {
 		event_dispatcher_remove_listener(layer->event_dispatcher, layer->listener_id);
 
 		const Allocator* allocator = layer->alocator;
-		deallocate(allocator, layer);
+		allocator->deallocate(layer);
 	}
 
 	void imgui_layer_update(ImGuiLayer* layer, f32 delta_time) {

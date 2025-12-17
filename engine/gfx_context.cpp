@@ -165,17 +165,17 @@ namespace edge::gfx {
 
 	static void* VKAPI_CALL vk_alloc_cb(void* user_data, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) {
 		const Allocator* alloc = (const Allocator*)user_data;
-		return allocator_malloc(alloc, size);
+		return alloc->malloc(size);
 	}
 
 	static void VKAPI_CALL vk_free_cb(void* user_data, void* memory) {
 		const Allocator* alloc = (const Allocator*)user_data;
-		allocator_free(alloc, memory);
+		alloc->free(memory);
 	}
 
 	static void* VKAPI_CALL vk_realloc_cb(void* user_data, void* original, size_t size, size_t alignment, VkSystemAllocationScope allocation_scope) {
 		const Allocator* alloc = (const Allocator*)user_data;
-		return allocator_realloc(alloc, original, size);
+		return alloc->realloc(original, size);
 	}
 
 	static void VKAPI_CALL vk_internal_alloc_cb(void* user_data, size_t size, VkInternalAllocationType allocation_type, VkSystemAllocationScope allocation_scope) {
@@ -472,7 +472,7 @@ namespace edge::gfx {
 		vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
 		VkLayerProperties* available_layers = nullptr;
 		if (layer_count > 0) {
-			available_layers = allocate_array<VkLayerProperties>(g_ctx.alloc, layer_count);
+			available_layers = g_ctx.alloc->allocate_array<VkLayerProperties>(layer_count);
 			vkEnumerateInstanceLayerProperties(&layer_count, available_layers);
 		}
 
@@ -480,7 +480,7 @@ namespace edge::gfx {
 		vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
 		VkExtensionProperties* available_extensions = nullptr;
 		if (extension_count > 0) {
-			available_extensions = allocate_array<VkExtensionProperties>(g_ctx.alloc, extension_count);
+			available_extensions = g_ctx.alloc->allocate_array<VkExtensionProperties>(extension_count);
 			vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, available_extensions);
 		}
 
@@ -523,12 +523,12 @@ namespace edge::gfx {
 		}
 
 		if (available_layers) {
-			deallocate_array(g_ctx.alloc, available_layers, layer_count);
+			g_ctx.alloc->deallocate_array(available_layers, layer_count);
 			available_layers = nullptr;
 		}
 
 		if (available_extensions) {
-			deallocate_array(g_ctx.alloc, available_extensions, extension_count);
+			g_ctx.alloc->deallocate_array(available_extensions, extension_count);
 			available_extensions = nullptr;
 		}
 
@@ -586,11 +586,11 @@ namespace edge::gfx {
 
 	fatal_error:
 		if (available_layers) {
-			deallocate_array(g_ctx.alloc, available_layers, layer_count);
+			g_ctx.alloc->deallocate_array(available_layers, layer_count);
 		}
 
 		if (available_extensions) {
-			deallocate_array(g_ctx.alloc, available_extensions, extension_count);
+			g_ctx.alloc->deallocate_array(available_extensions, extension_count);
 		}
 
 		return VK_ERROR_UNKNOWN;
@@ -622,7 +622,7 @@ namespace edge::gfx {
 
 			u32 extension_count = 0;
 			vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count, NULL);
-			VkExtensionProperties* available_extensions = allocate_array<VkExtensionProperties>(g_ctx.alloc, extension_count);
+			VkExtensionProperties* available_extensions = g_ctx.alloc->allocate_array<VkExtensionProperties>(extension_count);
 			vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count, available_extensions);
 
 			i32 adapter_score = 0;
@@ -658,7 +658,7 @@ namespace edge::gfx {
 				}
 			}
 
-			deallocate_array(g_ctx.alloc, available_extensions, extension_count);
+			g_ctx.alloc->deallocate_array(available_extensions, extension_count);
 
 			if (!all_required_found) {
 				continue;

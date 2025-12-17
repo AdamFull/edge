@@ -20,13 +20,13 @@ namespace edge {
 			return nullptr;
 		}
 
-		EventDispatcher* dispatcher = allocate<EventDispatcher>(alloc);
+		EventDispatcher* dispatcher = alloc->allocate<EventDispatcher>();
 		if (!dispatcher) {
 			return nullptr;
 		}
 
 		if (!dispatcher->listeners.reserve(alloc, 16)) {
-			deallocate(alloc, dispatcher);
+			alloc->deallocate(dispatcher);
 			return nullptr;
 		}
 
@@ -42,7 +42,7 @@ namespace edge {
 		}
 
 		dispatcher->listeners.destroy(dispatcher->allocator);
-		deallocate(dispatcher->allocator, dispatcher);
+		dispatcher->allocator->deallocate(dispatcher);
 	}
 
 	u64 event_dispatcher_add_listener(EventDispatcher* dispatcher, u64 listen_categories, EventListenerFn listener_fn) {

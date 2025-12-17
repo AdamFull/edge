@@ -96,7 +96,7 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
-		Renderer* renderer = allocate_zeroed<Renderer>(create_info->alloc);
+		Renderer* renderer = create_info->alloc->allocate<Renderer>(create_info->alloc);
 		if (!renderer) {
 			return nullptr;
 		}
@@ -319,7 +319,7 @@ namespace edge::gfx {
 		cmd_pool_destroy(&renderer->cmd_pool);
 
 		const Allocator* alloc = renderer->alloc;
-		deallocate(alloc, renderer);
+		alloc->deallocate(renderer);
 	}
 
 	Handle renderer_add_resource(Renderer* renderer) {

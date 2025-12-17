@@ -209,7 +209,7 @@ namespace edge {
 		}
 
 		Allocator* alloc = (Allocator*)user;
-		return allocator_malloc(alloc, size);
+		return alloc->malloc(size);
 	}
 
 	static void* glfw_reallocate_cb(void* block, size_t size, void* user) {
@@ -218,7 +218,7 @@ namespace edge {
 		}
 
 		Allocator* alloc = (Allocator*)user;
-		return allocator_realloc(alloc, block, size);
+		return alloc->realloc(block, size);
 	}
 
 	static void glfw_deallocate_cb(void* block, void* user) {
@@ -227,7 +227,7 @@ namespace edge {
 		}
 
 		Allocator* alloc = (Allocator*)user;
-		allocator_free(alloc, block);
+		alloc->free(block);
 	}
 
 	static void window_error_cb(i32 error, const char* description) {
@@ -372,7 +372,7 @@ namespace edge {
 			return NULL;
 		}
 
-		PlatformContext* ctx = allocate<PlatformContext>(create_info->alloc);
+		PlatformContext* ctx = create_info->alloc->allocate<PlatformContext>();
 		if (!ctx) {
 			return NULL;
 		}
@@ -424,14 +424,14 @@ namespace edge {
 			glfwSetWindowShouldClose(wnd->handle, GLFW_TRUE);
 			glfwDestroyWindow(wnd->handle);
 
-			deallocate(ctx->alloc, wnd);
+			ctx->alloc->deallocate(wnd);
 			deinit_glfw_context();
 		}
 
 		g_event_dispatcher = NULL;
 
 		const Allocator* alloc = ctx->alloc;
-		deallocate(alloc, ctx);
+		alloc->deallocate(ctx);
 	}
 
 	void platform_context_get_surface(PlatformContext* ctx, void* surface_info) {
@@ -454,7 +454,7 @@ namespace edge {
 
 		init_glfw_context(ctx->alloc);
 
-		Window* wnd = allocate<Window>(ctx->alloc);
+		Window* wnd = ctx->alloc->allocate<Window>();
 		if (!wnd) {
 			deinit_glfw_context();
 			return NULL;
@@ -492,7 +492,7 @@ namespace edge {
 		}
 
 		if (!wnd->handle) {
-			deallocate(ctx->alloc, wnd);
+			ctx->alloc->deallocate(wnd);
 			deinit_glfw_context();
 			return NULL;
 		}

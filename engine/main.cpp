@@ -50,15 +50,15 @@ static void edge_cleanup_engine(void) {
 		edge::logger_destroy(engine_context.logger);
 	}
 
-	size_t net_allocated = edge::allocator_get_net(engine_context.allocator);
+	size_t net_allocated = engine_context.allocator->get_net();
 	assert(net_allocated == 0 && "Memory leaks detected.");
 }
 
 int edge_main(edge::PlatformLayout* platform_layout) {
 #if EDGE_DEBUG
-	edge::Allocator allocator = edge::allocator_create_tracking();
+	edge::Allocator allocator = edge::Allocator::create_tracking();
 #else
-	edge_allocator_t allocator = edge_allocator_create(mi_malloc, mi_free, mi_realloc, mi_calloc, mi_strdup);
+	edge::Allocator allocator = edge::Allocator::create(mi_malloc, mi_free, mi_realloc, mi_calloc, mi_strdup);
 #endif
 
 	engine_context.allocator = &allocator;
