@@ -472,20 +472,20 @@ TEST(hashmap_clear) {
 TEST(bitarray_basic) {
 	edge::BitArray<64> arr = {};
 
-	edge::bitarray_clear_all(&arr);
-	SHOULD_EQUAL(edge::bitarray_get(&arr, 0), false);
+	arr.clear_all();
+	SHOULD_EQUAL(arr.get(0), false);
 
-	edge::bitarray_set(&arr, 5);
-	SHOULD_EQUAL(edge::bitarray_get(&arr, 5), true);
+	arr.set(5);
+	SHOULD_EQUAL(arr.get(5), true);
 
-	edge::bitarray_clear(&arr, 5);
-	SHOULD_EQUAL(edge::bitarray_get(&arr, 5), false);
+	arr.clear(5);
+	SHOULD_EQUAL(arr.get(5), false);
 
-	edge::bitarray_toggle(&arr, 10);
-	SHOULD_EQUAL(edge::bitarray_get(&arr, 10), true);
+	arr.toggle(10);
+	SHOULD_EQUAL(arr.get(10), true);
 
-	edge::bitarray_toggle(&arr, 10);
-	SHOULD_EQUAL(edge::bitarray_get(&arr, 10), false);
+	arr.toggle(10);
+	SHOULD_EQUAL(arr.get(10), false);
 
 	return 0;
 }
@@ -493,15 +493,15 @@ TEST(bitarray_basic) {
 TEST(bitarray_put) {
 	edge::BitArray<32> arr = {};
 
-	edge::bitarray_clear_all(&arr);
+	arr.clear_all();
 
-	edge::bitarray_put(&arr, 0, true);
-	edge::bitarray_put(&arr, 1, false);
-	edge::bitarray_put(&arr, 2, true);
+	arr.put(0, true);
+	arr.put(1, false);
+	arr.put(2, true);
 
-	SHOULD_EQUAL(edge::bitarray_get(&arr, 0), true);
-	SHOULD_EQUAL(edge::bitarray_get(&arr, 1), false);
-	SHOULD_EQUAL(edge::bitarray_get(&arr, 2), true);
+	SHOULD_EQUAL(arr.get(0), true);
+	SHOULD_EQUAL(arr.get(1), false);
+	SHOULD_EQUAL(arr.get(2), true);
 
 	return 0;
 }
@@ -509,10 +509,10 @@ TEST(bitarray_put) {
 TEST(bitarray_set_all) {
 	edge::BitArray<16> arr = {};
 
-	edge::bitarray_set_all(&arr);
+	arr.set_all();
 
 	for (i32 i = 0; i < 16; i++) {
-		SHOULD_EQUAL(edge::bitarray_get(&arr, i), true);
+		SHOULD_EQUAL(arr.get(i), true);
 	}
 
 	return 0;
@@ -521,13 +521,13 @@ TEST(bitarray_set_all) {
 TEST(bitarray_count) {
 	edge::BitArray<32> arr = {};
 
-	edge::bitarray_clear_all(&arr);
-	edge::bitarray_set(&arr, 0);
-	edge::bitarray_set(&arr, 5);
-	edge::bitarray_set(&arr, 10);
-	edge::bitarray_set(&arr, 15);
+	arr.clear_all();
+	arr.set(0);
+	arr.set(5);
+	arr.set(10);
+	arr.set(15);
 
-	SHOULD_EQUAL(edge::bitarray_count_set(&arr), 4);
+	SHOULD_EQUAL(arr.count_set(), 4);
 
 	return 0;
 }
@@ -535,14 +535,14 @@ TEST(bitarray_count) {
 TEST(bitarray_find_first) {
 	edge::BitArray<64> arr = {};
 
-	edge::bitarray_clear_all(&arr);
-	SHOULD_EQUAL(edge::bitarray_find_first_set(&arr), -1);
+	arr.clear_all();
+	SHOULD_EQUAL(arr.find_first_set(), -1);
 
-	edge::bitarray_set(&arr, 20);
-	SHOULD_EQUAL(edge::bitarray_find_first_set(&arr), 20);
+	arr.set(20);
+	SHOULD_EQUAL(arr.find_first_set(), 20);
 
-	edge::bitarray_set(&arr, 5);
-	SHOULD_EQUAL(edge::bitarray_find_first_set(&arr), 5);
+	arr.set(5);
+	SHOULD_EQUAL(arr.find_first_set(), 5);
 
 	return 0;
 }
@@ -550,13 +550,13 @@ TEST(bitarray_find_first) {
 TEST(bitarray_any_all) {
 	edge::BitArray<32> arr = {};
 
-	edge::bitarray_clear_all(&arr);
-	SHOULD_EQUAL(edge::bitarray_any_set(&arr), false);
-	SHOULD_EQUAL(edge::bitarray_all_clear(&arr), true);
+	arr.clear_all();
+	SHOULD_EQUAL(arr.any_set(), false);
+	SHOULD_EQUAL(arr.all_clear(), true);
 
-	edge::bitarray_set(&arr, 10);
-	SHOULD_EQUAL(edge::bitarray_any_set(&arr), true);
-	SHOULD_EQUAL(edge::bitarray_all_clear(&arr), false);
+	arr.set(10);
+	SHOULD_EQUAL(arr.any_set(), true);
+	SHOULD_EQUAL(arr.all_clear(), false);
 
 	return 0;
 }
