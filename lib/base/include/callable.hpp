@@ -35,6 +35,21 @@ namespace edge {
 	struct Callable<R(Args...)> {
 		R(*invoke_fn)(void* data, Args... args);
 		void* data;
+
+		R invoke(Args... args) {
+			return invoke_fn(data, std::forward<Args>(args)...);
+		}
+
+		void destroy(const Allocator* alloc) {
+			if (data) {
+				alloc->deallocate(data);
+			}
+			data = nullptr;
+		}
+
+		bool is_valid() const noexcept {
+			return invoke_fn != nullptr;
+		}
 	};
 
 	template<typename R, typename... Args>
@@ -68,24 +83,6 @@ namespace edge {
 			result.data = stored;
 			return result;
 		}(static_cast<Sig*>(nullptr));
-	}
-
-	template<typename R, typename... Args>
-	inline R callable_invoke(Callable<R(Args...)>* callable, Args... args) {
-		return callable->invoke_fn(callable->data, std::forward<Args>(args)...);
-	}
-
-	template<typename R, typename... Args>
-	inline void callable_destroy(const Allocator* alloc, Callable<R(Args...)>* callable) {
-		if (alloc && callable->data) {
-			alloc->deallocate(callable->data);
-		}
-		callable->data = nullptr;
-	}
-
-	template<typename R, typename... Args>
-	inline bool callable_is_valid(const Callable<R(Args...)>* callable) {
-		return callable && callable->invoke_fn != nullptr;
 	}
 }
 
