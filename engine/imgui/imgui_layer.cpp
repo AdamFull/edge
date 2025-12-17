@@ -428,7 +428,6 @@ namespace edge {
 
 		ImGui::ShowDemoWindow();
 
-		ImGui::End();
 		ImGui::Render();
 	}
 }

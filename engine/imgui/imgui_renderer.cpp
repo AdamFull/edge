@@ -207,9 +207,6 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
-		imgui_renderer->allocator = create_info->allocator;
-		imgui_renderer->renderer = create_info->renderer;
-
 		imgui_renderer->vertex_buffer = renderer_add_resource(imgui_renderer->renderer);
 		imgui_renderer->vertex_buffer_capacity = k_initial_vertex_count;
 		update_buffer_resource(imgui_renderer, imgui_renderer->vertex_buffer, k_initial_vertex_count * sizeof(ImDrawVert), k_vertex_buffer_flags);
