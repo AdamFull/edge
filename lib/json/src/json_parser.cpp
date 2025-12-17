@@ -36,7 +36,7 @@ namespace edge {
 
 			usize capacity = 32;
 			usize length = 0;
-			char* result = allocate<char>(parser->m_allocator, capacity);
+			char* result = parser->m_allocator->allocate<char>(capacity);
 			if (!result) return nullptr;
 
 			while (parser->m_pos < parser->m_length) {
@@ -52,7 +52,7 @@ namespace edge {
 				if (c == '\\') {
 					parser->m_pos++;
 					if (parser->m_pos >= parser->m_length) {
-						deallocate(parser->m_allocator, result);
+						parser->m_allocator->deallocate(result);
 						return nullptr;
 					}
 
@@ -72,7 +72,7 @@ namespace edge {
 						// TODO: Unicode support
 						parser->m_pos++;
 						if (parser->m_pos + 3 >= parser->m_length) {
-							deallocate(parser->m_allocator, result);
+							parser->m_allocator->deallocate(result);
 							return nullptr;
 						}
 						unescaped = '?';
@@ -80,7 +80,7 @@ namespace edge {
 						break;
 					}
 					default:
-						deallocate(parser->m_allocator, result);
+						parser->m_allocator->deallocate(result);
 						return nullptr;
 					}
 
@@ -90,9 +90,9 @@ namespace edge {
 				// Resize if needed
 				if (length >= capacity - 1) {
 					capacity *= 2;
-					char* new_result = reallocate(parser->m_allocator, result, capacity);
+					char* new_result = (char*)parser->m_allocator->realloc(result, capacity);
 					if (!new_result) {
-						deallocate(parser->m_allocator, result);
+						parser->m_allocator->deallocate(result);
 						return nullptr;
 					}
 					result = new_result;
@@ -102,7 +102,7 @@ namespace edge {
 				parser->m_pos++;
 			}
 
-			deallocate(parser->m_allocator, result);
+			parser->m_allocator->deallocate(result);
 			return nullptr;
 		}
 
@@ -156,11 +156,11 @@ namespace edge {
 				}
 			}
 
-			char* num_str = allocator_strndup(parser->m_allocator, parser->m_json + start, parser->m_pos - start);
+			char* num_str = parser->m_allocator->strndup(parser->m_json + start, parser->m_pos - start);
 			if (!num_str) return nullptr;
 
 			f64 value = strtod(num_str, nullptr);
-			deallocate(parser->m_allocator, num_str);
+			parser->m_allocator->deallocate(num_str);
 
 			return json_number(parser->m_allocator, value);
 		}
@@ -258,7 +258,7 @@ namespace edge {
 
 				// Expect ':'
 				if (parser->m_pos >= parser->m_length || parser->m_json[parser->m_pos] != ':') {
-					deallocate(parser->m_allocator, key);
+					parser->m_allocator->deallocate(key);
 					json_free_value(object);
 					return nullptr;
 				}
@@ -269,19 +269,19 @@ namespace edge {
 				// Parse value
 				JsonValue* value = parse_value(parser);
 				if (!value) {
-					deallocate(parser->m_allocator, key);
+					parser->m_allocator->deallocate(key);
 					json_free_value(object);
 					return nullptr;
 				}
 
 				if (!json_object_set(object, key, value)) {
-					deallocate(parser->m_allocator, key);
+					parser->m_allocator->deallocate(key);
 					json_free_value(value);
 					json_free_value(object);
 					return nullptr;
 				}
 
-				deallocate(parser->m_allocator, key);
+				parser->m_allocator->deallocate(key);
 				skip_whitespace(parser);
 
 				if (parser->m_pos >= parser->m_length) {
@@ -354,7 +354,7 @@ namespace edge {
 				char* str = parse_string_content(parser, &length);
 				if (!str) return nullptr;
 				JsonValue* value = json_string_len(parser->m_allocator, str, length);
-				deallocate(parser->m_allocator, str);
+				parser->m_allocator->deallocate(str);
 				return value;
 			}
 

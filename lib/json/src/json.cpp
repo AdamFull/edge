@@ -29,7 +29,7 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
+        JsonValue* value = alloc->allocate_zeroed<JsonValue>();
         if (!value) {
             return nullptr;
         }
@@ -44,7 +44,7 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
+        JsonValue* value = alloc->allocate_zeroed<JsonValue>();
         if (!value) {
             return nullptr;
         }
@@ -60,7 +60,7 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
+        JsonValue* value = alloc->allocate_zeroed<JsonValue>();
         if (!value) {
             return nullptr;
         }
@@ -95,14 +95,14 @@ namespace edge {
             return json_null(alloc);
         }
 
-        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
+        JsonValue* value = alloc->allocate_zeroed<JsonValue>();
         if (!value) {
             return nullptr;
         }
 
         value->m_type = JsonType::String;
         if (!string_create_from_buffer(alloc, &value->as.string_value, str, length)) {
-            deallocate(alloc, value);
+            alloc->deallocate(value);
             return nullptr;
         }
 
@@ -116,14 +116,14 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
+        JsonValue* value = alloc->allocate_zeroed<JsonValue>();
         if (!value) {
             return nullptr;
         }
 
         value->m_type = JsonType::Array;
         if (!value->as.array_value.reserve(alloc, 8)) {
-            deallocate(alloc, value);
+            alloc->deallocate(value);
             return nullptr;
         }
 
@@ -137,7 +137,7 @@ namespace edge {
             return nullptr;
         }
 
-        JsonValue* value = allocate_zeroed<JsonValue>(alloc);
+        JsonValue* value = alloc->allocate_zeroed<JsonValue>();
         if (!value) {
             return nullptr;
         }
@@ -149,7 +149,7 @@ namespace edge {
             8,
             string_hash,
             string_compare)) {
-            deallocate(alloc, value);
+            alloc->deallocate(value);
             return nullptr;
         }
 
@@ -188,7 +188,7 @@ namespace edge {
             break;
         }
 
-        deallocate(value->m_allocator, value);
+        value->m_allocator->deallocate(value);
     }
 
     bool json_get_bool(const JsonValue* value, bool default_value) {

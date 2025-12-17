@@ -221,7 +221,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		char* result = allocator_strdup(value->m_allocator, string_cstr(&sb));
+		char* result = value->m_allocator->strdup(string_cstr(&sb));
 		string_destroy(&sb);
 
 		return result;
