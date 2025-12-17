@@ -8,151 +8,81 @@ namespace edge {
 		u32* m_indices = nullptr;
 		u32 m_capacity = 0ull;
 		u32 m_count = 0ull;
-		const Allocator* m_allocator = nullptr;
+
+		bool create(NotNull<const Allocator*> alloc, u32 capacity) {
+			if (capacity == 0) {
+				return false;
+			}
+
+			m_indices = alloc->allocate_array<u32>(capacity);
+			if (!m_indices) {
+				return false;
+			}
+
+			m_capacity = capacity;
+			m_count = capacity;
+
+			// Initialize with all indices available in reverse order
+			// So index 0 is allocated first
+			for (u32 i = 0; i < capacity; i++) {
+				m_indices[i] = capacity - 1 - i;
+			}
+
+			return true;
+		}
+
+		void destroy(NotNull<const Allocator*> alloc) {
+			if (m_indices) {
+				alloc->deallocate_array(m_indices, m_capacity);
+			}
+		}
+
+		bool allocate(u32* out_index) noexcept {
+			if (!out_index || m_count == 0) {
+				return false;
+			}
+
+			*out_index = m_indices[--m_count];
+			return true;
+		}
+
+		bool free(u32 index) noexcept {
+			if (m_count >= m_capacity) {
+				return false;
+			}
+
+			if (index >= m_capacity) {
+				return false;
+			}
+
+			m_indices[m_count++] = index;
+			return true;
+		}
+
+		bool has_available() const noexcept {
+			return m_count > 0;
+		}
+
+		bool full() const noexcept {
+			return m_count == m_capacity;
+		}
+
+		bool empty() const noexcept {
+			return m_count == 0;
+		}
+
+		void reset() noexcept {
+			m_count = m_capacity;
+
+			for (u32 i = 0; i < m_capacity; i++) {
+				m_indices[i] = m_capacity - 1 - i;
+			}
+		}
+
+		void clear() noexcept {
+			m_count = 0;
+		}
 	};
-
-	/**
-	 * Create a free list with fixed capacity
-	 * Initially all indices [0, capacity-1] are available
-	 *
-	 * @param alloc Memory allocator to use
-	 * @param list Pointer to list to initialize
-	 * @param capacity Number of indices to manage
-	 * @return true on success, false on failure
-	 */
-	inline bool free_index_list_create(const Allocator* alloc, FreeIndexList* list, u32 capacity) {
-		if (!alloc || !list || capacity == 0) {
-			return false;
-		}
-
-		list->m_indices = alloc->allocate_array<u32>(capacity);
-		if (!list->m_indices) {
-			return false;
-		}
-
-		list->m_capacity = capacity;
-		list->m_count = capacity;
-		list->m_allocator = alloc;
-
-		// Initialize with all indices available in reverse order
-		// So index 0 is allocated first
-		for (u32 i = 0; i < capacity; i++) {
-			list->m_indices[i] = capacity - 1 - i;
-		}
-
-		return true;
-	}
-
-	/**
-	 * Destroy free list and free memory
-	 */
-	inline void free_index_list_destroy(FreeIndexList* list) {
-		if (!list) {
-			return;
-		}
-
-		if (list->m_indices) {
-			list->m_allocator->deallocate_array(list->m_indices, list->m_capacity);
-		}
-	}
-
-	/**
-	 * Allocate (pop) a free index
-	 *
-	 * @param list Free list
-	 * @param out_index Pointer to store the allocated index
-	 * @return true if successful, false if no free indices available
-	 */
-	inline bool free_index_list_allocate(FreeIndexList* list, u32* out_index) {
-		if (!list || !out_index || list->m_count == 0) {
-			return false;
-		}
-
-		*out_index = list->m_indices[--list->m_count];
-		return true;
-	}
-
-	/**
-	 * Free (return) an index back to the free list
-	 * Note: Does not check for double-free
-	 *
-	 * @param list Free list
-	 * @param index Index to return
-	 * @return true if successful, false if list is full or invalid
-	 */
-	inline bool free_index_list_free(FreeIndexList* list, u32 index) {
-		if (!list || list->m_count >= list->m_capacity) {
-			return false;
-		}
-
-		if (index >= list->m_capacity) {
-			return false;
-		}
-
-		list->m_indices[list->m_count++] = index;
-		return true;
-	}
-
-	/**
-	 * Get number of available free indices
-	 */
-	inline u32 free_index_list_available(const FreeIndexList* list) {
-		return list ? list->m_count : 0;
-	}
-
-	/**
-	 * Get total capacity
-	 */
-	inline u32 free_index_list_capacity(const FreeIndexList* list) {
-		return list ? list->m_capacity : 0;
-	}
-
-	/**
-	 * Check if any free indices are available
-	 */
-	inline bool free_index_list_has_available(const FreeIndexList* list) {
-		return list && list->m_count > 0;
-	}
-
-	/**
-	 * Check if free list is full (all indices are free)
-	 */
-	inline bool free_index_list_is_full(const FreeIndexList* list) {
-		return list && list->m_count == list->m_capacity;
-	}
-
-	/**
-	 * Check if free list is empty (no free indices available)
-	 */
-	inline bool free_index_list_is_empty(const FreeIndexList* list) {
-		return !list || list->m_count == 0;
-	}
-
-	/**
-	 * Reset the free list to initial state (all indices available)
-	 */
-	inline void free_index_list_reset(FreeIndexList* list) {
-		if (!list) {
-			return;
-		}
-
-		list->m_count = list->m_capacity;
-
-		for (u32 i = 0; i < list->m_capacity; i++) {
-			list->m_indices[i] = list->m_capacity - 1 - i;
-		}
-	}
-
-	/**
-	 * Clear the free list (marks all indices as allocated)
-	 */
-	inline void free_index_list_clear(FreeIndexList* list) {
-		if (!list) {
-			return;
-		}
-
-		list->m_count = 0;
-	}
 }
 
 #endif
