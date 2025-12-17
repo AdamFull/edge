@@ -130,35 +130,35 @@ static const u32 g_required_api_version = VK_API_VERSION_1_1;
 
 namespace edge::gfx {
 	struct Context {
-		const Allocator* alloc;
-		VkAllocationCallbacks vk_alloc;
+		const Allocator* alloc = nullptr;
+		VkAllocationCallbacks vk_alloc = {};
 
-		VkInstance inst;
-		VkDebugUtilsMessengerEXT debug_msgr;
+		VkInstance inst = VK_NULL_HANDLE;
+		VkDebugUtilsMessengerEXT debug_msgr = VK_NULL_HANDLE;
 
-		bool validation_enabled;
-		bool synchronization_validation_enabled;
+		bool validation_enabled = false;
+		bool synchronization_validation_enabled = false;
 
-		VkSurfaceKHR surf;
-		VkSurfaceFormatKHR surf_formats[GFX_SURFACE_FORMAT_MAX];
-		u32 surf_format_count;
-		VkPresentModeKHR surf_present_modes[GFX_PRESENT_MODES_MAX];
-		u32 surf_present_mode_count;
+		VkSurfaceKHR surf = VK_NULL_HANDLE;
+		VkSurfaceFormatKHR surf_formats[GFX_SURFACE_FORMAT_MAX] = {};
+		u32 surf_format_count = 0u;
+		VkPresentModeKHR surf_present_modes[GFX_PRESENT_MODES_MAX] = {};
+		u32 surf_present_mode_count = 0u;
 
-		VkPhysicalDevice adapter;
+		VkPhysicalDevice adapter = VK_NULL_HANDLE;
 
-		VkPhysicalDeviceProperties properties;
-		VkPhysicalDeviceFeatures features;
+		VkPhysicalDeviceProperties properties = {};
+		VkPhysicalDeviceFeatures features = {};
 
-		const char* enabled_extensions[GFX_DEVICE_EXTENSIONS_MAX];
-		u32 enabled_extension_count;
+		const char* enabled_extensions[GFX_DEVICE_EXTENSIONS_MAX] = {};
+		u32 enabled_extension_count = 0u;
 
-		VkQueueFamilyProperties queue_families[GFX_QUEUE_FAMILY_MAX];
-		u32 queue_family_count;
+		VkQueueFamilyProperties queue_families[GFX_QUEUE_FAMILY_MAX] = {};
+		u32 queue_family_count = 0u;
 
-		VkDevice dev;
+		VkDevice dev = VK_NULL_HANDLE;
 
-		VmaAllocator vma;
+		VmaAllocator vma = VK_NULL_HANDLE;
 	};
 
 	static Context g_ctx = {};
@@ -2053,7 +2053,7 @@ namespace edge::gfx {
 			VkBufferDeviceAddressInfo device_address_info = {};
 			device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
 			device_address_info.buffer = buffer->handle;
-			buffer->address = vkGetBufferDeviceAddress(g_ctx.dev, &device_address_info);
+			buffer->address = vkGetBufferDeviceAddressKHR(g_ctx.dev, &device_address_info);
 		}
 
 		buffer->flags = create_info->flags;

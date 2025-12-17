@@ -9,28 +9,28 @@ namespace edge::gfx {
 	constexpr usize IMAGE_BARRIERS_MAX = 32;
 
 	struct ContextCreateInfo {
-		const Allocator* alloc;
-		PlatformContext* platform_context;
+		const Allocator* alloc = nullptr;
+		PlatformContext* platform_context = nullptr;
 	};
 
 	struct QueueRequest {
-		QueueCapsFlags required_caps;
-		QueueCapsFlags preferred_caps;
-		QueueSelectionStrategy strategy;
-		bool prefer_separate_family;
+		QueueCapsFlags required_caps = {};
+		QueueCapsFlags preferred_caps = {};
+		QueueSelectionStrategy strategy = {};
+		bool prefer_separate_family = false;
 	};
 
 	struct DescriptorLayoutBuilder {
-		VkDescriptorSetLayoutBinding bindings[MAX_BINDING_COUNT];
-		VkDescriptorBindingFlagsEXT binding_flags[MAX_BINDING_COUNT];
-		u32 binding_count;
+		VkDescriptorSetLayoutBinding bindings[MAX_BINDING_COUNT] = {};
+		VkDescriptorBindingFlagsEXT binding_flags[MAX_BINDING_COUNT] = {};
+		u32 binding_count = 0u;
 	};
 
 	struct PipelineLayoutBuilder {
-		VkPushConstantRange constant_ranges[8];
-		u32 constant_range_count;
-		VkDescriptorSetLayout descriptor_layouts[MAX_BINDING_COUNT];
-		u32 descriptor_layout_count;
+		VkPushConstantRange constant_ranges[8] = {};
+		u32 constant_range_count = 0u;
+		VkDescriptorSetLayout descriptor_layouts[MAX_BINDING_COUNT] = {};
+		u32 descriptor_layout_count = 0u;
 	};
 
 	typedef enum {
@@ -40,49 +40,49 @@ namespace edge::gfx {
 	} gfx_swapchain_buffering_t;
 
 	struct SwapchainCreateInfo {
-		VkFormat preferred_format;
-		VkColorSpaceKHR preferred_color_space;
+		VkFormat preferred_format = VK_FORMAT_UNDEFINED;
+		VkColorSpaceKHR preferred_color_space = {};
 
-		bool vsync_enable;
-		bool hdr_enable;
+		bool vsync_enable = false;
+		bool hdr_enable = false;
 	};
 
 	struct ImageCreateInfo {
-		VkExtent3D extent;
-		u32 level_count;
-		u32 layer_count;
-		u32 face_count;
-		VkImageUsageFlags usage_flags;
-		VkFormat format;
+		VkExtent3D extent = { 1u, 1u, 1u };
+		u32 level_count = 1u;
+		u32 layer_count = 1u;
+		u32 face_count = 1u;
+		VkImageUsageFlags usage_flags = 0;
+		VkFormat format = VK_FORMAT_UNDEFINED;
 	};
 
 	struct BufferCreateInfo {
-		VkDeviceSize size;
-		VkDeviceSize alignment;
-		BufferFlags flags;
+		VkDeviceSize size = 0ull;
+		VkDeviceSize alignment = 0ull;
+		BufferFlags flags = 0;
 	};
 
 	struct PipelineBarrierBuilder {
-		VkMemoryBarrier2 memory_barriers[MEMORY_BARRIERS_MAX];
-		VkBufferMemoryBarrier2 buffer_barriers[BUFFER_BARRIERS_MAX];
-		VkImageMemoryBarrier2 image_barriers[IMAGE_BARRIERS_MAX];
+		VkMemoryBarrier2 memory_barriers[MEMORY_BARRIERS_MAX] = {};
+		VkBufferMemoryBarrier2 buffer_barriers[BUFFER_BARRIERS_MAX] = {};
+		VkImageMemoryBarrier2 image_barriers[IMAGE_BARRIERS_MAX] = {};
 
-		u32 memory_barrier_count;
-		u32 buffer_barrier_count;
-		u32 image_barrier_count;
+		u32 memory_barrier_count = 0u;
+		u32 buffer_barrier_count = 0u;
+		u32 image_barrier_count = 0u;
 
-		VkDependencyFlags dependency_flags;
+		VkDependencyFlags dependency_flags = 0;
 	};
 
 	struct GraphicsPipelineCreateInfo {
-		const PipelineLayout* layout;
-		const PipelineCache* cache;
+		const PipelineLayout* layout = nullptr;
+		const PipelineCache* cache = nullptr;
 	};
 
 	struct ComputePipelineCreateInfo {
-		const ShaderModule* shader_module;
-		const PipelineLayout* layout;
-		const PipelineCache* cache;
+		const ShaderModule* shader_module = nullptr;
+		const PipelineLayout* layout = nullptr;
+		const PipelineCache* cache = nullptr;
 	};
 
 	bool context_init(const ContextCreateInfo* cteate_info);

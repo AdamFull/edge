@@ -17,93 +17,93 @@ namespace edge::gfx {
 
 	// Primitives
 	struct Queue {
-		i32 family_index;
-		i32 queue_index;
+		i32 family_index = -1;
+		i32 queue_index = -1;
 	};
 
 	struct CmdPool {
-		VkCommandPool handle;
+		VkCommandPool handle = VK_NULL_HANDLE;
 	};
 
 	struct CmdBuf {
-		VkCommandBuffer handle;
-		const CmdPool* pool;
+		VkCommandBuffer handle = VK_NULL_HANDLE;
+		const CmdPool* pool = nullptr;
 	};
 
 	struct QueryPool {
-		VkQueryPool handle;
-		VkQueryType type;
-		u32 max_query;
-		bool host_reset_enabled;
+		VkQueryPool handle = VK_NULL_HANDLE;
+		VkQueryType type = {};
+		u32 max_query = 0u;
+		bool host_reset_enabled = false;
 	};
 
 	struct DescriptorSetLayout {
-		VkDescriptorSetLayout handle;
+		VkDescriptorSetLayout handle = VK_NULL_HANDLE;
 		u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT];
 	};
 
 	struct DescriptorPool {
-		VkDescriptorPool handle;
+		VkDescriptorPool handle = VK_NULL_HANDLE;
 		u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT];
 	};
 
 	struct DescriptorSet {
-		VkDescriptorSet handle;
-		const DescriptorPool* pool;
+		VkDescriptorSet handle = VK_NULL_HANDLE;
+		const DescriptorPool* pool = nullptr;
 	};
 
 	struct PipelineLayout {
-		VkPipelineLayout handle;
+		VkPipelineLayout handle = VK_NULL_HANDLE;
 	};
 
 	struct Swapchain {
-		VkSwapchainKHR handle;
-		VkFormat format;
-		VkColorSpaceKHR color_space;
-		u32 image_count;
-		VkExtent2D extent;
-		VkPresentModeKHR present_mode;
-		VkCompositeAlphaFlagBitsKHR composite_alpha;
+		VkSwapchainKHR handle = VK_NULL_HANDLE;
+		VkFormat format = VK_FORMAT_UNDEFINED;
+		VkColorSpaceKHR color_space = {};
+		u32 image_count = 1u;
+		VkExtent2D extent = { 1u, 1u };
+		VkPresentModeKHR present_mode = {};
+		VkCompositeAlphaFlagBitsKHR composite_alpha = {};
 	};
 
 	struct DeviceMemory {
-		VmaAllocation handle;
-		VmaAllocationInfo info;
+		VmaAllocation handle = VK_NULL_HANDLE;
+		VmaAllocationInfo info = {};
 
-		bool coherent;
-		bool persistent;
+		bool coherent = false;
+		bool persistent = false;
 	};
 
 	struct Image {
-		VkImage handle;
-		DeviceMemory memory;
+		VkImage handle = VK_NULL_HANDLE;
+		DeviceMemory memory = {};
 
-		VkExtent3D extent;
-		u32 level_count;
-		u32 layer_count;
-		u32 face_count;
-		VkImageUsageFlags usage_flags;
-		VkFormat format;
-		VkImageLayout layout;
+		VkExtent3D extent = { 1u, 1u, 1u };
+		u32 level_count = 1u;
+		u32 layer_count = 1u;
+		u32 face_count = 1u;
+		VkImageUsageFlags usage_flags = 0;
+		VkFormat format = VK_FORMAT_UNDEFINED;
+		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 	};
 
 	struct ImageView {
-		VkImageView handle;
-		VkImageViewType type;
-		VkImageSubresourceRange range;
+		VkImageView handle = VK_NULL_HANDLE;
+		VkImageViewType type = {};
+		VkImageSubresourceRange range = {};
 	};
 
 	struct PipelineCache {
-		VkPipelineCache handle;
+		VkPipelineCache handle = VK_NULL_HANDLE;
 	};
 
 	struct ShaderModule {
-		VkShaderModule handle;
+		VkShaderModule handle = VK_NULL_HANDLE;
 	};
 
 	struct Pipeline {
-		VkPipeline handle;
-		VkPipelineBindPoint bind_point;
+		VkPipeline handle = VK_NULL_HANDLE;
+		VkPipelineBindPoint bind_point = {};
 	};
 
 	enum BufferFlag {
@@ -125,21 +125,21 @@ namespace edge::gfx {
 	using BufferFlags = u16;
 
 	struct Buffer {
-		VkBuffer handle;
-		DeviceMemory memory;
+		VkBuffer handle = VK_NULL_HANDLE;
+		DeviceMemory memory = {};
 
-		BufferFlags flags;
-		VkDeviceAddress address;
+		BufferFlags flags = 0;
+		VkDeviceAddress address = 0ull;
 	};
 
 	struct Fence {
-		VkFence handle;
+		VkFence handle = VK_NULL_HANDLE;
 	};
 
 	struct Semaphore {
-		VkSemaphore handle;
-		VkSemaphoreType type;
-		u64 value;
+		VkSemaphore handle = VK_NULL_HANDLE;
+		VkSemaphoreType type = {};
+		u64 value = 0ull;
 	};
 
 	enum QueueCapsFlag {

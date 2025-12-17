@@ -30,11 +30,11 @@ namespace edge::gfx {
 
 			if (resource.type == ResourceType::Image) {
 				image_view_destroy(&resource.srv);
-				free_index_list_free(&renderer->srv_indices_list, resource.srv_index);
+				renderer->srv_indices_list.free(resource.srv_index);
 
 				for (i32 j = 0; j < resource.image.level_count; ++j) {
 					image_view_destroy(&resource.uav[j]);
-					free_index_list_free(&renderer->uav_indices_list, resource.uav_index + j);
+					renderer->uav_indices_list.free(resource.uav_index + j);
 				}
 
 				image_destroy(&resource.image);
@@ -220,17 +220,17 @@ namespace edge::gfx {
 		};
 		renderer->backbuffer_handle = handle_pool_allocate_with_data(&renderer->resource_handle_pool, backbuffer_resource);
 
-		if (!free_index_list_create(create_info->alloc, &renderer->sampler_indices_list, RENDERER_HANDLE_MAX)) {
+		if (!renderer->sampler_indices_list.create(create_info->alloc, RENDERER_HANDLE_MAX)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
-		if (!free_index_list_create(create_info->alloc, &renderer->srv_indices_list, RENDERER_HANDLE_MAX)) {
+		if (!renderer->srv_indices_list.create(create_info->alloc, RENDERER_HANDLE_MAX)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
-		if (!free_index_list_create(create_info->alloc, &renderer->uav_indices_list, RENDERER_HANDLE_MAX)) {
+		if (!renderer->uav_indices_list.create(create_info->alloc, RENDERER_HANDLE_MAX)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
@@ -280,11 +280,11 @@ namespace edge::gfx {
 			// TODO: Ignore backbuffer
 			if (resource->type == ResourceType::Image) {
 				image_view_destroy(&resource->srv);
-				free_index_list_free(&renderer->srv_indices_list, resource->srv_index);
+				renderer->srv_indices_list.free(resource->srv_index);
 
 				for (i32 mip = 0; mip < resource->image.level_count; ++mip) {
 					image_view_destroy(&resource->uav[mip]);
-					free_index_list_free(&renderer->uav_indices_list, resource->uav_index + mip);
+					renderer->uav_indices_list.free(resource->uav_index + mip);
 				}
 
 				image_destroy(&resource->image);
@@ -294,9 +294,9 @@ namespace edge::gfx {
 			}
 		}
 
-		free_index_list_destroy(&renderer->uav_indices_list);
-		free_index_list_destroy(&renderer->srv_indices_list);
-		free_index_list_destroy(&renderer->sampler_indices_list);
+		renderer->uav_indices_list.destroy(renderer->alloc);
+		renderer->srv_indices_list.destroy(renderer->alloc);
+		renderer->sampler_indices_list.destroy(renderer->alloc);
 
 		handle_pool_destroy(&renderer->resource_handle_pool);
 
@@ -383,7 +383,7 @@ namespace edge::gfx {
 				return false;
 			}
 
-			if (!free_index_list_allocate(&renderer->srv_indices_list, &resource->srv_index)) {
+			if (!renderer->srv_indices_list.allocate(&resource->srv_index)) {
 				return false;
 			}
 		}
@@ -405,7 +405,7 @@ namespace edge::gfx {
 				}
 
 				u32 uav_index;
-				if (!free_index_list_allocate(&renderer->uav_indices_list, &uav_index)) {
+				if (!renderer->uav_indices_list.allocate(&uav_index)) {
 					return false;
 				}
 

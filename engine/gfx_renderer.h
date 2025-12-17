@@ -23,92 +23,92 @@ namespace edge::gfx {
 	};
 
 	struct RendererCreateInfo {
-		const Allocator* alloc;
-		const Queue* main_queue;
+		const Allocator* alloc = nullptr;
+		const Queue* main_queue = nullptr;
 	};
 
 	struct Resource {
-		ResourceType type;
+		ResourceType type = ResourceType::Unknown;
 		union {
-			Image image;
+			Image image = {};
 			Buffer buffer;
 		};
 
-		ImageView srv;
-		u32 srv_index;
+		ImageView srv = {};
+		u32 srv_index = 0u;
 
-		ImageView uav[RENDERER_UAV_MAX];
-		u32 uav_index;
+		ImageView uav[RENDERER_UAV_MAX] = {};
+		u32 uav_index = 0u;
 	};
 
 	struct RendererFrame {
-		Semaphore image_available;
-		Semaphore rendering_finished;
-		Fence fence;
+		Semaphore image_available = {};
+		Semaphore rendering_finished = {};
+		Fence fence = {};
 
-		CmdBuf cmd_buf;
-		bool is_recording;
+		CmdBuf cmd_buf = {};
+		bool is_recording = false;
 
-		Array<Resource> free_resources;
+		Array<Resource> free_resources = {};
 	};
 
 	struct ResourceSet {
-		Buffer staging_memory;
+		Buffer staging_memory = {};
 		u64 staging_offset = 0ull;
 
-		Array<Buffer> temp_staging_memory;
+		Array<Buffer> temp_staging_memory = {};
 
-		Semaphore semaphore;
+		Semaphore semaphore = {};
 		std::atomic_uint64_t semaphore_counter = 0ull;
 		bool first_submition = true;
 	};
 
 	struct Updater {
-		ResourceSet resource_sets[RENDERER_FRAME_OVERLAP];
+		ResourceSet resource_sets[RENDERER_FRAME_OVERLAP] = {};
 	};
 
 	struct Uploader {
-		ResourceSet resource_sets[RENDERER_FRAME_OVERLAP];
+		ResourceSet resource_sets[RENDERER_FRAME_OVERLAP] = {};
 	};
 
 	struct Renderer {
-		const Allocator* alloc;
-		const Queue* queue;
+		const Allocator* alloc = nullptr;
+		const Queue* queue = nullptr;
 
-		CmdPool cmd_pool;
+		CmdPool cmd_pool = {};
 
-		QueryPool frame_timestamp;
-		double timestamp_freq;
-		double gpu_delta_time;
+		QueryPool frame_timestamp = {};
+		double timestamp_freq = 0.0;
+		double gpu_delta_time = 0.0;
 
-		DescriptorSetLayout descriptor_layout;
-		DescriptorPool descriptor_pool;
-		DescriptorSet descriptor_set;
-		PipelineLayout pipeline_layout;
+		DescriptorSetLayout descriptor_layout = {};
+		DescriptorPool descriptor_pool = {};
+		DescriptorSet descriptor_set = {};
+		PipelineLayout pipeline_layout = {};
 
-		Swapchain swapchain;
-		Image swapchain_images[8];
-		ImageView swapchain_image_views[8];
-		u32 active_image_index;
+		Swapchain swapchain = {};
+		Image swapchain_images[8] = {};
+		ImageView swapchain_image_views[8] = {};
+		u32 active_image_index = 0u;
 
-		RendererFrame frames[RENDERER_FRAME_OVERLAP];
-		RendererFrame* active_frame;
-		u32 frame_number;
+		RendererFrame frames[RENDERER_FRAME_OVERLAP] = {};
+		RendererFrame* active_frame = nullptr;
+		u32 frame_number = 0u;
 
-		HandlePool<Resource> resource_handle_pool;
-		Handle backbuffer_handle;
+		HandlePool<Resource> resource_handle_pool = {};
+		Handle backbuffer_handle = 0;
 
-		FreeIndexList sampler_indices_list;
-		FreeIndexList srv_indices_list;
-		FreeIndexList uav_indices_list;
+		FreeIndexList sampler_indices_list = {};
+		FreeIndexList srv_indices_list = {};
+		FreeIndexList uav_indices_list = {};
 
-		PipelineBarrierBuilder barrier_builder;
+		PipelineBarrierBuilder barrier_builder = {};
 
-		Semaphore* acquired_semaphore;
+		Semaphore* acquired_semaphore = nullptr;
 
-		Array<VkWriteDescriptorSet> write_descriptor_sets;
-		Array<VkDescriptorImageInfo> image_descriptors;
-		Array<VkDescriptorBufferInfo> buffer_descriptors;
+		Array<VkWriteDescriptorSet> write_descriptor_sets = {};
+		Array<VkDescriptorImageInfo> image_descriptors = {};
+		Array<VkDescriptorBufferInfo> buffer_descriptors = {};
 	};
 
 	Renderer* renderer_create(const RendererCreateInfo* create_info);
