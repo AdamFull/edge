@@ -67,24 +67,6 @@ namespace edge {
 	};
 
 	namespace detail {
-		template<TrivialType T>
-		ListNode<T>* create_node(const Allocator* alloc, const T& element) {
-			ListNode<T>* node = allocate<ListNode<T>>(alloc, element, nullptr, nullptr);
-			if (!node) {
-				return nullptr;
-			}
-
-			return node;
-		}
-
-		template<TrivialType T>
-		void destroy_node(const Allocator* alloc, ListNode<T>* node) {
-			if (!node) {
-				return;
-			}
-			deallocate(alloc, node);
-		}
-
 		template<TrivialType T, typename Comparator>
 		ListNode<T>* merge_sorted(ListNode<T>* left, ListNode<T>* right, Comparator&& compare) {
 			if (!left) {
@@ -167,7 +149,7 @@ namespace edge {
 		ListNode<T>* current = list->m_head;
 		while (current) {
 			ListNode<T>* next = current->next;
-			detail::destroy_node(list->m_allocator, current);
+			list->m_allocator->deallocate(current);
 			current = next;
 		}
 
@@ -184,7 +166,7 @@ namespace edge {
 			return false;
 		}
 
-		ListNode<T>* node = detail::create_node(list->m_allocator, element);
+		ListNode<T>* node = list->m_allocator->allocate<ListNode<T>>(element, nullptr, nullptr);
 		if (!node) {
 			return false;
 		}
@@ -218,7 +200,7 @@ namespace edge {
 			return false;
 		}
 
-		ListNode<T>* node = detail::create_node(list->m_allocator, element);
+		ListNode<T>* node = list->m_allocator->allocate<ListNode<T>>(element, nullptr, nullptr);
 		if (!node) {
 			return false;
 		}
@@ -257,7 +239,7 @@ namespace edge {
 			list->m_tail = nullptr;
 		}
 
-		detail::destroy_node(list->m_allocator, node);
+		list->m_allocator->deallocate(node);
 		list->m_size--;
 
 		return true;
@@ -283,7 +265,7 @@ namespace edge {
 			list->m_head = nullptr;
 		}
 
-		detail::destroy_node(list->m_allocator, node);
+		list->m_allocator->deallocate(node);
 		list->m_size--;
 
 		return true;
@@ -343,7 +325,7 @@ namespace edge {
 			return list_push_back(list, element);
 		}
 
-		ListNode<T>* new_node = detail::create_node(list->m_allocator, element);
+		ListNode<T>* new_node = list->m_allocator->allocate<ListNode<T>>(element, nullptr, nullptr);
 		if (!new_node) {
 			return false;
 		}
@@ -388,7 +370,7 @@ namespace edge {
 		current->prev->next = current->next;
 		current->next->prev = current->prev;
 
-		detail::destroy_node(list->m_allocator, current);
+		list->m_allocator->deallocate(current);
 		list->m_size--;
 
 		return true;
