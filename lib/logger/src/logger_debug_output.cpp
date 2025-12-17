@@ -37,7 +37,7 @@ namespace edge {
 		}
 
 		LoggerOutputDebugConsole* debug_console_output = (LoggerOutputDebugConsole*)output;
-		deallocate(output->allocator, debug_console_output);
+		output->allocator->deallocate(debug_console_output);
 	}
 
 	static const LoggerOutputVTable debug_console_vtable = {
@@ -51,7 +51,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		LoggerOutputDebugConsole* output = allocate<LoggerOutputDebugConsole>(allocator);
+		LoggerOutputDebugConsole* output = allocator->allocate<LoggerOutputDebugConsole>();
 		if (!output) {
 			return nullptr;
 		}

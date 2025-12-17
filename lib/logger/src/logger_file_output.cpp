@@ -54,7 +54,7 @@ namespace edge {
 			fclose(file_output->file);
 		}
 
-		deallocate(output->allocator, file_output);
+		output->allocator->deallocate(file_output);
 	}
 
 	static const LoggerOutputVTable file_vtable = {
@@ -68,14 +68,14 @@ namespace edge {
 			return nullptr;
 		}
 
-		LoggerOutputFile* output = allocate<LoggerOutputFile>(allocator);
+		LoggerOutputFile* output = allocator->allocate<LoggerOutputFile>();
 		if (!output) {
 			return nullptr;
 		}
 
 		output->file = fopen(file_path, "a");
 		if (!output->file) {
-			deallocate(allocator, output);
+			allocator->deallocate(output);
 			return nullptr;
 		}
 

@@ -91,7 +91,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		Logger* logger = allocate<Logger>(allocator);
+		Logger* logger = allocator->allocate<Logger>();
 		if (!logger) {
 			return nullptr;
 		}
@@ -100,13 +100,13 @@ namespace edge {
 		logger->allocator = allocator;
 
 		if (!logger->outputs.reserve(allocator, 4)) {
-			deallocate(allocator, logger);
+			allocator->deallocate(logger);
 			return nullptr;
 		}
 
 		if (mutex_init(&logger->mutex, MutexType::Plain) != ThreadResult::Success) {
 			logger->outputs.destroy(allocator);
-			deallocate(allocator, logger);
+			allocator->deallocate(logger);
 			return nullptr;
 		}
 
@@ -131,7 +131,7 @@ namespace edge {
 		logger->outputs.destroy(logger->allocator);
 
 		mutex_destroy(&logger->mutex);
-		deallocate(logger->allocator, logger);
+		logger->allocator->deallocate(logger);
 	}
 
 	bool logger_add_output(Logger* logger, LoggerOutput* output) {

@@ -30,7 +30,7 @@ namespace edge {
 		}
 
 		LoggerOutputStdout* stdout_output = (LoggerOutputStdout*)output;
-		deallocate(output->allocator, stdout_output);
+		output->allocator->deallocate(stdout_output);
 	}
 
 	static const LoggerOutputVTable stdout_vtable = {
@@ -44,7 +44,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		LoggerOutputStdout* output = allocate<LoggerOutputStdout>(allocator);
+		LoggerOutputStdout* output = allocator->allocate<LoggerOutputStdout>();
 		if (!output) {
 			return nullptr;
 		}
