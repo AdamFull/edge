@@ -24,16 +24,6 @@ namespace edge {
     constexpr u64 HANDLE_VERSION_MASK = (1ull << HANDLE_VERSION_BITS) - 1;
     constexpr u32 HANDLE_MAX_CAPACITY = static_cast<u32>(HANDLE_INDEX_MASK);
 
-    template<TrivialType T>
-    struct HandlePool {
-        T* m_data = nullptr;
-        HandleVersion* m_versions = nullptr;
-        Array<u32> m_free_indices;
-        u32 m_capacity = 0ull;
-        u32 m_count = 0ull;
-        const Allocator* m_allocator = nullptr;
-    };
-
     /**
      * Create a handle from index and version
      */
@@ -57,6 +47,9 @@ namespace edge {
     }
 
     template<TrivialType T>
+    struct HandlePool;
+
+    template<TrivialType T>
     struct HandlePoolIterator {
         HandlePool<T>* m_pool;
         u32 m_current_index;
@@ -71,7 +64,7 @@ namespace edge {
                 m_current_index++;
                 while (m_current_index < m_pool->m_capacity) {
                     Handle handle = handle_make(m_current_index, m_pool->m_versions[m_current_index]);
-                    if (handle_pool_is_valid(m_pool, handle)) {
+                    if (m_pool->is_valid(handle)) {
                         break;
                     }
                     m_current_index++;
@@ -132,316 +125,221 @@ namespace edge {
         }
     };
 
-    /**
-     * Create a handle pool
-     *
-     * @param alloc Memory allocator to use
-     * @param pool Pointer to pool to initialize
-     * @param capacity Maximum number of handles (must be <= HANDLE_MAX_CAPACITY)
-     * @return true on success, false on failure
-     */
     template<TrivialType T>
-    bool handle_pool_create(const Allocator* alloc, HandlePool<T>* pool, u32 capacity) {
-        if (!alloc || !pool || capacity == 0 || capacity > HANDLE_MAX_CAPACITY) {
-            return false;
+    struct HandlePool {
+        T* m_data = nullptr;
+        HandleVersion* m_versions = nullptr;
+        Array<u32> m_free_indices;
+        u32 m_capacity = 0ull;
+        u32 m_count = 0ull;
+
+        bool create(NotNull<const Allocator*> alloc, u32 capacity) {
+            if (capacity == 0 || capacity > HANDLE_MAX_CAPACITY) {
+                return false;
+            }
+
+            m_data = alloc->allocate_array<T>(capacity);
+            if (!m_data) {
+                return false;
+            }
+
+            m_versions = alloc->allocate_array<HandleVersion>(capacity);
+            if (!m_versions) {
+                alloc->deallocate_array(m_data, m_capacity);
+                return false;
+            }
+
+            if (!m_free_indices.reserve(alloc, capacity)) {
+                alloc->deallocate_array(m_versions, m_capacity);
+                alloc->deallocate_array(m_data, m_capacity);;
+                return false;
+            }
+
+            m_capacity = capacity;
+            m_count = 0;
+
+            // Initialize free indices in reverse order (so 0 is allocated first)
+            for (u32 i = 0; i < capacity; i++) {
+                u32 index = capacity - 1 - i;
+                m_free_indices.push_back(alloc, index);
+            }
+
+            return true;
         }
 
-        pool->m_data = alloc->allocate_array<T>(capacity);
-        if (!pool->m_data) {
-            return false;
+        void destroy(NotNull<const Allocator*> alloc) {
+            m_free_indices.destroy(alloc);
+
+            if (m_versions) {
+                alloc->deallocate_array(m_versions, m_capacity);
+            }
+
+            if (m_data) {
+                alloc->deallocate_array(m_data, m_capacity);
+            }
         }
 
-        pool->m_versions = alloc->allocate_array<HandleVersion>(capacity);
-        if (!pool->m_versions) {
-            alloc->deallocate_array(pool->m_data, pool->m_capacity);
-            return false;
+        Handle allocate() noexcept {
+            if (m_free_indices.empty()) {
+                return HANDLE_INVALID;
+            }
+
+            u32 index;
+            if (!m_free_indices.pop_back(&index)) {
+                return HANDLE_INVALID;
+            }
+
+            memset(&m_data[index], 0, sizeof(T));
+
+            HandleVersion version = m_versions[index];
+            m_count++;
+
+            return handle_make(index, version);
         }
 
-        if (!pool->m_free_indices.reserve(alloc, capacity)) {
-            alloc->deallocate_array(pool->m_versions, pool->m_capacity);
-            alloc->deallocate_array(pool->m_data, pool->m_capacity);;
-            return false;
+        Handle allocate_with_data(const T& element) noexcept {
+            if (m_free_indices.empty()) {
+                return HANDLE_INVALID;
+            }
+
+            u32 index;
+            if (!m_free_indices.pop_back(&index)) {
+                return HANDLE_INVALID;
+            }
+
+            memcpy(&m_data[index], &element, sizeof(T));
+
+            HandleVersion version = m_versions[index];
+            m_count++;
+
+            return handle_make(index, version);
         }
 
-        pool->m_capacity = capacity;
-        pool->m_count = 0;
-        pool->m_allocator = alloc;
+        bool free(NotNull<const Allocator*> alloc, Handle handle) {
+            if (handle == HANDLE_INVALID) {
+                return false;
+            }
 
-        // Initialize free indices in reverse order (so 0 is allocated first)
-        for (u32 i = 0; i < capacity; i++) {
-            u32 index = capacity - 1 - i;
-            pool->m_free_indices.push_back(alloc, index);
+            u32 index = handle_get_index(handle);
+            HandleVersion version = handle_get_version(handle);
+
+            if (index >= m_capacity) {
+                return false;
+            }
+
+            if (m_versions[index] != version) {
+                return false;
+            }
+
+            // Increment version (wrapping around within version mask)
+            m_versions[index] = (m_versions[index] + 1) & HANDLE_VERSION_MASK;
+
+            // Clear the element data
+            memset(&m_data[index], 0, sizeof(T));
+
+            m_free_indices.push_back(alloc, index);
+            m_count--;
+
+            return true;
         }
 
-        return true;
-    }
+        T* get(Handle handle) noexcept {
+            if (handle == HANDLE_INVALID) {
+                return nullptr;
+            }
 
-    /**
-     * Destroy handle pool and free all resources
-     */
-    template<TrivialType T>
-    void handle_pool_destroy(HandlePool<T>* pool) {
-        if (!pool) {
-            return;
+            u32 index = handle_get_index(handle);
+            HandleVersion version = handle_get_version(handle);
+
+            if (index >= m_capacity) {
+                return nullptr;
+            }
+
+            if (m_versions[index] != version) {
+                return nullptr;
+            }
+
+            return &m_data[index];
         }
 
-        pool->m_free_indices.destroy(pool->m_allocator);
+        const T* get(Handle handle) const noexcept {
+            if (handle == HANDLE_INVALID) {
+                return nullptr;
+            }
 
-        if (pool->m_versions) {
-            pool->m_allocator->deallocate_array(pool->m_versions, pool->m_capacity);
+            u32 index = handle_get_index(handle);
+            HandleVersion version = handle_get_version(handle);
+
+            if (index >= m_capacity) {
+                return nullptr;
+            }
+
+            if (m_versions[index] != version) {
+                return nullptr;
+            }
+
+            return &m_data[index];
         }
 
-        if (pool->m_data) {
-            pool->m_allocator->deallocate_array(pool->m_data, pool->m_capacity);
-        }
-    }
+        bool set(Handle handle, const T& element) noexcept {
+            if (handle == HANDLE_INVALID) {
+                return false;
+            }
 
-    /**
-     * Allocate a new unique handle
-     * The element data is zeroed initially
-     *
-     * @param pool Handle pool
-     * @return Valid handle or HANDLE_INVALID if pool is full
-     */
-    template<TrivialType T>
-    Handle handle_pool_allocate(HandlePool<T>* pool) {
-        if (!pool || pool->m_free_indices.empty()) {
-            return HANDLE_INVALID;
-        }
+            u32 index = handle_get_index(handle);
+            HandleVersion version = handle_get_version(handle);
 
-        u32 index;
-        if (!pool->m_free_indices.pop_back(&index)) {
-            return HANDLE_INVALID;
+            if (index >= m_capacity) {
+                return false;
+            }
+
+            if (m_versions[index] != version) {
+                return false;
+            }
+
+            memcpy(&m_data[index], &element, sizeof(T));
+            return true;
         }
 
-        memset(&pool->m_data[index], 0, sizeof(T));
+        bool is_valid(Handle handle) const noexcept {
+            if (handle == HANDLE_INVALID) {
+                return false;
+            }
 
-        HandleVersion version = pool->m_versions[index];
-        pool->m_count++;
+            u32 index = handle_get_index(handle);
+            HandleVersion version = handle_get_version(handle);
 
-        return handle_make(index, version);
-    }
+            if (index >= m_capacity) {
+                return false;
+            }
 
-    /**
-     * Allocate a new unique handle with initial data
-     *
-     * @param pool Handle pool
-     * @param element Initial data to copy into the slot
-     * @return Valid handle or HANDLE_INVALID if pool is full
-     */
-    template<TrivialType T>
-    Handle handle_pool_allocate_with_data(HandlePool<T>* pool, const T& element) {
-        if (!pool || pool->m_free_indices.empty()) {
-            return HANDLE_INVALID;
+            return m_versions[index] == version;
         }
 
-        u32 index;
-        if (!pool->m_free_indices.pop_back(&index)) {
-            return HANDLE_INVALID;
+        bool is_full() const noexcept {
+            return m_free_indices.empty();
         }
 
-        memcpy(&pool->m_data[index], &element, sizeof(T));
-
-        HandleVersion version = pool->m_versions[index];
-        pool->m_count++;
-
-        return handle_make(index, version);
-    }
-
-    /**
-     * Free a handle and return it to the pool
-     * Version is incremented to invalidate old handles
-     *
-     * @param pool Handle pool
-     * @param handle Handle to free
-     * @return true if successful, false if handle is invalid or already freed
-     */
-    template<TrivialType T>
-    bool handle_pool_free(HandlePool<T>* pool, Handle handle) {
-        if (!pool || handle == HANDLE_INVALID) {
-            return false;
+        bool is_empty() const noexcept {
+            return m_count == 0;
         }
 
-        u32 index = handle_get_index(handle);
-        HandleVersion version = handle_get_version(handle);
+        void clear(NotNull<const Allocator*> alloc) noexcept {
+            m_free_indices.clear();
 
-        if (index >= pool->m_capacity) {
-            return false;
+            // Re-initialize free indices and increment versions
+            for (u32 i = 0; i < m_capacity; i++) {
+                u32 index = m_capacity - 1 - i;
+                m_free_indices.push_back(alloc, index);
+
+                m_versions[i] = (m_versions[i] + 1) & HANDLE_VERSION_MASK;
+
+                memset(&m_data[i], 0, sizeof(T));
+            }
+
+            m_count = 0;
         }
-
-        if (pool->m_versions[index] != version) {
-            return false;
-        }
-
-        // Increment version (wrapping around within version mask)
-        pool->m_versions[index] = (pool->m_versions[index] + 1) & HANDLE_VERSION_MASK;
-
-        // Clear the element data
-        memset(&pool->m_data[index], 0, sizeof(T));
-
-        pool->m_free_indices.push_back(pool->m_allocator, index);
-        pool->m_count--;
-
-        return true;
-    }
-
-    /**
-     * Get element by handle with validation
-     *
-     * @param pool Handle pool
-     * @param handle Handle to look up
-     * @return Pointer to element or nullptr if handle is invalid/stale
-     */
-    template<TrivialType T>
-    T* handle_pool_get(HandlePool<T>* pool, Handle handle) {
-        if (!pool || handle == HANDLE_INVALID) {
-            return nullptr;
-        }
-
-        u32 index = handle_get_index(handle);
-        HandleVersion version = handle_get_version(handle);
-
-        if (index >= pool->m_capacity) {
-            return nullptr;
-        }
-
-        if (pool->m_versions[index] != version) {
-            return nullptr;
-        }
-
-        return &pool->m_data[index];
-    }
-
-    /**
-     * Get element by handle with validation (const version)
-     */
-    template<TrivialType T>
-    const T* handle_pool_get(const HandlePool<T>* pool, Handle handle) {
-        if (!pool || handle == HANDLE_INVALID) {
-            return nullptr;
-        }
-
-        u32 index = handle_get_index(handle);
-        HandleVersion version = handle_get_version(handle);
-
-        if (index >= pool->m_capacity) {
-            return nullptr;
-        }
-
-        if (pool->m_versions[index] != version) {
-            return nullptr;
-        }
-
-        return &pool->m_data[index];
-    }
-
-    /**
-     * Set element data by handle
-     *
-     * @param pool Handle pool
-     * @param handle Handle to update
-     * @param element Data to copy into the slot
-     * @return true if successful, false if handle is invalid
-     */
-    template<TrivialType T>
-    bool handle_pool_set(HandlePool<T>* pool, Handle handle, const T& element) {
-        if (!pool || handle == HANDLE_INVALID) {
-            return false;
-        }
-
-        u32 index = handle_get_index(handle);
-        HandleVersion version = handle_get_version(handle);
-
-        if (index >= pool->m_capacity) {
-            return false;
-        }
-
-        if (pool->m_versions[index] != version) {
-            return false;
-        }
-
-        memcpy(&pool->m_data[index], &element, sizeof(T));
-        return true;
-    }
-
-    /**
-     * Check if a handle is valid
-     *
-     * @param pool Handle pool
-     * @param handle Handle to validate
-     * @return true if handle is valid and active
-     */
-    template<TrivialType T>
-    bool handle_pool_is_valid(const HandlePool<T>* pool, Handle handle) {
-        if (!pool || handle == HANDLE_INVALID) {
-            return false;
-        }
-
-        u32 index = handle_get_index(handle);
-        HandleVersion version = handle_get_version(handle);
-
-        if (index >= pool->m_capacity) {
-            return false;
-        }
-
-        return pool->m_versions[index] == version;
-    }
-
-    /**
-     * Get number of active handles
-     */
-    template<TrivialType T>
-    u32 handle_pool_count(const HandlePool<T>* pool) {
-        return pool ? pool->m_count : 0;
-    }
-
-    /**
-     * Get total pool capacity
-     */
-    template<TrivialType T>
-    u32 handle_pool_capacity(const HandlePool<T>* pool) {
-        return pool ? pool->m_capacity : 0;
-    }
-
-    /**
-     * Check if pool is full
-     */
-    template<TrivialType T>
-    bool handle_pool_is_full(const HandlePool<T>* pool) {
-        return pool ? pool->m_free_indices.empty() : true;
-    }
-
-    /**
-     * Check if pool is empty
-     */
-    template<TrivialType T>
-    bool handle_pool_is_empty(const HandlePool<T>* pool) {
-        return pool ? (pool->m_count == 0) : true;
-    }
-
-    /**
-     * Clear all handles (frees all resources and increments versions)
-     */
-    template<TrivialType T>
-    void handle_pool_clear(HandlePool<T>* pool) {
-        if (!pool) {
-            return;
-        }
-
-        array_clear(&pool->m_free_indices);
-
-        // Re-initialize free indices and increment versions
-        for (u32 i = 0; i < pool->m_capacity; i++) {
-            u32 index = pool->m_capacity - 1 - i;
-            array_push_back(&pool->m_free_indices, index);
-
-            pool->m_versions[i] = (pool->m_versions[i] + 1) & HANDLE_VERSION_MASK;
-
-            memset(&pool->m_data[i], 0, sizeof(T));
-        }
-
-        pool->m_count = 0;
-    }
+    };
 
     /**
      * Get iterator to first active handle
@@ -451,7 +349,7 @@ namespace edge {
         u32 index = 0;
         while (index < pool.m_capacity) {
             Handle handle = handle_make(index, pool.m_versions[index]);
-            if (handle_pool_is_valid(&pool, handle)) {
+            if (pool.is_valid(handle)) {
                 break;
             }
             index++;
@@ -475,7 +373,7 @@ namespace edge {
         u32 index = 0;
         while (index < pool.m_capacity) {
             Handle handle = handle_make(index, pool.m_versions[index]);
-            if (handle_pool_is_valid(&pool, handle)) {
+            if (pool.is_valid(handle)) {
                 break;
             }
             index++;
