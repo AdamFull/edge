@@ -1,6 +1,7 @@
 #ifndef EDGE_STDDEF_H
 #define EDGE_STDDEF_H
 
+#include <cassert>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -42,6 +43,42 @@ namespace edge {
 
 	template<typename T>
 	concept FloatingPoint = std::is_floating_point_v<T>;
+
+	template<typename T>
+	struct NotNull {
+		static_assert(std::is_pointer_v<T>, "NotNull requires a pointer type");
+
+		using pointer = T;
+		using element_type = std::remove_pointer_t<T>;
+
+		constexpr NotNull(T ptr) : m_ptr(ptr) {
+			assert(ptr != nullptr);
+		}
+
+		constexpr NotNull(const NotNull& other) = default;
+		constexpr NotNull(NotNull&& other) noexcept = default;
+
+		constexpr NotNull& operator=(const NotNull& other) = default;
+		constexpr NotNull& operator=(NotNull&& other) noexcept = default;
+
+		constexpr NotNull& operator=(T ptr) {
+			m_ptr = ptr;
+			return *this;
+		}
+
+		NotNull(std::nullptr_t) = delete;
+		NotNull& operator=(std::nullptr_t) = delete;
+
+		constexpr element_type& operator*() const {
+			return *m_ptr;
+		}
+
+		constexpr T operator->() const noexcept {
+			return m_ptr;
+		}
+
+		T m_ptr;
+	};
 
 	template<typename Container>
 	constexpr auto array_size(const Container& c) -> decltype(c.size()) {
