@@ -206,11 +206,11 @@ namespace edge {
 				return nullptr;
 			}
 
-			if constexpr (!std::is_trivially_constructible_v<T>) {
+			//if constexpr (!std::is_trivial_v<T>) {
 				for (usize i = 0; i < count; ++i) {
 					new (&ptr[i]) T();
 				}
-			}
+			//}
 
 			return ptr;
 		}
@@ -221,9 +221,9 @@ namespace edge {
 				return;
 			}
 
-			if constexpr (!std::is_trivially_destructible_v<T>) {
+			//if constexpr (!std::is_trivial_v<T>) {
 				ptr->~T();
-			}
+			//}
 
 			free(ptr);
 		}
@@ -234,11 +234,11 @@ namespace edge {
 				return;
 			}
 
-			if constexpr (!std::is_trivially_destructible_v<T>) {
+			//if constexpr (!std::is_trivially_destructible_v<T>) {
 				for (usize i = count; i > 0; --i) {
 					ptr[i - 1].~T();
 				}
-			}
+			//}
 
 			free(ptr);
 		}
