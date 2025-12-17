@@ -113,75 +113,74 @@ void print_list(const edge::List<T>& list) {
 }
 
 TEST(array_basic) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::Array<i32> arr;
 
-	SHOULD_EQUAL(edge::array_create(&alloc, &arr, 0), true);
-	SHOULD_EQUAL(edge::array_empty(&arr), true);
-	SHOULD_EQUAL(edge::array_push_back(&arr, 99), true);
-	SHOULD_EQUAL(*edge::array_back(&arr), 99);
+	arr.reserve(&alloc, 10);
+	SHOULD_EQUAL(arr.empty(), true);
+	SHOULD_EQUAL(arr.push_back(&alloc, 99), true);
+	SHOULD_EQUAL(*arr.back(), 99);
 
-	edge::array_push_back(&arr, 80);
-	edge::array_push_back(&arr, 60);
+	arr.push_back(&alloc, 80);
+	arr.push_back(&alloc, 60);
 
-	SHOULD_EQUAL(*edge::array_front(&arr), 99);
-	SHOULD_EQUAL(edge::array_size(&arr), 3);
-	SHOULD_EQUAL(edge::array_insert(&arr, 1, 50), true);
-	SHOULD_EQUAL(*edge::array_at(&arr, 1), 50);
+	SHOULD_EQUAL(*arr.front(), 99);
+	SHOULD_EQUAL(arr.m_size, 3);
+	SHOULD_EQUAL(arr.insert(&alloc, 1, 50), true);
+	SHOULD_EQUAL(*arr.get(1), 50);
 
 	auto found = std::find_if(edge::begin(arr), edge::end(arr), [](const i32& val) { return val == 80; });
 	SHOULD_EQUAL(*found, 80);
 
 	std::sort(edge::begin(arr), edge::end(arr), [](const i32& a, const i32& b) { return a < b; });
 	print_array(arr);
-	SHOULD_EQUAL(*edge::array_front(&arr), 50);
+	SHOULD_EQUAL(*arr.front(), 50);
 
-	edge::array_destroy(&arr);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	arr.destroy(&alloc);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(array_resize) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::Array<i32> arr;
 
-	edge::array_create(&alloc, &arr, 4);
-	SHOULD_EQUAL(edge::array_capacity(&arr), 4);
+	arr.reserve(&alloc, 4);
+	SHOULD_EQUAL(arr.m_capacity, 4);
 
-	SHOULD_EQUAL(edge::array_resize(&arr, 10), true);
-	SHOULD_EQUAL(edge::array_size(&arr), 10);
-	SHOULD_EQUAL(*edge::array_at(&arr, 5), 0);
+	SHOULD_EQUAL(arr.resize(&alloc, 10), true);
+	SHOULD_EQUAL(arr.m_size, 10);
 
-	edge::array_set(&arr, 5, 42);
-	SHOULD_EQUAL(*edge::array_get(&arr, 5), 42);
+	arr.set(5, 42);
+	SHOULD_EQUAL(*arr.get(5), 42);
 
-	edge::array_destroy(&arr);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	arr.destroy(&alloc);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(array_remove) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::Array<i32> arr;
 
-	edge::array_create(&alloc, &arr, 0);
+	arr.reserve(&alloc, 5);
 	for (i32 i = 0; i < 5; i++) {
-		edge::array_push_back(&arr, i * 10);
+		arr.push_back(&alloc, i * 10);
 	}
 
 	i32 removed;
-	SHOULD_EQUAL(edge::array_remove(&arr, 2, &removed), true);
+	SHOULD_EQUAL(arr.remove(2, &removed), true);
 	SHOULD_EQUAL(removed, 20);
-	SHOULD_EQUAL(edge::array_size(&arr), 4);
-	SHOULD_EQUAL(*edge::array_at(&arr, 2), 30);
+	SHOULD_EQUAL(arr.m_size, 4);
+	SHOULD_EQUAL(*arr.get(2), 30);
 
-	edge::array_destroy(&arr);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	arr.destroy(&alloc);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(list_basic) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
 	SHOULD_EQUAL(edge::list_create(&alloc, &list), true);
@@ -198,12 +197,12 @@ TEST(list_basic) {
 	print_list(list);
 
 	edge::list_destroy(&list);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(list_push_pop) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
 	edge::list_create(&alloc, &list);
@@ -223,12 +222,12 @@ TEST(list_push_pop) {
 	SHOULD_EQUAL(edge::list_size(&list), 1);
 
 	edge::list_destroy(&list);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(list_insert_remove) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
 	edge::list_create(&alloc, &list);
@@ -247,12 +246,12 @@ TEST(list_insert_remove) {
 	SHOULD_EQUAL(edge::list_size(&list), 3);
 
 	edge::list_destroy(&list);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(list_reverse) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
 	edge::list_create(&alloc, &list);
@@ -273,12 +272,12 @@ TEST(list_reverse) {
 	SHOULD_EQUAL(*edge::list_back(&list), 1);
 
 	edge::list_destroy(&list);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(list_sort) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
 	edge::list_create(&alloc, &list);
@@ -302,12 +301,12 @@ TEST(list_sort) {
 	SHOULD_EQUAL(*edge::list_back(&list), 9);
 
 	edge::list_destroy(&list);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(list_find) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
 	edge::list_create(&alloc, &list);
@@ -330,82 +329,82 @@ TEST(list_find) {
 	SHOULD_EQUAL(found_if->data, 40);
 
 	edge::list_destroy(&list);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(hashmap_basic) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::HashMap<i32, i32> map;
 
-	SHOULD_EQUAL(edge::hashmap_create(&alloc, &map, 0), true);
-	SHOULD_EQUAL(edge::hashmap_empty(&map), true);
+	SHOULD_EQUAL(map.create(&alloc, 0), true);
+	SHOULD_EQUAL(map.empty(), true);
 
-	SHOULD_EQUAL(edge::hashmap_insert(&map, 1, 100), true);
-	SHOULD_EQUAL(edge::hashmap_insert(&map, 2, 200), true);
-	SHOULD_EQUAL(edge::hashmap_insert(&map, 3, 300), true);
+	SHOULD_EQUAL(map.insert(&alloc, 1, 100), true);
+	SHOULD_EQUAL(map.insert(&alloc, 2, 200), true);
+	SHOULD_EQUAL(map.insert(&alloc, 3, 300), true);
 
-	SHOULD_EQUAL(edge::hashmap_size(&map), 3);
+	SHOULD_EQUAL(map.m_size, 3);
 
-	i32* val = edge::hashmap_get(&map, 2);
+	i32* val = map.get(2);
 	SHOULD_EQUAL(val != nullptr, true);
 	SHOULD_EQUAL(*val, 200);
 
-	edge::hashmap_destroy(&map);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	map.destroy(&alloc);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(hashmap_update) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::HashMap<i32, i32> map;
 
-	edge::hashmap_create(&alloc, &map, 0);
+	map.create(&alloc, 0);
 
-	edge::hashmap_insert(&map, 5, 50);
-	SHOULD_EQUAL(*edge::hashmap_get(&map, 5), 50);
+	map.insert(&alloc, 5, 50);
+	SHOULD_EQUAL(*map.get(5), 50);
 
 	// Update existing key
-	edge::hashmap_insert(&map, 5, 500);
-	SHOULD_EQUAL(*edge::hashmap_get(&map, 5), 500);
-	SHOULD_EQUAL(edge::hashmap_size(&map), 1);
+	map.insert(&alloc, 5, 500);
+	SHOULD_EQUAL(*map.get(5), 500);
+	SHOULD_EQUAL(map.m_size, 1);
 
-	edge::hashmap_destroy(&map);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	map.destroy(&alloc);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(hashmap_remove) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::HashMap<i32, i32> map;
 
-	edge::hashmap_create(&alloc, &map, 0);
+	map.create(&alloc, 0);
 
-	edge::hashmap_insert(&map, 10, 100);
-	edge::hashmap_insert(&map, 20, 200);
-	edge::hashmap_insert(&map, 30, 300);
+	map.insert(&alloc, 10, 100);
+	map.insert(&alloc, 20, 200);
+	map.insert(&alloc, 30, 300);
 
 	i32 removed_val;
-	SHOULD_EQUAL(edge::hashmap_remove(&map, 20, &removed_val), true);
+	SHOULD_EQUAL(map.remove(&alloc, 20, &removed_val), true);
 	SHOULD_EQUAL(removed_val, 200);
-	SHOULD_EQUAL(edge::hashmap_size(&map), 2);
+	SHOULD_EQUAL(map.m_size, 2);
 
-	SHOULD_EQUAL(edge::hashmap_contains(&map, 20), false);
-	SHOULD_EQUAL(edge::hashmap_contains(&map, 10), true);
+	SHOULD_EQUAL(map.contains(20), false);
+	SHOULD_EQUAL(map.contains(10), true);
 
-	edge::hashmap_destroy(&map);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	map.destroy(&alloc);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(hashmap_iteration) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::HashMap<i32, i32> map;
 
-	edge::hashmap_create(&alloc, &map, 0);
+	map.create(&alloc, 5);
 
 	for (i32 i = 0; i < 5; i++) {
-		edge::hashmap_insert(&map, i, i * 10);
+		map.insert(&alloc, i, i * 10);
 	}
 
 	printf("  HashMap entries: ");
@@ -418,55 +417,55 @@ TEST(hashmap_iteration) {
 
 	SHOULD_EQUAL(count, 5);
 
-	edge::hashmap_destroy(&map);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	map.destroy(&alloc);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(hashmap_rehash) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::HashMap<i32, i32> map;
 
-	edge::hashmap_create(&alloc, &map, 4);
+	map.create(&alloc, 4);
 
 	// Insert enough elements to trigger rehash
 	for (i32 i = 0; i < 10; i++) {
-		edge::hashmap_insert(&map, i, i * 100);
+		map.insert(&alloc, i, i * 100);
 	}
 
-	SHOULD_EQUAL(edge::hashmap_size(&map), 10);
+	SHOULD_EQUAL(map.m_size, 10);
 
 	// Verify all elements are still accessible
 	for (i32 i = 0; i < 10; i++) {
-		i32* val = edge::hashmap_get(&map, i);
+		i32* val = map.get(i);
 		SHOULD_EQUAL(val != nullptr, true);
 		SHOULD_EQUAL(*val, i * 100);
 	}
 
-	edge::hashmap_destroy(&map);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	map.destroy(&alloc);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(hashmap_clear) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::HashMap<i32, i32> map;
 
-	edge::hashmap_create(&alloc, &map, 0);
+	map.create(&alloc, 5);
 
 	for (i32 i = 0; i < 5; i++) {
-		edge::hashmap_insert(&map, i, i);
+		map.insert(&alloc, i, i);
 	}
 
-	SHOULD_EQUAL(edge::hashmap_size(&map), 5);
+	SHOULD_EQUAL(map.m_size, 5);
 
-	edge::hashmap_clear(&map);
+	map.clear(&alloc);
 
-	SHOULD_EQUAL(edge::hashmap_empty(&map), true);
-	SHOULD_EQUAL(edge::hashmap_size(&map), 0);
+	SHOULD_EQUAL(map.empty(), true);
+	SHOULD_EQUAL(map.m_size, 0);
 
-	edge::hashmap_destroy(&map);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	map.destroy(&alloc);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
@@ -563,7 +562,7 @@ TEST(bitarray_any_all) {
 }
 
 TEST(mpmc_queue_basic) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::MPMCQueue<i32> queue;
 
 	SHOULD_EQUAL(edge::mpmc_queue_create(&alloc, &queue, 8), true);
@@ -586,12 +585,12 @@ TEST(mpmc_queue_basic) {
 	SHOULD_EQUAL(edge::mpmc_queue_size_approx(&queue), 1);
 
 	edge::mpmc_queue_destroy(&queue);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(mpmc_queue_full) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::MPMCQueue<i32> queue;
 
 	edge::mpmc_queue_create(&alloc, &queue, 4);
@@ -614,12 +613,12 @@ TEST(mpmc_queue_full) {
 	SHOULD_EQUAL(edge::mpmc_queue_enqueue(&queue, 200), true);
 
 	edge::mpmc_queue_destroy(&queue);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
 TEST(mpmc_queue_try_operations) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::MPMCQueue<i32> queue;
 
 	edge::mpmc_queue_create(&alloc, &queue, 4);
@@ -638,7 +637,7 @@ TEST(mpmc_queue_try_operations) {
 	SHOULD_EQUAL(edge::mpmc_queue_try_dequeue(&queue, &val, 1), false);
 
 	edge::mpmc_queue_destroy(&queue);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
@@ -690,7 +689,7 @@ i32 consumer_thread(void* arg) {
 }
 
 TEST(mpmc_queue_multithreaded) {
-	edge::Allocator alloc = edge::allocator_create_tracking();
+	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::MPMCQueue<i32> queue;
 
 	edge::mpmc_queue_create(&alloc, &queue, 1024);
@@ -701,13 +700,13 @@ TEST(mpmc_queue_multithreaded) {
 	const i32 total_items = num_producers * items_per_producer;
 
 	edge::Array<edge::Thread> threads;
-	edge::array_create(&alloc, &threads, num_producers + num_consumers);
+	threads.reserve(&alloc, num_producers + num_consumers);
 
 	edge::Array<ProducerArgs> producer_args;
-	edge::array_create(&alloc, &producer_args, num_producers);
+	producer_args.reserve(&alloc, num_producers);
 
 	edge::Array<ConsumerArgs> consumer_args;
-	edge::array_create(&alloc, &consumer_args, num_consumers);
+	consumer_args.reserve(&alloc, num_consumers);
 
 	std::atomic<i32> consumed_count{ 0 };
 
@@ -717,11 +716,11 @@ TEST(mpmc_queue_multithreaded) {
 		args.queue = &queue;
 		args.producer_id = p;
 		args.items_count = items_per_producer;
-		edge::array_push_back(&producer_args, args);
+		producer_args.push_back(&alloc, args);
 
 		edge::Thread thr;
-		edge::thread_create(&thr, producer_thread, edge::array_at(&producer_args, p));
-		edge::array_push_back(&threads, thr);
+		edge::thread_create(&thr, producer_thread, producer_args.get(p));
+		threads.push_back(&alloc, thr);
 	}
 
 	// Create consumer threads
@@ -730,26 +729,26 @@ TEST(mpmc_queue_multithreaded) {
 		args.queue = &queue;
 		args.consumed_count = &consumed_count;
 		args.total_items = total_items;
-		edge::array_push_back(&consumer_args, args);
+		consumer_args.push_back(&alloc, args);
 
 		edge::Thread thr;
-		edge::thread_create(&thr, consumer_thread, edge::array_at(&consumer_args, c));
-		edge::array_push_back(&threads, thr);
+		edge::thread_create(&thr, consumer_thread, consumer_args.get(c));
+		threads.push_back(&alloc, thr);
 	}
 
 	// Join all threads
-	for (usize i = 0; i < edge::array_size(&threads); i++) {
-		edge::thread_join(*edge::array_at(&threads, i));
+	for (usize i = 0; i < threads.m_size; i++) {
+		edge::thread_join(*threads.get(i));
 	}
 
 	printf("  Consumed %d items\n", consumed_count.load());
 	SHOULD_EQUAL(consumed_count.load(), total_items);
 
-	edge::array_destroy(&consumer_args);
-	edge::array_destroy(&producer_args);
-	edge::array_destroy(&threads);
+	consumer_args.destroy(&alloc);
+	producer_args.destroy(&alloc);
+	threads.destroy(&alloc);
 	edge::mpmc_queue_destroy(&queue);
-	SHOULD_EQUAL(edge::allocator_get_net(&alloc), 0ull);
+	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
 
