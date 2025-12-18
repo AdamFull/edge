@@ -554,26 +554,26 @@ TEST(mpmc_queue_basic) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::MPMCQueue<i32> queue;
 
-	SHOULD_EQUAL(edge::mpmc_queue_create(&alloc, &queue, 8), true);
-	SHOULD_EQUAL(edge::mpmc_queue_empty_approx(&queue), true);
-	SHOULD_EQUAL(edge::mpmc_queue_capacity(&queue), 8);
+	SHOULD_EQUAL(queue.create(&alloc, 8), true);
+	SHOULD_EQUAL(queue.empty_approx(), true);
+	SHOULD_EQUAL(queue.capacity(), 8);
 
-	SHOULD_EQUAL(edge::mpmc_queue_enqueue(&queue, 10), true);
-	SHOULD_EQUAL(edge::mpmc_queue_enqueue(&queue, 20), true);
-	SHOULD_EQUAL(edge::mpmc_queue_enqueue(&queue, 30), true);
+	SHOULD_EQUAL(queue.enqueue(10), true);
+	SHOULD_EQUAL(queue.enqueue(20), true);
+	SHOULD_EQUAL(queue.enqueue(30), true);
 
-	SHOULD_EQUAL(edge::mpmc_queue_size_approx(&queue), 3);
+	SHOULD_EQUAL(queue.size_approx(), 3);
 
 	i32 val;
-	SHOULD_EQUAL(edge::mpmc_queue_dequeue(&queue, &val), true);
+	SHOULD_EQUAL(queue.dequeue(&val), true);
 	SHOULD_EQUAL(val, 10);
 
-	SHOULD_EQUAL(edge::mpmc_queue_dequeue(&queue, &val), true);
+	SHOULD_EQUAL(queue.dequeue(&val), true);
 	SHOULD_EQUAL(val, 20);
 
-	SHOULD_EQUAL(edge::mpmc_queue_size_approx(&queue), 1);
+	SHOULD_EQUAL(queue.size_approx(), 1);
 
-	edge::mpmc_queue_destroy(&queue);
+	queue.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
@@ -582,26 +582,26 @@ TEST(mpmc_queue_full) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::MPMCQueue<i32> queue;
 
-	edge::mpmc_queue_create(&alloc, &queue, 4);
+	queue.create(&alloc, 4);
 
 	// Fill the queue
 	for (i32 i = 0; i < 4; i++) {
-		SHOULD_EQUAL(edge::mpmc_queue_enqueue(&queue, i), true);
+		SHOULD_EQUAL(queue.enqueue(i), true);
 	}
 
-	SHOULD_EQUAL(edge::mpmc_queue_full_approx(&queue), true);
+	SHOULD_EQUAL(queue.full_approx(), true);
 
 	// Try to enqueue to full queue should fail
-	SHOULD_EQUAL(edge::mpmc_queue_enqueue(&queue, 100), false);
+	SHOULD_EQUAL(queue.enqueue(100), false);
 
 	// Dequeue one element
 	i32 val;
-	edge::mpmc_queue_dequeue(&queue, &val);
+	queue.dequeue(&val);
 
 	// Now we should be able to enqueue again
-	SHOULD_EQUAL(edge::mpmc_queue_enqueue(&queue, 200), true);
+	SHOULD_EQUAL(queue.enqueue(200), true);
 
-	edge::mpmc_queue_destroy(&queue);
+	queue.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
@@ -610,22 +610,22 @@ TEST(mpmc_queue_try_operations) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::MPMCQueue<i32> queue;
 
-	edge::mpmc_queue_create(&alloc, &queue, 4);
+	queue.create(&alloc, 4);
 
-	SHOULD_EQUAL(edge::mpmc_queue_try_enqueue(&queue, 100, 10), true);
-	SHOULD_EQUAL(edge::mpmc_queue_try_enqueue(&queue, 200, 10), true);
+	SHOULD_EQUAL(queue.try_enqueue(100, 10), true);
+	SHOULD_EQUAL(queue.try_enqueue(200, 10), true);
 
 	i32 val;
-	SHOULD_EQUAL(edge::mpmc_queue_try_dequeue(&queue, &val, 10), true);
+	SHOULD_EQUAL(queue.try_dequeue(&val, 10), true);
 	SHOULD_EQUAL(val, 100);
 
-	SHOULD_EQUAL(edge::mpmc_queue_try_dequeue(&queue, &val, 10), true);
+	SHOULD_EQUAL(queue.try_dequeue(&val, 10), true);
 	SHOULD_EQUAL(val, 200);
 
 	// Should fail on empty queue
-	SHOULD_EQUAL(edge::mpmc_queue_try_dequeue(&queue, &val, 1), false);
+	SHOULD_EQUAL(queue.try_dequeue(&val, 1), false);
 
-	edge::mpmc_queue_destroy(&queue);
+	queue.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
@@ -646,7 +646,7 @@ i32 producer_thread(void* arg) {
 	ProducerArgs* args = (ProducerArgs*)arg;
 
 	for (i32 i = 0; i < args->items_count; i++) {
-		while (!edge::mpmc_queue_enqueue(args->queue, args->producer_id * 1000 + i)) {
+		while (!args->queue->enqueue(args->producer_id * 1000 + i)) {
 			// Retry on failure
 			edge::thread_yield();
 		}
@@ -660,7 +660,7 @@ i32 consumer_thread(void* arg) {
 
 	i32 val;
 	for (;;) {
-		if (edge::mpmc_queue_dequeue(args->queue, &val)) {
+		if (args->queue->dequeue(&val)) {
 			args->consumed_count->fetch_add(1);
 		}
 		else {
@@ -681,7 +681,7 @@ TEST(mpmc_queue_multithreaded) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::MPMCQueue<i32> queue;
 
-	edge::mpmc_queue_create(&alloc, &queue, 1024);
+	queue.create(&alloc, 1024);
 
 	const i32 num_producers = 2;
 	const i32 num_consumers = 2;
@@ -736,7 +736,7 @@ TEST(mpmc_queue_multithreaded) {
 	consumer_args.destroy(&alloc);
 	producer_args.destroy(&alloc);
 	threads.destroy(&alloc);
-	edge::mpmc_queue_destroy(&queue);
+	queue.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
