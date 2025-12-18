@@ -15,49 +15,28 @@ namespace edge {
 	};
 
 	struct Arena {
-		const Allocator* m_allocator = nullptr;
 		void* m_base = nullptr;
 		usize m_reserved = 0ull;
 		usize m_committed = 0ull;
 		usize m_offset = 0ull;
 		usize m_page_size = 0ull;
+
+		bool create(usize size = 0);
+		void destroy();
+
+		bool protect(void* addr, usize size, VMemProt prot);
+		void* alloc_ex(usize size, usize alignment);
+		void* alloc(usize size) {
+			return alloc_ex(size, alignof(max_align_t));
+		}
+
+		template<typename T>
+		T* alloc(usize count = 1) {
+			return static_cast<T*>(alloc_ex(sizeof(T) * count, alignof(T)));
+		}
+
+		void reset(bool zero_memory = false);
 	};
-
-	bool arena_create(const Allocator* alloc, Arena* arena, usize size = 0);
-	void arena_destroy(Arena* arena);
-	bool arena_protect(Arena* arena, void* addr, usize size, VMemProt prot);
-	void* arena_alloc_ex(Arena* arena, usize size, usize alignment);
-
-	inline void* arena_alloc(Arena* arena, usize size) {
-		return arena_alloc_ex(arena, size, 0);
-	}
-
-	template<typename T>
-	inline T* arena_alloc(Arena* arena, usize count = 1) {
-		return static_cast<T*>(arena_alloc_ex(arena, sizeof(T) * count, alignof(T)));
-	}
-
-	void arena_reset(Arena* arena, bool zero_memory = false);
-
-	inline usize arena_offset(const Arena* arena) {
-		return arena ? arena->m_offset : 0;
-	}
-
-	inline usize arena_committed(const Arena* arena) {
-		return arena ? arena->m_committed : 0;
-	}
-
-	inline usize arena_reserved(const Arena* arena) {
-		return arena ? arena->m_reserved : 0;
-	}
-
-	inline usize arena_available(const Arena* arena) {
-		return arena ? (arena->m_reserved - arena->m_offset) : 0;
-	}
-
-	inline void* arena_base(const Arena* arena) {
-		return arena ? arena->m_base : nullptr;
-	}
 }
 
 #endif
