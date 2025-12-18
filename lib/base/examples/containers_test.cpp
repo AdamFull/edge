@@ -183,20 +183,19 @@ TEST(list_basic) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
-	SHOULD_EQUAL(edge::list_create(&alloc, &list), true);
-	SHOULD_EQUAL(edge::list_empty(&list), true);
+	SHOULD_EQUAL(list.empty(), true);
 
-	SHOULD_EQUAL(edge::list_push_back(&list, 10), true);
-	SHOULD_EQUAL(edge::list_push_back(&list, 20), true);
-	SHOULD_EQUAL(edge::list_push_back(&list, 30), true);
+	SHOULD_EQUAL(list.push_back(&alloc, 10), true);
+	SHOULD_EQUAL(list.push_back(&alloc, 20), true);
+	SHOULD_EQUAL(list.push_back(&alloc, 30), true);
 
-	SHOULD_EQUAL(*edge::list_front(&list), 10);
-	SHOULD_EQUAL(*edge::list_back(&list), 30);
-	SHOULD_EQUAL(edge::list_size(&list), 3);
+	SHOULD_EQUAL(*list.front(), 10);
+	SHOULD_EQUAL(*list.back(), 30);
+	SHOULD_EQUAL(list.m_size, 3);
 
 	print_list(list);
 
-	edge::list_destroy(&list);
+	list.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
@@ -205,23 +204,21 @@ TEST(list_push_pop) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
-	edge::list_create(&alloc, &list);
-
-	edge::list_push_front(&list, 5);
-	edge::list_push_front(&list, 3);
-	edge::list_push_front(&list, 1);
-	SHOULD_EQUAL(*edge::list_front(&list), 1);
+	list.push_front(&alloc, 5);
+	list.push_front(&alloc, 3);
+	list.push_front(&alloc, 1);
+	SHOULD_EQUAL(*list.front(), 1);
 
 	i32 val;
-	SHOULD_EQUAL(edge::list_pop_front(&list, &val), true);
+	SHOULD_EQUAL(list.pop_front(&alloc, &val), true);
 	SHOULD_EQUAL(val, 1);
-	SHOULD_EQUAL(*edge::list_front(&list), 3);
+	SHOULD_EQUAL(*list.front(), 3);
 
-	SHOULD_EQUAL(edge::list_pop_back(&list, &val), true);
+	SHOULD_EQUAL(list.pop_back(&alloc, &val), true);
 	SHOULD_EQUAL(val, 5);
-	SHOULD_EQUAL(edge::list_size(&list), 1);
+	SHOULD_EQUAL(list.m_size, 1);
 
-	edge::list_destroy(&list);
+	list.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
@@ -230,22 +227,20 @@ TEST(list_insert_remove) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
-	edge::list_create(&alloc, &list);
+	list.push_back(&alloc, 10);
+	list.push_back(&alloc, 30);
+	list.push_back(&alloc, 40);
 
-	edge::list_push_back(&list, 10);
-	edge::list_push_back(&list, 30);
-	edge::list_push_back(&list, 40);
-
-	SHOULD_EQUAL(edge::list_insert(&list, 1, 20), true);
-	SHOULD_EQUAL(*edge::list_get(&list, 1), 20);
-	SHOULD_EQUAL(edge::list_size(&list), 4);
+	SHOULD_EQUAL(list.insert(&alloc, 1, 20), true);
+	SHOULD_EQUAL(*list.get(1), 20);
+	SHOULD_EQUAL(list.m_size, 4);
 
 	i32 val;
-	SHOULD_EQUAL(edge::list_remove(&list, 1, &val), true);
+	SHOULD_EQUAL(list.remove(&alloc, 1, &val), true);
 	SHOULD_EQUAL(val, 20);
-	SHOULD_EQUAL(edge::list_size(&list), 3);
+	SHOULD_EQUAL(list.m_size, 3);
 
-	edge::list_destroy(&list);
+	list.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
@@ -254,24 +249,22 @@ TEST(list_reverse) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
-	edge::list_create(&alloc, &list);
-
 	for (i32 i = 1; i <= 5; i++) {
-		edge::list_push_back(&list, i);
+		list.push_back(&alloc, i);
 	}
 
 	printf("  Before reverse: ");
 	print_list(list);
 
-	edge::list_reverse(&list);
+	list.reverse();
 
 	printf("  After reverse: ");
 	print_list(list);
 
-	SHOULD_EQUAL(*edge::list_front(&list), 5);
-	SHOULD_EQUAL(*edge::list_back(&list), 1);
+	SHOULD_EQUAL(*list.front(), 5);
+	SHOULD_EQUAL(*list.back(), 1);
 
-	edge::list_destroy(&list);
+	list.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
@@ -280,27 +273,25 @@ TEST(list_sort) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
-	edge::list_create(&alloc, &list);
-
 	i32 values[] = { 5, 2, 8, 1, 9, 3 };
 	for (i32 val : values) {
-		edge::list_push_back(&list, val);
+		list.push_back(&alloc, val);
 	}
 
 	printf("  Before sort: ");
 	print_list(list);
 
-	edge::list_sort(&list, [](const i32& a, const i32& b) -> i32 {
+	list.sort([](const i32& a, const i32& b) -> i32 {
 		return a - b;
 		});
 
 	printf("  After sort: ");
 	print_list(list);
 
-	SHOULD_EQUAL(*edge::list_front(&list), 1);
-	SHOULD_EQUAL(*edge::list_back(&list), 9);
+	SHOULD_EQUAL(*list.front(), 1);
+	SHOULD_EQUAL(*list.back(), 9);
 
-	edge::list_destroy(&list);
+	list.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
@@ -309,26 +300,24 @@ TEST(list_find) {
 	edge::Allocator alloc = edge::Allocator::create_tracking();
 	edge::List<i32> list;
 
-	edge::list_create(&alloc, &list);
-
 	for (i32 i = 10; i <= 50; i += 10) {
-		edge::list_push_back(&list, i);
+		list.push_back(&alloc, i);
 	}
 
-	auto* node = edge::list_find(&list, 30);
+	auto* node = list.find(30);
 	SHOULD_EQUAL(node != nullptr, true);
 	SHOULD_EQUAL(node->data, 30);
 
-	auto* not_found = edge::list_find(&list, 99);
+	auto* not_found = list.find(99);
 	SHOULD_EQUAL(not_found == nullptr, true);
 
-	auto* found_if = edge::list_find_if(&list, [](const i32& val) {
+	auto* found_if = list.find_if([](const i32& val) {
 		return val > 35;
 		});
 	SHOULD_EQUAL(found_if != nullptr, true);
 	SHOULD_EQUAL(found_if->data, 40);
 
-	edge::list_destroy(&list);
+	list.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
 	return 0;
 }
