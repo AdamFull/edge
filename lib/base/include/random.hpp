@@ -5,16 +5,16 @@
 
 namespace edge {
 	struct RngPCG {
-		u64 state;
-		u64 inc;
+		u64 state = 0;
+		u64 inc = 0;
 	};
 
 	struct RngXoshiro256 {
-		u64 s[4];
+		u64 s[4] = {};
 	};
 
 	struct RngSplitMix64 {
-		u64 state;
+		u64 state = 0;
 	};
 
 	enum class RngAlgorithm {
@@ -24,9 +24,9 @@ namespace edge {
 	};
 
 	struct Rng {
-		RngAlgorithm algorithm;
+		RngAlgorithm algorithm = RngAlgorithm::PCG;
 		union {
-			RngPCG pcg;
+			RngPCG pcg = {};
 			RngXoshiro256 xoshiro256;
 			RngSplitMix64 splitmix64;
 		} state;
