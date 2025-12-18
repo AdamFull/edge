@@ -138,8 +138,6 @@ namespace edge {
 				current = next;
 			}
 
-			// TODO: Call destructor for not trivially destructable
-
 			m_head = nullptr;
 			m_tail = nullptr;
 			m_size = 0;
