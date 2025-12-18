@@ -54,7 +54,7 @@ static void job_b(void* payload) {
 }
 
 int main(void) {
-    edge::Allocator allocator = edge::allocator_create_tracking();
+    edge::Allocator allocator = edge::Allocator::create_tracking();
 
     edge::Scheduler* sched = edge::sched_create(&allocator);
 
@@ -64,7 +64,7 @@ int main(void) {
 
     edge::sched_destroy(sched);
 
-    size_t alloc_net = edge::allocator_get_net(&allocator);
+    size_t alloc_net = allocator.get_net();
     assert(alloc_net == 0 && "Memory leaks detected, some data was not freed.");
 
     return 0;
