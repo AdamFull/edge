@@ -115,9 +115,7 @@ namespace edge {
 				}
 			}
 
-			memcpy(&m_data[m_size], &element, sizeof(T));
-			m_size++;
-
+			m_data[m_size++] = element;
 			return true;
 		}
 
@@ -126,9 +124,8 @@ namespace edge {
 				return false;
 			}
 
-			m_size--;
 			if (out_element) {
-				memcpy(out_element, &m_data[m_size], sizeof(T));
+				*out_element = m_data[--m_size];
 			}
 
 			return true;
@@ -149,7 +146,7 @@ namespace edge {
 				memmove(&m_data[index + 1], &m_data[index], sizeof(T) * (m_size - index));
 			}
 
-			memcpy(&m_data[index], &element, sizeof(T));
+			m_data[index] = element;
 			m_size++;
 			return true;
 		}
@@ -160,7 +157,7 @@ namespace edge {
 			}
 
 			if (out_element) {
-				memcpy(out_element, &m_data[index], sizeof(T));
+				*out_element = m_data[index];
 			}
 
 			if (index < m_size - 1) {
