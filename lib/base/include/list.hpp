@@ -5,19 +5,10 @@
 
 namespace edge {
 	template<TrivialType T>
-	struct ListNode {
-		T data;
-		ListNode* next = nullptr;
-		ListNode* prev = nullptr;
-	};
+	struct ListNode;
 
 	template<TrivialType T>
-	struct List {
-		ListNode<T>* m_head = nullptr;
-		ListNode<T>* m_tail = nullptr;
-		usize m_size = 0ull;
-		const Allocator* m_allocator = nullptr;
-	};
+	struct List;
 
 	template<TrivialType T>
 	struct ListIterator {
@@ -64,6 +55,13 @@ namespace edge {
 			--(*this);
 			return tmp;
 		}
+	};
+
+	template<TrivialType T>
+	struct ListNode {
+		T data;
+		ListNode* next = nullptr;
+		ListNode* prev = nullptr;
 	};
 
 	namespace detail {
@@ -127,333 +125,283 @@ namespace edge {
 	}
 
 	template<TrivialType T>
-	bool list_create(const Allocator* alloc, List<T>* list) {
-		if (!alloc || !list) {
-			return false;
+	struct List {
+		ListNode<T>* m_head = nullptr;
+		ListNode<T>* m_tail = nullptr;
+		usize m_size = 0ull;
+
+		void clear(NotNull<const Allocator*> alloc) {
+			ListNode<T>* current = m_head;
+			while (current) {
+				ListNode<T>* next = current->next;
+				alloc->deallocate(current);
+				current = next;
+			}
+
+			// TODO: Call destructor for not trivially destructable
+
+			m_head = nullptr;
+			m_tail = nullptr;
+			m_size = 0;
 		}
 
-		list->m_head = nullptr;
-		list->m_tail = nullptr;
-		list->m_size = 0;
-		list->m_allocator = alloc;
+		bool push_front(NotNull<const Allocator*> alloc, const T& element) {
+			ListNode<T>* node = alloc->allocate<ListNode<T>>(element, nullptr, nullptr);
+			if (!node) {
+				return false;
+			}
 
-		return true;
-	}
+			if (m_head) {
+				node->next = m_head;
+				m_head->prev = node;
+				m_head = node;
+			}
+			else {
+				m_head = node;
+				m_tail = node;
+			}
 
-	template<TrivialType T>
-	void list_clear(List<T>* list) {
-		if (!list) {
-			return;
+			m_size++;
+			return true;
 		}
 
-		ListNode<T>* current = list->m_head;
-		while (current) {
-			ListNode<T>* next = current->next;
-			list->m_allocator->deallocate(current);
-			current = next;
+		void destroy(NotNull<const Allocator*> alloc) {
+			clear(alloc);
 		}
 
-		// TODO: Call destructor for not trivially destructable
+		bool push_back(NotNull<const Allocator*> alloc, const T& element) {
+			ListNode<T>* node = alloc->allocate<ListNode<T>>(element, nullptr, nullptr);
+			if (!node) {
+				return false;
+			}
 
-		list->m_head = nullptr;
-		list->m_tail = nullptr;
-		list->m_size = 0;
-	}
+			if (m_tail) {
+				node->prev = m_tail;
+				m_tail->next = node;
+				m_tail = node;
+			}
+			else {
+				m_head = node;
+				m_tail = node;
+			}
 
-	template<TrivialType T>
-	bool list_push_front(List<T>* list, const T& element) {
-		if (!list) {
-			return false;
+			m_size++;
+			return true;
 		}
 
-		ListNode<T>* node = list->m_allocator->allocate<ListNode<T>>(element, nullptr, nullptr);
-		if (!node) {
-			return false;
+		bool pop_front(NotNull<const Allocator*> alloc, T* out_element) {
+			if (!m_head) {
+				return false;
+			}
+
+			ListNode<T>* node = m_head;
+
+			if (out_element) {
+				*out_element = node->data;
+			}
+
+			m_head = node->next;
+			if (m_head) {
+				m_head->prev = nullptr;
+			}
+			else {
+				m_tail = nullptr;
+			}
+
+			alloc->deallocate(node);
+			m_size--;
+
+			return true;
 		}
 
-		if (list->m_head) {
-			node->next = list->m_head;
-			list->m_head->prev = node;
-			list->m_head = node;
-		}
-		else {
-			list->m_head = node;
-			list->m_tail = node;
-		}
+		bool pop_back(NotNull<const Allocator*> alloc, T* out_element) {
+			if (!m_tail) {
+				return false;
+			}
 
-		list->m_size++;
-		return true;
-	}
+			ListNode<T>* node = m_tail;
 
-	template<TrivialType T>
-	void list_destroy(List<T>* list) {
-		if (!list) {
-			return;
-		}
+			if (out_element) {
+				*out_element = node->data;
+			}
 
-		list_clear(list);
-	}
+			m_tail = node->prev;
+			if (m_tail) {
+				m_tail->next = nullptr;
+			}
+			else {
+				m_head = nullptr;
+			}
 
-	template<TrivialType T>
-	bool list_push_back(List<T>* list, const T& element) {
-		if (!list) {
-			return false;
+			alloc->deallocate(node);
+			m_size--;
+
+			return true;
 		}
 
-		ListNode<T>* node = list->m_allocator->allocate<ListNode<T>>(element, nullptr, nullptr);
-		if (!node) {
-			return false;
+		T* front() noexcept {
+			if (!m_head) {
+				return nullptr;
+			}
+			return &m_head->data;
 		}
 
-		if (list->m_tail) {
-			node->prev = list->m_tail;
-			list->m_tail->next = node;
-			list->m_tail = node;
-		}
-		else {
-			list->m_head = node;
-			list->m_tail = node;
+		T* back() noexcept {
+			if (!m_tail) {
+				return nullptr;
+			}
+			return &m_tail->data;
 		}
 
-		list->m_size++;
-		return true;
-	}
+		T* get(usize index) const noexcept {
+			if (index >= m_size) {
+				return nullptr;
+			}
 
-	template<TrivialType T>
-	bool list_pop_front(List<T>* list, T* out_element) {
-		if (!list || !list->m_head) {
-			return false;
+			ListNode<T>* current;
+
+			if (index < m_size / 2) {
+				current = m_head;
+				for (usize i = 0; i < index; i++) {
+					current = current->next;
+				}
+			}
+			else {
+				current = m_tail;
+				for (usize i = m_size - 1; i > index; i--) {
+					current = current->prev;
+				}
+			}
+
+			return current ? &current->data : nullptr;
 		}
 
-		ListNode<T>* node = list->m_head;
+		bool insert(NotNull<const Allocator*> alloc, usize index, const T& element) {
+			if (index > m_size) {
+				return false;
+			}
 
-		if (out_element) {
-			*out_element = node->data;
-		}
+			if (index == 0) {
+				return push_front(alloc, element);
+			}
 
-		list->m_head = node->next;
-		if (list->m_head) {
-			list->m_head->prev = nullptr;
-		}
-		else {
-			list->m_tail = nullptr;
-		}
+			if (index == m_size) {
+				return push_back(alloc, element);
+			}
 
-		list->m_allocator->deallocate(node);
-		list->m_size--;
+			ListNode<T>* new_node = alloc->allocate<ListNode<T>>(element, nullptr, nullptr);
+			if (!new_node) {
+				return false;
+			}
 
-		return true;
-	}
-
-	template<TrivialType T>
-	bool list_pop_back(List<T>* list, T* out_element) {
-		if (!list || !list->m_tail) {
-			return false;
-		}
-
-		ListNode<T>* node = list->m_tail;
-
-		if (out_element) {
-			*out_element = node->data;
-		}
-
-		list->m_tail = node->prev;
-		if (list->m_tail) {
-			list->m_tail->next = nullptr;
-		}
-		else {
-			list->m_head = nullptr;
-		}
-
-		list->m_allocator->deallocate(node);
-		list->m_size--;
-
-		return true;
-	}
-
-	template<TrivialType T>
-	T* list_front(const List<T>* list) {
-		if (!list || !list->m_head) {
-			return nullptr;
-		}
-		return &list->m_head->data;
-	}
-
-	template<TrivialType T>
-	T* list_back(const List<T>* list) {
-		if (!list || !list->m_tail) {
-			return nullptr;
-		}
-		return &list->m_tail->data;
-	}
-
-	template<TrivialType T>
-	T* list_get(const List<T>* list, usize index) {
-		if (!list || index >= list->m_size) {
-			return nullptr;
-		}
-
-		ListNode<T>* current;
-
-		if (index < list->m_size / 2) {
-			current = list->m_head;
+			ListNode<T>* current = m_head;
 			for (usize i = 0; i < index; i++) {
 				current = current->next;
 			}
+
+			new_node->prev = current->prev;
+			new_node->next = current;
+			current->prev->next = new_node;
+			current->prev = new_node;
+
+			m_size++;
+			return true;
 		}
-		else {
-			current = list->m_tail;
-			for (usize i = list->m_size - 1; i > index; i--) {
+
+		bool remove(NotNull<const Allocator*> alloc, usize index, T* out_element) {
+			if (index >= m_size) {
+				return false;
+			}
+
+			if (index == 0) {
+				return pop_front(alloc, out_element);
+			}
+
+			if (index == m_size - 1) {
+				return pop_back(alloc, out_element);
+			}
+
+			ListNode<T>* current = m_head;
+			for (usize i = 0; i < index; i++) {
+				current = current->next;
+			}
+
+			if (out_element) {
+				*out_element = current->data;
+			}
+
+			current->prev->next = current->next;
+			current->next->prev = current->prev;
+
+			alloc->deallocate(current);
+			m_size--;
+
+			return true;
+		}
+
+		bool empty() const noexcept {
+			return m_size == 0;
+		}
+
+		ListNode<T>* find(const T& element) noexcept {
+			ListNode<T>* current = m_head;
+			while (current) {
+				if (current->data == element) {
+					return current;
+				}
+				current = current->next;
+			}
+
+			return nullptr;
+		}
+
+		template<typename Predicate>
+		ListNode<T>* find_if(Predicate pred) noexcept {
+			ListNode<T>* current = m_head;
+			while (current) {
+				if (pred(current->data)) {
+					return current;
+				}
+				current = current->next;
+			}
+
+			return nullptr;
+		}
+
+		void reverse() {
+			if (m_size < 2) {
+				return;
+			}
+
+			ListNode<T>* current = m_head;
+			ListNode<T>* temp = nullptr;
+
+			while (current) {
+				temp = current->prev;
+				current->prev = current->next;
+				current->next = temp;
 				current = current->prev;
 			}
+
+			temp = m_head;
+			m_head = m_tail;
+			m_tail = temp;
 		}
 
-		return current ? &current->data : nullptr;
-	}
-
-	template<TrivialType T>
-	bool list_insert(List<T>* list, usize index, const T& element) {
-		if (!list || index > list->m_size) {
-			return false;
-		}
-
-		if (index == 0) {
-			return list_push_front(list, element);
-		}
-
-		if (index == list->m_size) {
-			return list_push_back(list, element);
-		}
-
-		ListNode<T>* new_node = list->m_allocator->allocate<ListNode<T>>(element, nullptr, nullptr);
-		if (!new_node) {
-			return false;
-		}
-
-		ListNode<T>* current = list->m_head;
-		for (usize i = 0; i < index; i++) {
-			current = current->next;
-		}
-
-		new_node->prev = current->prev;
-		new_node->next = current;
-		current->prev->next = new_node;
-		current->prev = new_node;
-
-		list->m_size++;
-		return true;
-	}
-
-	template<TrivialType T>
-	bool list_remove(List<T>* list, usize index, T* out_element) {
-		if (!list || index >= list->m_size) {
-			return false;
-		}
-
-		if (index == 0) {
-			return list_pop_front(list, out_element);
-		}
-
-		if (index == list->m_size - 1) {
-			return list_pop_back(list, out_element);
-		}
-
-		ListNode<T>* current = list->m_head;
-		for (usize i = 0; i < index; i++) {
-			current = current->next;
-		}
-
-		if (out_element) {
-			*out_element = current->data;
-		}
-
-		current->prev->next = current->next;
-		current->next->prev = current->prev;
-
-		list->m_allocator->deallocate(current);
-		list->m_size--;
-
-		return true;
-	}
-
-	template<TrivialType T>
-	usize list_size(const List<T>* list) {
-		return list ? list->m_size : 0;
-	}
-
-	template<TrivialType T>
-	bool list_empty(const List<T>* list) {
-		return !list || list->m_size == 0;
-	}
-
-	template<TrivialType T>
-	ListNode<T>* list_find(const List<T>* list, const T& element) {
-		if (!list) {
-			return nullptr;
-		}
-
-		ListNode<T>* current = list->m_head;
-		while (current) {
-			if (current->data == element) {
-				return current;
+		template<typename Comparator>
+		void sort(Comparator&& compare) noexcept {
+			if (m_size < 2) {
+				return;
 			}
-			current = current->next;
-		}
 
-		return nullptr;
-	}
+			m_head = detail::merge_sort_nodes(m_head, compare);
 
-	template<TrivialType T, typename Predicate>
-	ListNode<T>* list_find_if(const List<T>* list, Predicate pred) {
-		if (!list) {
-			return nullptr;
-		}
-
-		ListNode<T>* current = list->m_head;
-		while (current) {
-			if (pred(current->data)) {
-				return current;
+			m_tail = m_head;
+			while (m_tail && m_tail->next) {
+				m_tail = m_tail->next;
 			}
-			current = current->next;
 		}
-
-		return nullptr;
-	}
-
-	template<TrivialType T>
-	void list_reverse(List<T>* list) {
-		if (!list || list->m_size < 2) {
-			return;
-		}
-
-		ListNode<T>* current = list->m_head;
-		ListNode<T>* temp = nullptr;
-
-		while (current) {
-			temp = current->prev;
-			current->prev = current->next;
-			current->next = temp;
-			current = current->prev;
-		}
-
-		temp = list->m_head;
-		list->m_head = list->m_tail;
-		list->m_tail = temp;
-	}
-
-	template<TrivialType T, typename Comparator>
-	void list_sort(List<T>* list, Comparator&& compare) {
-		if (!list || list->m_size < 2) {
-			return;
-		}
-
-		list->m_head = detail::merge_sort_nodes(list->m_head, compare);
-
-		list->m_tail = list->m_head;
-		while (list->m_tail && list->m_tail->next) {
-			list->m_tail = list->m_tail->next;
-		}
-	}
+	};
 
 	template<TrivialType T>
 	inline ListIterator<T> begin(List<T>& list) {
