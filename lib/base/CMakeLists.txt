@@ -21,6 +21,7 @@ set(EDGE_BASE_SOURCES
     "src/edge_mpmc_queue.c"
     "src/edge_queue.c"
     "src/edge_rng.c"
+
     "src/edge_stack.c"
     "src/edge_string.c"
     "src/edge_testing.c"
@@ -33,7 +34,6 @@ set(EDGE_BASE_SOURCES
     "src/hash.cpp"
     "src/random.cpp"
     "src/threads.cpp"
-    "src/uuid.cpp"
     "src/vmem.cpp"
 )
 
@@ -71,7 +71,6 @@ set(EDGE_BASE_HEADERS
     "include/random.hpp"
     "include/stddef.hpp"
     "include/string.hpp"
-    "include/uuid.hpp"
     "include/vmem.hpp"
 )
 
