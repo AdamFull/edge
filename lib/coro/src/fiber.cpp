@@ -103,11 +103,7 @@ namespace edge {
 		std::abort();
 	}
 
-	FiberContext* fiber_context_create(const Allocator* allocator, FiberEntryFn entry, void* stack_ptr, usize stack_size) {
-		if (!allocator) {
-			return nullptr;
-		}
-
+	FiberContext* fiber_context_create(NotNull<const Allocator*> allocator, FiberEntryFn entry, void* stack_ptr, usize stack_size) {
 		FiberContext* ctx = allocator->allocate<FiberContext>();
 		if (!ctx) {
 			return nullptr;
@@ -145,8 +141,8 @@ namespace edge {
 		return ctx;
 	}
 
-	void fiber_context_destroy(const Allocator* allocator, FiberContext* ctx) {
-		if (!allocator || !ctx) {
+	void fiber_context_destroy(NotNull<const Allocator*> allocator, FiberContext* ctx) {
+		if (!ctx) {
 			return;
 		}
 
