@@ -21,7 +21,9 @@ namespace edge {
 		}
 
 		void clear() {
-			// TODO: Call destructor for not trivially destructable
+			for (usize i = 0; i < m_size; ++i) {
+				m_data[i].~T();
+			}
 			m_size = 0;
 		}
 
@@ -83,7 +85,7 @@ namespace edge {
 			return &m_data[index];
 		}
 
-		bool set(usize index, const T& element) {
+		bool set(usize index, const T element) {
 			if (index >= m_size) {
 				return false;
 			}
@@ -105,7 +107,7 @@ namespace edge {
 			return &m_data[m_size - 1];
 		}
 
-		bool push_back(NotNull<const Allocator*> alloc, const T& element) {
+		bool push_back(NotNull<const Allocator*> alloc, const T element) {
 			if (m_size >= m_capacity) {
 				usize new_capacity = m_capacity * 2;
 				if (!reserve(alloc, new_capacity)) {
@@ -132,7 +134,7 @@ namespace edge {
 			return true;
 		}
 
-		bool insert(NotNull<const Allocator*> alloc, usize index, const T& element) {
+		bool insert(NotNull<const Allocator*> alloc, usize index, const T element) {
 			if (index > m_size) {
 				return false;
 			}
