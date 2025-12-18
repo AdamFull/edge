@@ -66,7 +66,7 @@ namespace edge {
 
 		uintptr_t ptr_addr = 0x0;
 		if (!ctx->free_stacks.pop_back(&ptr_addr)) {
-			return arena_alloc_ex(&thread_context.stack_arena, EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
+			return thread_context.stack_arena.alloc_ex(EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
 		}
 
 		return reinterpret_cast<void*>(ptr_addr);
@@ -87,7 +87,7 @@ namespace edge {
 
 	void coro_init_thread_context(const Allocator* allocator) {
 		if (thread_context.main_coro.state == CoroState{}) {
-			arena_create(allocator, &thread_context.stack_arena, 0);
+			thread_context.stack_arena.create();
 
 			thread_context.free_stacks.reserve(allocator, 16);
 
@@ -106,7 +106,7 @@ namespace edge {
 			}
 
 			thread_context.free_stacks.destroy(thread_context.allocator);
-			arena_destroy(&thread_context.stack_arena);
+			thread_context.stack_arena.destroy();
 		}
 	}
 
