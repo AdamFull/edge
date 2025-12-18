@@ -12,53 +12,53 @@
 
 namespace edge {
 	struct Job {
-		FiberContext* context;
-		CoroFn func;
-		void* user_data;
-		CoroState state;
-		Job* caller;
+		FiberContext* context = nullptr;
+		CoroFn func = nullptr;
+		void* user_data = nullptr;
+		CoroState state = {};
+		Job* caller = nullptr;
 
-		SchedulerPriority priority;
+		SchedulerPriority priority = {};
 	};
 
 	struct WorkerThread {
-		Thread thread;
-		Scheduler* scheduler;
-		usize thread_id;
-		std::atomic<bool> should_exit;
+		Thread thread = {};
+		Scheduler* scheduler = nullptr;
+		usize thread_id = 0;
+		std::atomic<bool> should_exit = false;
 	};
 
 	struct Scheduler {
-		const Allocator* allocator;
+		const Allocator* allocator = nullptr;
 
-		Arena* protected_arena;
-		Array<uintptr_t> free_stacks;
-		Mutex stack_mutex;
+		Arena protected_arena = {};
+		Array<uintptr_t> free_stacks = {};
+		Mutex stack_mutex = {};
 
-		MPMCQueue<uintptr_t>* queues[static_cast<usize>(SchedulerPriority::Count)];
+		MPMCQueue<uintptr_t> queues[static_cast<usize>(SchedulerPriority::Count)] = {};
 
-		Array<WorkerThread*> worker_threads;
+		Array<WorkerThread*> worker_threads = {};
 
-		std::atomic<usize> active_jobs;
-		std::atomic<usize> queued_jobs;
-		std::atomic<bool> shutdown;
+		std::atomic<usize> active_jobs = 0;
+		std::atomic<usize> queued_jobs = 0;
+		std::atomic<bool> shutdown = false;
 
-		std::atomic<usize> jobs_completed;
-		std::atomic<usize> jobs_failed;
+		std::atomic<usize> jobs_completed = 0;
+		std::atomic<usize> jobs_failed = 0;
 	};
 
 	struct SchedulerThreadContext {
-		Scheduler* scheduler;
+		Scheduler* scheduler = nullptr;
 
-		Job* current_job;
-		Job main_job;
-		FiberContext* main_context;
+		Job* current_job = nullptr;
+		Job main_job = {};
+		FiberContext* main_context = nullptr;
 
-		i32 thread_id;
+		i32 thread_id = 0;
 	};
 
 	struct SchedulerEvent {
-		std::atomic<bool> done;
+		std::atomic<bool> done = false;
 	};
 
 	static thread_local SchedulerThreadContext thread_context = { };
@@ -154,7 +154,7 @@ namespace edge {
 		uintptr_t ptr_addr = 0;
 		if (!sched->free_stacks.pop_back(&ptr_addr)) {
 			mutex_unlock(&sched->stack_mutex);
-			return arena_alloc_ex(sched->protected_arena, EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
+			return sched->protected_arena.alloc_ex(EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
 		}
 		mutex_unlock(&sched->stack_mutex);
 
@@ -268,7 +268,7 @@ namespace edge {
 
 		for (i32 i = static_cast<i32>(SchedulerPriority::Count) - 1; i >= 0; i--) {
 			uintptr_t job_addr;
-			if (mpmc_queue_dequeue(sched->queues[i], &job_addr)) {
+			if (sched->queues[i].dequeue(&job_addr)) {
 				sched->queued_jobs.fetch_sub(1, std::memory_order_relaxed);
 				return reinterpret_cast<Job*>(job_addr);
 			}
@@ -285,7 +285,7 @@ namespace edge {
 		i32 priority_index = static_cast<i32>(job->priority);
 		uintptr_t job_addr = reinterpret_cast<uintptr_t>(job);
 
-		if (!mpmc_queue_enqueue(sched->queues[priority_index], job_addr)) {
+		if (!sched->queues[priority_index].enqueue(job_addr)) {
 			return;
 		}
 
@@ -359,8 +359,7 @@ namespace edge {
 
 		sched->allocator = allocator;
 
-		sched->protected_arena = allocator->allocate<Arena>();
-		if (!arena_create(allocator, sched->protected_arena, 0)) {
+		if (!sched->protected_arena.create()) {
 			goto failed;
 		}
 
@@ -373,8 +372,7 @@ namespace edge {
 		}
 
 		for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
-			sched->queues[i] = allocator->allocate<MPMCQueue<uintptr_t>>();
-			if (!mpmc_queue_create(allocator, sched->queues[i], 1024)) {
+			if (!sched->queues[i].create(allocator, 1024)) {
 				goto failed;
 			}
 		}
@@ -451,11 +449,7 @@ namespace edge {
 			}
 
 			for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
-				MPMCQueue<uintptr_t>* queue = sched->queues[i];
-				if (queue) {
-					mpmc_queue_destroy(queue);
-					allocator->deallocate(queue);
-				}
+				sched->queues[i].destroy(allocator);
 			}
 
 			mutex_destroy(&sched->stack_mutex);
@@ -464,11 +458,7 @@ namespace edge {
 				sched->free_stacks.destroy(sched->allocator);
 			}
 
-			if (sched->protected_arena) {
-				arena_destroy(sched->protected_arena);
-				allocator->deallocate(sched->protected_arena);
-			}
-
+			sched->protected_arena.destroy();
 			allocator->deallocate(sched);
 		}
 
@@ -496,21 +486,17 @@ namespace edge {
 		}
 
 		for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
-			MPMCQueue<uintptr_t>* queue = sched->queues[i];
-			if (queue) {
-				while (true) {
-					uintptr_t job_addr;
-					if (!mpmc_queue_dequeue(queue, &job_addr)) {
-						break;
-					}
-
-					Job* job = reinterpret_cast<Job*>(job_addr);
-					job_destroy(sched, job);
+			while (true) {
+				uintptr_t job_addr;
+				if (!sched->queues[i].dequeue(&job_addr)) {
+					break;
 				}
 
-				mpmc_queue_destroy(queue);
-				sched->allocator->deallocate(queue);
+				Job* job = reinterpret_cast<Job*>(job_addr);
+				job_destroy(sched, job);
 			}
+
+			sched->queues[i].destroy(sched->allocator);
 		}
 
 		mutex_destroy(&sched->stack_mutex);
@@ -519,10 +505,7 @@ namespace edge {
 			sched->free_stacks.destroy(sched->allocator);
 		}
 
-		if (sched->protected_arena) {
-			arena_destroy(sched->protected_arena);
-			sched->allocator->deallocate(sched->protected_arena);
-		}
+		sched->protected_arena.destroy();
 
 		const Allocator* alloc = sched->allocator;
 		alloc->deallocate(sched);
