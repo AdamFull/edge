@@ -105,6 +105,8 @@ namespace edge::gfx {
 	bool cmd_buf_create(CmdPool cmd_pool, CmdBuf& cmd_buf);
 	bool cmd_begin(CmdBuf cmd_buf);
 	bool cmd_end(CmdBuf cmd_buf);
+	void cmd_begin_marker(CmdBuf cmd_buf, const char* name, u32 color);
+	void cmd_end_marker(CmdBuf cmd_buf);
 	bool cmd_reset(CmdBuf cmd_buf);
 	void cmd_reset_query(CmdBuf cmd_buf, QueryPool query, u32 first_query, u32 query_count);
 	void cmd_write_timestamp(CmdBuf cmd_buf, QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index);

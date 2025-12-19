@@ -540,20 +540,23 @@ namespace edge::gfx {
 		app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0); // TODO: Generate
 		app_info.apiVersion = g_required_api_version;
 
-		VkInstanceCreateInfo instance_info = {};
-		instance_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-		instance_info.pApplicationInfo = &app_info;
-		instance_info.enabledLayerCount = enabled_layer_count;
-		instance_info.ppEnabledLayerNames = enabled_layers;
-		instance_info.enabledExtensionCount = enabled_extension_count;
-		instance_info.ppEnabledExtensionNames = enabled_extensions;
+		VkInstanceCreateInfo instance_info = {
+			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
+			.pApplicationInfo = &app_info,
+			.enabledLayerCount = enabled_layer_count,
+			.ppEnabledLayerNames = enabled_layers,
+			.enabledExtensionCount = enabled_extension_count,
+			.ppEnabledExtensionNames = enabled_extensions
+		};
 
 #ifdef USE_VALIDATION_LAYER_FEATURES
-		VkValidationFeaturesEXT validation_features = {};
+		const VkValidationFeaturesEXT validation_features = {
+			.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
+			.enabledValidationFeatureCount = (u32)array_size(g_validation_features_enable),
+			.pEnabledValidationFeatures = g_validation_features_enable
+		};
+
 		if (g_ctx.validation_enabled) {
-			validation_features.sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT;
-			validation_features.enabledValidationFeatureCount = array_size(g_validation_features_enable);
-			validation_features.pEnabledValidationFeatures = g_validation_features_enable;
 			instance_info.pNext = &validation_features;
 		}
 #endif
@@ -568,12 +571,13 @@ namespace edge::gfx {
 
 #ifdef USE_VALIDATION_LAYERS
 		if (g_ctx.validation_enabled) {
-			VkDebugUtilsMessengerCreateInfoEXT debug_info = {};
-			debug_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-			debug_info.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-			debug_info.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-				VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-			debug_info.pfnUserCallback = debug_utils_messenger_cb;
+			const VkDebugUtilsMessengerCreateInfoEXT debug_info = {
+				.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
+				.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+				.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
+				VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+				.pfnUserCallback = debug_utils_messenger_cb
+			};
 
 			result = vkCreateDebugUtilsMessengerEXT(g_ctx.inst, &debug_info, &g_ctx.vk_alloc, &g_ctx.debug_msgr);
 			if (result != VK_SUCCESS) {
@@ -718,13 +722,12 @@ namespace edge::gfx {
 		}
 
 		for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
-			VkDeviceQueueCreateInfo* queue_create_info = &queue_create_infos[i];
-			queue_create_info->sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-			queue_create_info->flags = 0;
-			queue_create_info->pNext = nullptr;
-			queue_create_info->queueFamilyIndex = i;
-			queue_create_info->queueCount = g_ctx.queue_families[i].queueCount;
-			queue_create_info->pQueuePriorities = queue_priorities;
+			queue_create_infos[i] = {
+				.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+				.queueFamilyIndex = (u32)i,
+				.queueCount = g_ctx.queue_families[i].queueCount,
+				.pQueuePriorities = queue_priorities
+			};
 		}
 
 		VkPhysicalDeviceSynchronization2FeaturesKHR sync2_features = {
@@ -758,17 +761,21 @@ namespace edge::gfx {
 
 		void* last_feature = &sync2_features;
 
-		VkPhysicalDeviceVulkan11Features features_vk11 = {};
-		features_vk11.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES;
+		VkPhysicalDeviceVulkan11Features features_vk11 = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES
+		};
 
-		VkPhysicalDeviceVulkan12Features features_vk12 = {};
-		features_vk12.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES;
+		VkPhysicalDeviceVulkan12Features features_vk12 = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES
+		};
 
-		VkPhysicalDeviceVulkan13Features features_vk13 = {};
-		features_vk13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+		VkPhysicalDeviceVulkan13Features features_vk13 = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES
+		};
 
-		VkPhysicalDeviceVulkan14Features features_vk14 = {};
-		features_vk14.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES;
+		VkPhysicalDeviceVulkan14Features features_vk14 = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES
+		};
 
 		void* feature_chain = nullptr;
 		if (g_required_api_version >= VK_API_VERSION_1_4) {
@@ -797,19 +804,21 @@ namespace edge::gfx {
 			feature_chain = last_feature;
 		}
 
-		VkPhysicalDeviceFeatures2 features2 = {};
-		features2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
-		features2.pNext = feature_chain;
+		VkPhysicalDeviceFeatures2 features2 = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+			.pNext = feature_chain
+		};
 
 		vkGetPhysicalDeviceFeatures2(g_ctx.adapter, &features2);
 
-		VkDeviceCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-		create_info.queueCreateInfoCount = g_ctx.queue_family_count;
-		create_info.pQueueCreateInfos = queue_create_infos;
-		create_info.enabledExtensionCount = g_ctx.enabled_extension_count;
-		create_info.ppEnabledExtensionNames = g_ctx.enabled_extensions;
-		create_info.pNext = &features2;
+		const VkDeviceCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+			.pNext = &features2,
+			.queueCreateInfoCount = g_ctx.queue_family_count,
+			.pQueueCreateInfos = queue_create_infos,
+			.enabledExtensionCount = g_ctx.enabled_extension_count,
+			.ppEnabledExtensionNames = g_ctx.enabled_extensions
+		};
 
 		VkResult result = vkCreateDevice(g_ctx.adapter, &create_info, &g_ctx.vk_alloc, &g_ctx.dev);
 		if (result != VK_SUCCESS) {
@@ -822,17 +831,19 @@ namespace edge::gfx {
 	}
 
 	static bool allocator_init() {
-		VmaVulkanFunctions vma_vulkan_func = {};
-		vma_vulkan_func.vkGetInstanceProcAddr = vkGetInstanceProcAddr;
-		vma_vulkan_func.vkGetDeviceProcAddr = vkGetDeviceProcAddr;
+		VmaVulkanFunctions vma_vulkan_func = {
+			.vkGetInstanceProcAddr = vkGetInstanceProcAddr,
+			.vkGetDeviceProcAddr = vkGetDeviceProcAddr
+		};
 
-		VmaAllocatorCreateInfo create_info = {};
-		create_info.pVulkanFunctions = &vma_vulkan_func;
-		create_info.physicalDevice = g_ctx.adapter;
-		create_info.device = g_ctx.dev;
-		create_info.instance = g_ctx.inst;
-		create_info.pAllocationCallbacks = &g_ctx.vk_alloc;
-		create_info.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+		VmaAllocatorCreateInfo create_info = {
+			.flags = VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT,
+			.physicalDevice = g_ctx.adapter,
+			.device = g_ctx.dev,
+			.pAllocationCallbacks = &g_ctx.vk_alloc,
+			.pVulkanFunctions = &vma_vulkan_func,
+			.instance = g_ctx.inst
+		};
 
 		if (context_is_extension_enabled(VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME)) {
 			create_info.flags |= VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT;
@@ -1118,7 +1129,7 @@ namespace edge::gfx {
 		}
 
 		VkQueue queue_ = queue_handle(queue);
-		if (queue_handle == VK_NULL_HANDLE) {
+		if (queue_ == VK_NULL_HANDLE) {
 			return false;
 		}
 
@@ -1143,10 +1154,11 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkCommandPoolCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-		create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		create_info.queueFamilyIndex = queue.family_index;
+		const VkCommandPoolCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+			.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+			.queueFamilyIndex = (u32)queue.family_index
+		};
 
 		VkResult result = vkCreateCommandPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &cmd_pool.handle);
 		if (result != VK_SUCCESS) {
@@ -1169,11 +1181,12 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkCommandBufferAllocateInfo alloc_info = {};
-		alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		alloc_info.commandPool = cmd_pool.handle;
-		alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		alloc_info.commandBufferCount = 1;
+		const VkCommandBufferAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+			.commandPool = cmd_pool.handle,
+			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+			.commandBufferCount = 1
+		};
 
 		VkResult result = vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &cmd_buf.handle);
 		if (result != VK_SUCCESS) {
@@ -1190,9 +1203,10 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkCommandBufferBeginInfo begin_info = {};
-		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-		begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		const VkCommandBufferBeginInfo begin_info = {
+			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
+		};
 
 		return vkBeginCommandBuffer(cmd_buf.handle, &begin_info) == VK_SUCCESS;
 	}
@@ -1203,6 +1217,27 @@ namespace edge::gfx {
 		}
 
 		return vkEndCommandBuffer(cmd_buf.handle) == VK_SUCCESS;
+	}
+
+	void cmd_begin_marker(CmdBuf cmd_buf, const char* name, u32 color) {
+		if (!cmd_buf) {
+			return;
+		}
+
+		const VkDebugMarkerMarkerInfoEXT marker_info = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT,
+			.pNext = name
+		};
+
+		vkCmdDebugMarkerBeginEXT(cmd_buf.handle, &marker_info);
+	}
+
+	void cmd_end_marker(CmdBuf cmd_buf) {
+		if (!cmd_buf) {
+			return;
+		}
+
+		vkCmdDebugMarkerEndEXT(cmd_buf.handle);
 	}
 
 	bool cmd_reset(CmdBuf cmd_buf) {
@@ -1234,10 +1269,8 @@ namespace edge::gfx {
 			return;
 		}
 
-		VkDependencyInfoKHR dependency_info = {
+		const VkDependencyInfoKHR dependency_info = {
 			.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
-			.pNext = NULL,
-			.dependencyFlags = 0,
 			.memoryBarrierCount = builder.memory_barrier_count,
 			.pMemoryBarriers = builder.memory_barriers,
 			.bufferMemoryBarrierCount = builder.buffer_barrier_count,
@@ -1270,14 +1303,11 @@ namespace edge::gfx {
 	}
 
 	bool query_pool_create(VkQueryType type, u32 count, QueryPool& query_pool) {
-		VkQueryPoolCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
-		create_info.queryType = type;
-		create_info.queryCount = count;
-
-		if (type == VK_QUERY_TYPE_TIMESTAMP) {
-			create_info.queryCount *= 2;
-		}
+		const VkQueryPoolCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+			.queryType = type,
+			.queryCount = type == VK_QUERY_TYPE_TIMESTAMP ? count * 2 : count
+		};
 
 		VkResult result = vkCreateQueryPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &query_pool.handle);
 		if (result != VK_SUCCESS) {
@@ -1337,17 +1367,19 @@ namespace edge::gfx {
 	}
 
 	bool descriptor_set_layout_create(const DescriptorLayoutBuilder& builder, DescriptorSetLayout& descriptor_set_layout) {
-		VkDescriptorSetLayoutBindingFlagsCreateInfoEXT binding_flags_create_info = {};
-		binding_flags_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-		binding_flags_create_info.bindingCount = builder.binding_count;
-		binding_flags_create_info.pBindingFlags = builder.binding_flags;
+		const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT binding_flags_create_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
+			.bindingCount = builder.binding_count,
+			.pBindingFlags = builder.binding_flags
+		};
 
-		VkDescriptorSetLayoutCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-		create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-		create_info.bindingCount = builder.binding_count;
-		create_info.pBindings = builder.bindings;
-		create_info.pNext = &binding_flags_create_info;
+		const VkDescriptorSetLayoutCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+			.pNext = &binding_flags_create_info,
+			.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT,
+			.bindingCount = builder.binding_count,
+			.pBindings = builder.bindings,
+		};
 
 		VkResult result = vkCreateDescriptorSetLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_set_layout.handle);
 		if (result != VK_SUCCESS) {
@@ -1382,12 +1414,13 @@ namespace edge::gfx {
 			pool_size->descriptorCount = descriptor_sizes[i] ? descriptor_sizes[i] : 1;
 		}
 
-		VkDescriptorPoolCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		create_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT;
-		create_info.maxSets = 64; // TODO: Set it manually
-		create_info.poolSizeCount = DESCRIPTOR_SIZES_COUNT;
-		create_info.pPoolSizes = pool_sizes;
+		const VkDescriptorPoolCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+			.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT | VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT,
+			.maxSets = 64, // TODO: Set it manually
+			.poolSizeCount = DESCRIPTOR_SIZES_COUNT,
+			.pPoolSizes = pool_sizes
+		};
 
 		VkResult result = vkCreateDescriptorPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_pool.handle);
 		if (result != VK_SUCCESS) {
@@ -1412,11 +1445,12 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkDescriptorSetAllocateInfo alloc_info = {};
-		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		alloc_info.descriptorPool = pool.handle;
-		alloc_info.descriptorSetCount = 1;
-		alloc_info.pSetLayouts = &layouts->handle;
+		const VkDescriptorSetAllocateInfo alloc_info = {
+			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+			.descriptorPool = pool.handle,
+			.descriptorSetCount = 1,
+			.pSetLayouts = &layouts->handle
+		};
 
 		VkResult result = vkAllocateDescriptorSets(g_ctx.dev, &alloc_info, &set.handle);
 		if (result != VK_SUCCESS) {
@@ -1455,12 +1489,13 @@ namespace edge::gfx {
 	}
 
 	bool pipeline_layout_create(const PipelineLayoutBuilder& builder, PipelineLayout& pipeline_layout) {
-		VkPipelineLayoutCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		create_info.setLayoutCount = builder.descriptor_layout_count;
-		create_info.pSetLayouts = builder.descriptor_layouts;
-		create_info.pushConstantRangeCount = builder.constant_range_count;
-		create_info.pPushConstantRanges = builder.constant_ranges;
+		const VkPipelineLayoutCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+			.setLayoutCount = builder.descriptor_layout_count,
+			.pSetLayouts = builder.descriptor_layouts,
+			.pushConstantRangeCount = builder.constant_range_count,
+			.pPushConstantRanges = builder.constant_ranges
+		};
 
 		VkResult result = vkCreatePipelineLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_layout.handle);
 		if (result != VK_SUCCESS) {
@@ -1479,10 +1514,11 @@ namespace edge::gfx {
 	}
 
 	bool pipeline_cache_create(const u8* data, size_t data_size, PipelineCache& pipeline_cache) {
-		VkPipelineCacheCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-		create_info.initialDataSize = data_size;
-		create_info.pInitialData = data;
+		const VkPipelineCacheCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
+			.initialDataSize = data_size,
+			.pInitialData = data
+		};
 
 		VkResult result = vkCreatePipelineCache(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_cache.handle);
 		return result == VK_SUCCESS;
@@ -1497,10 +1533,11 @@ namespace edge::gfx {
 	}
 
 	bool shader_module_create(const u32* code, size_t size, ShaderModule& shader_module) {
-		VkShaderModuleCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-		create_info.codeSize = size;
-		create_info.pCode = code;
+		const VkShaderModuleCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+			.codeSize = size,
+			.pCode = code
+		};
 
 		return vkCreateShaderModule(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &shader_module.handle) == VK_SUCCESS;
 	}
@@ -1529,12 +1566,15 @@ namespace edge::gfx {
 	}
 
 	bool pipeline_compute_create(ComputePipelineCreateInfo create_info, Pipeline& pipeline) {
-		VkComputePipelineCreateInfo pipeline_create_info = {};
-		pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-		pipeline_create_info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-		pipeline_create_info.stage.module = create_info.shader_module.handle;
-		pipeline_create_info.stage.pName = "main";
-		pipeline_create_info.layout = create_info.layout.handle;
+		const VkComputePipelineCreateInfo pipeline_create_info = {
+			.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+			.stage = {
+				.stage = VK_SHADER_STAGE_COMPUTE_BIT,
+				.module = create_info.shader_module.handle,
+				.pName = "main"
+			},
+			.layout = create_info.layout.handle
+		};
 
 		VkResult result = vkCreateComputePipelines(g_ctx.dev, create_info.cache ? create_info.cache.handle : VK_NULL_HANDLE, 1, &pipeline_create_info, &g_ctx.vk_alloc, &pipeline.handle);
 		if (result != VK_SUCCESS) {
@@ -1575,31 +1615,30 @@ namespace edge::gfx {
 			queue_family_indices[i] = i;
 		}
 
-		VkSwapchainCreateInfoKHR swapchain_create_info = {};
-		swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		swapchain_create_info.surface = g_ctx.surf;
-		swapchain_create_info.minImageCount = 2;
-		swapchain_create_info.minImageCount = clamp(swapchain_create_info.minImageCount, surf_caps.minImageCount, surf_caps.maxImageCount ? surf_caps.maxImageCount : 16);
-
 		VkSurfaceFormatKHR requested_surface_format;
 		requested_surface_format.format = create_info.preferred_format;
 		requested_surface_format.colorSpace = create_info.preferred_color_space;
 
 		VkSurfaceFormatKHR selected_surface_format = choose_surface_format(requested_surface_format, g_ctx.surf_formats, g_ctx.surf_format_count, create_info.hdr_enable);
-		swapchain_create_info.imageFormat = selected_surface_format.format;
-		swapchain_create_info.imageColorSpace = selected_surface_format.colorSpace;
 
-		swapchain_create_info.imageExtent = choose_suitable_extent(swapchain.extent, &surf_caps);
-		swapchain_create_info.imageArrayLayers = 1;
-		swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-		swapchain_create_info.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-		swapchain_create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
-		swapchain_create_info.pQueueFamilyIndices = queue_family_indices;
-		swapchain_create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-		swapchain_create_info.compositeAlpha = choose_suitable_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surf_caps.supportedCompositeAlpha);
-		swapchain_create_info.presentMode = choose_suitable_present_mode(present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
-			present_mode_priority_list, array_size(present_mode_priority_list));
-		swapchain_create_info.oldSwapchain = swapchain.handle;
+		const VkSwapchainCreateInfoKHR swapchain_create_info = {
+			.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+			.surface = g_ctx.surf,
+			.minImageCount = clamp(2u, surf_caps.minImageCount, surf_caps.maxImageCount ? surf_caps.maxImageCount : 16),
+			.imageFormat = selected_surface_format.format,
+			.imageColorSpace = selected_surface_format.colorSpace,
+			.imageExtent = choose_suitable_extent(swapchain.extent, &surf_caps),
+			.imageArrayLayers = 1,
+			.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+			.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+			.queueFamilyIndexCount = g_ctx.queue_family_count,
+			.pQueueFamilyIndices = queue_family_indices,
+			.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+			.compositeAlpha = choose_suitable_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surf_caps.supportedCompositeAlpha),
+			.presentMode = choose_suitable_present_mode(present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
+			present_mode_priority_list, array_size(present_mode_priority_list)),
+			.oldSwapchain = swapchain.handle
+		};
 
 		result = vkCreateSwapchainKHR(g_ctx.dev, &swapchain_create_info, &g_ctx.vk_alloc, &swapchain.handle);
 		if (result != VK_SUCCESS) {
@@ -1632,22 +1671,23 @@ namespace edge::gfx {
 			queue_family_indices[i] = i;
 		}
 
-		VkSwapchainCreateInfoKHR create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-		create_info.surface = g_ctx.surf;
-		create_info.minImageCount = swapchain.image_count;
-		create_info.imageFormat = swapchain.format;
-		create_info.imageColorSpace = swapchain.color_space;
-		create_info.imageExtent = choose_suitable_extent(swapchain.extent, &surf_caps);
-		create_info.imageArrayLayers = 1;
-		create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-		create_info.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-		create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
-		create_info.pQueueFamilyIndices = queue_family_indices;
-		create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-		create_info.compositeAlpha = swapchain.composite_alpha;
-		create_info.presentMode = swapchain.present_mode;
-		create_info.oldSwapchain = swapchain.handle;
+		const VkSwapchainCreateInfoKHR create_info = {
+			.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+			.surface = g_ctx.surf,
+			.minImageCount = swapchain.image_count,
+			.imageFormat = swapchain.format,
+			.imageColorSpace = swapchain.color_space,
+			.imageExtent = choose_suitable_extent(swapchain.extent, &surf_caps),
+			.imageArrayLayers = 1,
+			.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+			.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+			.queueFamilyIndexCount = g_ctx.queue_family_count,
+			.pQueueFamilyIndices = queue_family_indices,
+			.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+			.compositeAlpha = swapchain.composite_alpha,
+			.presentMode = swapchain.present_mode,
+			.oldSwapchain = swapchain.handle
+		};
 
 		result = vkCreateSwapchainKHR(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &swapchain.handle);
 		if (result != VK_SUCCESS) {
@@ -1691,17 +1731,17 @@ namespace edge::gfx {
 		}
 
 		for (i32 i = 0; i < swapchain.image_count; ++i) {
-			Image* image = &image_out[i];
-			image->handle = images[i];
-			image->extent.width = swapchain.extent.width;
-			image->extent.height = swapchain.extent.height;
-			image->extent.depth = 1;
-			image->level_count = 1;
-			image->layer_count = 1;
-			image->face_count = 1;
-			image->usage_flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-			image->format = swapchain.format;
-			image->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+			Image& image = image_out[i];
+			image.handle = images[i];
+			image.extent.width = swapchain.extent.width;
+			image.extent.height = swapchain.extent.height;
+			image.extent.depth = 1;
+			image.level_count = 1;
+			image.layer_count = 1;
+			image.face_count = 1;
+			image.usage_flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+			image.format = swapchain.format;
+			image.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 		}
 
 		return true;
@@ -1806,24 +1846,26 @@ namespace edge::gfx {
 			queue_family_indices[i] = i;
 		}
 
-		VmaAllocationCreateInfo allocation_create_info = {};
-		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+		VmaAllocationCreateInfo allocation_create_info = {
+			.usage = VMA_MEMORY_USAGE_AUTO
+		};
 
-		VkImageCreateInfo image_create_info = {};
-		image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image_create_info.flags = (create_info.face_count == 6u) ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
-		image_create_info.imageType = (create_info.extent.depth > 1u) ? VK_IMAGE_TYPE_3D : (create_info.extent.height > 1u) ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_1D;
-		image_create_info.format = create_info.format;
-		image_create_info.extent = create_info.extent;
-		image_create_info.mipLevels = clamp(create_info.level_count, 1u, max_mip_levels);
-		image_create_info.arrayLayers = clamp(create_info.layer_count * create_info.face_count, 1u, g_ctx.properties.limits.maxImageArrayLayers);
-		image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
-		image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image_create_info.usage = create_info.usage_flags;
-		image_create_info.sharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-		image_create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
-		image_create_info.pQueueFamilyIndices = queue_family_indices;
-		image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		const VkImageCreateInfo image_create_info = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+			.flags = (create_info.face_count == 6u) ? (VkImageCreateFlags)VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : (VkImageCreateFlags)VK_IMAGE_CREATE_EXTENDED_USAGE_BIT,
+			.imageType = (create_info.extent.depth > 1u) ? VK_IMAGE_TYPE_3D : (create_info.extent.height > 1u) ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_1D,
+			.format = create_info.format,
+			.extent = create_info.extent,
+			.mipLevels = clamp(create_info.level_count, 1u, max_mip_levels),
+			.arrayLayers = clamp(create_info.layer_count * create_info.face_count, 1u, g_ctx.properties.limits.maxImageArrayLayers),
+			.samples = VK_SAMPLE_COUNT_1_BIT,
+			.tiling = VK_IMAGE_TILING_OPTIMAL,
+			.usage = create_info.usage_flags,
+			.sharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+			.queueFamilyIndexCount = g_ctx.queue_family_count,
+			.pQueueFamilyIndices = queue_family_indices,
+			.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
+		};
 
 		bool is_color_attachment = create_info.usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 		bool is_depth_attachment = create_info.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -1866,16 +1908,19 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkImageViewCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		create_info.image = image.handle;
-		create_info.viewType = type;
-		create_info.format = image.format;
-		create_info.components.r = VK_COMPONENT_SWIZZLE_R;
-		create_info.components.g = VK_COMPONENT_SWIZZLE_G;
-		create_info.components.b = VK_COMPONENT_SWIZZLE_B;
-		create_info.components.a = VK_COMPONENT_SWIZZLE_A;
-		create_info.subresourceRange = subresource_range;
+		const VkImageViewCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+			.image = image.handle,
+			.viewType = type,
+			.format = image.format,
+			.components = {
+				.r = VK_COMPONENT_SWIZZLE_R,
+				.g = VK_COMPONENT_SWIZZLE_G,
+				.b = VK_COMPONENT_SWIZZLE_B,
+				.a = VK_COMPONENT_SWIZZLE_A,
+			},
+			.subresourceRange = subresource_range
+		};
 
 		VkResult result = vkCreateImageView(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &view.handle);
 		if (result != VK_SUCCESS) {
@@ -1902,14 +1947,16 @@ namespace edge::gfx {
 			queue_family_indices[i] = i;
 		}
 
-		VmaAllocationCreateInfo allocation_create_info = {};
-		allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO;
+		VmaAllocationCreateInfo allocation_create_info = {
+			.usage = VMA_MEMORY_USAGE_AUTO
+		};
 
-		VkBufferCreateInfo buffer_create_info = {};
-		buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-		buffer_create_info.sharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
-		buffer_create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
-		buffer_create_info.pQueueFamilyIndices = queue_family_indices;
+		VkBufferCreateInfo buffer_create_info = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+			.sharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
+			.queueFamilyIndexCount = g_ctx.queue_family_count,
+			.pQueueFamilyIndices = queue_family_indices
+		};
 
 		u32 minimal_alignment = 1;
 		if (create_info.flags & BUFFER_FLAG_DYNAMIC) {
@@ -1974,9 +2021,10 @@ namespace edge::gfx {
 		device_memory_setup(buffer.memory);
 
 		if (create_info.flags & BUFFER_FLAG_DEVICE_ADDRESS) {
-			VkBufferDeviceAddressInfo device_address_info = {};
-			device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-			device_address_info.buffer = buffer.handle;
+			const VkBufferDeviceAddressInfo device_address_info = {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
+				.buffer = buffer.handle
+			};
 			buffer.address = vkGetBufferDeviceAddressKHR(g_ctx.dev, &device_address_info);
 		}
 
@@ -1994,14 +2042,16 @@ namespace edge::gfx {
 	}
 
 	bool semaphore_create(VkSemaphoreType type, u64 value, Semaphore& semaphore) {
-		VkSemaphoreTypeCreateInfo type_create_info = {};
-		type_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
-		type_create_info.semaphoreType = type;
-		type_create_info.initialValue = value;
+		const VkSemaphoreTypeCreateInfo type_create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+			.semaphoreType = type,
+			.initialValue = value
+		};
 
-		VkSemaphoreCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-		create_info.pNext = &type_create_info;
+		const VkSemaphoreCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+			.pNext = &type_create_info
+		};
 
 		VkResult result = vkCreateSemaphore(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &semaphore.handle);
 		if (result != VK_SUCCESS) {
@@ -2023,9 +2073,10 @@ namespace edge::gfx {
 	}
 
 	bool fence_create(VkFenceCreateFlags flags, Fence& fence) {
-		VkFenceCreateInfo create_info = {};
-		create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-		create_info.flags = flags;
+		const VkFenceCreateInfo create_info = {
+			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+			.flags = flags
+		};
 
 		VkResult result = vkCreateFence(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &fence.handle);
 		if (result != VK_SUCCESS) {
@@ -2070,13 +2121,13 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkMemoryBarrier2* barrier = &builder.memory_barriers[builder.memory_barrier_count++];
-		barrier->sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
-		barrier->pNext = nullptr;
-		barrier->srcStageMask = src_stage_mask;
-		barrier->srcAccessMask = src_access_mask;
-		barrier->dstStageMask = dst_stage_mask;
-		barrier->dstAccessMask = dst_access_mask;
+		builder.memory_barriers[builder.memory_barrier_count++] = {
+			.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
+			.srcStageMask = src_stage_mask,
+			.srcAccessMask = src_access_mask,
+			.dstStageMask = dst_stage_mask,
+			.dstAccessMask = dst_access_mask
+		};
 
 		return true;
 	}
@@ -2087,18 +2138,18 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkBufferMemoryBarrier2* barrier = &builder.buffer_barriers[builder.buffer_barrier_count++];
-		barrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
-		barrier->pNext = nullptr;
-		barrier->srcStageMask = src_stage_mask;
-		barrier->srcAccessMask = src_access_mask;
-		barrier->dstStageMask = dst_stage_mask;
-		barrier->dstAccessMask = dst_access_mask;
-		barrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier->dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier->buffer = buffer.handle;
-		barrier->offset = offset;
-		barrier->size = size;
+		builder.buffer_barriers[builder.buffer_barrier_count++] = {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
+			.srcStageMask = src_stage_mask,
+			.srcAccessMask = src_access_mask,
+			.dstStageMask = dst_stage_mask,
+			.dstAccessMask = dst_access_mask,
+			.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+			.buffer = buffer.handle,
+			.offset = offset,
+			.size = size
+		};
 
 		return true;
 	}
@@ -2152,7 +2203,6 @@ namespace edge::gfx {
 
 		VkImageMemoryBarrier2* barrier = &builder.image_barriers[builder.image_barrier_count++];
 		barrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
-		barrier->pNext = nullptr;
 		image_get_stage_and_acces(image.layout, &barrier->srcStageMask, &barrier->srcAccessMask);
 		image_get_stage_and_acces(new_layout, &barrier->dstStageMask, &barrier->dstAccessMask);
 		barrier->oldLayout = image.layout;
