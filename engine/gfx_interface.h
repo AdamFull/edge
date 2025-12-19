@@ -19,15 +19,21 @@ namespace edge::gfx {
 	struct Queue {
 		i32 family_index = -1;
 		i32 queue_index = -1;
+
+		operator bool() const noexcept { return family_index != -1 && queue_index != -1; }
 	};
 
 	struct CmdPool {
 		VkCommandPool handle = VK_NULL_HANDLE;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct CmdBuf {
 		VkCommandBuffer handle = VK_NULL_HANDLE;
-		const CmdPool* pool = nullptr;
+		CmdPool pool = {};
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE && pool; }
 	};
 
 	struct QueryPool {
@@ -35,25 +41,35 @@ namespace edge::gfx {
 		VkQueryType type = {};
 		u32 max_query = 0u;
 		bool host_reset_enabled = false;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct DescriptorSetLayout {
 		VkDescriptorSetLayout handle = VK_NULL_HANDLE;
 		u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT];
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct DescriptorPool {
 		VkDescriptorPool handle = VK_NULL_HANDLE;
 		u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT];
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct DescriptorSet {
 		VkDescriptorSet handle = VK_NULL_HANDLE;
-		const DescriptorPool* pool = nullptr;
+		DescriptorPool pool = {};
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE && pool; }
 	};
 
 	struct PipelineLayout {
 		VkPipelineLayout handle = VK_NULL_HANDLE;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct Swapchain {
@@ -64,16 +80,22 @@ namespace edge::gfx {
 		VkExtent2D extent = { 1u, 1u };
 		VkPresentModeKHR present_mode = {};
 		VkCompositeAlphaFlagBitsKHR composite_alpha = {};
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct DeviceMemory {
 		VmaAllocation handle = VK_NULL_HANDLE;
-		VmaAllocationInfo info = {};
+		VkDeviceSize size = 0;
+		void* mapped = nullptr;
 
 		bool coherent = false;
 		bool persistent = false;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
+	// TODO: COMPACT DATA
 	struct Image {
 		VkImage handle = VK_NULL_HANDLE;
 		DeviceMemory memory = {};
@@ -85,25 +107,35 @@ namespace edge::gfx {
 		VkImageUsageFlags usage_flags = 0;
 		VkFormat format = VK_FORMAT_UNDEFINED;
 		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct ImageView {
 		VkImageView handle = VK_NULL_HANDLE;
 		VkImageViewType type = {};
 		VkImageSubresourceRange range = {};
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct PipelineCache {
 		VkPipelineCache handle = VK_NULL_HANDLE;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct ShaderModule {
 		VkShaderModule handle = VK_NULL_HANDLE;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct Pipeline {
 		VkPipeline handle = VK_NULL_HANDLE;
 		VkPipelineBindPoint bind_point = {};
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	enum BufferFlag {
@@ -130,16 +162,22 @@ namespace edge::gfx {
 
 		BufferFlags flags = 0;
 		VkDeviceAddress address = 0ull;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct Fence {
 		VkFence handle = VK_NULL_HANDLE;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	struct Semaphore {
 		VkSemaphore handle = VK_NULL_HANDLE;
 		VkSemaphoreType type = {};
 		u64 value = 0ull;
+
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
 	enum QueueCapsFlag {
