@@ -29,18 +29,18 @@ namespace edge::gfx {
 			}
 
 			if (resource.type == ResourceType::Image) {
-				image_view_destroy(&resource.srv);
+				image_view_destroy(resource.srv);
 				renderer->srv_indices_list.free(resource.srv_index);
 
 				for (i32 j = 0; j < resource.image.level_count; ++j) {
-					image_view_destroy(&resource.uav[j]);
+					image_view_destroy(resource.uav[j]);
 					renderer->uav_indices_list.free(resource.uav_index + j);
 				}
 
-				image_destroy(&resource.image);
+				image_destroy(resource.image);
 			} 
 			else if (resource.type == ResourceType::Buffer) {
-				buffer_destroy(&resource.buffer);
+				buffer_destroy(resource.buffer);
 			}
 		}
 
@@ -54,19 +54,19 @@ namespace edge::gfx {
 			return false;
 		}
 
-		if (!semaphore_create(VK_SEMAPHORE_TYPE_BINARY, 0, &frame->image_available)) {
+		if (!semaphore_create(VK_SEMAPHORE_TYPE_BINARY, 0, frame->image_available)) {
 			return false;
 		}
 
-		if (!semaphore_create(VK_SEMAPHORE_TYPE_BINARY, 0, &frame->rendering_finished)) {
+		if (!semaphore_create(VK_SEMAPHORE_TYPE_BINARY, 0, frame->rendering_finished)) {
 			return false;
 		}
 
-		if (!fence_create(VK_FENCE_CREATE_SIGNALED_BIT, &frame->fence)) {
+		if (!fence_create(VK_FENCE_CREATE_SIGNALED_BIT, frame->fence)) {
 			return false;
 		}
 
-		if (!cmd_buf_create(&renderer->cmd_pool, &frame->cmd_buf)) {
+		if (!cmd_buf_create(renderer->cmd_pool, frame->cmd_buf)) {
 			return false;
 		}
 
@@ -85,10 +85,10 @@ namespace edge::gfx {
 		renderer_frame_release_pending_resources(renderer, frame);
 		frame->free_resources.destroy(renderer->alloc);
 
-		cmd_buf_destroy(&frame->cmd_buf);
-		fence_destroy(&frame->fence);
-		semaphore_destroy(&frame->rendering_finished);
-		semaphore_destroy(&frame->image_available);
+		cmd_buf_destroy(frame->cmd_buf);
+		fence_destroy(frame->fence);
+		semaphore_destroy(frame->rendering_finished);
+		semaphore_destroy(frame->image_available);
 	}
 
 	Renderer* renderer_create(const RendererCreateInfo* create_info) {
@@ -102,14 +102,14 @@ namespace edge::gfx {
 		}
 
 		renderer->alloc = create_info->alloc;
-		renderer->queue = create_info->main_queue;
+		renderer->queue = *create_info->main_queue;
 
-		if (!cmd_pool_create(renderer->queue, &renderer->cmd_pool)) {
+		if (!cmd_pool_create(renderer->queue, renderer->cmd_pool)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
-		if (!query_pool_create(VK_QUERY_TYPE_TIMESTAMP, 1, &renderer->frame_timestamp)) {
+		if (!query_pool_create(VK_QUERY_TYPE_TIMESTAMP, 1, renderer->frame_timestamp)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
@@ -145,41 +145,41 @@ namespace edge::gfx {
 
 		VkDescriptorBindingFlags descriptor_binding_flags = VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT | VK_DESCRIPTOR_BINDING_PARTIALLY_BOUND_BIT;
 
-		descriptor_layout_builder_add_binding(samplers_binding, descriptor_binding_flags, &descriptor_layout_builder);
-		descriptor_layout_builder_add_binding(srv_image_binding, descriptor_binding_flags, &descriptor_layout_builder);
-		descriptor_layout_builder_add_binding(uav_image_binding, descriptor_binding_flags, &descriptor_layout_builder);
+		descriptor_layout_builder_add_binding(descriptor_layout_builder, samplers_binding, descriptor_binding_flags);
+		descriptor_layout_builder_add_binding(descriptor_layout_builder, srv_image_binding, descriptor_binding_flags);
+		descriptor_layout_builder_add_binding(descriptor_layout_builder, uav_image_binding, descriptor_binding_flags);
 
-		if (!descriptor_set_layout_create(&descriptor_layout_builder, &renderer->descriptor_layout)) {
+		if (!descriptor_set_layout_create(descriptor_layout_builder, renderer->descriptor_layout)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
-		if (!descriptor_pool_create(renderer->descriptor_layout.descriptor_sizes, &renderer->descriptor_pool)) {
+		if (!descriptor_pool_create(renderer->descriptor_layout.descriptor_sizes, renderer->descriptor_pool)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
-		if (!descriptor_set_create(&renderer->descriptor_pool, &renderer->descriptor_layout, &renderer->descriptor_set)) {
+		if (!descriptor_set_create(renderer->descriptor_pool, &renderer->descriptor_layout, renderer->descriptor_set)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
 		PipelineLayoutBuilder pipeline_layout_builder = {};
-		pipeline_layout_builder_add_layout(&pipeline_layout_builder, &renderer->descriptor_layout);
-		pipeline_layout_builder_add_range(&pipeline_layout_builder, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0u, props->limits.maxPushConstantsSize);
+		pipeline_layout_builder_add_layout(pipeline_layout_builder, renderer->descriptor_layout);
+		pipeline_layout_builder_add_range(pipeline_layout_builder, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0u, props->limits.maxPushConstantsSize);
 
-		if (!pipeline_layout_create(&pipeline_layout_builder, &renderer->pipeline_layout)) {
+		if (!pipeline_layout_create(pipeline_layout_builder, renderer->pipeline_layout)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
 		SwapchainCreateInfo swapchain_create_info = {};
-		if (!swapchain_create(&swapchain_create_info, &renderer->swapchain)) {
+		if (!swapchain_create(swapchain_create_info, renderer->swapchain)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
 
-		if (!swapchain_get_images(&renderer->swapchain, renderer->swapchain_images)) {
+		if (!swapchain_get_images(renderer->swapchain, renderer->swapchain_images)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
@@ -193,10 +193,7 @@ namespace edge::gfx {
 				.layerCount = 1u
 			};
 
-			const Image* image = &renderer->swapchain_images[i];
-			ImageView* image_view = &renderer->swapchain_image_views[i];
-
-			if (!image_view_create(image, VK_IMAGE_VIEW_TYPE_2D, subresource_range, image_view)) {
+			if (!image_view_create(renderer->swapchain_images[i], VK_IMAGE_VIEW_TYPE_2D, subresource_range, renderer->swapchain_image_views[i])) {
 				renderer_destroy(renderer);
 				return nullptr;
 			}
@@ -250,11 +247,29 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
-		if constexpr (std::is_trivially_constructible_v<ResourceSet>) {
-			EDGE_LOG_DEBUG("Biba");
-		}
-		else {
-			EDGE_LOG_DEBUG("Boba");
+		for (i32 i = 0; i < RENDERER_FRAME_OVERLAP; ++i) {
+			ResourceSet& resource_set = renderer->update_resource_sets[i];
+
+			BufferCreateInfo buffer_create_info = {
+				.size = RENDERER_UPDATE_STAGING_ARENA_SIZE,
+				.alignment = 1,
+				.flags = BUFFER_FLAG_STAGING
+			};
+
+			if (!buffer_create(buffer_create_info, resource_set.staging_memory)) {
+				renderer_destroy(renderer);
+				return nullptr;
+			}
+
+			if(!semaphore_create(VK_SEMAPHORE_TYPE_TIMELINE_KHR, 0ull, resource_set.semaphore)) {
+				renderer_destroy(renderer);
+				return nullptr;
+			}
+
+			if (!cmd_buf_create(renderer->cmd_pool, resource_set.cmd_buf)) {
+				renderer_destroy(renderer);
+				return nullptr;
+			}
 		}
 
 		return renderer;
@@ -266,6 +281,11 @@ namespace edge::gfx {
 		}
 
 		queue_wait_idle(renderer->queue);
+
+		for (i32 i = 0; i < RENDERER_FRAME_OVERLAP; ++i) {
+			ResourceSet& resource_set = renderer->update_resource_sets[i];
+
+		}
 
 		renderer->write_descriptor_sets.destroy(renderer->alloc);
 		renderer->image_descriptors.destroy(renderer->alloc);
@@ -279,18 +299,18 @@ namespace edge::gfx {
 
 			// TODO: Ignore backbuffer
 			if (resource->type == ResourceType::Image) {
-				image_view_destroy(&resource->srv);
+				image_view_destroy(resource->srv);
 				renderer->srv_indices_list.free(resource->srv_index);
 
 				for (i32 mip = 0; mip < resource->image.level_count; ++mip) {
-					image_view_destroy(&resource->uav[mip]);
+					image_view_destroy(resource->uav[mip]);
 					renderer->uav_indices_list.free(resource->uav_index + mip);
 				}
 
-				image_destroy(&resource->image);
+				image_destroy(resource->image);
 			}
 			else if (resource->type == ResourceType::Buffer) {
-				buffer_destroy(&resource->buffer);
+				buffer_destroy(resource->buffer);
 			}
 		}
 
@@ -306,17 +326,16 @@ namespace edge::gfx {
 		}
 
 		for (i32 i = 0; i < renderer->swapchain.image_count; ++i) {
-			ImageView* image_view = &renderer->swapchain_image_views[i];
-			image_view_destroy(image_view);
+			image_view_destroy(renderer->swapchain_image_views[i]);
 		}
 
-		swapchain_destroy(&renderer->swapchain);
-		pipeline_layout_destroy(&renderer->pipeline_layout);
-		descriptor_set_destroy(&renderer->descriptor_set);
-		descriptor_pool_destroy(&renderer->descriptor_pool);
-		descriptor_set_layout_destroy(&renderer->descriptor_layout);
-		query_pool_destroy(&renderer->frame_timestamp);
-		cmd_pool_destroy(&renderer->cmd_pool);
+		swapchain_destroy(renderer->swapchain);
+		pipeline_layout_destroy(renderer->pipeline_layout);
+		descriptor_set_destroy(renderer->descriptor_set);
+		descriptor_pool_destroy(renderer->descriptor_pool);
+		descriptor_set_layout_destroy(renderer->descriptor_layout);
+		query_pool_destroy(renderer->frame_timestamp);
+		cmd_pool_destroy(renderer->cmd_pool);
 
 		const Allocator* alloc = renderer->alloc;
 		alloc->deallocate(renderer);
@@ -350,36 +369,36 @@ namespace edge::gfx {
 
 		memcpy(&resource->image, &image, sizeof(Image));
 
-		Image* image_source = &resource->image;
+		Image& image_source = resource->image;
 
-		VkImageAspectFlags image_aspect = (image_source->usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+		VkImageAspectFlags image_aspect = (image_source.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 
 		VkImageViewType view_type = {};
-		if (image_source->extent.depth > 1) {
+		if (image_source.extent.depth > 1) {
 			view_type = VK_IMAGE_VIEW_TYPE_3D;
 		}
-		else if (image_source->extent.height > 1) {
-			if (image_source->layer_count > 1) {
-				view_type = (image_source->face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		else if (image_source.extent.height > 1) {
+			if (image_source.layer_count > 1) {
+				view_type = (image_source.face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_2D_ARRAY;
 			}
 			else {
-				view_type = (image_source->face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+				view_type = (image_source.face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
 			}
 		}
-		else if (image_source->extent.width > 1) {
-			view_type = image_source->layer_count > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
+		else if (image_source.extent.width > 1) {
+			view_type = image_source.layer_count > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
 		}
 
-		if (image_source->usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+		if (image_source.usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
 			VkImageSubresourceRange srv_subresource_range = {
 				.aspectMask = image_aspect,
 				.baseMipLevel = 0u,
-				.levelCount = image_source->level_count,
+				.levelCount = image_source.level_count,
 				.baseArrayLayer = 0u,
-				.layerCount = image_source->layer_count * image_source->face_count
+				.layerCount = image_source.layer_count * image_source.face_count
 			};
 
-			if (!image_view_create(image_source, view_type, srv_subresource_range, &resource->srv)) {
+			if (!image_view_create(image_source, view_type, srv_subresource_range, resource->srv)) {
 				return false;
 			}
 
@@ -388,19 +407,19 @@ namespace edge::gfx {
 			}
 		}
 
-		if (image_source->usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
+		if (image_source.usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
 			VkImageSubresourceRange uav_subresource_range = {
 				.aspectMask = image_aspect,
 				.baseMipLevel = 0u,
 				.levelCount = 1u,
 				.baseArrayLayer = 0u,
-				.layerCount = image_source->layer_count * image_source->face_count
+				.layerCount = image_source.layer_count * image_source.face_count
 			};
 
-			for (i32 i = 0; i < image_source->level_count; ++i) {
+			for (i32 i = 0; i < image_source.level_count; ++i) {
 				uav_subresource_range.baseMipLevel = i;
 
-				if (!image_view_create(image_source, view_type, uav_subresource_range, &resource->uav[i])) {
+				if (!image_view_create(image_source, view_type, uav_subresource_range, resource->uav[i])) {
 					return false;
 				}
 
@@ -415,23 +434,23 @@ namespace edge::gfx {
 			}
 		}
 
-		bool is_attachment = (image_source->usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) || (image_source->usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-		if (!is_attachment && image_source->layout != VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR) {
+		bool is_attachment = (image_source.usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) || (image_source.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+		if (!is_attachment && image_source.layout != VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR) {
 			PipelineBarrierBuilder builder = {};
 
 			VkImageSubresourceRange subresource_range = {
 				.aspectMask = image_aspect,
 				.baseMipLevel = 0u,
-				.levelCount = image_source->level_count,
+				.levelCount = image_source.level_count,
 				.baseArrayLayer = 0u,
-				.layerCount = image_source->layer_count
+				.layerCount = image_source.layer_count
 			};
 
 			// TODO: Make batching updates
-			pipeline_barrier_add_image(&builder, image_source, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
-			cmd_pipeline_barrier(&renderer->active_frame->cmd_buf, &builder);
+			pipeline_barrier_add_image(builder, image_source, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
+			cmd_pipeline_barrier(renderer->active_frame->cmd_buf, builder);
 
-			image_source->layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
+			image_source.layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
 		}
 
 		VkWriteDescriptorSet descriptor_write = {};
@@ -439,7 +458,7 @@ namespace edge::gfx {
 		descriptor_write.dstSet = renderer->descriptor_set.handle;
 		descriptor_write.descriptorCount = 1u;
 
-		if (image_source->usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+		if (image_source.usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
 			VkDescriptorImageInfo image_descriptor = {};
 			image_descriptor.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
 			image_descriptor.imageView = resource->srv.handle;
@@ -452,11 +471,11 @@ namespace edge::gfx {
 			renderer->write_descriptor_sets.push_back(renderer->alloc, descriptor_write);
 		}
 
-		if (image_source->usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
+		if (image_source.usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
 			descriptor_write.dstBinding = RENDERER_UAV_SLOT;
 			descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 
-			for (i32 mip = 0; mip < image_source->level_count; ++mip) {
+			for (i32 mip = 0; mip < image_source.level_count; ++mip) {
 				VkDescriptorImageInfo image_descriptor = {};
 				image_descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 				image_descriptor.imageView = resource->uav[mip].handle;
@@ -536,17 +555,17 @@ namespace edge::gfx {
 		}
 
 		bool surface_updated = false;
-		if (swapchain_is_outdated(&renderer->swapchain)) {
+		if (swapchain_is_outdated(renderer->swapchain)) {
 
 			if (renderer->queue) {
 				queue_wait_idle(renderer->queue);
 			}
 
-			if (!swapchain_update(&renderer->swapchain)) {
+			if (!swapchain_update(renderer->swapchain)) {
 				return false;
 			}
 
-			if (!swapchain_get_images(&renderer->swapchain, renderer->swapchain_images)) {
+			if (!swapchain_get_images(renderer->swapchain, renderer->swapchain_images)) {
 				return false;
 			}
 
@@ -559,14 +578,10 @@ namespace edge::gfx {
 					.layerCount = 1u
 				};
 
-				const Image* image = &renderer->swapchain_images[i];
-				ImageView* image_view = &renderer->swapchain_image_views[i];
+				Image& image = renderer->swapchain_images[i];
+				ImageView& image_view = renderer->swapchain_image_views[i];
 
-				if (image_view->handle != VK_NULL_HANDLE) {
-					image_view_destroy(image_view);
-					image_view->handle = VK_NULL_HANDLE;
-				}
-
+				image_view_destroy(image_view);
 				if (!image_view_create(image, VK_IMAGE_VIEW_TYPE_2D, subresource_range, image_view)) {
 					return false;
 				}
@@ -579,11 +594,11 @@ namespace edge::gfx {
 
 		RendererFrame* current_frame = &renderer->frames[renderer->frame_number % RENDERER_FRAME_OVERLAP];
 		if (!current_frame->is_recording) {
-			fence_wait(&current_frame->fence, 1000000000ull);
-			fence_reset(&current_frame->fence);
+			fence_wait(current_frame->fence, 1000000000ull);
+			fence_reset(current_frame->fence);
 
-			cmd_reset(&current_frame->cmd_buf);
-			current_frame->is_recording = cmd_begin(&current_frame->cmd_buf);
+			cmd_reset(current_frame->cmd_buf);
+			current_frame->is_recording = cmd_begin(current_frame->cmd_buf);
 
 			renderer_frame_release_pending_resources(renderer, current_frame);
 		}
@@ -592,9 +607,9 @@ namespace edge::gfx {
 			return false;
 		}
 
-		renderer->acquired_semaphore = &current_frame->image_available;
+		renderer->acquired_semaphore = current_frame->image_available;
 
-		if (!swapchain_acquire_next_image(&renderer->swapchain, 1000000000ull, renderer->acquired_semaphore, &renderer->active_image_index)) {
+		if (!swapchain_acquire_next_image(renderer->swapchain, 1000000000ull, renderer->acquired_semaphore, &renderer->active_image_index)) {
 			return false;
 		}
 
@@ -606,7 +621,7 @@ namespace edge::gfx {
 
 		if (renderer->frame_number > 0) {
 			u64 timestamps[2] = {};
-			if (query_pool_get_data(&renderer->frame_timestamp, 0, timestamps)) {
+			if (query_pool_get_data(renderer->frame_timestamp, 0, timestamps)) {
 				u64 elapsed_time = timestamps[1] - timestamps[0];
 				if (timestamps[1] <= timestamps[0]) {
 					elapsed_time = 0ull;
@@ -616,11 +631,11 @@ namespace edge::gfx {
 			}
 		}
 
-		cmd_reset_query(&current_frame->cmd_buf, &renderer->frame_timestamp, 0u, 2u);
-		cmd_write_timestamp(&current_frame->cmd_buf, &renderer->frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0u);
+		cmd_reset_query(current_frame->cmd_buf, renderer->frame_timestamp, 0u, 2u);
+		cmd_write_timestamp(current_frame->cmd_buf, renderer->frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0u);
 
-		cmd_bind_descriptor(&current_frame->cmd_buf, &renderer->pipeline_layout, &renderer->descriptor_set, VK_PIPELINE_BIND_POINT_GRAPHICS);
-		cmd_bind_descriptor(&current_frame->cmd_buf, &renderer->pipeline_layout, &renderer->descriptor_set, VK_PIPELINE_BIND_POINT_COMPUTE);
+		cmd_bind_descriptor(current_frame->cmd_buf, renderer->pipeline_layout, renderer->descriptor_set, VK_PIPELINE_BIND_POINT_GRAPHICS);
+		cmd_bind_descriptor(current_frame->cmd_buf, renderer->pipeline_layout, renderer->descriptor_set, VK_PIPELINE_BIND_POINT_COMPUTE);
 
 		return true;
 	}
@@ -648,8 +663,8 @@ namespace edge::gfx {
 				.layerCount = 1u
 				};
 
-				pipeline_barrier_add_image(&barrier_builder, &backbuffer_resource->image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
-				cmd_pipeline_barrier(&current_frame->cmd_buf, &barrier_builder);
+				pipeline_barrier_add_image(barrier_builder, backbuffer_resource->image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
+				cmd_pipeline_barrier(current_frame->cmd_buf, barrier_builder);
 
 				backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 			}
@@ -663,15 +678,15 @@ namespace edge::gfx {
 			renderer->buffer_descriptors.clear();
 		}
 
-		cmd_write_timestamp(&current_frame->cmd_buf, &renderer->frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 1u);
-		cmd_end(&current_frame->cmd_buf);
+		cmd_write_timestamp(current_frame->cmd_buf, renderer->frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 1u);
+		cmd_end(current_frame->cmd_buf);
 
 		renderer->active_frame = nullptr;
 		current_frame->is_recording = false;
 
 		VkSemaphoreSubmitInfo wait_semaphores[2] = {};
 		wait_semaphores[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-		wait_semaphores[0].semaphore = renderer->acquired_semaphore->handle;
+		wait_semaphores[0].semaphore = renderer->acquired_semaphore.handle;
 		wait_semaphores[0].stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
 		VkSemaphoreSubmitInfo signal_semaphores[2] = {};
@@ -692,7 +707,7 @@ namespace edge::gfx {
 		submit_info.signalSemaphoreInfoCount = 1u;
 		submit_info.pSignalSemaphoreInfos = signal_semaphores;
 
-		if (!queue_submit(renderer->queue, &current_frame->fence, &submit_info)) {
+		if (!queue_submit(renderer->queue, current_frame->fence, &submit_info)) {
 			return false;
 		}
 

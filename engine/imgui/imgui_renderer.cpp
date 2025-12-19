@@ -30,7 +30,7 @@ namespace edge::gfx {
 		};
 
 		Buffer buffer;
-		if (!buffer_create(&buffer_create_info, &buffer)) {
+		if (!buffer_create(buffer_create_info, buffer)) {
 			return;
 		}
 		renderer_update_buffer_resource(imgui_renderer->renderer, handle, buffer);
@@ -75,12 +75,12 @@ namespace edge::gfx {
 		imgui_renderer->allocator = create_info->allocator;
 		imgui_renderer->renderer = create_info->renderer;
 
-		if (!shader_module_create(imgui_vs, imgui_vs_size, &imgui_renderer->vertex_shader)) {
+		if (!shader_module_create(imgui_vs, imgui_vs_size, imgui_renderer->vertex_shader)) {
 			imgui_renderer_destroy(imgui_renderer);
 			return nullptr;
 		}
 
-		if (!shader_module_create(imgui_fs, imgui_fs_size, &imgui_renderer->fragment_shader)) {
+		if (!shader_module_create(imgui_fs, imgui_fs_size, imgui_renderer->fragment_shader)) {
 			imgui_renderer_destroy(imgui_renderer);
 			return nullptr;
 		}
@@ -202,7 +202,7 @@ namespace edge::gfx {
 			.renderPass = VK_NULL_HANDLE
 		};
 
-		if (!pipeline_graphics_create(&pipeline_create_info, &imgui_renderer->pipeline)) {
+		if (!pipeline_graphics_create(&pipeline_create_info, imgui_renderer->pipeline)) {
 			imgui_renderer_destroy(imgui_renderer);
 			return nullptr;
 		}
@@ -223,10 +223,10 @@ namespace edge::gfx {
 			return;
 		}
 
-		pipeline_destroy(&imgui_renderer->pipeline);
+		pipeline_destroy(imgui_renderer->pipeline);
 
-		shader_module_destroy(&imgui_renderer->fragment_shader);
-		shader_module_destroy(&imgui_renderer->vertex_shader);
+		shader_module_destroy(imgui_renderer->fragment_shader);
+		shader_module_destroy(imgui_renderer->vertex_shader);
 
 		renderer_free_resource(imgui_renderer->renderer, imgui_renderer->index_buffer);
 		renderer_free_resource(imgui_renderer->renderer, imgui_renderer->vertex_buffer);

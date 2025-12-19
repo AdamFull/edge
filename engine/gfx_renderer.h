@@ -16,6 +16,8 @@ namespace edge::gfx {
 
 	constexpr usize RENDERER_HANDLE_MAX = 65535;
 
+	constexpr usize RENDERER_UPDATE_STAGING_ARENA_SIZE = 1048576;
+
 	enum class ResourceType {
 		Unknown = -1,
 		Image,
@@ -54,26 +56,27 @@ namespace edge::gfx {
 
 	struct ResourceSet {
 		Buffer staging_memory = {};
-		u64 staging_offset = 0ull;
+		u64 staging_offset = 0;
 
 		Array<Buffer> temp_staging_memory = {};
 
 		Semaphore semaphore = {};
-		std::atomic_uint64_t semaphore_counter = 0ull;
+		std::atomic_uint64_t semaphore_counter = 0;
 		bool first_submition = true;
-	};
-
-	struct Updater {
-		ResourceSet resource_sets[RENDERER_FRAME_OVERLAP] = {};
+		
+		CmdBuf cmd_buf = {};
+		bool recording = false;
 	};
 
 	struct Uploader {
 		ResourceSet resource_sets[RENDERER_FRAME_OVERLAP] = {};
+		Queue queue = {};
+		CmdPool cmd_pool = {};
 	};
 
 	struct Renderer {
 		const Allocator* alloc = nullptr;
-		const Queue* queue = nullptr;
+		Queue queue = {};
 
 		CmdPool cmd_pool = {};
 
@@ -104,11 +107,14 @@ namespace edge::gfx {
 
 		PipelineBarrierBuilder barrier_builder = {};
 
-		Semaphore* acquired_semaphore = nullptr;
+		Semaphore acquired_semaphore = {};
 
 		Array<VkWriteDescriptorSet> write_descriptor_sets = {};
 		Array<VkDescriptorImageInfo> image_descriptors = {};
 		Array<VkDescriptorBufferInfo> buffer_descriptors = {};
+
+		ResourceSet update_resource_sets[RENDERER_FRAME_OVERLAP] = {};
+		u32 current_update_set = 0;
 	};
 
 	Renderer* renderer_create(const RendererCreateInfo* create_info);
