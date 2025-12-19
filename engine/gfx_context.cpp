@@ -751,6 +751,11 @@ namespace edge::gfx {
 		};
 		descriptor_indexing_features.pNext = &shader_float16_int8_features;
 
+		VkPhysicalDeviceTimelineSemaphoreFeaturesKHR timeline_semaphore_features = {
+			.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR
+		};
+		shader_float16_int8_features.pNext = &timeline_semaphore_features;
+
 		void* last_feature = &sync2_features;
 
 		VkPhysicalDeviceVulkan11Features features_vk11 = {};
@@ -979,11 +984,7 @@ namespace edge::gfx {
 		return &g_ctx.properties;
 	}
 
-	static i32 queue_calculate_family_score(const QueueRequest* request, u32 family_index) {
-		if (!request) {
-			return -1;
-		}
-
+	static i32 queue_calculate_family_score(QueueRequest request, u32 family_index) {
 		QueueCapsFlags caps = QUEUE_CAPS_NONE;
 
 		VkQueueFamilyProperties props = g_ctx.queue_families[family_index];
@@ -1018,18 +1019,18 @@ namespace edge::gfx {
 			}
 		}
 
-		if (request->strategy == QUEUE_SELECTION_STRATEGY_EXACT) {
-			return (caps == request->required_caps) ? 1000 : -1;
+		if (request.strategy == QUEUE_SELECTION_STRATEGY_EXACT) {
+			return (caps == request.required_caps) ? 1000 : -1;
 		}
 
-		if ((caps & request->required_caps) != request->required_caps) {
+		if ((caps & request.required_caps) != request.required_caps) {
 			return -1;
 		}
 
 		i32 score = 100;
-		switch (request->strategy) {
+		switch (request.strategy) {
 		case QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED: {
-			score -= __builtin_popcount(caps & ~request->required_caps) * 10;
+			score -= __builtin_popcount(caps & ~request.required_caps) * 10;
 			break;
 		}
 
@@ -1043,12 +1044,12 @@ namespace edge::gfx {
 			break;
 		}
 
-		if (request->preferred_caps != QUEUE_CAPS_NONE) {
-			if ((caps & request->preferred_caps) == request->preferred_caps) {
+		if (request.preferred_caps != QUEUE_CAPS_NONE) {
+			if ((caps & request.preferred_caps) == request.preferred_caps) {
 				score += 30;
 			}
 			else {
-				score += __builtin_popcount(caps & request->preferred_caps) * 5;
+				score += __builtin_popcount(caps & request.preferred_caps) * 5;
 			}
 		}
 
@@ -1059,12 +1060,8 @@ namespace edge::gfx {
 		return score;
 	}
 
-	bool get_queue(const QueueRequest* request, Queue* queue) {
-		if (!request || !queue) {
-			return false;
-		}
-
-		queue->queue_index = 0; // TODO: Select specific index
+	bool get_queue(QueueRequest request, Queue& queue) {
+		queue.queue_index = 0; // TODO: Select specific index
 
 		i32 best_score = -1;
 
@@ -1072,7 +1069,7 @@ namespace edge::gfx {
 			i32 score = queue_calculate_family_score(request, i);
 			if (score > best_score) {
 				best_score = score;
-				queue->family_index = 0;
+				queue.family_index = 0;
 			}
 		}
 
@@ -1083,7 +1080,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void release_queue(Queue* queue) {
+	void release_queue(Queue queue) {
 		if (!queue) {
 			return;
 		}
@@ -1091,18 +1088,18 @@ namespace edge::gfx {
 		// TODO: release indices
 	}
 
-	VkQueue queue_handle(const Queue* queue) {
+	VkQueue queue_handle(Queue queue) {
 		if (!queue) {
 			return VK_NULL_HANDLE;
 		}
 
 		VkQueue handle;
-		vkGetDeviceQueue(g_ctx.dev, queue->family_index, queue->queue_index, &handle);
+		vkGetDeviceQueue(g_ctx.dev, queue.family_index, queue.queue_index, &handle);
 
 		return handle;
 	}
 
-	bool queue_submit(const Queue* queue, const Fence* fence, const VkSubmitInfo2KHR* submit_info) {
+	bool queue_submit(Queue queue, Fence fence, const VkSubmitInfo2KHR* submit_info) {
 		if (!queue || !submit_info) {
 			return false;
 		}
@@ -1112,11 +1109,10 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkResult result = vkQueueSubmit2KHR(queue_, 1, submit_info, fence ? fence->handle : VK_NULL_HANDLE);
-		return result == VK_SUCCESS;
+		return vkQueueSubmit2KHR(queue_, 1, submit_info, fence ? fence.handle : VK_NULL_HANDLE) == VK_SUCCESS;
 	}
 
-	bool queue_present(const Queue* queue, const VkPresentInfoKHR* present_info) {
+	bool queue_present(Queue queue, const VkPresentInfoKHR* present_info) {
 		if (!queue || !present_info) {
 			return false;
 		}
@@ -1126,11 +1122,10 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkResult result = vkQueuePresentKHR(queue_, present_info);
-		return result == VK_SUCCESS;
+		return vkQueuePresentKHR(queue_, present_info) == VK_SUCCESS;
 	}
 
-	void queue_wait_idle(const Queue* queue) {
+	void queue_wait_idle(Queue queue) {
 		if (!queue) {
 			return;
 		}
@@ -1143,17 +1138,17 @@ namespace edge::gfx {
 		vkQueueWaitIdle(queue_);
 	}
 
-	bool cmd_pool_create(const Queue* queue, CmdPool* cmd_pool) {
-		if (!queue || !cmd_pool) {
+	bool cmd_pool_create(Queue queue, CmdPool& cmd_pool) {
+		if (!queue) {
 			return false;
 		}
 
 		VkCommandPoolCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 		create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-		create_info.queueFamilyIndex = queue->family_index;
+		create_info.queueFamilyIndex = queue.family_index;
 
-		VkResult result = vkCreateCommandPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &cmd_pool->handle);
+		VkResult result = vkCreateCommandPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &cmd_pool.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
@@ -1161,38 +1156,36 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void cmd_pool_destroy(CmdPool* command_pool) {
+	void cmd_pool_destroy(CmdPool command_pool) {
 		if (!command_pool) {
 			return;
 		}
 
-		if (command_pool->handle != VK_NULL_HANDLE) {
-			vkDestroyCommandPool(g_ctx.dev, command_pool->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroyCommandPool(g_ctx.dev, command_pool.handle, &g_ctx.vk_alloc);
 	}
 
-	bool cmd_buf_create(const CmdPool* cmd_pool, CmdBuf* cmd_buf) {
-		if (!cmd_pool || !cmd_buf) {
+	bool cmd_buf_create(CmdPool cmd_pool, CmdBuf& cmd_buf) {
+		if (!cmd_pool) {
 			return false;
 		}
 
 		VkCommandBufferAllocateInfo alloc_info = {};
 		alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		alloc_info.commandPool = cmd_pool->handle;
+		alloc_info.commandPool = cmd_pool.handle;
 		alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 		alloc_info.commandBufferCount = 1;
 
-		VkResult result = vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &cmd_buf->handle);
+		VkResult result = vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &cmd_buf.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		cmd_buf->pool = cmd_pool;
+		cmd_buf.pool = cmd_pool;
 
 		return true;
 	}
 
-	bool cmd_begin(const CmdBuf* cmd_buf) {
+	bool cmd_begin(CmdBuf cmd_buf) {
 		if (!cmd_buf) {
 			return false;
 		}
@@ -1201,46 +1194,43 @@ namespace edge::gfx {
 		begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 		begin_info.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-		VkResult result = vkBeginCommandBuffer(cmd_buf->handle, &begin_info);
-		return result == VK_SUCCESS;
+		return vkBeginCommandBuffer(cmd_buf.handle, &begin_info) == VK_SUCCESS;
 	}
 
-	bool cmd_end(const CmdBuf* cmd_buf) {
+	bool cmd_end(CmdBuf cmd_buf) {
 		if (!cmd_buf) {
 			return false;
 		}
 
-		VkResult result = vkEndCommandBuffer(cmd_buf->handle);
-		return result == VK_SUCCESS;
+		return vkEndCommandBuffer(cmd_buf.handle) == VK_SUCCESS;
 	}
 
-	bool cmd_reset(const CmdBuf* cmd_buf) {
+	bool cmd_reset(CmdBuf cmd_buf) {
 		if (!cmd_buf) {
 			return false;
 		}
 
-		VkResult result = vkResetCommandBuffer(cmd_buf->handle, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
-		return result == VK_SUCCESS;
+		return vkResetCommandBuffer(cmd_buf.handle, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) == VK_SUCCESS;
 	}
 
-	void cmd_write_timestamp(const CmdBuf* cmd_buf, const QueryPool* query, VkPipelineStageFlagBits2 stage, u32 query_index) {
+	void cmd_write_timestamp(CmdBuf cmd_buf, QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index) {
 		if (!cmd_buf || !query) {
 			return;
 		}
 
-		vkCmdWriteTimestamp2KHR(cmd_buf->handle, stage, query->handle, query_index);
+		vkCmdWriteTimestamp2KHR(cmd_buf.handle, stage, query.handle, query_index);
 	}
 
-	void cmd_bind_descriptor(const CmdBuf* cmd_buf, const PipelineLayout* layout, const DescriptorSet* descriptor, VkPipelineBindPoint bind_point) {
+	void cmd_bind_descriptor(CmdBuf cmd_buf, PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point) {
 		if (!cmd_buf || !layout || !descriptor) {
 			return;
 		}
 
-		vkCmdBindDescriptorSets(cmd_buf->handle, bind_point, layout->handle, 0u, 1u, &descriptor->handle, 0u, NULL);
+		vkCmdBindDescriptorSets(cmd_buf.handle, bind_point, layout.handle, 0u, 1u, &descriptor.handle, 0u, NULL);
 	}
 
-	void cmd_pipeline_barrier(const CmdBuf* cmd_buf, const PipelineBarrierBuilder* builder) {
-		if (!cmd_buf || !builder) {
+	void cmd_pipeline_barrier(CmdBuf cmd_buf, const PipelineBarrierBuilder& builder) {
+		if (!cmd_buf) {
 			return;
 		}
 
@@ -1248,46 +1238,38 @@ namespace edge::gfx {
 			.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
 			.pNext = NULL,
 			.dependencyFlags = 0,
-			.memoryBarrierCount = builder->memory_barrier_count,
-			.pMemoryBarriers = builder->memory_barriers,
-			.bufferMemoryBarrierCount = builder->buffer_barrier_count,
-			.pBufferMemoryBarriers = builder->buffer_barriers,
-			.imageMemoryBarrierCount = builder->image_barrier_count,
-			.pImageMemoryBarriers = builder->image_barriers
+			.memoryBarrierCount = builder.memory_barrier_count,
+			.pMemoryBarriers = builder.memory_barriers,
+			.bufferMemoryBarrierCount = builder.buffer_barrier_count,
+			.pBufferMemoryBarriers = builder.buffer_barriers,
+			.imageMemoryBarrierCount = builder.image_barrier_count,
+			.pImageMemoryBarriers = builder.image_barriers
 		};
 
-		vkCmdPipelineBarrier2KHR(cmd_buf->handle, &dependency_info);
+		vkCmdPipelineBarrier2KHR(cmd_buf.handle, &dependency_info);
 	}
 
-	void cmd_buf_destroy(CmdBuf* cmd_buf) {
+	void cmd_buf_destroy(CmdBuf cmd_buf) {
 		if (!cmd_buf) {
 			return;
 		}
 
-		if (cmd_buf->handle != VK_NULL_HANDLE) {
-			vkFreeCommandBuffers(g_ctx.dev, cmd_buf->pool->handle, 1, &cmd_buf->handle);
-		}
+		vkFreeCommandBuffers(g_ctx.dev, cmd_buf.pool.handle, 1, &cmd_buf.handle);
 	}
 
 	void updete_descriptors(const VkWriteDescriptorSet* writes, u32 count) {
 		vkUpdateDescriptorSets(g_ctx.dev, count, writes, 0u, NULL);
 	}
 
-	void cmd_reset_query(const CmdBuf* cmd_buf, const QueryPool* query, u32 first_query, u32 query_count) {
+	void cmd_reset_query(CmdBuf cmd_buf, QueryPool query, u32 first_query, u32 query_count) {
 		if (!cmd_buf || !query) {
 			return;
 		}
 
-		if (query->handle != VK_NULL_HANDLE) {
-			vkCmdResetQueryPool(cmd_buf->handle, query->handle, first_query, query_count);
-		}
+		vkCmdResetQueryPool(cmd_buf.handle, query.handle, first_query, query_count);
 	}
 
-	bool query_pool_create(VkQueryType type, u32 count, QueryPool* query_pool) {
-		if (!query_pool) {
-			return false;
-		}
-
+	bool query_pool_create(VkQueryType type, u32 count, QueryPool& query_pool) {
 		VkQueryPoolCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
 		create_info.queryType = type;
@@ -1297,40 +1279,40 @@ namespace edge::gfx {
 			create_info.queryCount *= 2;
 		}
 
-		VkResult result = vkCreateQueryPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &query_pool->handle);
+		VkResult result = vkCreateQueryPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &query_pool.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		query_pool->type = type;
-		query_pool->max_query = create_info.queryCount;
-		query_pool->host_reset_enabled = context_is_extension_enabled(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
+		query_pool.type = type;
+		query_pool.max_query = create_info.queryCount;
+		query_pool.host_reset_enabled = context_is_extension_enabled(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
 
 		return true;
 	}
 
-	void query_pool_reset(QueryPool* query_pool) {
+	void query_pool_reset(QueryPool& query_pool) {
 		if (!query_pool) {
 			return;
 		}
 
-		vkResetQueryPoolEXT(g_ctx.dev, query_pool->handle, 0, query_pool->max_query);
+		vkResetQueryPoolEXT(g_ctx.dev, query_pool.handle, 0, query_pool.max_query);
 	}
 
-	bool query_pool_get_data(const QueryPool* query_pool, u32 first_query, void* out_data) {
+	bool query_pool_get_data(QueryPool query_pool, u32 first_query, void* out_data) {
 		if (!query_pool || !out_data) {
 			return false;
 		}
 
 		VkResult result = VK_SUCCESS;
-		switch (query_pool->type)
+		switch (query_pool.type)
 		{
 		case VK_QUERY_TYPE_OCCLUSION: {
-			result = vkGetQueryPoolResults(g_ctx.dev, query_pool->handle, first_query, 1, sizeof(u64), out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
+			result = vkGetQueryPoolResults(g_ctx.dev, query_pool.handle, first_query, 1, sizeof(u64), out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
 			break;
 		}
 		case VK_QUERY_TYPE_TIMESTAMP: {
-			result = vkGetQueryPoolResults(g_ctx.dev, query_pool->handle, first_query * 2, 2, sizeof(u64) * 2, out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
+			result = vkGetQueryPoolResults(g_ctx.dev, query_pool.handle, first_query * 2, 2, sizeof(u64) * 2, out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
 			break;
 		}
 		default:
@@ -1340,68 +1322,56 @@ namespace edge::gfx {
 		return result == VK_SUCCESS;
 	}
 
-	void query_pool_destroy(QueryPool* query_pool) {
+	void query_pool_destroy(QueryPool query_pool) {
 		if (!query_pool) {
 			return;
 		}
 
-		if (query_pool->handle != VK_NULL_HANDLE) {
-			vkDestroyQueryPool(g_ctx.dev, query_pool->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroyQueryPool(g_ctx.dev, query_pool.handle, &g_ctx.vk_alloc);
 	}
 
-	void descriptor_layout_builder_add_binding(VkDescriptorSetLayoutBinding binding, VkDescriptorBindingFlags flags, DescriptorLayoutBuilder* builder) {
-		if (!builder) {
-			return;
-		}
-
-		u32 index = builder->binding_count++;
-		builder->bindings[index] = binding;
-		builder->binding_flags[index] = flags;
+	void descriptor_layout_builder_add_binding(DescriptorLayoutBuilder& builder, VkDescriptorSetLayoutBinding binding, VkDescriptorBindingFlags flags) {
+		u32 index = builder.binding_count++;
+		builder.bindings[index] = binding;
+		builder.binding_flags[index] = flags;
 	}
 
-	bool descriptor_set_layout_create(const DescriptorLayoutBuilder* builder, DescriptorSetLayout* descriptor_set_layout) {
-		if (!descriptor_set_layout) {
-			return false;
-		}
-
+	bool descriptor_set_layout_create(const DescriptorLayoutBuilder& builder, DescriptorSetLayout& descriptor_set_layout) {
 		VkDescriptorSetLayoutBindingFlagsCreateInfoEXT binding_flags_create_info = {};
 		binding_flags_create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO;
-		binding_flags_create_info.bindingCount = builder->binding_count;
-		binding_flags_create_info.pBindingFlags = builder->binding_flags;
+		binding_flags_create_info.bindingCount = builder.binding_count;
+		binding_flags_create_info.pBindingFlags = builder.binding_flags;
 
 		VkDescriptorSetLayoutCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 		create_info.flags = VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
-		create_info.bindingCount = builder->binding_count;
-		create_info.pBindings = builder->bindings;
+		create_info.bindingCount = builder.binding_count;
+		create_info.pBindings = builder.bindings;
 		create_info.pNext = &binding_flags_create_info;
 
-		VkResult result = vkCreateDescriptorSetLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_set_layout->handle);
+		VkResult result = vkCreateDescriptorSetLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_set_layout.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		for (i32 i = 0; i < builder->binding_count; ++i) {
-			VkDescriptorSetLayoutBinding binding = builder->bindings[i];
-			descriptor_set_layout->descriptor_sizes[binding.descriptorType] += binding.descriptorCount;
+		for (i32 i = 0; i < builder.binding_count; ++i) {
+			VkDescriptorSetLayoutBinding binding = builder.bindings[i];
+			descriptor_set_layout.descriptor_sizes[binding.descriptorType] += binding.descriptorCount;
 		}
 
 		return true;
 	}
 
-	void descriptor_set_layout_destroy(DescriptorSetLayout* descriptor_set_layout) {
+	void descriptor_set_layout_destroy(DescriptorSetLayout descriptor_set_layout) {
 		if (!descriptor_set_layout) {
 			return;
 		}
 
-		if (descriptor_set_layout->handle != VK_NULL_HANDLE) {
-			vkDestroyDescriptorSetLayout(g_ctx.dev, descriptor_set_layout->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroyDescriptorSetLayout(g_ctx.dev, descriptor_set_layout.handle, &g_ctx.vk_alloc);
 	}
 
-	bool descriptor_pool_create(u32* descriptor_sizes, DescriptorPool* descriptor_pool) {
-		if (!descriptor_sizes || !descriptor_pool) {
+	bool descriptor_pool_create(u32* descriptor_sizes, DescriptorPool& descriptor_pool) {
+		if (!descriptor_sizes) {
 			return false;
 		}
 
@@ -1419,90 +1389,80 @@ namespace edge::gfx {
 		create_info.poolSizeCount = DESCRIPTOR_SIZES_COUNT;
 		create_info.pPoolSizes = pool_sizes;
 
-		VkResult result = vkCreateDescriptorPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_pool->handle);
+		VkResult result = vkCreateDescriptorPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_pool.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		memcpy(descriptor_pool->descriptor_sizes, descriptor_sizes, DESCRIPTOR_SIZES_COUNT * sizeof(u32));
+		memcpy(descriptor_pool.descriptor_sizes, descriptor_sizes, DESCRIPTOR_SIZES_COUNT * sizeof(u32));
 
 		return true;
 	}
 
-	void descriptor_pool_destroy(DescriptorPool* descriptor_pool) {
+	void descriptor_pool_destroy(DescriptorPool descriptor_pool) {
 		if (!descriptor_pool) {
 			return;
 		}
 
-		if (descriptor_pool->handle != VK_NULL_HANDLE) {
-			vkDestroyDescriptorPool(g_ctx.dev, descriptor_pool->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroyDescriptorPool(g_ctx.dev, descriptor_pool.handle, &g_ctx.vk_alloc);
 	}
 
-	bool descriptor_set_create(const DescriptorPool* pool, const DescriptorSetLayout* layouts, DescriptorSet* set) {
-		if (!pool || !layouts || !set) {
+	bool descriptor_set_create(DescriptorPool pool, const DescriptorSetLayout* layouts, DescriptorSet& set) {
+		if (!pool || !layouts) {
 			return false;
 		}
 
 		VkDescriptorSetAllocateInfo alloc_info = {};
 		alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-		alloc_info.descriptorPool = pool->handle;
+		alloc_info.descriptorPool = pool.handle;
 		alloc_info.descriptorSetCount = 1;
 		alloc_info.pSetLayouts = &layouts->handle;
 
-		VkResult result = vkAllocateDescriptorSets(g_ctx.dev, &alloc_info, &set->handle);
+		VkResult result = vkAllocateDescriptorSets(g_ctx.dev, &alloc_info, &set.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		set->pool = pool;
+		set.pool = pool;
 
 		return true;
 	}
 
-	void descriptor_set_destroy(DescriptorSet* set) {
+	void descriptor_set_destroy(DescriptorSet set) {
 		if (!set) {
 			return;
 		}
 
-		vkFreeDescriptorSets(g_ctx.dev, set->pool->handle, 1, &set->handle);
+		vkFreeDescriptorSets(g_ctx.dev, set.pool.handle, 1, &set.handle);
 	}
 
-	void pipeline_layout_builder_add_range(PipelineLayoutBuilder* builder, VkShaderStageFlags stage_flags, u32 offset, u32 size) {
-		if (!builder) {
-			return;
-		}
-
+	void pipeline_layout_builder_add_range(PipelineLayoutBuilder& builder, VkShaderStageFlags stage_flags, u32 offset, u32 size) {
 		VkPushConstantRange constant_range = {
 			.stageFlags = stage_flags,
 			.offset = offset,
 			.size = size
 		};
 
-		builder->constant_ranges[builder->constant_range_count++] = constant_range;
+		builder.constant_ranges[builder.constant_range_count++] = constant_range;
 	}
 
-	void pipeline_layout_builder_add_layout(PipelineLayoutBuilder* builder, const DescriptorSetLayout* layout) {
-		if (!layout || !builder) {
+	void pipeline_layout_builder_add_layout(PipelineLayoutBuilder& builder, DescriptorSetLayout layout) {
+		if (!layout) {
 			return;
 		}
 
-		builder->descriptor_layouts[builder->descriptor_layout_count++] = layout->handle;
+		builder.descriptor_layouts[builder.descriptor_layout_count++] = layout.handle;
 	}
 
-	bool pipeline_layout_create(const PipelineLayoutBuilder* builder, PipelineLayout* pipeline_layout) {
-		if (!builder || !pipeline_layout) {
-			return false;
-		}
-
+	bool pipeline_layout_create(const PipelineLayoutBuilder& builder, PipelineLayout& pipeline_layout) {
 		VkPipelineLayoutCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-		create_info.setLayoutCount = builder->descriptor_layout_count;
-		create_info.pSetLayouts = builder->descriptor_layouts;
-		create_info.pushConstantRangeCount = builder->constant_range_count;
-		create_info.pPushConstantRanges = builder->constant_ranges;
+		create_info.setLayoutCount = builder.descriptor_layout_count;
+		create_info.pSetLayouts = builder.descriptor_layouts;
+		create_info.pushConstantRangeCount = builder.constant_range_count;
+		create_info.pPushConstantRanges = builder.constant_ranges;
 
-		VkResult result = vkCreatePipelineLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_layout->handle);
+		VkResult result = vkCreatePipelineLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_layout.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
@@ -1510,117 +1470,92 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void pipeline_layout_destroy(PipelineLayout* pipeline_layout) {
+	void pipeline_layout_destroy(PipelineLayout pipeline_layout) {
 		if (!pipeline_layout) {
 			return;
 		}
 
-		if (pipeline_layout->handle != VK_NULL_HANDLE) {
-			vkDestroyPipelineLayout(g_ctx.dev, pipeline_layout->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroyPipelineLayout(g_ctx.dev, pipeline_layout.handle, &g_ctx.vk_alloc);
 	}
 
-	bool pipeline_cache_create(const u8* data, size_t data_size, PipelineCache* pipeline_cache) {
-		if (!pipeline_cache) {
-			return false;
-		}
-
+	bool pipeline_cache_create(const u8* data, size_t data_size, PipelineCache& pipeline_cache) {
 		VkPipelineCacheCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
 		create_info.initialDataSize = data_size;
 		create_info.pInitialData = data;
 
-		VkResult result = vkCreatePipelineCache(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_cache->handle);
+		VkResult result = vkCreatePipelineCache(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_cache.handle);
 		return result == VK_SUCCESS;
 	}
 
-	void pipeline_cache_destroy(PipelineCache* pipeline_cache) {
+	void pipeline_cache_destroy(PipelineCache pipeline_cache) {
 		if (!pipeline_cache) {
 			return;
 		}
 
-		if (pipeline_cache->handle != VK_NULL_HANDLE) {
-			vkDestroyPipelineCache(g_ctx.dev, pipeline_cache->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroyPipelineCache(g_ctx.dev, pipeline_cache.handle, &g_ctx.vk_alloc);
 	}
 
-	bool shader_module_create(const u32* code, size_t size, ShaderModule* shader_module) {
-		if (!shader_module) {
-			return false;
-		}
-
+	bool shader_module_create(const u32* code, size_t size, ShaderModule& shader_module) {
 		VkShaderModuleCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
 		create_info.codeSize = size;
 		create_info.pCode = code;
 
-		VkResult result = vkCreateShaderModule(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &shader_module->handle);
-		return result == VK_SUCCESS;
+		return vkCreateShaderModule(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &shader_module.handle) == VK_SUCCESS;
 	}
 
-	void shader_module_destroy(ShaderModule* shader_module) {
+	void shader_module_destroy(ShaderModule shader_module) {
 		if (!shader_module) {
 			return;
 		}
 
-		if (shader_module->handle != VK_NULL_HANDLE) {
-			vkDestroyShaderModule(g_ctx.dev, shader_module->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroyShaderModule(g_ctx.dev, shader_module.handle, &g_ctx.vk_alloc);
 	}
 
-	bool pipeline_graphics_create(const VkGraphicsPipelineCreateInfo* create_info, Pipeline* pipeline) {
-		if (!create_info || !pipeline) {
+	bool pipeline_graphics_create(const VkGraphicsPipelineCreateInfo* create_info, Pipeline& pipeline) {
+		if (!create_info) {
 			return false;
 		}
 
-		VkResult result = vkCreateGraphicsPipelines(g_ctx.dev, VK_NULL_HANDLE, 1u, create_info, &g_ctx.vk_alloc, &pipeline->handle);
+		VkResult result = vkCreateGraphicsPipelines(g_ctx.dev, VK_NULL_HANDLE, 1u, create_info, &g_ctx.vk_alloc, &pipeline.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		pipeline->bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS;
+		pipeline.bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS;
 
 		return true;
 	}
 
-	bool pipeline_compute_create(const ComputePipelineCreateInfo* create_info, Pipeline* pipeline) {
-		if (!create_info || !pipeline) {
-			return false;
-		}
-
+	bool pipeline_compute_create(ComputePipelineCreateInfo create_info, Pipeline& pipeline) {
 		VkComputePipelineCreateInfo pipeline_create_info = {};
 		pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
 		pipeline_create_info.stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-		pipeline_create_info.stage.module = create_info->shader_module->handle;
+		pipeline_create_info.stage.module = create_info.shader_module.handle;
 		pipeline_create_info.stage.pName = "main";
-		pipeline_create_info.layout = create_info->layout->handle;
+		pipeline_create_info.layout = create_info.layout.handle;
 
-		VkResult result = vkCreateComputePipelines(g_ctx.dev, create_info->cache ? create_info->cache->handle : VK_NULL_HANDLE, 1, &pipeline_create_info, &g_ctx.vk_alloc, &pipeline->handle);
+		VkResult result = vkCreateComputePipelines(g_ctx.dev, create_info.cache ? create_info.cache.handle : VK_NULL_HANDLE, 1, &pipeline_create_info, &g_ctx.vk_alloc, &pipeline.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		pipeline->bind_point = VK_PIPELINE_BIND_POINT_COMPUTE;
+		pipeline.bind_point = VK_PIPELINE_BIND_POINT_COMPUTE;
 
 		return true;
 	}
 
-	void pipeline_destroy(Pipeline* pipeline) {
+	void pipeline_destroy(Pipeline pipeline) {
 		if (!pipeline) {
 			return;
 		}
 
-		if (pipeline->handle != VK_NULL_HANDLE) {
-			vkDestroyPipeline(g_ctx.dev, pipeline->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroyPipeline(g_ctx.dev, pipeline.handle, &g_ctx.vk_alloc);
 	}
 
-	bool swapchain_create(const SwapchainCreateInfo* create_info, Swapchain* swapchain) {
-		if (!create_info || !swapchain) {
-			return false;
-		}
-
-		VkPresentModeKHR present_mode = create_info->vsync_enable ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
+	bool swapchain_create(SwapchainCreateInfo create_info, Swapchain& swapchain) {
+		VkPresentModeKHR present_mode = create_info.vsync_enable ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
 		VkPresentModeKHR present_mode_priority_list[3] = {
 	#ifdef VK_USE_PLATFORM_ANDROID_KHR
 				VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR, VK_PRESENT_MODE_IMMEDIATE_KHR
@@ -1647,14 +1582,14 @@ namespace edge::gfx {
 		swapchain_create_info.minImageCount = clamp(swapchain_create_info.minImageCount, surf_caps.minImageCount, surf_caps.maxImageCount ? surf_caps.maxImageCount : 16);
 
 		VkSurfaceFormatKHR requested_surface_format;
-		requested_surface_format.format = create_info->preferred_format;
-		requested_surface_format.colorSpace = create_info->preferred_color_space;
+		requested_surface_format.format = create_info.preferred_format;
+		requested_surface_format.colorSpace = create_info.preferred_color_space;
 
-		VkSurfaceFormatKHR selected_surface_format = choose_surface_format(requested_surface_format, g_ctx.surf_formats, g_ctx.surf_format_count, create_info->hdr_enable);
+		VkSurfaceFormatKHR selected_surface_format = choose_surface_format(requested_surface_format, g_ctx.surf_formats, g_ctx.surf_format_count, create_info.hdr_enable);
 		swapchain_create_info.imageFormat = selected_surface_format.format;
 		swapchain_create_info.imageColorSpace = selected_surface_format.colorSpace;
 
-		swapchain_create_info.imageExtent = choose_suitable_extent(swapchain->extent, &surf_caps);
+		swapchain_create_info.imageExtent = choose_suitable_extent(swapchain.extent, &surf_caps);
 		swapchain_create_info.imageArrayLayers = 1;
 		swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 		swapchain_create_info.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
@@ -1664,24 +1599,24 @@ namespace edge::gfx {
 		swapchain_create_info.compositeAlpha = choose_suitable_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surf_caps.supportedCompositeAlpha);
 		swapchain_create_info.presentMode = choose_suitable_present_mode(present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
 			present_mode_priority_list, array_size(present_mode_priority_list));
-		swapchain_create_info.oldSwapchain = swapchain->handle;
+		swapchain_create_info.oldSwapchain = swapchain.handle;
 
-		result = vkCreateSwapchainKHR(g_ctx.dev, &swapchain_create_info, &g_ctx.vk_alloc, &swapchain->handle);
+		result = vkCreateSwapchainKHR(g_ctx.dev, &swapchain_create_info, &g_ctx.vk_alloc, &swapchain.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		swapchain->format = selected_surface_format.format;
-		swapchain->color_space = selected_surface_format.colorSpace;
-		swapchain->image_count = swapchain_create_info.minImageCount;
-		swapchain->extent = swapchain_create_info.imageExtent;
-		swapchain->present_mode = swapchain_create_info.presentMode;
-		swapchain->composite_alpha = swapchain_create_info.compositeAlpha;
+		swapchain.format = selected_surface_format.format;
+		swapchain.color_space = selected_surface_format.colorSpace;
+		swapchain.image_count = swapchain_create_info.minImageCount;
+		swapchain.extent = swapchain_create_info.imageExtent;
+		swapchain.present_mode = swapchain_create_info.presentMode;
+		swapchain.composite_alpha = swapchain_create_info.compositeAlpha;
 
 		return true;
 	}
 
-	bool swapchain_update(Swapchain* swapchain) {
+	bool swapchain_update(Swapchain& swapchain) {
 		if (!swapchain) {
 			return false;
 		}
@@ -1700,31 +1635,31 @@ namespace edge::gfx {
 		VkSwapchainCreateInfoKHR create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
 		create_info.surface = g_ctx.surf;
-		create_info.minImageCount = swapchain->image_count;
-		create_info.imageFormat = swapchain->format;
-		create_info.imageColorSpace = swapchain->color_space;
-		create_info.imageExtent = choose_suitable_extent(swapchain->extent, &surf_caps);
+		create_info.minImageCount = swapchain.image_count;
+		create_info.imageFormat = swapchain.format;
+		create_info.imageColorSpace = swapchain.color_space;
+		create_info.imageExtent = choose_suitable_extent(swapchain.extent, &surf_caps);
 		create_info.imageArrayLayers = 1;
 		create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 		create_info.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
 		create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
 		create_info.pQueueFamilyIndices = queue_family_indices;
 		create_info.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-		create_info.compositeAlpha = swapchain->composite_alpha;
-		create_info.presentMode = swapchain->present_mode;
-		create_info.oldSwapchain = swapchain->handle;
+		create_info.compositeAlpha = swapchain.composite_alpha;
+		create_info.presentMode = swapchain.present_mode;
+		create_info.oldSwapchain = swapchain.handle;
 
-		result = vkCreateSwapchainKHR(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &swapchain->handle);
+		result = vkCreateSwapchainKHR(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &swapchain.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		swapchain->extent = create_info.imageExtent;
+		swapchain.extent = create_info.imageExtent;
 
 		return true;
 	}
 
-	bool swapchain_is_outdated(const Swapchain* swapchain) {
+	bool swapchain_is_outdated(Swapchain swapchain) {
 		if (!swapchain) {
 			return false;
 		}
@@ -1739,10 +1674,10 @@ namespace edge::gfx {
 			return false;
 		}
 
-		return swapchain->extent.width != surf_caps.currentExtent.width || swapchain->extent.height != surf_caps.currentExtent.height;
+		return swapchain.extent.width != surf_caps.currentExtent.width || swapchain.extent.height != surf_caps.currentExtent.height;
 	}
 
-	bool swapchain_get_images(const Swapchain* swapchain, Image* image_out) {
+	bool swapchain_get_images(Swapchain swapchain, Image* image_out) {
 		if (!swapchain || !image_out) {
 			return false;
 		}
@@ -1750,130 +1685,120 @@ namespace edge::gfx {
 		VkImage images[GFX_SWAPCHAIN_IMAGES_MAX];
 
 		u32 image_count;
-		VkResult result = vkGetSwapchainImagesKHR(g_ctx.dev, swapchain->handle, &image_count, images);
-		if (result != VK_SUCCESS || image_count != swapchain->image_count) {
+		VkResult result = vkGetSwapchainImagesKHR(g_ctx.dev, swapchain.handle, &image_count, images);
+		if (result != VK_SUCCESS || image_count != swapchain.image_count) {
 			return false;
 		}
 
-		for (i32 i = 0; i < swapchain->image_count; ++i) {
+		for (i32 i = 0; i < swapchain.image_count; ++i) {
 			Image* image = &image_out[i];
 			image->handle = images[i];
-			image->extent.width = swapchain->extent.width;
-			image->extent.height = swapchain->extent.height;
+			image->extent.width = swapchain.extent.width;
+			image->extent.height = swapchain.extent.height;
 			image->extent.depth = 1;
 			image->level_count = 1;
 			image->layer_count = 1;
 			image->face_count = 1;
 			image->usage_flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-			image->format = swapchain->format;
+			image->format = swapchain.format;
 			image->layout = VK_IMAGE_LAYOUT_UNDEFINED;
 		}
 
 		return true;
 	}
 
-	bool swapchain_acquire_next_image(const Swapchain* swapchain, u64 timeout, const Semaphore* semaphore, u32* next_image_idx) {
+	bool swapchain_acquire_next_image(Swapchain swapchain, u64 timeout, Semaphore semaphore, u32* next_image_idx) {
 		if (!swapchain || !semaphore || !next_image_idx) {
 			return false;
 		}
 
-		return vkAcquireNextImageKHR(g_ctx.dev, swapchain->handle, timeout, semaphore->handle, VK_NULL_HANDLE, next_image_idx) == VK_SUCCESS;
+		return vkAcquireNextImageKHR(g_ctx.dev, swapchain.handle, timeout, semaphore.handle, VK_NULL_HANDLE, next_image_idx) == VK_SUCCESS;
 	}
 
-	void swapchain_destroy(Swapchain* swapchain) {
+	void swapchain_destroy(Swapchain swapchain) {
 		if (!swapchain) {
 			return;
 		}
 
-		if (swapchain->handle != VK_NULL_HANDLE) {
-			vkDestroySwapchainKHR(g_ctx.dev, swapchain->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroySwapchainKHR(g_ctx.dev, swapchain.handle, &g_ctx.vk_alloc);
 	}
 
-	void device_memory_setup(DeviceMemory* mem) {
+	void device_memory_setup(DeviceMemory& mem) {
+		VkMemoryPropertyFlags memory_properties;
+		vmaGetAllocationMemoryProperties(g_ctx.vma, mem.handle, &memory_properties);
+
+		mem.coherent = memory_properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+		mem.persistent = mem.mapped != nullptr;
+	}
+
+	bool device_memory_is_mapped(DeviceMemory mem) {
+		if (!mem) {
+			return false;
+		}
+
+		return mem.mapped != nullptr;
+	}
+
+	void* device_memory_map(DeviceMemory& mem) {
+		if (!mem) {
+			return nullptr;
+		}
+
+		if (!mem.persistent && !mem.mapped) {
+			void* mappedMemory;
+			VkResult result = vmaMapMemory(g_ctx.vma, mem.handle, &mappedMemory);
+			if (result != VK_SUCCESS) {
+				return nullptr;
+			}
+			mem.mapped = mappedMemory;
+		}
+
+		return mem.mapped;
+	}
+
+	void device_memory_unmap(DeviceMemory& mem) {
 		if (!mem) {
 			return;
 		}
 
-		VkMemoryPropertyFlags memory_properties;
-		vmaGetAllocationMemoryProperties(g_ctx.vma, mem->handle, &memory_properties);
-
-		mem->coherent = memory_properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-		mem->persistent = mem->info.pMappedData != nullptr;
+		if (!mem.persistent && mem.mapped != nullptr) {
+			vmaUnmapMemory(g_ctx.vma, mem.handle);
+			mem.mapped = nullptr;
+		}
 	}
 
-	bool device_memory_is_mapped(const DeviceMemory* mem) {
-		if (!mem || mem->handle == VK_NULL_HANDLE) {
-			return false;
-		}
-
-		return mem->info.pMappedData != nullptr;
-	}
-
-	void* device_memory_map(DeviceMemory* mem) {
-		if (!mem || mem->handle == VK_NULL_HANDLE) {
-			return nullptr;
-		}
-
-		if (!mem->persistent && !mem->info.pMappedData) {
-			void* mappedMemory;
-			VkResult result = vmaMapMemory(g_ctx.vma, mem->handle, &mappedMemory);
-			if (result != VK_SUCCESS) {
-				return nullptr;
-			}
-			mem->info.pMappedData = mappedMemory;
-		}
-
-		return mem->info.pMappedData;
-	}
-
-	void device_memory_unmap(DeviceMemory* mem) {
-		if (!mem || mem->handle == VK_NULL_HANDLE) {
+	void device_memory_flush(DeviceMemory& mem, VkDeviceSize offset, VkDeviceSize size) {
+		if (!mem) {
 			return;
 		}
 
-		if (!mem->persistent && mem->info.pMappedData != nullptr) {
-			vmaUnmapMemory(g_ctx.vma, mem->handle);
-			mem->info.pMappedData = nullptr;
-		}
-	}
-
-	void device_memory_flush(DeviceMemory* mem, VkDeviceSize offset, VkDeviceSize size) {
-		if (!mem || mem->handle == VK_NULL_HANDLE) {
-			return;
-		}
-
-		if (!mem->coherent) {
-			VkResult result = vmaFlushAllocation(g_ctx.vma, mem->handle, offset, size);
+		if (!mem.coherent) {
+			VkResult result = vmaFlushAllocation(g_ctx.vma, mem.handle, offset, size);
 			// TODO: fatal error
 		}
 	}
 
-	void device_memory_update(DeviceMemory* mem, const void* data, VkDeviceSize size, VkDeviceSize offset) {
-		if (!mem || mem->handle == VK_NULL_HANDLE) {
+	void device_memory_update(DeviceMemory& mem, const void* data, VkDeviceSize size, VkDeviceSize offset) {
+		if (!mem) {
 			return;
 		}
 
-		if (mem->persistent) {
-			memcpy((i8*)mem->info.pMappedData + offset, data, size);
+		if (mem.persistent) {
+			memcpy((i8*)mem.mapped + offset, data, size);
 			device_memory_flush(mem, offset, size);
 		}
 		else {
 			device_memory_map(mem);
 
-			memcpy((i8*)mem->info.pMappedData + offset, data, size);
+			memcpy((i8*)mem.mapped + offset, data, size);
 			device_memory_unmap(mem);
 
 			device_memory_flush(mem, offset, size);
 		}
 	}
 
-	bool image_create(const ImageCreateInfo* create_info, Image* image) {
-		if (!create_info || !image) {
-			return false;
-		}
-
-		u32 max_dimension = (create_info->extent.width > create_info->extent.height) ? create_info->extent.width : create_info->extent.height;
+	bool image_create(ImageCreateInfo create_info, Image& image) {
+		u32 max_dimension = (create_info.extent.width > create_info.extent.height) ? create_info.extent.width : create_info.extent.height;
 		u32 max_mip_levels = compute_max_mip_level(max_dimension);
 
 		u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
@@ -1886,97 +1811,92 @@ namespace edge::gfx {
 
 		VkImageCreateInfo image_create_info = {};
 		image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-		image_create_info.flags = (create_info->face_count == 6u) ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
-		image_create_info.imageType = (create_info->extent.depth > 1u) ? VK_IMAGE_TYPE_3D : (create_info->extent.height > 1u) ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_1D;
-		image_create_info.format = create_info->format;
-		image_create_info.extent = create_info->extent;
-		image_create_info.mipLevels = clamp(create_info->level_count, 1u, max_mip_levels);
-		image_create_info.arrayLayers = clamp(create_info->layer_count * create_info->face_count, 1u, g_ctx.properties.limits.maxImageArrayLayers);
+		image_create_info.flags = (create_info.face_count == 6u) ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : VK_IMAGE_CREATE_EXTENDED_USAGE_BIT;
+		image_create_info.imageType = (create_info.extent.depth > 1u) ? VK_IMAGE_TYPE_3D : (create_info.extent.height > 1u) ? VK_IMAGE_TYPE_2D : VK_IMAGE_TYPE_1D;
+		image_create_info.format = create_info.format;
+		image_create_info.extent = create_info.extent;
+		image_create_info.mipLevels = clamp(create_info.level_count, 1u, max_mip_levels);
+		image_create_info.arrayLayers = clamp(create_info.layer_count * create_info.face_count, 1u, g_ctx.properties.limits.maxImageArrayLayers);
 		image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
 		image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
-		image_create_info.usage = create_info->usage_flags;
+		image_create_info.usage = create_info.usage_flags;
 		image_create_info.sharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE;
 		image_create_info.queueFamilyIndexCount = g_ctx.queue_family_count;
 		image_create_info.pQueueFamilyIndices = queue_family_indices;
 		image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-		bool is_color_attachment = create_info->usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-		bool is_depth_attachment = create_info->usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+		bool is_color_attachment = create_info.usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+		bool is_depth_attachment = create_info.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 		if (is_color_attachment || is_depth_attachment) {
 			allocation_create_info.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
 			allocation_create_info.priority = 1.0f;
 		}
-
-		VkResult result = vmaCreateImage(g_ctx.vma, &image_create_info, &allocation_create_info, &image->handle, &image->memory.handle, &image->memory.info);
+		VmaAllocationInfo alloc_info;
+		VkResult result = vmaCreateImage(g_ctx.vma, &image_create_info, &allocation_create_info, &image.handle, &image.memory.handle, &alloc_info);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		device_memory_setup(&image->memory);
+		image.memory.size = alloc_info.size;
+		image.memory.mapped = alloc_info.pMappedData;
 
-		image->extent = create_info->extent;
-		image->level_count = create_info->level_count;
-		image->layer_count = create_info->layer_count;
-		image->face_count = create_info->face_count;
-		image->usage_flags = create_info->usage_flags;
-		image->format = create_info->format;
-		image->layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		device_memory_setup(image.memory);
+
+		image.extent = create_info.extent;
+		image.level_count = create_info.level_count;
+		image.layer_count = create_info.layer_count;
+		image.face_count = create_info.face_count;
+		image.usage_flags = create_info.usage_flags;
+		image.format = create_info.format;
+		image.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 		return true;
 	}
 
-	void image_destroy(Image* image) {
+	void image_destroy(Image image) {
 		if (!image) {
 			return;
 		}
 
-		if (image->handle != VK_NULL_HANDLE && image->memory.handle != VK_NULL_HANDLE) {
-			vmaDestroyImage(g_ctx.vma, image->handle, image->memory.handle);
-		}
+		vmaDestroyImage(g_ctx.vma, image.handle, image.memory.handle);
 	}
 
-	bool image_view_create(const Image* image, VkImageViewType type, VkImageSubresourceRange subresource_range, ImageView* view) {
-		if (!image || !view) {
+	bool image_view_create(Image image, VkImageViewType type, VkImageSubresourceRange subresource_range, ImageView& view) {
+		if (!image) {
 			return false;
 		}
 
 		VkImageViewCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-		create_info.image = image->handle;
+		create_info.image = image.handle;
 		create_info.viewType = type;
-		create_info.format = image->format;
+		create_info.format = image.format;
 		create_info.components.r = VK_COMPONENT_SWIZZLE_R;
 		create_info.components.g = VK_COMPONENT_SWIZZLE_G;
 		create_info.components.b = VK_COMPONENT_SWIZZLE_B;
 		create_info.components.a = VK_COMPONENT_SWIZZLE_A;
 		create_info.subresourceRange = subresource_range;
 
-		VkResult result = vkCreateImageView(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &view->handle);
+		VkResult result = vkCreateImageView(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &view.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		view->type = type;
-		view->range = subresource_range;
+		view.type = type;
+		view.range = subresource_range;
 
 		return true;
 	}
 
-	void image_view_destroy(ImageView* view) {
+	void image_view_destroy(ImageView view) {
 		if (!view) {
 			return;
 		}
 
-		if (view->handle != VK_NULL_HANDLE) {
-			vkDestroyImageView(g_ctx.dev, view->handle, &g_ctx.vk_alloc);
-		}
+		vkDestroyImageView(g_ctx.dev, view.handle, &g_ctx.vk_alloc);
 	}
 
-	bool buffer_create(const BufferCreateInfo* create_info, Buffer* buffer) {
-		if (!create_info || !buffer) {
-			return false;
-		}
-
+	bool buffer_create(BufferCreateInfo create_info, Buffer& buffer) {
 		u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
 		for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
 			queue_family_indices[i] = i;
@@ -1992,90 +1912,88 @@ namespace edge::gfx {
 		buffer_create_info.pQueueFamilyIndices = queue_family_indices;
 
 		u32 minimal_alignment = 1;
-		if (create_info->flags & BUFFER_FLAG_DYNAMIC) {
+		if (create_info.flags & BUFFER_FLAG_DYNAMIC) {
 			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
 			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT |
 				VMA_ALLOCATION_CREATE_HOST_ACCESS_ALLOW_TRANSFER_INSTEAD_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 		}
-		else if (create_info->flags & BUFFER_FLAG_READBACK) {
+		else if (create_info.flags & BUFFER_FLAG_READBACK) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 		}
-		else if (create_info->flags & BUFFER_FLAG_STAGING) {
+		else if (create_info.flags & BUFFER_FLAG_STAGING) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
 			allocation_create_info.usage = VMA_MEMORY_USAGE_AUTO_PREFER_HOST;
 			allocation_create_info.flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT;
 		}
 
-		if (create_info->flags & BUFFER_FLAG_DEVICE_ADDRESS) {
+		if (create_info.flags & BUFFER_FLAG_DEVICE_ADDRESS) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT;
 		}
 
-		if (create_info->flags & BUFFER_FLAG_UNIFORM) {
+		if (create_info.flags & BUFFER_FLAG_UNIFORM) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			minimal_alignment = lcm(g_ctx.properties.limits.minUniformBufferOffsetAlignment, g_ctx.properties.limits.nonCoherentAtomSize);
 		}
-		else if (create_info->flags & BUFFER_FLAG_STORAGE) {
+		else if (create_info.flags & BUFFER_FLAG_STORAGE) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			minimal_alignment = max(minimal_alignment, (u32)g_ctx.properties.limits.minStorageBufferOffsetAlignment);
 		}
-		else if (create_info->flags & BUFFER_FLAG_VERTEX) {
+		else if (create_info.flags & BUFFER_FLAG_VERTEX) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			minimal_alignment = max(minimal_alignment, 4u);
 		}
-		else if (create_info->flags & BUFFER_FLAG_INDEX) {
+		else if (create_info.flags & BUFFER_FLAG_INDEX) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_INDEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 			minimal_alignment = max(minimal_alignment, 1u);
 		}
-		else if (create_info->flags & BUFFER_FLAG_INDIRECT) {
+		else if (create_info.flags & BUFFER_FLAG_INDIRECT) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		}
-		else if (create_info->flags & BUFFER_FLAG_ACCELERATION_BUILD) {
+		else if (create_info.flags & BUFFER_FLAG_ACCELERATION_BUILD) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_BUILD_INPUT_READ_ONLY_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		}
-		else if (create_info->flags & BUFFER_FLAG_ACCELERATION_STORE) {
+		else if (create_info.flags & BUFFER_FLAG_ACCELERATION_STORE) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_ACCELERATION_STRUCTURE_STORAGE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		}
-		else if (create_info->flags & BUFFER_FLAG_SHADER_BINDING_TABLE) {
+		else if (create_info.flags & BUFFER_FLAG_SHADER_BINDING_TABLE) {
 			buffer_create_info.usage |= VK_BUFFER_USAGE_SHADER_BINDING_TABLE_BIT_KHR | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
 		}
 
-		buffer_create_info.size = align_up((u32)create_info->size, minimal_alignment);
+		buffer_create_info.size = align_up((u32)create_info.size, minimal_alignment);
 
-		VkResult result = vmaCreateBuffer(g_ctx.vma, &buffer_create_info, &allocation_create_info, &buffer->handle, &buffer->memory.handle, &buffer->memory.info);
+		VmaAllocationInfo alloc_info;
+		VkResult result = vmaCreateBuffer(g_ctx.vma, &buffer_create_info, &allocation_create_info, &buffer.handle, &buffer.memory.handle, &alloc_info);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		device_memory_setup(&buffer->memory);
+		buffer.memory.size = alloc_info.size;
+		buffer.memory.mapped = alloc_info.pMappedData;
 
-		if (create_info->flags & BUFFER_FLAG_DEVICE_ADDRESS) {
+		device_memory_setup(buffer.memory);
+
+		if (create_info.flags & BUFFER_FLAG_DEVICE_ADDRESS) {
 			VkBufferDeviceAddressInfo device_address_info = {};
 			device_address_info.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO;
-			device_address_info.buffer = buffer->handle;
-			buffer->address = vkGetBufferDeviceAddressKHR(g_ctx.dev, &device_address_info);
+			device_address_info.buffer = buffer.handle;
+			buffer.address = vkGetBufferDeviceAddressKHR(g_ctx.dev, &device_address_info);
 		}
 
-		buffer->flags = create_info->flags;
+		buffer.flags = create_info.flags;
 
 		return true;
 	}
 
-	void buffer_destroy(Buffer* buffer) {
+	void buffer_destroy(Buffer buffer) {
 		if (!buffer) {
 			return;
 		}
 
-		if (buffer->handle != VK_NULL_HANDLE && buffer->memory.handle != VK_NULL_HANDLE) {
-			vmaDestroyBuffer(g_ctx.vma, buffer->handle, buffer->memory.handle);
-		}
+		vmaDestroyBuffer(g_ctx.vma, buffer.handle, buffer.memory.handle);
 	}
 
-	bool semaphore_create(VkSemaphoreType type, u64 value, Semaphore* semaphore) {
-		if (!semaphore) {
-			return false;
-		}
-
+	bool semaphore_create(VkSemaphoreType type, u64 value, Semaphore& semaphore) {
 		VkSemaphoreTypeCreateInfo type_create_info = {};
 		type_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO;
 		type_create_info.semaphoreType = type;
@@ -2085,35 +2003,31 @@ namespace edge::gfx {
 		create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 		create_info.pNext = &type_create_info;
 
-		VkResult result = vkCreateSemaphore(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &semaphore->handle);
+		VkResult result = vkCreateSemaphore(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &semaphore.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		semaphore->type = type;
-		semaphore->value = value;
+		semaphore.type = type;
+		semaphore.value = value;
 
 		return true;
 	}
 
-	void semaphore_destroy(Semaphore* semaphore) {
+	void semaphore_destroy(Semaphore semaphore) {
 		if (!semaphore) {
 			return;
 		}
 
-		vkDestroySemaphore(g_ctx.dev, semaphore->handle, &g_ctx.vk_alloc);
+		vkDestroySemaphore(g_ctx.dev, semaphore.handle, &g_ctx.vk_alloc);
 	}
 
-	bool fence_create(VkFenceCreateFlags flags, Fence* fence) {
-		if (!fence) {
-			return false;
-		}
-
+	bool fence_create(VkFenceCreateFlags flags, Fence& fence) {
 		VkFenceCreateInfo create_info = {};
 		create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 		create_info.flags = flags;
 
-		VkResult result = vkCreateFence(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &fence->handle);
+		VkResult result = vkCreateFence(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &fence.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
@@ -2121,12 +2035,12 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool fence_wait(const Fence* fence, u64 timeout) {
+	bool fence_wait(Fence fence, u64 timeout) {
 		if (!fence) {
 			return false;
 		}
 
-		VkResult result = vkWaitForFences(g_ctx.dev, 1, &fence->handle, VK_TRUE, timeout);
+		VkResult result = vkWaitForFences(g_ctx.dev, 1, &fence.handle, VK_TRUE, timeout);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
@@ -2134,29 +2048,29 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void fence_reset(const Fence* fence) {
+	void fence_reset(Fence fence) {
 		if (!fence) {
 			return;
 		}
 
-		vkResetFences(g_ctx.dev, 1, &fence->handle);
+		vkResetFences(g_ctx.dev, 1, &fence.handle);
 	}
 
-	void fence_destroy(Fence* fence) {
+	void fence_destroy(Fence fence) {
 		if (!fence) {
 			return;
 		}
 
-		vkDestroyFence(g_ctx.dev, fence->handle, &g_ctx.vk_alloc);
+		vkDestroyFence(g_ctx.dev, fence.handle, &g_ctx.vk_alloc);
 	}
 
-	bool pipeline_barrier_add_memory(PipelineBarrierBuilder* builder, VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
+	bool pipeline_barrier_add_memory(PipelineBarrierBuilder& builder, VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
 		VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask) {
-		if (builder->memory_barrier_count >= MEMORY_BARRIERS_MAX) {
+		if (builder.memory_barrier_count >= MEMORY_BARRIERS_MAX) {
 			return false;
 		}
 
-		VkMemoryBarrier2* barrier = &builder->memory_barriers[builder->memory_barrier_count++];
+		VkMemoryBarrier2* barrier = &builder.memory_barriers[builder.memory_barrier_count++];
 		barrier->sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
 		barrier->pNext = nullptr;
 		barrier->srcStageMask = src_stage_mask;
@@ -2167,13 +2081,13 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool pipeline_barrier_add_buffer(PipelineBarrierBuilder* builder, const Buffer* buffer, VkPipelineStageFlags2 src_stage_mask,
+	bool pipeline_barrier_add_buffer(PipelineBarrierBuilder& builder, Buffer buffer, VkPipelineStageFlags2 src_stage_mask,
 		VkAccessFlags2 src_access_mask, VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask, VkDeviceSize offset, VkDeviceSize size) {
-		if (builder->buffer_barrier_count >= BUFFER_BARRIERS_MAX || !buffer) {
+		if (builder.buffer_barrier_count >= BUFFER_BARRIERS_MAX || !buffer) {
 			return false;
 		}
 
-		VkBufferMemoryBarrier2* barrier = &builder->buffer_barriers[builder->buffer_barrier_count++];
+		VkBufferMemoryBarrier2* barrier = &builder.buffer_barriers[builder.buffer_barrier_count++];
 		barrier->sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
 		barrier->pNext = nullptr;
 		barrier->srcStageMask = src_stage_mask;
@@ -2182,7 +2096,7 @@ namespace edge::gfx {
 		barrier->dstAccessMask = dst_access_mask;
 		barrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier->dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier->buffer = buffer->handle;
+		barrier->buffer = buffer.handle;
 		barrier->offset = offset;
 		barrier->size = size;
 
@@ -2231,34 +2145,30 @@ namespace edge::gfx {
 		}
 	}
 
-	bool pipeline_barrier_add_image(PipelineBarrierBuilder* builder, const Image* image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range) {
-		if (builder->image_barrier_count >= IMAGE_BARRIERS_MAX || !image) {
+	bool pipeline_barrier_add_image(PipelineBarrierBuilder& builder, Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range) {
+		if (builder.image_barrier_count >= IMAGE_BARRIERS_MAX || !image) {
 			return false;
 		}
 
-		VkImageMemoryBarrier2* barrier = &builder->image_barriers[builder->image_barrier_count++];
+		VkImageMemoryBarrier2* barrier = &builder.image_barriers[builder.image_barrier_count++];
 		barrier->sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2;
 		barrier->pNext = nullptr;
-		image_get_stage_and_acces(image->layout, &barrier->srcStageMask, &barrier->srcAccessMask);
+		image_get_stage_and_acces(image.layout, &barrier->srcStageMask, &barrier->srcAccessMask);
 		image_get_stage_and_acces(new_layout, &barrier->dstStageMask, &barrier->dstAccessMask);
-		barrier->oldLayout = image->layout;
+		barrier->oldLayout = image.layout;
 		barrier->newLayout = new_layout;
 		barrier->srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
 		barrier->dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-		barrier->image = image->handle;
+		barrier->image = image.handle;
 		barrier->subresourceRange = subresource_range;
 
 		return true;
 	}
 
-	void pipeline_barrier_builder_reset(PipelineBarrierBuilder* builder) {
-		if (!builder) {
-			return;
-		}
-
-		builder->memory_barrier_count = 0;
-		builder->buffer_barrier_count = 0;
-		builder->image_barrier_count = 0;
-		builder->dependency_flags = 0;
+	void pipeline_barrier_builder_reset(PipelineBarrierBuilder& builder) {
+		builder.memory_barrier_count = 0;
+		builder.buffer_barrier_count = 0;
+		builder.image_barrier_count = 0;
+		builder.dependency_flags = 0;
 	}
 }
