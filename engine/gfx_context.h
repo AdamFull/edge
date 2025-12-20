@@ -182,8 +182,7 @@ namespace edge::gfx {
 
 	bool pipeline_barrier_add_memory(PipelineBarrierBuilder& builder, VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
 		VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask);
-	bool pipeline_barrier_add_buffer(PipelineBarrierBuilder& builder, Buffer buffer, VkPipelineStageFlags2 src_stage_mask,
-		VkAccessFlags2 src_access_mask, VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask, VkDeviceSize offset, VkDeviceSize size);
+	bool pipeline_barrier_add_buffer(PipelineBarrierBuilder& builder, Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size);
 	bool pipeline_barrier_add_image(PipelineBarrierBuilder& builder, Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range);
 	void pipeline_barrier_builder_reset(PipelineBarrierBuilder& builder);
 }
