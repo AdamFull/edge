@@ -38,25 +38,25 @@ namespace edge {
 		i32 height;
 	};
 
-	PlatformContext* platform_context_create(PlatformContextCreateInfo* create_info);
+	PlatformContext* platform_context_create(PlatformContextCreateInfo create_info);
 	void platform_context_destroy(PlatformContext* ctx);
 
-	void platform_context_get_surface(PlatformContext* ctx, void* surface_info);
+	void platform_context_get_surface(NotNull<PlatformContext*> ctx, void* surface_info);
 
-	bool platform_context_window_init(PlatformContext* ctx, WindowCreateInfo* create_info);
+	bool platform_context_window_init(NotNull<PlatformContext*> ctx, WindowCreateInfo create_info);
 
-	bool platform_context_window_should_close(PlatformContext* ctx);
-	void platform_context_window_process_events(PlatformContext* ctx, f32 delta_time);
+	bool platform_context_window_should_close(NotNull<PlatformContext*> ctx);
+	void platform_context_window_process_events(NotNull<PlatformContext*> ctx, f32 delta_time);
 
-	void platform_context_window_show(PlatformContext* ctx);
-	void platform_context_window_hide(PlatformContext* ctx);
+	void platform_context_window_show(NotNull<PlatformContext*> ctx);
+	void platform_context_window_hide(NotNull<PlatformContext*> ctx);
 
-	void platform_context_window_set_title(PlatformContext* ctx, const char* title);
+	void platform_context_window_set_title(NotNull<PlatformContext*> ctx, const char* title);
 
-	void platform_context_window_get_size(PlatformContext* ctx, i32* width, i32* height);
+	void platform_context_window_get_size(NotNull<PlatformContext*> ctx, i32* width, i32* height);
 
-	f32 platform_context_window_dpi_scale_factor(PlatformContext* ctx);
-	f32 platform_context_window_content_scale_factor(PlatformContext* ctx);
+	f32 platform_context_window_dpi_scale_factor(NotNull<PlatformContext*> ctx);
+	f32 platform_context_window_content_scale_factor(NotNull<PlatformContext*> ctx);
 }
 
 #endif //PLATFORM_CONTEXT_H

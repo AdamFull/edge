@@ -24,7 +24,7 @@
 extern i32 edge_main(edge::PlatformLayout* platform_layout);
 
 namespace edge {
-	static EventDispatcher* g_event_dispatcher = NULL;
+	EventDispatcher* g_event_dispatcher = nullptr;
 
 	struct PlatformLayout {
 		HINSTANCE hinst;
@@ -205,7 +205,7 @@ namespace edge {
 
 	static void* glfw_allocate_cb(size_t size, void* user) {
 		if (!user) {
-			return NULL;
+			return nullptr;
 		}
 
 		Allocator* alloc = (Allocator*)user;
@@ -214,7 +214,7 @@ namespace edge {
 
 	static void* glfw_reallocate_cb(void* block, size_t size, void* user) {
 		if (!user) {
-			return NULL;
+			return nullptr;
 		}
 
 		Allocator* alloc = (Allocator*)user;
@@ -261,7 +261,7 @@ namespace edge {
 			glfwTerminate();
 		}
 
-		glfwSetErrorCallback(NULL);
+		glfwSetErrorCallback(nullptr);
 	}
 
 	static void window_close_cb(GLFWwindow* window) {
@@ -367,24 +367,24 @@ namespace edge {
 		event_dispatcher_dispatch(g_event_dispatcher, (EventHeader*)&evt);
 	}
 
-	PlatformContext* platform_context_create(PlatformContextCreateInfo* create_info) {
-		if (!create_info || !create_info->alloc || !create_info->layout) {
-			return NULL;
+	PlatformContext* platform_context_create(PlatformContextCreateInfo create_info) {
+		if (!create_info.alloc || !create_info.layout) {
+			return nullptr;
 		}
 
-		PlatformContext* ctx = create_info->alloc->allocate<PlatformContext>();
+		PlatformContext* ctx = create_info.alloc->allocate<PlatformContext>();
 		if (!ctx) {
-			return NULL;
+			return nullptr;
 		}
 
 		memset(&ctx->input_state, 0, sizeof(InputState));
 
-		ctx->alloc = create_info->alloc;
-		ctx->layout = create_info->layout;
-		ctx->event_dispatcher = create_info->event_dispatcher;
-		ctx->wnd = NULL;
+		ctx->alloc = create_info.alloc;
+		ctx->layout = create_info.layout;
+		ctx->event_dispatcher = create_info.event_dispatcher;
+		ctx->wnd = nullptr;
 
-		g_event_dispatcher = create_info->event_dispatcher;
+		g_event_dispatcher = create_info.event_dispatcher;
 
 #if EDGE_DEBUG
 		if (!AttachConsole(ATTACH_PARENT_PROCESS)) {
@@ -407,7 +407,7 @@ namespace edge {
 #endif
 		
 		Logger* logger = logger_get_global();
-		LoggerOutput* debug_output = logger_create_debug_console_output(create_info->alloc, LogFormat::LogFormat_Default);
+		LoggerOutput* debug_output = logger_create_debug_console_output(create_info.alloc, LogFormat::LogFormat_Default);
 		logger_add_output(logger, debug_output);
 
 		return ctx;
@@ -428,49 +428,44 @@ namespace edge {
 			deinit_glfw_context();
 		}
 
-		g_event_dispatcher = NULL;
+		g_event_dispatcher = nullptr;
 
 		const Allocator* alloc = ctx->alloc;
 		alloc->deallocate(ctx);
 	}
 
-	void platform_context_get_surface(PlatformContext* ctx, void* surface_info) {
-		if (!ctx || !surface_info) {
+	void platform_context_get_surface(NotNull<PlatformContext*> ctx, void* surface_info) {
+		if (!surface_info) {
 			return;
 		}
 
-		VkWin32SurfaceCreateInfoKHR* create_info = (VkWin32SurfaceCreateInfoKHR*)surface_info;
-		create_info->sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-		create_info->pNext = NULL;
-		create_info->flags = 0;
-		create_info->hinstance = ctx->layout->hinst;
-		create_info->hwnd = glfwGetWin32Window(ctx->wnd->handle);
+		*(VkWin32SurfaceCreateInfoKHR*)surface_info = {
+			.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
+			.hinstance = ctx->layout->hinst,
+			.hwnd = glfwGetWin32Window(ctx->wnd->handle)
+		};
 	}
 
-	bool platform_context_window_init(PlatformContext* ctx, WindowCreateInfo* create_info) {
-		if (!ctx) {
-			return false;
-		}
-
+	bool platform_context_window_init(NotNull<PlatformContext*> ctx, WindowCreateInfo create_info) {
 		init_glfw_context(ctx->alloc);
 
 		Window* wnd = ctx->alloc->allocate<Window>();
 		if (!wnd) {
 			deinit_glfw_context();
-			return NULL;
+			return false;
 		}
 
-		wnd->mode = create_info->mode;
-		wnd->resizable = create_info->resizable;
-		wnd->vsync_mode = create_info->vsync_mode;
+		wnd->mode = create_info.mode;
+		wnd->resizable = create_info.resizable;
+		wnd->vsync_mode = create_info.vsync_mode;
 		wnd->should_close = false;
 		
-		switch (create_info->mode)
+		switch (create_info.mode)
 		{
 		case WindowMode::Fullscreen: {
 			GLFWmonitor* monitor = glfwGetPrimaryMonitor();
 			const GLFWvidmode* mode = glfwGetVideoMode(monitor);
-			wnd->handle = glfwCreateWindow(mode->width, mode->height, create_info->title, monitor, NULL);
+			wnd->handle = glfwCreateWindow(mode->width, mode->height, create_info.title, monitor, nullptr);
 			break;
 		}
 		case WindowMode::FullscreenBorderless: {
@@ -482,11 +477,11 @@ namespace edge {
 			glfwWindowHint(GLFW_BLUE_BITS, mode->blueBits);
 			glfwWindowHint(GLFW_REFRESH_RATE, mode->refreshRate);
 
-			wnd->handle = glfwCreateWindow(mode->width, mode->height, create_info->title, monitor, NULL);
+			wnd->handle = glfwCreateWindow(mode->width, mode->height, create_info.title, monitor, nullptr);
 			break;
 		}
 		default: {
-			wnd->handle = glfwCreateWindow(create_info->width, create_info->height, create_info->title, NULL, NULL);
+			wnd->handle = glfwCreateWindow(create_info.width, create_info.height, create_info.title, nullptr, nullptr);
 			break;
 		}
 		}
@@ -494,7 +489,7 @@ namespace edge {
 		if (!wnd->handle) {
 			ctx->alloc->deallocate(wnd);
 			deinit_glfw_context();
-			return NULL;
+			return false;
 		}
 
 		glfwSetWindowCloseCallback(wnd->handle, window_close_cb);
@@ -512,23 +507,23 @@ namespace edge {
 		glfwSetInputMode(wnd->handle, GLFW_STICKY_KEYS, 1);
 		glfwSetInputMode(wnd->handle, GLFW_STICKY_MOUSE_BUTTONS, 1);
 
-		glfwSetWindowUserPointer(wnd->handle, ctx);
+		glfwSetWindowUserPointer(wnd->handle, ctx.m_ptr);
 
 		ctx->wnd = wnd;
 
 		return true;
 	}
 
-	bool platform_context_window_should_close(PlatformContext* ctx) {
-		if (!ctx || !ctx->wnd) {
+	bool platform_context_window_should_close(NotNull<PlatformContext*> ctx) {
+		if (!ctx->wnd) {
 			return false;
 		}
 
 		return ctx->wnd->should_close;
 	}
 
-	void platform_context_window_process_events(PlatformContext* ctx, f32 delta_time) {
-		if (!ctx || !ctx->wnd || !ctx->wnd->handle) {
+	void platform_context_window_process_events(NotNull<PlatformContext*> ctx, f32 delta_time) {
+		if (!ctx->wnd || !ctx->wnd->handle) {
 			return;
 		}
 
@@ -560,32 +555,32 @@ namespace edge {
 		glfwShowWindow(ctx->wnd->handle);
 	}
 
-	void platform_context_window_hide(PlatformContext* ctx) {
-		if (!ctx || !ctx->wnd || !ctx->wnd->handle) {
+	void platform_context_window_hide(NotNull<PlatformContext*> ctx) {
+		if (!ctx->wnd || !ctx->wnd->handle) {
 			return;
 		}
 
 		glfwHideWindow(ctx->wnd->handle);
 	}
 
-	void platform_context_window_set_title(PlatformContext* ctx, const char* title) {
-		if (!ctx || !ctx->wnd || !ctx->wnd->handle || !title) {
+	void platform_context_window_set_title(NotNull<PlatformContext*> ctx, const char* title) {
+		if (!ctx->wnd || !ctx->wnd->handle || !title) {
 			return;
 		}
 
 		glfwSetWindowTitle(ctx->wnd->handle, title);
 	}
 
-	void platform_context_window_get_size(PlatformContext* ctx, i32* width, i32* height) {
-		if (!ctx || !width || !height) {
+	void platform_context_window_get_size(NotNull<PlatformContext*> ctx, i32* width, i32* height) {
+		if (!width || !height) {
 			return;
 		}
 
 		glfwGetWindowSize(ctx->wnd->handle, width, height);
 	}
 
-	f32 platform_context_window_dpi_scale_factor(PlatformContext* ctx) {
-		if (!ctx || !ctx->wnd || !ctx->wnd->handle) {
+	f32 platform_context_window_dpi_scale_factor(NotNull<PlatformContext*> ctx) {
+		if (!ctx->wnd || !ctx->wnd->handle) {
 			return 1.0f;
 		}
 
@@ -603,8 +598,8 @@ namespace edge {
 		return dpi / win_base_density;
 	}
 
-	f32 platform_context_window_content_scale_factor(PlatformContext* ctx) {
-		if (!ctx || !ctx->wnd || !ctx->wnd->handle) {
+	f32 platform_context_window_content_scale_factor(NotNull<PlatformContext*> ctx) {
+		if (!ctx->wnd || !ctx->wnd->handle) {
 			return 1.0f;
 		}
 
@@ -619,11 +614,12 @@ namespace edge {
 }
 
 i32 APIENTRY WinMain(HINSTANCE hinst, HINSTANCE prev_hinst, PSTR cmd_line, INT cmd_show) {
-	edge::PlatformLayout platform_layout = {};
-	platform_layout.hinst = hinst;
-	platform_layout.prev_hinst = prev_hinst;
-	platform_layout.cmd_line = cmd_line;
-	platform_layout.cmd_show = cmd_show;
+	edge::PlatformLayout platform_layout = {
+		.hinst = hinst,
+		.prev_hinst = prev_hinst,
+		.cmd_line = cmd_line,
+		.cmd_show = cmd_show
+	};
 
 	return edge_main(&platform_layout);
 }
