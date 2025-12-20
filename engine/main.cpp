@@ -167,7 +167,6 @@ int edge_main(PlatformLayout* platform_layout) {
 	}
 
 	const gfx::ImGuiRendererCreateInfo imgui_renderer_create_info = {
-		.allocator = engine_context.allocator,
 		.renderer = engine_context.renderer
 	};
 
@@ -182,9 +181,10 @@ int edge_main(PlatformLayout* platform_layout) {
 
 		imgui_layer_update(engine_context.imgui_layer, 0.1f);
 
-		if (gfx::renderer_frame_begin(engine_context.renderer)) {
-			gfx::imgui_renderer_execute(engine_context.imgui_renderer);
-			gfx::renderer_frame_end(engine_context.renderer);
+		if (engine_context.renderer->frame_begin()) {
+			engine_context.imgui_renderer->execute();
+			
+			engine_context.renderer->frame_end();
 		}
     }
 

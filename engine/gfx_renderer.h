@@ -97,6 +97,15 @@ namespace edge::gfx {
 		CmdPool cmd_pool = {};
 	};
 
+	struct BufferUpdateInfo {
+		Buffer dst_buffer = {};
+		BufferView buffer_view = {};
+		Array<VkBufferCopy2KHR> copy_regions = {};
+		VkDeviceSize offset = 0;
+
+		bool write(NotNull<const Allocator*> alloc, const void* data, VkDeviceSize size, VkDeviceSize dst_offset) noexcept;
+	};
+
 	struct Renderer {
 		const Allocator* alloc = nullptr;
 		Queue queue = {};
@@ -138,33 +147,24 @@ namespace edge::gfx {
 
 		//ResourceSet update_resource_sets[RENDERER_FRAME_OVERLAP] = {};
 		//u32 current_update_set = 0;
-	};
 
-	struct BufferUpdateInfo {
-		Buffer dst_buffer = {};
-		BufferView buffer_view = {};
-		Array<VkBufferCopy2KHR> copy_regions = {};
-		VkDeviceSize offset = 0;
+		Handle add_resource() noexcept;
+		bool setup_resource(Handle handle, Image image) noexcept;
+		bool setup_resource(Handle handle, Buffer buffer) noexcept;
+		void update_resource(Handle handle, Image image) noexcept;
+		void update_resource(Handle handle, Buffer buffer) noexcept;
+		Resource* get_resource(Handle handle) noexcept;
+		void free_resource(Handle handle) noexcept;
 
-		bool write(NotNull<const Allocator*> alloc, const void* data, VkDeviceSize size, VkDeviceSize dst_offset) noexcept;
+		bool frame_begin() noexcept;
+		bool frame_end() noexcept;
+
+		void buffer_update_begin(VkDeviceSize size, BufferUpdateInfo& update_info) noexcept;
+		void buffer_update_end(const BufferUpdateInfo& update_info);
 	};
 
 	Renderer* renderer_create(RendererCreateInfo create_info);
 	void renderer_destroy(Renderer* renderer);
-
-	Handle renderer_add_resource(NotNull<Renderer*> renderer);
-	bool renderer_setup_image_resource(NotNull<Renderer*> renderer, Handle handle, Image resource);
-	bool renderer_setup_buffer_resource(NotNull<Renderer*> renderer, Handle handle, Buffer resource);
-	void renderer_update_image_resource(NotNull<Renderer*> renderer, Handle handle, Image image);
-	void renderer_update_buffer_resource(NotNull<Renderer*> renderer, Handle handle, Buffer buffer);
-	Resource* renderer_get_resource(NotNull<Renderer*> renderer, Handle handle);
-	void renderer_free_resource(NotNull<Renderer*> renderer, Handle handle);
-
-	bool renderer_frame_begin(NotNull<Renderer*> renderer);
-	bool renderer_frame_end(NotNull<Renderer*> renderer);
-
-	void renderer_buffer_update_begin(NotNull<Renderer*> renderer, VkDeviceSize size, BufferUpdateInfo& update_info);
-	void renderer_buffer_update_end(NotNull<Renderer*> renderer, const BufferUpdateInfo& update_info);
 }
 
 #endif // GFX_RENDERER_H

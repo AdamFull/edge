@@ -37,79 +37,15 @@ namespace edge::gfx {
 		if (!buffer_create(buffer_create_info, buffer)) {
 			return;
 		}
-		renderer_update_buffer_resource(imgui_renderer->renderer, handle, buffer);
-	}
-
-	static void update_imgui_texture(NotNull<ImGuiRenderer*> imgui_renderer, ImTextureData* tex) {
-		if (!tex) {
-			return;
-		}
-
-
-	}
-
-	static void update_geometry_buffers(NotNull<ImGuiRenderer*> imgui_renderer, NotNull<ImDrawData*> draw_data) {
-		if (draw_data->TotalVtxCount > imgui_renderer->vertex_buffer_capacity) {
-			imgui_renderer->vertex_buffer_capacity = grow(imgui_renderer->vertex_buffer_capacity, draw_data->TotalVtxCount);
-			update_buffer_resource(imgui_renderer, imgui_renderer->vertex_buffer,
-				imgui_renderer->vertex_buffer_capacity * sizeof(ImDrawVert), k_vertex_buffer_flags);
-		}
-
-		if (draw_data->TotalIdxCount > imgui_renderer->index_buffer_capacity) {
-			imgui_renderer->index_buffer_capacity = grow(imgui_renderer->index_buffer_capacity, draw_data->TotalIdxCount);
-			update_buffer_resource(imgui_renderer, imgui_renderer->index_buffer, imgui_renderer->index_buffer_capacity * sizeof(ImDrawIdx), k_index_buffer_flags);
-		}
-
-		Resource* vertex_buffer_resorce = renderer_get_resource(imgui_renderer->renderer, imgui_renderer->vertex_buffer);
-		Resource* index_buffer_resorce = renderer_get_resource(imgui_renderer->renderer, imgui_renderer->index_buffer);
-
-		BufferUpdateInfo vb_update = { .dst_buffer = vertex_buffer_resorce->buffer };
-		renderer_buffer_update_begin(imgui_renderer->renderer, draw_data->TotalVtxCount * sizeof(ImDrawVert), vb_update);
-
-		BufferUpdateInfo ib_update = { .dst_buffer = index_buffer_resorce->buffer };
-		renderer_buffer_update_begin(imgui_renderer->renderer, draw_data->TotalIdxCount * sizeof(ImDrawIdx), ib_update);
-
-		VkDeviceSize vtx_offset = 0, idx_offset = 0;
-
-		for (i32 n = 0; n < draw_data->CmdListsCount; n++) {
-			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
-
-			auto vtx_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
-			vb_update.write(imgui_renderer->allocator, im_cmd_list->VtxBuffer.Data, vtx_size, std::exchange(vtx_offset, vtx_offset + vtx_size));
-
-			auto idx_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
-			ib_update.write(imgui_renderer->allocator, im_cmd_list->IdxBuffer.Data, idx_size, std::exchange(idx_offset, idx_offset + idx_size));
-		}
-
-		// TODO: barriers
-		PipelineBarrierBuilder barrier_builder = {};
-		pipeline_barrier_add_buffer(barrier_builder, vertex_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
-		vertex_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
-		pipeline_barrier_add_buffer(barrier_builder, index_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
-		index_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
-
-		cmd_pipeline_barrier(imgui_renderer->renderer->active_frame->cmd_buf, barrier_builder);
-		pipeline_barrier_builder_reset(barrier_builder);
-
-		renderer_buffer_update_end(imgui_renderer->renderer, vb_update);
-		renderer_buffer_update_end(imgui_renderer->renderer, ib_update);
-
-		pipeline_barrier_add_buffer(barrier_builder, vertex_buffer_resorce->buffer, BufferLayout::ShaderRead, 0, VK_WHOLE_SIZE);
-		vertex_buffer_resorce->buffer.layout = BufferLayout::ShaderRead;
-
-		pipeline_barrier_add_buffer(barrier_builder, index_buffer_resorce->buffer, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
-		index_buffer_resorce->buffer.layout = BufferLayout::IndexBuffer;
-
-		cmd_pipeline_barrier(imgui_renderer->renderer->active_frame->cmd_buf, barrier_builder);
+		imgui_renderer->renderer->update_resource(handle, buffer);
 	}
 
 	ImGuiRenderer* imgui_renderer_create(ImGuiRendererCreateInfo create_info) {
-		ImGuiRenderer* imgui_renderer = create_info.allocator->allocate<ImGuiRenderer>();
+		ImGuiRenderer* imgui_renderer = create_info.renderer->alloc->allocate<ImGuiRenderer>();
 		if (!imgui_renderer) {
 			return nullptr;
 		}
 
-		imgui_renderer->allocator = create_info.allocator;
 		imgui_renderer->renderer = create_info.renderer;
 
 		if (!shader_module_create(imgui_vs, imgui_vs_size, imgui_renderer->vertex_shader)) {
@@ -244,11 +180,11 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
-		imgui_renderer->vertex_buffer = renderer_add_resource(imgui_renderer->renderer);
+		imgui_renderer->vertex_buffer = imgui_renderer->renderer->add_resource();
 		imgui_renderer->vertex_buffer_capacity = k_initial_vertex_count;
 		update_buffer_resource(imgui_renderer, imgui_renderer->vertex_buffer, k_initial_vertex_count * sizeof(ImDrawVert), k_vertex_buffer_flags);
 
-		imgui_renderer->index_buffer = renderer_add_resource(imgui_renderer->renderer);
+		imgui_renderer->index_buffer = imgui_renderer->renderer->add_resource();
 		imgui_renderer->index_buffer_capacity = k_initial_index_count;
 		update_buffer_resource(imgui_renderer, imgui_renderer->index_buffer, k_initial_index_count * sizeof(ImDrawIdx), k_index_buffer_flags);
 
@@ -265,14 +201,73 @@ namespace edge::gfx {
 		shader_module_destroy(imgui_renderer->fragment_shader);
 		shader_module_destroy(imgui_renderer->vertex_shader);
 
-		renderer_free_resource(imgui_renderer->renderer, imgui_renderer->index_buffer);
-		renderer_free_resource(imgui_renderer->renderer, imgui_renderer->vertex_buffer);
+		imgui_renderer->renderer->free_resource(imgui_renderer->index_buffer);
+		imgui_renderer->renderer->free_resource(imgui_renderer->vertex_buffer);
 
-		const Allocator* allocator = imgui_renderer->allocator;
+		const Allocator* allocator = imgui_renderer->renderer->alloc;
 		allocator->deallocate(imgui_renderer);
 	}
 
-	void imgui_renderer_execute(NotNull<ImGuiRenderer*> imgui_renderer) {
+	void ImGuiRenderer::update_texture(NotNull<ImTextureData*> tex) noexcept {
+		
+	}
+
+	void ImGuiRenderer::update_geometry(NotNull<ImDrawData*> draw_data) noexcept {
+		if (draw_data->TotalVtxCount > vertex_buffer_capacity) {
+			vertex_buffer_capacity = grow(vertex_buffer_capacity, draw_data->TotalVtxCount);
+			update_buffer_resource(this, vertex_buffer,
+				vertex_buffer_capacity * sizeof(ImDrawVert), k_vertex_buffer_flags);
+		}
+
+		if (draw_data->TotalIdxCount > index_buffer_capacity) {
+			index_buffer_capacity = grow(index_buffer_capacity, draw_data->TotalIdxCount);
+			update_buffer_resource(this, index_buffer, index_buffer_capacity * sizeof(ImDrawIdx), k_index_buffer_flags);
+		}
+
+		Resource* vertex_buffer_resorce = renderer->get_resource(vertex_buffer);
+		Resource* index_buffer_resorce = renderer->get_resource(index_buffer);
+
+		BufferUpdateInfo vb_update = { .dst_buffer = vertex_buffer_resorce->buffer };
+		renderer->buffer_update_begin(draw_data->TotalVtxCount * sizeof(ImDrawVert), vb_update);
+
+		BufferUpdateInfo ib_update = { .dst_buffer = index_buffer_resorce->buffer };
+		renderer->buffer_update_begin(draw_data->TotalIdxCount * sizeof(ImDrawIdx), ib_update);
+
+		VkDeviceSize vtx_offset = 0, idx_offset = 0;
+
+		for (i32 n = 0; n < draw_data->CmdListsCount; n++) {
+			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
+
+			auto vtx_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
+			vb_update.write(renderer->alloc, im_cmd_list->VtxBuffer.Data, vtx_size, std::exchange(vtx_offset, vtx_offset + vtx_size));
+
+			auto idx_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+			ib_update.write(renderer->alloc, im_cmd_list->IdxBuffer.Data, idx_size, std::exchange(idx_offset, idx_offset + idx_size));
+		}
+
+		// TODO: barriers
+		PipelineBarrierBuilder barrier_builder = {};
+		pipeline_barrier_add_buffer(barrier_builder, vertex_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
+		vertex_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
+		pipeline_barrier_add_buffer(barrier_builder, index_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
+		index_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
+
+		cmd_pipeline_barrier(renderer->active_frame->cmd_buf, barrier_builder);
+		pipeline_barrier_builder_reset(barrier_builder);
+
+		renderer->buffer_update_end(vb_update);
+		renderer->buffer_update_end(ib_update);
+
+		pipeline_barrier_add_buffer(barrier_builder, vertex_buffer_resorce->buffer, BufferLayout::ShaderRead, 0, VK_WHOLE_SIZE);
+		vertex_buffer_resorce->buffer.layout = BufferLayout::ShaderRead;
+
+		pipeline_barrier_add_buffer(barrier_builder, index_buffer_resorce->buffer, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
+		index_buffer_resorce->buffer.layout = BufferLayout::IndexBuffer;
+
+		cmd_pipeline_barrier(renderer->active_frame->cmd_buf, barrier_builder);
+	}
+
+	void ImGuiRenderer::execute() noexcept {
 		if (!ImGui::GetCurrentContext()) {
 			return;
 		}
@@ -280,7 +275,7 @@ namespace edge::gfx {
 		ImDrawData* draw_data = ImGui::GetDrawData();
 		if (draw_data && draw_data->Textures) {
 			for (ImTextureData* tex : *draw_data->Textures) {
-				update_imgui_texture(imgui_renderer, tex);
+				update_texture(tex);
 			}
 		}
 
@@ -288,12 +283,11 @@ namespace edge::gfx {
 			return;
 		}
 
-		update_geometry_buffers(imgui_renderer, draw_data);
+		update_geometry(draw_data);
 
-		Resource* vertex_buffer_resorce = renderer_get_resource(imgui_renderer->renderer, imgui_renderer->vertex_buffer);
-		Resource* index_buffer_resorce = renderer_get_resource(imgui_renderer->renderer, imgui_renderer->index_buffer);
-
-		Resource* backbuffer_resource = renderer_get_resource(imgui_renderer->renderer, imgui_renderer->renderer->backbuffer_handle);
+		Resource* vertex_buffer_resorce = renderer->get_resource(vertex_buffer);
+		Resource* index_buffer_resorce = renderer->get_resource(index_buffer);
+		Resource* backbuffer_resource = renderer->get_resource(renderer->backbuffer_handle);
 
 		VkAttachmentLoadOp load_op = VK_ATTACHMENT_LOAD_OP_LOAD;
 		if (backbuffer_resource->image.layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
@@ -307,7 +301,7 @@ namespace edge::gfx {
 				});
 			backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-			cmd_pipeline_barrier(imgui_renderer->renderer->active_frame->cmd_buf, barrier_builder);
+			cmd_pipeline_barrier(renderer->active_frame->cmd_buf, barrier_builder);
 			load_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		}
 
@@ -334,14 +328,14 @@ namespace edge::gfx {
 			.pColorAttachments = &color_attachment
 		};
 
-		CmdBuf cmd = imgui_renderer->renderer->active_frame->cmd_buf;
+		CmdBuf cmd = renderer->active_frame->cmd_buf;
 
 		cmd_begin_rendering(cmd, rendering_info);
-		
+
 		//cmd_bind_index_buffer(cmd, index_buffer_resorce->buffer, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 		vkCmdBindIndexBuffer(cmd.handle, index_buffer_resorce->buffer.handle, 0ull, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
-		//cmd_bind_pipeline(cmd, imgui_renderer->pipeline);
-		vkCmdBindPipeline(cmd.handle, imgui_renderer->pipeline.bind_point, imgui_renderer->pipeline.handle);
+		//cmd_bind_pipeline(cmd, pipeline);
+		vkCmdBindPipeline(cmd.handle, pipeline.bind_point, pipeline.handle);
 
 		VkViewport vp = {
 			.x = 0.0f,
@@ -360,7 +354,7 @@ namespace edge::gfx {
 		imgui::PushConstant push_constant = {
 			.vertices = vertex_buffer_resorce->buffer.address,
 			.scale = {
-				2.0f / draw_data->DisplaySize.x, 
+				2.0f / draw_data->DisplaySize.x,
 				2.0f / draw_data->DisplaySize.y},
 			.translate = {
 				-1.0f - draw_data->DisplayPos.x * push_constant.scale.x,
@@ -399,17 +393,17 @@ namespace edge::gfx {
 #if 0 // TODO
 				Handle new_image_index = (Handle)pcmd->GetTexID();
 				if (new_image_index != last_image_index) {
-					Resource* render_resource = renderer_get_resource(imgui_renderer->renderer, new_image_index);
+					Resource* render_resource = renderer_get_resource(renderer, new_image_index);
 					push_constant.image_index = render_resource->srv_index;
 					auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
-					vkCmdPushConstants(cmd.handle, imgui_renderer->renderer->pipeline_layout.handle,
+					vkCmdPushConstants(cmd.handle, renderer->pipeline_layout.handle,
 						VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constant), &push_constant);
 					last_image_index = new_image_index;
 				}
 #else
 				push_constant.image_index = 0;
 				auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
-				vkCmdPushConstants(cmd.handle, imgui_renderer->renderer->pipeline_layout.handle,
+				vkCmdPushConstants(cmd.handle, renderer->pipeline_layout.handle,
 					VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constant), &push_constant);
 #endif
 

@@ -4,6 +4,9 @@
 #include "../gfx_interface.h"
 #include <handle_pool.hpp>
 
+struct ImDrawData;
+struct ImTextureData;
+
 namespace edge {
 	struct Allocator;
 }
@@ -12,7 +15,6 @@ namespace edge::gfx {
 	struct Renderer;
 
 	struct ImGuiRenderer {
-		const Allocator* allocator;
 		Renderer* renderer;
 
 		ShaderModule vertex_shader;
@@ -24,16 +26,19 @@ namespace edge::gfx {
 
 		Handle index_buffer;
 		u64 index_buffer_capacity;
+
+		void update_texture(NotNull<ImTextureData*> tex) noexcept;
+		void update_geometry(NotNull<ImDrawData*> draw_data) noexcept;
+
+		void execute() noexcept;
 	};
 
 	struct ImGuiRendererCreateInfo {
-		const Allocator* allocator;
 		Renderer* renderer;
 	};
 
 	ImGuiRenderer* imgui_renderer_create(ImGuiRendererCreateInfo create_info);
 	void imgui_renderer_destroy(ImGuiRenderer* imgui_renderer);
-	void imgui_renderer_execute(NotNull<ImGuiRenderer*> imgui_renderer);
 }
 
 #endif
