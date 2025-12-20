@@ -156,12 +156,39 @@ namespace edge::gfx {
 
 	using BufferFlags = u16;
 
+	enum class BufferLayout {
+		Undefined,
+		General,
+
+		TransferSrc,
+		TransferDst,
+
+		VertexBuffer,
+		IndexBuffer,
+
+		UniformBuffer,
+
+		StorageBufferRead,
+		StorageBufferWrite,
+		StorageBufferRW,
+
+		IndirectBuffer,
+
+		HostRead,
+		HostWrite,
+
+		ShaderRead,
+		ShaderWrite,
+		ShaderRW
+	};
+
 	struct Buffer {
 		VkBuffer handle = VK_NULL_HANDLE;
 		DeviceMemory memory = {};
 
 		BufferFlags flags = 0;
-		VkDeviceAddress address = 0ull;
+		VkDeviceAddress address = 0;
+		BufferLayout layout = BufferLayout::Undefined;
 
 		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
