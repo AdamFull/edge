@@ -214,7 +214,7 @@ namespace edge::gfx {
 		return VK_FALSE;
 	}
 
-	static inline u32 compute_max_mip_level(u32 size) {
+	static u32 compute_max_mip_level(u32 size) {
 		u32 level_count = 0;
 		while (size) {
 			level_count++;
