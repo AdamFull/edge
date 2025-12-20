@@ -1219,15 +1219,23 @@ namespace edge::gfx {
 		return vkEndCommandBuffer(cmd_buf.handle) == VK_SUCCESS;
 	}
 
+	static void make_color(uint32_t color, f32(&out_color)[4]) {
+		out_color[0] = ((color >> 24) & 0xFF) / 255.0f;
+		out_color[1] = ((color >> 16) & 0xFF) / 255.0f;
+		out_color[2] = ((color >> 8) & 0xFF) / 255.0f;
+		out_color[3] = (color & 0xFF) / 255.0f;
+	}
+
 	void cmd_begin_marker(CmdBuf cmd_buf, const char* name, u32 color) {
 		if (!cmd_buf) {
 			return;
 		}
 
-		const VkDebugMarkerMarkerInfoEXT marker_info = {
+		VkDebugMarkerMarkerInfoEXT marker_info = {
 			.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT,
 			.pNext = name
 		};
+		make_color(color, marker_info.color);
 
 		vkCmdDebugMarkerBeginEXT(cmd_buf.handle, &marker_info);
 	}
@@ -2039,6 +2047,18 @@ namespace edge::gfx {
 		}
 
 		vmaDestroyBuffer(g_ctx.vma, buffer.handle, buffer.memory.handle);
+	}
+
+	void buffer_view_write(BufferView& buffer_view, const void* data, VkDeviceSize size, VkDeviceSize offset) {
+		if (!buffer_view) {
+			return;
+		}
+
+		if (offset + size + buffer_view.offset > buffer_view.size) {
+			return;
+		}
+
+		memcpy((u8*)device_memory_map(buffer_view.buffer.memory) + buffer_view.offset + offset, data, size);
 	}
 
 	bool semaphore_create(VkSemaphoreType type, u64 value, Semaphore& semaphore) {

@@ -170,6 +170,8 @@ namespace edge::gfx {
 	bool buffer_create(BufferCreateInfo create_info, Buffer& buffer);
 	void buffer_destroy(Buffer buffer);
 
+	void buffer_view_write(BufferView& buffer_view, const void* data, VkDeviceSize size, VkDeviceSize offset);
+
 	bool semaphore_create(VkSemaphoreType type, u64 value, Semaphore& semaphore);
 	void semaphore_destroy(Semaphore semaphore);
 

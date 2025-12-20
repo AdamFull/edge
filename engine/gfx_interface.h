@@ -166,6 +166,14 @@ namespace edge::gfx {
 		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
+	struct BufferView {
+		Buffer buffer = {};
+		VkDeviceSize offset = 0;
+		VkDeviceSize size = 0;
+
+		operator bool() const noexcept { return buffer && size != 0; }
+	};
+
 	struct Fence {
 		VkFence handle = VK_NULL_HANDLE;
 
