@@ -3,6 +3,7 @@
 
 #include "gfx_context.h"
 #include "gfx_renderer.h"
+#include "gfx_uploader.h"
 
 #include "imgui/imgui_layer.h"
 #include "imgui/imgui_renderer.h"
@@ -26,6 +27,10 @@ static void edge_cleanup_engine(void) {
 
 	if (engine_context.imgui_renderer) {
 		gfx::imgui_renderer_destroy(engine_context.imgui_renderer);
+	}
+
+	if (engine_context.uploader) {
+		gfx::uploader_destroy(engine_context.allocator, engine_context.uploader);
 	}
 
 	if (engine_context.renderer) {
@@ -131,17 +136,25 @@ int edge_main(PlatformLayout* platform_layout) {
 		return -1;
 	}
 
-	const gfx::QueueRequest queue_request = {
+	const gfx::QueueRequest direct_queue_request = {
 		.required_caps = gfx::QUEUE_CAPS_GRAPHICS | gfx::QUEUE_CAPS_COMPUTE | gfx::QUEUE_CAPS_TRANSFER | gfx::QUEUE_CAPS_PRESENT,
 		.preferred_caps = gfx::QUEUE_CAPS_NONE,
 		.strategy = gfx::QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED,
 		.prefer_separate_family = false
 	};
 
-	if (!gfx::get_queue(queue_request, engine_context.main_queue)) {
+	if (!gfx::get_queue(direct_queue_request, engine_context.main_queue)) {
 		edge_cleanup_engine();
 		return -1;
 	}
+
+	// NOTE: Optional, not required
+	const gfx::QueueRequest copy_queue_request = {
+		.required_caps = gfx::QUEUE_CAPS_TRANSFER,
+		.strategy = gfx::QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED,
+		.prefer_separate_family = false
+	};
+	gfx::get_queue(copy_queue_request, engine_context.copy_queue);
 
 	const gfx::RendererCreateInfo renderer_create_info = {
 		.alloc = &allocator,
@@ -150,6 +163,18 @@ int edge_main(PlatformLayout* platform_layout) {
 
 	engine_context.renderer = gfx::renderer_create(renderer_create_info);
 	if (!engine_context.renderer) {
+		edge_cleanup_engine();
+		return -1;
+	}
+
+	const gfx::UploaderCreateInfo uploader_create_info = {
+		.alloc = &allocator,
+		.sched = engine_context.sched,
+		.queue = engine_context.copy_queue ? engine_context.copy_queue : engine_context.main_queue
+	};
+
+	engine_context.uploader = gfx::uploader_create(uploader_create_info);
+	if (!engine_context.uploader) {
 		edge_cleanup_engine();
 		return -1;
 	}

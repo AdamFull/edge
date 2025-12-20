@@ -14,6 +14,7 @@ namespace edge {
 	namespace gfx {
 		struct Queue;
 		struct Renderer;
+		struct Uploader;
 
 		struct ImGuiRenderer;
 	}
@@ -29,7 +30,10 @@ namespace edge {
 		PlatformContext* platform_context;
 
 		gfx::Queue main_queue;
+		gfx::Queue copy_queue;
+
 		gfx::Renderer* renderer;
+		gfx::Uploader* uploader;
 
 		ImGuiLayer* imgui_layer;
 		gfx::ImGuiRenderer* imgui_renderer;
