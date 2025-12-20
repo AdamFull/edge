@@ -31,7 +31,7 @@ namespace edge::gfx {
 		Renderer* renderer;
 	};
 
-	ImGuiRenderer* imgui_renderer_create(const ImGuiRendererCreateInfo* create_info);
+	ImGuiRenderer* imgui_renderer_create(ImGuiRendererCreateInfo create_info);
 	void imgui_renderer_destroy(ImGuiRenderer* imgui_renderer);
 	void imgui_renderer_execute(NotNull<ImGuiRenderer*> imgui_renderer);
 }
