@@ -6,6 +6,8 @@
 #include <free_index_list.hpp>
 
 namespace edge::gfx {
+	struct Renderer;
+
 	constexpr usize RENDERER_FRAME_OVERLAP = 3;
 
 	constexpr usize RENDERER_UAV_MAX = 16;
@@ -26,7 +28,7 @@ namespace edge::gfx {
 
 	struct RendererCreateInfo {
 		const Allocator* alloc = nullptr;
-		const Queue* main_queue = nullptr;
+		Queue main_queue = {};
 	};
 
 	struct Resource {
@@ -44,6 +46,11 @@ namespace edge::gfx {
 	};
 
 	struct RendererFrame {
+		Buffer staging_memory = {};
+		u64 staging_offset = 0;
+
+		Array<Buffer> temp_staging_memory = {};
+
 		Semaphore image_available = {};
 		Semaphore rendering_finished = {};
 		Fence fence = {};
@@ -52,6 +59,14 @@ namespace edge::gfx {
 		bool is_recording = false;
 
 		Array<Resource> free_resources = {};
+
+		bool create(NotNull<Renderer*> renderer) noexcept;
+		void destroy(NotNull<Renderer*> renderer) noexcept;
+		void release_resources(NotNull<Renderer*> renderer) noexcept;
+
+		bool begin(NotNull<Renderer*> renderer) noexcept;
+
+		BufferView try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) noexcept;
 	};
 
 	struct ResourceSet {
@@ -66,6 +81,14 @@ namespace edge::gfx {
 		
 		CmdBuf cmd_buf = {};
 		bool recording = false;
+
+		bool create(NotNull<Renderer*> renderer) noexcept;
+		void destroy(NotNull<Renderer*> renderer) noexcept;
+
+		bool begin() noexcept;
+		bool end() noexcept;
+
+		BufferView try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) noexcept;
 	};
 
 	struct Uploader {
@@ -113,22 +136,34 @@ namespace edge::gfx {
 		Array<VkDescriptorImageInfo> image_descriptors = {};
 		Array<VkDescriptorBufferInfo> buffer_descriptors = {};
 
-		ResourceSet update_resource_sets[RENDERER_FRAME_OVERLAP] = {};
-		u32 current_update_set = 0;
+		//ResourceSet update_resource_sets[RENDERER_FRAME_OVERLAP] = {};
+		//u32 current_update_set = 0;
 	};
 
-	Renderer* renderer_create(const RendererCreateInfo* create_info);
+	struct BufferUpdateInfo {
+		Buffer dst_buffer = {};
+		BufferView buffer_view = {};
+		Array<VkBufferCopy2KHR> copy_regions = {};
+		VkDeviceSize offset = 0;
+
+		bool write(NotNull<const Allocator*> alloc, const void* data, VkDeviceSize size, VkDeviceSize dst_offset) noexcept;
+	};
+
+	Renderer* renderer_create(RendererCreateInfo create_info);
 	void renderer_destroy(Renderer* renderer);
 
-	Handle renderer_add_resource(Renderer* renderer);
-	bool renderer_setup_image_resource(Renderer* renderer, Handle handle, Image resource);
-	bool renderer_setup_buffer_resource(Renderer* renderer, Handle handle, Buffer resource);
-	void renderer_update_image_resource(Renderer* renderer, Handle handle, Image image);
-	void renderer_update_buffer_resource(Renderer* renderer, Handle handle, Buffer buffer);
-	void renderer_free_resource(Renderer* renderer, Handle handle);
+	Handle renderer_add_resource(NotNull<Renderer*> renderer);
+	bool renderer_setup_image_resource(NotNull<Renderer*> renderer, Handle handle, Image resource);
+	bool renderer_setup_buffer_resource(NotNull<Renderer*> renderer, Handle handle, Buffer resource);
+	void renderer_update_image_resource(NotNull<Renderer*> renderer, Handle handle, Image image);
+	void renderer_update_buffer_resource(NotNull<Renderer*> renderer, Handle handle, Buffer buffer);
+	void renderer_free_resource(NotNull<Renderer*> renderer, Handle handle);
 
-	bool renderer_frame_begin(Renderer* renderer);
-	bool renderer_frame_end(Renderer* renderer);
+	bool renderer_frame_begin(NotNull<Renderer*> renderer);
+	bool renderer_frame_end(NotNull<Renderer*> renderer);
+
+	void renderer_buffer_update_begin(NotNull<Renderer*> renderer, VkDeviceSize size, BufferUpdateInfo& update_info);
+	void renderer_buffer_update_end(NotNull<Renderer*> renderer, const BufferUpdateInfo& update_info);
 }
 
 #endif // GFX_RENDERER_H
