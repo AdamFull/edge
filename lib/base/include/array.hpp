@@ -11,8 +11,8 @@ namespace edge {
 	template<TrivialType T>
 	struct Array {
 		T* m_data = nullptr;
-		usize m_size = 0ull;
-		usize m_capacity = 0ull;
+		usize m_size = 0;
+		usize m_capacity = 0;
 
 		void destroy(NotNull<const Allocator*> alloc) {
 			if (m_data) {
@@ -28,6 +28,10 @@ namespace edge {
 		}
 
 		bool reserve(NotNull<const Allocator*> alloc, usize capacity) {
+			if (capacity == 0) {
+				capacity = 16;
+			}
+
 			if (capacity <= m_capacity) {
 				return true;
 			}
@@ -59,6 +63,7 @@ namespace edge {
 				}
 			}
 
+			// TODO: need to call constructors here
 			if (new_size > m_size) {
 				memset(&m_data[m_size], 0, sizeof(T) * (new_size - m_size));
 			}
