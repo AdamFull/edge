@@ -6,6 +6,7 @@
 #include <logger.hpp>
 
 #include <atomic>
+#include <utility>
 
 #include <vulkan/vulkan.h>
 #include <volk.h>
@@ -129,7 +130,7 @@ namespace edge::gfx {
 		VkDeviceSize aligned_requested_size = align_up(required_memory, required_alignment);
 		VkDeviceSize available_size = staging_memory.memory.size - staging_offset;
 
-		if (staging_memory.memory.size || available_size < aligned_requested_size) {
+		if (staging_memory.memory.size < aligned_requested_size || available_size < aligned_requested_size) {
 			BufferCreateInfo create_info = {
 				.size = required_memory,
 				.alignment = required_alignment,
@@ -144,7 +145,11 @@ namespace edge::gfx {
 			return BufferView{ .buffer = new_buffer, .offset = 0, .size = aligned_requested_size };
 		}
 
-		return BufferView{ .buffer = staging_memory, .offset = (staging_offset += aligned_requested_size), .size = aligned_requested_size };
+		return BufferView{ 
+			.buffer = staging_memory, 
+			.offset = std::exchange(staging_offset, staging_offset + aligned_requested_size),
+			.size = aligned_requested_size 
+		};
 	}
 
 
@@ -219,7 +224,7 @@ namespace edge::gfx {
 		VkDeviceSize aligned_requested_size = align_up(required_memory, required_alignment);
 		VkDeviceSize available_size = staging_memory .memory.size - staging_offset;
 
-		if (staging_memory.memory.size || available_size < aligned_requested_size) {
+		if (staging_memory.memory.size < aligned_requested_size || available_size < aligned_requested_size) {
 			BufferCreateInfo create_info = {
 				.size = required_memory,
 				.alignment = required_alignment,
@@ -234,7 +239,11 @@ namespace edge::gfx {
 			return BufferView{ .buffer = new_buffer, .offset = 0, .size = aligned_requested_size };
 		}
 
-		return BufferView{ .buffer = staging_memory, .offset = (staging_offset += aligned_requested_size), .size = aligned_requested_size };
+		return BufferView{ 
+			.buffer = staging_memory, 
+			.offset = std::exchange(staging_offset, staging_offset + aligned_requested_size),
+			.size = aligned_requested_size 
+		};
 	}
 
 	bool BufferUpdateInfo::write(NotNull<const Allocator*> alloc, const void* data, VkDeviceSize size, VkDeviceSize dst_offset) noexcept {
@@ -246,7 +255,7 @@ namespace edge::gfx {
 		buffer_view_write(buffer_view, data, size, offset);
 		copy_regions.push_back(alloc, {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2_KHR,
-			.srcOffset = (offset += size),
+			.srcOffset = buffer_view.offset + std::exchange(offset, offset + size),
 			.dstOffset = dst_offset,
 			.size = size
 			});
@@ -479,8 +488,7 @@ namespace edge::gfx {
 	bool renderer_setup_image_resource(NotNull<Renderer*> renderer, Handle handle, Image image) {
 		Resource* resource = renderer->resource_handle_pool.get(handle);
 		resource->type = ResourceType::Image;
-
-		memcpy(&resource->image, &image, sizeof(Image));
+		resource->image = image;
 
 		Image& image_source = resource->image;
 
@@ -503,7 +511,7 @@ namespace edge::gfx {
 		}
 
 		if (image_source.usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
-			VkImageSubresourceRange srv_subresource_range = {
+			const VkImageSubresourceRange srv_subresource_range = {
 				.aspectMask = image_aspect,
 				.baseMipLevel = 0u,
 				.levelCount = image_source.level_count,
@@ -566,15 +574,17 @@ namespace edge::gfx {
 			image_source.layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
 		}
 
-		VkWriteDescriptorSet descriptor_write = {};
-		descriptor_write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptor_write.dstSet = renderer->descriptor_set.handle;
-		descriptor_write.descriptorCount = 1u;
+		VkWriteDescriptorSet descriptor_write = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = renderer->descriptor_set.handle,
+			.descriptorCount = 1u
+		};
 
 		if (image_source.usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
-			VkDescriptorImageInfo image_descriptor = {};
-			image_descriptor.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
-			image_descriptor.imageView = resource->srv.handle;
+			const VkDescriptorImageInfo image_descriptor = {
+				.imageView = resource->srv.handle,
+				.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR
+			};
 			renderer->image_descriptors.push_back(renderer->alloc, image_descriptor);
 
 			descriptor_write.dstBinding = RENDERER_SRV_SLOT;
@@ -589,9 +599,10 @@ namespace edge::gfx {
 			descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 
 			for (i32 mip = 0; mip < image_source.level_count; ++mip) {
-				VkDescriptorImageInfo image_descriptor = {};
-				image_descriptor.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-				image_descriptor.imageView = resource->uav[mip].handle;
+				const VkDescriptorImageInfo image_descriptor = {
+					.imageView = resource->uav[mip].handle,
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+				};
 				renderer->image_descriptors.push_back(renderer->alloc, image_descriptor);
 
 				descriptor_write.dstArrayElement = resource->uav_index + mip;
@@ -606,7 +617,7 @@ namespace edge::gfx {
 	bool renderer_setup_buffer_resource(NotNull<Renderer*> renderer, Handle handle, Buffer buffer) {
 		Resource* resource = renderer->resource_handle_pool.get(handle);
 		resource->type = ResourceType::Buffer;
-		memcpy(&resource->buffer, &buffer, sizeof(Buffer));
+		resource->buffer = buffer;
 
 		return true;
 	}
@@ -639,6 +650,10 @@ namespace edge::gfx {
 		}
 
 		renderer_setup_buffer_resource(renderer, handle, buffer);
+	}
+
+	Resource* renderer_get_resource(NotNull<Renderer*> renderer, Handle handle) {
+		return renderer->resource_handle_pool.get(handle);
 	}
 
 	void renderer_free_resource(NotNull<Renderer*> renderer, Handle handle) {
@@ -709,6 +724,7 @@ namespace edge::gfx {
 		// Update backbuffer resource
 		Resource* backbuffer_resource = renderer->resource_handle_pool.get(renderer->backbuffer_handle);
 		backbuffer_resource->image = renderer->swapchain_images[renderer->active_image_index];
+		backbuffer_resource->srv = renderer->swapchain_image_views[renderer->active_image_index];
 
 		if (renderer->frame_number > 0) {
 			u64 timestamps[2] = {};

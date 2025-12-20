@@ -157,6 +157,7 @@ namespace edge::gfx {
 	bool renderer_setup_buffer_resource(NotNull<Renderer*> renderer, Handle handle, Buffer resource);
 	void renderer_update_image_resource(NotNull<Renderer*> renderer, Handle handle, Image image);
 	void renderer_update_buffer_resource(NotNull<Renderer*> renderer, Handle handle, Buffer buffer);
+	Resource* renderer_get_resource(NotNull<Renderer*> renderer, Handle handle);
 	void renderer_free_resource(NotNull<Renderer*> renderer, Handle handle);
 
 	bool renderer_frame_begin(NotNull<Renderer*> renderer);
