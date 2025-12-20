@@ -1080,7 +1080,7 @@ namespace edge::gfx {
 			i32 score = queue_calculate_family_score(request, i);
 			if (score > best_score) {
 				best_score = score;
-				queue.family_index = 0;
+				queue.family_index = i;
 			}
 		}
 
@@ -1176,7 +1176,7 @@ namespace edge::gfx {
 		vkDestroyCommandPool(g_ctx.dev, command_pool.handle, &g_ctx.vk_alloc);
 	}
 
-	bool cmd_buf_create(CmdPool cmd_pool, CmdBuf& cmd_buf) {
+	bool cmd_buf_create(CmdPool cmd_pool, CmdBuf& cmd) {
 		if (!cmd_pool) {
 			return false;
 		}
@@ -1188,18 +1188,18 @@ namespace edge::gfx {
 			.commandBufferCount = 1
 		};
 
-		VkResult result = vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &cmd_buf.handle);
+		VkResult result = vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &cmd.handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		cmd_buf.pool = cmd_pool;
+		cmd.pool = cmd_pool;
 
 		return true;
 	}
 
-	bool cmd_begin(CmdBuf cmd_buf) {
-		if (!cmd_buf) {
+	bool cmd_begin(CmdBuf cmd) {
+		if (!cmd) {
 			return false;
 		}
 
@@ -1208,15 +1208,15 @@ namespace edge::gfx {
 			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
 		};
 
-		return vkBeginCommandBuffer(cmd_buf.handle, &begin_info) == VK_SUCCESS;
+		return vkBeginCommandBuffer(cmd.handle, &begin_info) == VK_SUCCESS;
 	}
 
-	bool cmd_end(CmdBuf cmd_buf) {
-		if (!cmd_buf) {
+	bool cmd_end(CmdBuf cmd) {
+		if (!cmd) {
 			return false;
 		}
 
-		return vkEndCommandBuffer(cmd_buf.handle) == VK_SUCCESS;
+		return vkEndCommandBuffer(cmd.handle) == VK_SUCCESS;
 	}
 
 	static void make_color(uint32_t color, f32(&out_color)[4]) {
@@ -1226,8 +1226,8 @@ namespace edge::gfx {
 		out_color[3] = (color & 0xFF) / 255.0f;
 	}
 
-	void cmd_begin_marker(CmdBuf cmd_buf, const char* name, u32 color) {
-		if (!cmd_buf) {
+	void cmd_begin_marker(CmdBuf cmd, const char* name, u32 color) {
+		if (!cmd) {
 			return;
 		}
 
@@ -1237,43 +1237,43 @@ namespace edge::gfx {
 		};
 		make_color(color, marker_info.color);
 
-		vkCmdDebugMarkerBeginEXT(cmd_buf.handle, &marker_info);
+		vkCmdDebugMarkerBeginEXT(cmd.handle, &marker_info);
 	}
 
-	void cmd_end_marker(CmdBuf cmd_buf) {
-		if (!cmd_buf) {
+	void cmd_end_marker(CmdBuf cmd) {
+		if (!cmd) {
 			return;
 		}
 
-		vkCmdDebugMarkerEndEXT(cmd_buf.handle);
+		vkCmdDebugMarkerEndEXT(cmd.handle);
 	}
 
-	bool cmd_reset(CmdBuf cmd_buf) {
-		if (!cmd_buf) {
+	bool cmd_reset(CmdBuf cmd) {
+		if (!cmd) {
 			return false;
 		}
 
-		return vkResetCommandBuffer(cmd_buf.handle, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) == VK_SUCCESS;
+		return vkResetCommandBuffer(cmd.handle, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) == VK_SUCCESS;
 	}
 
-	void cmd_write_timestamp(CmdBuf cmd_buf, QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index) {
-		if (!cmd_buf || !query) {
+	void cmd_write_timestamp(CmdBuf cmd, QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index) {
+		if (!cmd || !query) {
 			return;
 		}
 
-		vkCmdWriteTimestamp2KHR(cmd_buf.handle, stage, query.handle, query_index);
+		vkCmdWriteTimestamp2KHR(cmd.handle, stage, query.handle, query_index);
 	}
 
-	void cmd_bind_descriptor(CmdBuf cmd_buf, PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point) {
-		if (!cmd_buf || !layout || !descriptor) {
+	void cmd_bind_descriptor(CmdBuf cmd, PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point) {
+		if (!cmd || !layout || !descriptor) {
 			return;
 		}
 
-		vkCmdBindDescriptorSets(cmd_buf.handle, bind_point, layout.handle, 0u, 1u, &descriptor.handle, 0u, NULL);
+		vkCmdBindDescriptorSets(cmd.handle, bind_point, layout.handle, 0u, 1u, &descriptor.handle, 0u, NULL);
 	}
 
-	void cmd_pipeline_barrier(CmdBuf cmd_buf, const PipelineBarrierBuilder& builder) {
-		if (!cmd_buf) {
+	void cmd_pipeline_barrier(CmdBuf cmd, const PipelineBarrierBuilder& builder) {
+		if (!cmd) {
 			return;
 		}
 
@@ -1287,43 +1287,113 @@ namespace edge::gfx {
 			.pImageMemoryBarriers = builder.image_barriers
 		};
 
-		vkCmdPipelineBarrier2KHR(cmd_buf.handle, &dependency_info);
+		vkCmdPipelineBarrier2KHR(cmd.handle, &dependency_info);
 	}
 
-	void cmd_begin_rendering(CmdBuf cmd_buf, const VkRenderingInfoKHR& rendering_info) {
-		if (!cmd_buf) {
+	void cmd_begin_rendering(CmdBuf cmd, const VkRenderingInfoKHR& rendering_info) {
+		if (!cmd) {
 			return;
 		}
 
-		vkCmdBeginRenderingKHR(cmd_buf.handle, &rendering_info);
+		vkCmdBeginRenderingKHR(cmd.handle, &rendering_info);
 	}
 
-	void cmd_end_rendering(CmdBuf cmd_buf) {
-		if (!cmd_buf) {
+	void cmd_end_rendering(CmdBuf cmd) {
+		if (!cmd) {
+			return;
+		}
+		vkCmdEndRenderingKHR(cmd.handle);
+	}
+
+	void cmd_bind_index_buffer(CmdBuf cmd, Buffer buffer, VkIndexType type) {
+		if (!cmd || !buffer) {
+			return;
+		}
+		vkCmdBindIndexBuffer(cmd.handle, buffer.handle, 0, type);
+	}
+
+	void cmd_bind_pipeline(CmdBuf cmd, Pipeline pipeline) {
+		if (!cmd || !pipeline) {
 			return;
 		}
 
-		vkCmdEndRenderingKHR(cmd_buf.handle);
+		vkCmdBindPipeline(cmd.handle, pipeline.bind_point, pipeline.handle);
 	}
 
-	void cmd_buf_destroy(CmdBuf cmd_buf) {
-		if (!cmd_buf) {
+	void cmd_set_viewport(CmdBuf cmd, VkViewport viewport) {
+		if (!cmd) {
+			return;
+		}
+		vkCmdSetViewport(cmd.handle, 0u, 1u, &viewport);
+	}
+
+	void cmd_set_viewport(CmdBuf cmd, f32 x, f32 y, f32 width, f32 height, f32 depth_min, f32 depth_max) {
+		if (!cmd) {
 			return;
 		}
 
-		vkFreeCommandBuffers(g_ctx.dev, cmd_buf.pool.handle, 1, &cmd_buf.handle);
+		VkViewport viewport = {
+			.x = x,
+			.y = y,
+			.width = width,
+			.height = height,
+			.minDepth = depth_min,
+			.maxDepth = depth_max
+		};
+		vkCmdSetViewport(cmd.handle, 0u, 1u, &viewport);
+	}
+
+	void cmd_set_scissor(CmdBuf cmd, VkRect2D rect) {
+		if (!cmd) {
+			return;
+		}
+		vkCmdSetScissor(cmd.handle, 0u, 1u, &rect);
+	}
+
+	void cmd_set_scissor(CmdBuf cmd, i32 off_x, i32 off_y, u32 width, u32 height) {
+		if (!cmd) {
+			return;
+		}
+
+		VkRect2D rect = {
+			.offset = { .x = off_x, .y = off_y },
+			.extent = { .width = width, .height = height }
+		};
+		vkCmdSetScissor(cmd.handle, 0u, 1u, &rect);
+	}
+
+	void cmd_push_constants(CmdBuf cmd, PipelineLayout layout, VkShaderStageFlags flags, u32 offset, u32 size, const void* data) {
+		if (!cmd || !layout || !data) {
+			return;
+		}
+		vkCmdPushConstants(cmd.handle, layout.handle, flags, offset, size, data);
+	}
+
+	void cmd_draw_indexed(CmdBuf cmd, u32 idx_cnt, u32 inst_cnt, u32 first_idx, i32 vtx_offset, u32 first_inst) {
+		if (!cmd) {
+			return;
+		}
+		vkCmdDrawIndexed(cmd.handle, idx_cnt, inst_cnt, first_idx, vtx_offset, first_inst);
+	}
+
+	void cmd_buf_destroy(CmdBuf cmd) {
+		if (!cmd) {
+			return;
+		}
+
+		vkFreeCommandBuffers(g_ctx.dev, cmd.pool.handle, 1, &cmd.handle);
 	}
 
 	void updete_descriptors(const VkWriteDescriptorSet* writes, u32 count) {
 		vkUpdateDescriptorSets(g_ctx.dev, count, writes, 0u, NULL);
 	}
 
-	void cmd_reset_query(CmdBuf cmd_buf, QueryPool query, u32 first_query, u32 query_count) {
-		if (!cmd_buf || !query) {
+	void cmd_reset_query(CmdBuf cmd, QueryPool query, u32 first_query, u32 query_count) {
+		if (!cmd || !query) {
 			return;
 		}
 
-		vkCmdResetQueryPool(cmd_buf.handle, query.handle, first_query, query_count);
+		vkCmdResetQueryPool(cmd.handle, query.handle, first_query, query_count);
 	}
 
 	bool query_pool_create(VkQueryType type, u32 count, QueryPool& query_pool) {

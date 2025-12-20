@@ -102,19 +102,27 @@ namespace edge::gfx {
 	bool cmd_pool_create(Queue queue, CmdPool& cmd_pool);
 	void cmd_pool_destroy(CmdPool command_pool);
 
-	bool cmd_buf_create(CmdPool cmd_pool, CmdBuf& cmd_buf);
-	bool cmd_begin(CmdBuf cmd_buf);
-	bool cmd_end(CmdBuf cmd_buf);
-	void cmd_begin_marker(CmdBuf cmd_buf, const char* name, u32 color);
-	void cmd_end_marker(CmdBuf cmd_buf);
-	bool cmd_reset(CmdBuf cmd_buf);
-	void cmd_reset_query(CmdBuf cmd_buf, QueryPool query, u32 first_query, u32 query_count);
-	void cmd_write_timestamp(CmdBuf cmd_buf, QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index);
-	void cmd_bind_descriptor(CmdBuf cmd_buf, PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point);
-	void cmd_pipeline_barrier(CmdBuf cmd_buf, const PipelineBarrierBuilder& builder);
-	void cmd_begin_rendering(CmdBuf cmd_buf, const VkRenderingInfoKHR& rendering_info);
-	void cmd_end_rendering(CmdBuf cmd_buf);
-	void cmd_buf_destroy(CmdBuf cmd_buf);
+	bool cmd_buf_create(CmdPool cmd_pool, CmdBuf& cmd);
+	bool cmd_begin(CmdBuf cmd);
+	bool cmd_end(CmdBuf cmd);
+	void cmd_begin_marker(CmdBuf cmd, const char* name, u32 color);
+	void cmd_end_marker(CmdBuf cmd);
+	bool cmd_reset(CmdBuf cmd);
+	void cmd_reset_query(CmdBuf cmd, QueryPool query, u32 first_query, u32 query_count);
+	void cmd_write_timestamp(CmdBuf cmd, QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index);
+	void cmd_bind_descriptor(CmdBuf cmd, PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point);
+	void cmd_pipeline_barrier(CmdBuf cmd, const PipelineBarrierBuilder& builder);
+	void cmd_begin_rendering(CmdBuf cmd, const VkRenderingInfoKHR& rendering_info);
+	void cmd_end_rendering(CmdBuf cmd);
+	void cmd_bind_index_buffer(CmdBuf cmd, Buffer buffer, VkIndexType type);
+	void cmd_bind_pipeline(CmdBuf cmd, Pipeline pipeline);
+	void cmd_set_viewport(CmdBuf cmd, VkViewport viewport);
+	void cmd_set_viewport(CmdBuf cmd, f32 x, f32 y, f32 width, f32 height, f32 depth_min = 0.0f, f32 depth_max = 1.0f);
+	void cmd_set_scissor(CmdBuf cmd, VkRect2D rect);
+	void cmd_set_scissor(CmdBuf cmd, i32 off_x, i32 off_y, u32 width, u32 height);
+	void cmd_push_constants(CmdBuf cmd, PipelineLayout layout, VkShaderStageFlags flags, u32 offset, u32 size, const void* data);
+	void cmd_draw_indexed(CmdBuf cmd, u32 idx_cnt, u32 inst_cnt, u32 first_idx, i32 vtx_offset, u32 first_inst);
+	void cmd_buf_destroy(CmdBuf cmd);
 
 	void updete_descriptors(const VkWriteDescriptorSet* writes, u32 count);
 
