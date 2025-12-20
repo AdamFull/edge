@@ -11,8 +11,6 @@
 
 #include <utility>
 
-#include <volk.h>
-
 namespace edge::gfx {
 	constexpr u64 k_initial_vertex_count = 2048ull;
 	constexpr u64 k_initial_index_count = 4096ull;
@@ -252,7 +250,7 @@ namespace edge::gfx {
 		pipeline_barrier_add_buffer(barrier_builder, index_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
 		index_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
 
-		cmd_pipeline_barrier(renderer->active_frame->cmd_buf, barrier_builder);
+		cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
 		pipeline_barrier_builder_reset(barrier_builder);
 
 		renderer->buffer_update_end(vb_update);
@@ -264,7 +262,7 @@ namespace edge::gfx {
 		pipeline_barrier_add_buffer(barrier_builder, index_buffer_resorce->buffer, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
 		index_buffer_resorce->buffer.layout = BufferLayout::IndexBuffer;
 
-		cmd_pipeline_barrier(renderer->active_frame->cmd_buf, barrier_builder);
+		cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
 	}
 
 	void ImGuiRenderer::execute() noexcept {
@@ -301,7 +299,7 @@ namespace edge::gfx {
 				});
 			backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-			cmd_pipeline_barrier(renderer->active_frame->cmd_buf, barrier_builder);
+			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
 			load_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		}
 
@@ -328,25 +326,14 @@ namespace edge::gfx {
 			.pColorAttachments = &color_attachment
 		};
 
-		CmdBuf cmd = renderer->active_frame->cmd_buf;
+		CmdBuf cmd = renderer->active_frame->cmd;
 
 		cmd_begin_rendering(cmd, rendering_info);
 
-		//cmd_bind_index_buffer(cmd, index_buffer_resorce->buffer, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
-		vkCmdBindIndexBuffer(cmd.handle, index_buffer_resorce->buffer.handle, 0ull, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
-		//cmd_bind_pipeline(cmd, pipeline);
-		vkCmdBindPipeline(cmd.handle, pipeline.bind_point, pipeline.handle);
+		cmd_bind_index_buffer(cmd, index_buffer_resorce->buffer, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+		cmd_bind_pipeline(cmd, pipeline);
 
-		VkViewport vp = {
-			.x = 0.0f,
-			.y = 0.0f,
-			.width = (f32)backbuffer_resource->image.extent.width,
-			.height = (f32)backbuffer_resource->image.extent.height,
-			.minDepth = 0.0f,
-			.maxDepth = 1.0f
-		};
-		//cmd_set_viewport(cmd, vp);
-		vkCmdSetViewport(cmd.handle, 0u, 1u, &vp);
+		cmd_set_viewport(cmd, 0.0f, 0.0f, (f32)backbuffer_resource->image.extent.width, (f32)backbuffer_resource->image.extent.height);
 
 		ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
 		ImVec2 clip_scale = draw_data->FramebufferScale; // (1,1) unless using retina display which are often (2,2)
@@ -384,30 +371,22 @@ namespace edge::gfx {
 					continue;
 
 				// Apply scissor/clipping rectangle
-				VkRect2D scissor_rect = {
-					.offset = { (i32)clip_min.x, (i32)clip_min.y },
-					.extent = { (u32)(clip_max.x - clip_min.x), (u32)(clip_max.y - clip_min.y) }
-				};
-				vkCmdSetScissor(cmd.handle, 0u, 1u, &scissor_rect);
+				cmd_set_scissor(cmd, clip_min.x, clip_min.y, clip_max.x - clip_min.x, clip_max.y - clip_min.y);
 
 #if 0 // TODO
 				Handle new_image_index = (Handle)pcmd->GetTexID();
 				if (new_image_index != last_image_index) {
 					Resource* render_resource = renderer_get_resource(renderer, new_image_index);
 					push_constant.image_index = render_resource->srv_index;
-					auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
-					vkCmdPushConstants(cmd.handle, renderer->pipeline_layout.handle,
-						VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constant), &push_constant);
+					renderer->push_constants(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, push_constant);
 					last_image_index = new_image_index;
 				}
 #else
 				push_constant.image_index = 0;
-				auto constant_range_ptr = reinterpret_cast<const uint8_t*>(&push_constant);
-				vkCmdPushConstants(cmd.handle, renderer->pipeline_layout.handle,
-					VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(push_constant), &push_constant);
+				renderer->push_constants(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, push_constant);
 #endif
 
-				vkCmdDrawIndexed(cmd.handle, pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
+				cmd_draw_indexed(cmd, pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
 			}
 
 			global_idx_offset += im_cmd_list->IdxBuffer.Size;
