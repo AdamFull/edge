@@ -46,7 +46,7 @@ namespace edge::gfx {
 			return false;
 		}
 
-		if (!cmd_buf_create(renderer->cmd_pool, cmd_buf)) {
+		if (!cmd_buf_create(renderer->cmd_pool, cmd)) {
 			return false;
 		}
 
@@ -68,7 +68,7 @@ namespace edge::gfx {
 		release_resources(renderer);
 		free_resources.destroy(renderer->alloc);
 
-		cmd_buf_destroy(cmd_buf);
+		cmd_buf_destroy(cmd);
 		fence_destroy(fence);
 		semaphore_destroy(rendering_finished);
 		semaphore_destroy(image_available);
@@ -106,9 +106,9 @@ namespace edge::gfx {
 
 		fence_wait(fence, 1000000000ull);
 		fence_reset(fence);
-		cmd_reset(cmd_buf);
+		cmd_reset(cmd);
 
-		is_recording = cmd_begin(cmd_buf);
+		is_recording = cmd_begin(cmd);
 
 		release_resources(renderer);
 
@@ -129,100 +129,6 @@ namespace edge::gfx {
 
 		VkDeviceSize aligned_requested_size = align_up(required_memory, required_alignment);
 		VkDeviceSize available_size = staging_memory.memory.size - staging_offset;
-
-		if (staging_memory.memory.size < aligned_requested_size || available_size < aligned_requested_size) {
-			BufferCreateInfo create_info = {
-				.size = required_memory,
-				.alignment = required_alignment,
-				.flags = BUFFER_FLAG_STAGING
-			};
-
-			Buffer new_buffer;
-			if (!buffer_create(create_info, new_buffer) || !temp_staging_memory.push_back(alloc, new_buffer)) {
-				return {};
-			}
-
-			return BufferView{ .buffer = new_buffer, .offset = 0, .size = aligned_requested_size };
-		}
-
-		return BufferView{ 
-			.buffer = staging_memory, 
-			.offset = std::exchange(staging_offset, staging_offset + aligned_requested_size),
-			.size = aligned_requested_size 
-		};
-	}
-
-
-	bool ResourceSet::create(NotNull<Renderer*> renderer) noexcept {
-		BufferCreateInfo buffer_create_info = {
-				.size = RENDERER_UPDATE_STAGING_ARENA_SIZE,
-				.alignment = 1,
-				.flags = BUFFER_FLAG_STAGING
-		};
-
-		if (!buffer_create(buffer_create_info, staging_memory)) {
-			return false;
-		}
-
-		temp_staging_memory.reserve(renderer->alloc, 128);
-
-		if (!semaphore_create(VK_SEMAPHORE_TYPE_TIMELINE_KHR, 0ull, semaphore)) {
-			return false;
-		}
-
-		if (!cmd_buf_create(renderer->cmd_pool, cmd_buf)) {
-			return false;
-		}
-
-		return true;
-	}
-
-	void ResourceSet::destroy(NotNull<Renderer*> renderer) noexcept {
-		cmd_buf_destroy(cmd_buf);
-		semaphore_destroy(semaphore);
-		buffer_destroy(staging_memory);
-
-		for (auto& buffer : temp_staging_memory) {
-			buffer_destroy(buffer);
-		}
-		temp_staging_memory.destroy(renderer->alloc);
-	}
-
-	bool ResourceSet::begin() noexcept {
-		if (!recording) {
-			staging_offset = 0;
-
-			for (auto& buffer : temp_staging_memory) {
-				buffer_destroy(buffer);
-			}
-			temp_staging_memory.clear();
-
-			if (!cmd_begin(cmd_buf)) {
-				return false;
-			}
-
-			cmd_begin_marker(cmd_buf, "update", 0xFFFFFFFF);
-			recording = true;
-		}
-	}
-
-	bool ResourceSet::end() noexcept {
-		if (recording) {
-			cmd_end_marker(cmd_buf);
-			cmd_end(cmd_buf);
-			recording = false;
-			return true;
-		}
-		return false;
-	}
-
-	BufferView ResourceSet::try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) noexcept {
-		if (!begin()) {
-			return {};
-		}
-
-		VkDeviceSize aligned_requested_size = align_up(required_memory, required_alignment);
-		VkDeviceSize available_size = staging_memory .memory.size - staging_offset;
 
 		if (staging_memory.memory.size < aligned_requested_size || available_size < aligned_requested_size) {
 			BufferCreateInfo create_info = {
@@ -274,9 +180,9 @@ namespace edge::gfx {
 		}
 
 		renderer->alloc = create_info.alloc;
-		renderer->queue = create_info.main_queue;
+		renderer->direct_queue = create_info.main_queue;
 
-		if (!cmd_pool_create(renderer->queue, renderer->cmd_pool)) {
+		if (!cmd_pool_create(renderer->direct_queue, renderer->cmd_pool)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
@@ -422,7 +328,7 @@ namespace edge::gfx {
 	}
 
 	void renderer_destroy(Renderer* renderer) {
-		queue_wait_idle(renderer->queue);
+		queue_wait_idle(renderer->direct_queue);
 
 		renderer->write_descriptor_sets.destroy(renderer->alloc);
 		renderer->image_descriptors.destroy(renderer->alloc);
@@ -568,7 +474,7 @@ namespace edge::gfx {
 
 			// TODO: Make batching updates
 			pipeline_barrier_add_image(builder, image_source, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
-			cmd_pipeline_barrier(active_frame->cmd_buf, builder);
+			cmd_pipeline_barrier(active_frame->cmd, builder);
 
 			image_source.layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
 		}
@@ -671,8 +577,8 @@ namespace edge::gfx {
 		bool surface_updated = false;
 		if (swapchain_is_outdated(swapchain)) {
 
-			if (queue) {
-				queue_wait_idle(queue);
+			if (direct_queue) {
+				queue_wait_idle(direct_queue);
 			}
 
 			if (!swapchain_update(swapchain)) {
@@ -736,11 +642,11 @@ namespace edge::gfx {
 			}
 		}
 
-		cmd_reset_query(current_frame.cmd_buf, frame_timestamp, 0u, 2u);
-		cmd_write_timestamp(current_frame.cmd_buf, frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0u);
+		cmd_reset_query(current_frame.cmd, frame_timestamp, 0u, 2u);
+		cmd_write_timestamp(current_frame.cmd, frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 0u);
 
-		cmd_bind_descriptor(current_frame.cmd_buf, pipeline_layout, descriptor_set, VK_PIPELINE_BIND_POINT_GRAPHICS);
-		cmd_bind_descriptor(current_frame.cmd_buf, pipeline_layout, descriptor_set, VK_PIPELINE_BIND_POINT_COMPUTE);
+		cmd_bind_descriptor(current_frame.cmd, pipeline_layout, descriptor_set, VK_PIPELINE_BIND_POINT_GRAPHICS);
+		cmd_bind_descriptor(current_frame.cmd, pipeline_layout, descriptor_set, VK_PIPELINE_BIND_POINT_COMPUTE);
 
 		return true;
 	}
@@ -764,7 +670,7 @@ namespace edge::gfx {
 				};
 
 				pipeline_barrier_add_image(barrier_builder, backbuffer_resource->image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
-				cmd_pipeline_barrier(active_frame->cmd_buf, barrier_builder);
+				cmd_pipeline_barrier(active_frame->cmd, barrier_builder);
 
 				backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 			}
@@ -778,8 +684,8 @@ namespace edge::gfx {
 			buffer_descriptors.clear();
 		}
 
-		cmd_write_timestamp(active_frame->cmd_buf, frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 1u);
-		cmd_end(active_frame->cmd_buf);
+		cmd_write_timestamp(active_frame->cmd, frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 1u);
+		cmd_end(active_frame->cmd);
 
 		VkSemaphoreSubmitInfo wait_semaphores[2] = {};
 		wait_semaphores[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -795,7 +701,7 @@ namespace edge::gfx {
 		VkCommandBufferSubmitInfo cmd_buffer_submit_infos[6];
 		cmd_buffer_submit_infos[cmd_buffer_count++] = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = active_frame->cmd_buf.handle
+			.commandBuffer = active_frame->cmd.handle
 		};
 
 		const VkSubmitInfo2KHR submit_info = {
@@ -808,7 +714,7 @@ namespace edge::gfx {
 			.pSignalSemaphoreInfos = signal_semaphores
 		};
 
-		if (!queue_submit(queue, active_frame->fence, &submit_info)) {
+		if (!queue_submit(direct_queue, active_frame->fence, &submit_info)) {
 			active_frame->is_recording = false;
 			active_frame = nullptr;
 			return false;
@@ -823,7 +729,7 @@ namespace edge::gfx {
 			.pImageIndices = &active_image_index
 		};
 
-		if (!queue_present(queue, &present_info)) {
+		if (!queue_present(direct_queue, &present_info)) {
 			active_frame->is_recording = false;
 			active_frame = nullptr;
 			return false;
@@ -850,6 +756,6 @@ namespace edge::gfx {
 			.pRegions = update_info.copy_regions.m_data
 		};
 
-		vkCmdCopyBuffer2KHR(active_frame->cmd_buf.handle, &copy_buffer_info);
+		vkCmdCopyBuffer2KHR(active_frame->cmd.handle, &copy_buffer_info);
 	}
 }

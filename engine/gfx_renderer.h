@@ -55,7 +55,7 @@ namespace edge::gfx {
 		Semaphore rendering_finished = {};
 		Fence fence = {};
 
-		CmdBuf cmd_buf = {};
+		CmdBuf cmd = {};
 		bool is_recording = false;
 
 		Array<Resource> free_resources = {};
@@ -69,34 +69,6 @@ namespace edge::gfx {
 		BufferView try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) noexcept;
 	};
 
-	struct ResourceSet {
-		Buffer staging_memory = {};
-		u64 staging_offset = 0;
-
-		Array<Buffer> temp_staging_memory = {};
-
-		Semaphore semaphore = {};
-		std::atomic_uint64_t semaphore_counter = 0;
-		bool first_submition = true;
-		
-		CmdBuf cmd_buf = {};
-		bool recording = false;
-
-		bool create(NotNull<Renderer*> renderer) noexcept;
-		void destroy(NotNull<Renderer*> renderer) noexcept;
-
-		bool begin() noexcept;
-		bool end() noexcept;
-
-		BufferView try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) noexcept;
-	};
-
-	struct Uploader {
-		ResourceSet resource_sets[RENDERER_FRAME_OVERLAP] = {};
-		Queue queue = {};
-		CmdPool cmd_pool = {};
-	};
-
 	struct BufferUpdateInfo {
 		Buffer dst_buffer = {};
 		BufferView buffer_view = {};
@@ -108,7 +80,8 @@ namespace edge::gfx {
 
 	struct Renderer {
 		const Allocator* alloc = nullptr;
-		Queue queue = {};
+
+		Queue direct_queue = {};
 
 		CmdPool cmd_pool = {};
 
@@ -145,9 +118,6 @@ namespace edge::gfx {
 		Array<VkDescriptorImageInfo> image_descriptors = {};
 		Array<VkDescriptorBufferInfo> buffer_descriptors = {};
 
-		//ResourceSet update_resource_sets[RENDERER_FRAME_OVERLAP] = {};
-		//u32 current_update_set = 0;
-
 		Handle add_resource() noexcept;
 		bool setup_resource(Handle handle, Image image) noexcept;
 		bool setup_resource(Handle handle, Buffer buffer) noexcept;
@@ -161,6 +131,11 @@ namespace edge::gfx {
 
 		void buffer_update_begin(VkDeviceSize size, BufferUpdateInfo& update_info) noexcept;
 		void buffer_update_end(const BufferUpdateInfo& update_info);
+
+		template<typename T>
+		void push_constants(VkShaderStageFlags, T data) {
+			cmd_push_constants(active_frame->cmd, pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(T), &data);
+		}
 	};
 
 	Renderer* renderer_create(RendererCreateInfo create_info);
