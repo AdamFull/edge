@@ -10,6 +10,7 @@ set(EDGE_ENGINE_SOURCES
     "event_dispatcher.cpp"
     "gfx_context.cpp"
     "gfx_renderer.cpp"
+    "gfx_uploader.cpp"
     "main.cpp"
 )
 
