@@ -9,26 +9,26 @@
 #include <imgui.h>
 
 namespace edge {
-	constexpr float IMGUI_STICK_DEADZONE = 0.15f;
-	constexpr float IMGUI_TRIGGER_DEADZONE = 0.15f;
-	constexpr float IMGUI_TRIGGER_THRESHOLD = 0.15f;
+	constexpr f32 IMGUI_STICK_DEADZONE = 0.15f;
+	constexpr f32 IMGUI_TRIGGER_DEADZONE = 0.15f;
+	constexpr f32 IMGUI_TRIGGER_THRESHOLD = 0.15f;
 
-	inline auto radial_deadzone(float x, float y, float deadzone) -> std::pair<float, float> {
-		float magnitude = sqrt(x * x + y * y);
+	static std::pair<f32, f32> radial_deadzone(f32 x, f32 y, f32 deadzone) {
+		f32 magnitude = sqrt(x * x + y * y);
 		if (magnitude < deadzone) {
 			return { 0.0f, 0.0f };
 		}
 
-		float scale = (magnitude - deadzone) / (1.0f - deadzone);
+		f32 scale = (magnitude - deadzone) / (1.0f - deadzone);
 		scale = std::min(scale, 1.0f);
 
-		float normalized_x = x / magnitude;
-		float normalized_y = y / magnitude;
+		f32 normalized_x = x / magnitude;
+		f32 normalized_y = y / magnitude;
 
 		return { normalized_x * scale, normalized_y * scale };
 	}
 
-	inline auto simple_deadzone(float value, float deadzone) -> float {
+	static f32 simple_deadzone(f32 value, f32 deadzone) {
 		if (value < deadzone) {
 			return 0.0f;
 		}
@@ -36,7 +36,7 @@ namespace edge {
 		return (value - deadzone) / (1.0f - deadzone);
 	}
 
-	inline auto handle_axis_direction(ImGuiIO& io, ImGuiKey negative_key, ImGuiKey positive_key, float value, float threshold) -> void {
+	static void handle_axis_direction(ImGuiIO& io, ImGuiKey negative_key, ImGuiKey positive_key, f32 value, float threshold) {
 		if (value < -threshold) {
 			io.AddKeyAnalogEvent(negative_key, true, -value);
 		}
@@ -52,7 +52,7 @@ namespace edge {
 		}
 	}
 
-	inline constexpr auto translate_key_code(InputKeyboardKey code) -> ImGuiKey {
+	constexpr ImGuiKey translate_key_code(InputKeyboardKey code) {
 		switch (code)
 		{
 		case InputKeyboardKey::Unknown: return ImGuiKey_None;
@@ -177,7 +177,7 @@ namespace edge {
 		}
 	}
 
-	inline constexpr auto translate_gamepad_button(InputPadBtn code) -> ImGuiKey {
+	constexpr ImGuiKey translate_gamepad_button(InputPadBtn code)  {
 		switch (code)
 		{
 		case InputPadBtn::A: return ImGuiKey_GamepadFaceDown;
@@ -199,28 +199,24 @@ namespace edge {
 		}
 	}
 
-	inline constexpr auto translate_mouse_code(InputMouseBtn code) -> ImGuiMouseButton {
+	constexpr ImGuiMouseButton translate_mouse_code(InputMouseBtn code) {
 		switch (code)
 		{
-		case edge::InputMouseBtn::Left: return ImGuiMouseButton_Left;
-		case edge::InputMouseBtn::Right: return ImGuiMouseButton_Right;
-		case edge::InputMouseBtn::Middle: return ImGuiMouseButton_Middle;
+		case InputMouseBtn::Left: return ImGuiMouseButton_Left;
+		case InputMouseBtn::Right: return ImGuiMouseButton_Right;
+		case InputMouseBtn::Middle: return ImGuiMouseButton_Middle;
 		default: return ImGuiMouseButton_COUNT;
 		}
 	}
 
-	ImGuiLayer* imgui_layer_create(const ImGuiLayerInitInfo* init_info) {
-		if (!init_info) {
-			return nullptr;
-		}
-
-		ImGuiLayer* layer = init_info->alocator->allocate<ImGuiLayer>();
+	ImGuiLayer* imgui_layer_create(ImGuiLayerInitInfo init_info) {
+		ImGuiLayer* layer = init_info.alocator->allocate<ImGuiLayer>();
 		if (!layer) {
 			return nullptr;
 		}
 
-		layer->alocator = init_info->alocator;
-		layer->event_dispatcher = init_info->event_dispatcher;
+		layer->alocator = init_info.alocator;
+		layer->event_dispatcher = init_info.event_dispatcher;
 
 		ImGui::SetAllocatorFunctions(
 			[](size_t size, void* user_data) -> void* {
@@ -230,7 +226,7 @@ namespace edge {
 			[](void* ptr, void* user_data) -> void {
 				const Allocator* allocator = (const Allocator*)user_data;
 				allocator->free(ptr);
-			}, (void*)init_info->alocator);
+			}, (void*)init_info.alocator);
 
 		ImGuiContext* ctx = ImGui::CreateContext();
 		if (!ctx) {
@@ -255,7 +251,7 @@ namespace edge {
 		io.ConfigDpiScaleFonts = true;
 
 		i32 width, height;
-		platform_context_window_get_size(init_info->platform_context, &width, &height);
+		platform_context_window_get_size(init_info.platform_context, &width, &height);
 
 		io.DisplaySize.x = (f32)width;
 		io.DisplaySize.y = (f32)height;
@@ -388,11 +384,7 @@ namespace edge {
 		allocator->deallocate(layer);
 	}
 
-	void imgui_layer_update(ImGuiLayer* layer, f32 delta_time) {
-		if (!layer) {
-			return;
-		}
-
+	void imgui_layer_update(NotNull<ImGuiLayer*> layer, f32 delta_time) {
 		ImGuiIO& io = ImGui::GetIO();
 		io.DeltaTime = delta_time;
 

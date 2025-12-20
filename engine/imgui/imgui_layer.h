@@ -22,9 +22,9 @@ namespace edge {
 		PlatformContext* platform_context;
 	};
 
-	ImGuiLayer* imgui_layer_create(const ImGuiLayerInitInfo* init_info);
+	ImGuiLayer* imgui_layer_create(ImGuiLayerInitInfo init_info);
 	void imgui_layer_destroy(ImGuiLayer* layer);
-	void imgui_layer_update(ImGuiLayer* layer, f32 delta_time);
+	void imgui_layer_update(NotNull<ImGuiLayer*> layer, f32 delta_time);
 }
 
 #endif
