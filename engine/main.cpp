@@ -139,9 +139,9 @@ int edge_main(edge::PlatformLayout* platform_layout) {
 
 	edge::gfx::RendererCreateInfo renderer_create_info;
 	renderer_create_info.alloc = &allocator;
-	renderer_create_info.main_queue = &engine_context.main_queue;
+	renderer_create_info.main_queue = engine_context.main_queue;
 
-	engine_context.renderer = edge::gfx::renderer_create(&renderer_create_info);
+	engine_context.renderer = edge::gfx::renderer_create(renderer_create_info);
 	if (!engine_context.renderer) {
 		edge_cleanup_engine();
 		return -1;

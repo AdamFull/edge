@@ -23,7 +23,7 @@ namespace edge::gfx {
 		return result;
 	}
 
-	static void update_buffer_resource(ImGuiRenderer* imgui_renderer, Handle handle, u64 size, BufferFlags flags) {
+	static void update_buffer_resource(NotNull<ImGuiRenderer*> imgui_renderer, Handle handle, u64 size, BufferFlags flags) {
 		BufferCreateInfo buffer_create_info = {
 			.size = size,
 			.flags = flags
@@ -36,16 +36,16 @@ namespace edge::gfx {
 		renderer_update_buffer_resource(imgui_renderer->renderer, handle, buffer);
 	}
 
-	static void update_imgui_texture(ImGuiRenderer* imgui_renderer, ImTextureData* tex) {
-		if (!imgui_renderer || !tex) {
+	static void update_imgui_texture(NotNull<ImGuiRenderer*> imgui_renderer, ImTextureData* tex) {
+		if (!tex) {
 			return;
 		}
 
 
 	}
 
-	static void update_geometry_buffers(ImGuiRenderer* imgui_renderer, ImDrawData* draw_data) {
-		if (!imgui_renderer || !draw_data) {
+	static void update_geometry_buffers(NotNull<ImGuiRenderer*> imgui_renderer, ImDrawData* draw_data) {
+		if (!draw_data) {
 			return;
 		}
 
@@ -235,8 +235,8 @@ namespace edge::gfx {
 		allocator->deallocate(imgui_renderer);
 	}
 
-	void imgui_renderer_execute(ImGuiRenderer* imgui_renderer) {
-		if (!imgui_renderer || !ImGui::GetCurrentContext()) {
+	void imgui_renderer_execute(NotNull<ImGuiRenderer*> imgui_renderer) {
+		if (!ImGui::GetCurrentContext()) {
 			return;
 		}
 
