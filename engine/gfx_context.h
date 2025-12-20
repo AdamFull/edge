@@ -112,6 +112,8 @@ namespace edge::gfx {
 	void cmd_write_timestamp(CmdBuf cmd_buf, QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index);
 	void cmd_bind_descriptor(CmdBuf cmd_buf, PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point);
 	void cmd_pipeline_barrier(CmdBuf cmd_buf, const PipelineBarrierBuilder& builder);
+	void cmd_begin_rendering(CmdBuf cmd_buf, const VkRenderingInfoKHR& rendering_info);
+	void cmd_end_rendering(CmdBuf cmd_buf);
 	void cmd_buf_destroy(CmdBuf cmd_buf);
 
 	void updete_descriptors(const VkWriteDescriptorSet* writes, u32 count);

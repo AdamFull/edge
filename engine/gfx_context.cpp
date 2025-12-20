@@ -1290,6 +1290,22 @@ namespace edge::gfx {
 		vkCmdPipelineBarrier2KHR(cmd_buf.handle, &dependency_info);
 	}
 
+	void cmd_begin_rendering(CmdBuf cmd_buf, const VkRenderingInfoKHR& rendering_info) {
+		if (!cmd_buf) {
+			return;
+		}
+
+		vkCmdBeginRenderingKHR(cmd_buf.handle, &rendering_info);
+	}
+
+	void cmd_end_rendering(CmdBuf cmd_buf) {
+		if (!cmd_buf) {
+			return;
+		}
+
+		vkCmdEndRenderingKHR(cmd_buf.handle);
+	}
+
 	void cmd_buf_destroy(CmdBuf cmd_buf) {
 		if (!cmd_buf) {
 			return;
@@ -2054,7 +2070,7 @@ namespace edge::gfx {
 			return;
 		}
 
-		if (offset + size + buffer_view.offset > buffer_view.size) {
+		if (offset + size > buffer_view.size) {
 			return;
 		}
 
