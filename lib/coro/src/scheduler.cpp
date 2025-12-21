@@ -13,9 +13,8 @@
 namespace edge {
 	struct Job {
 		FiberContext* context = nullptr;
-		CoroFn func = nullptr;
-		void* user_data = nullptr;
-		CoroState state = {};
+		JobFn func = {};
+		JobState state = {};
 		Job* caller = nullptr;
 
 		SchedulerPriority priority = {};
@@ -70,7 +69,7 @@ namespace edge {
 		thread_context.current_job = &thread_context.main_job;
 		thread_context.thread_id = static_cast<i32>(worker->thread_id);
 
-		thread_context.main_job.state = CoroState::Running;
+		thread_context.main_job.state = JobState::Running;
 	}
 
 	static void sched_shutdown_thread_context() {
@@ -177,10 +176,10 @@ namespace edge {
 	extern "C" void job_main(void) {
 		Job* job = sched_current_job();
 
-		if (job && job->func) {
-			job->state = CoroState::Running;
-			job->func(job->user_data);
-			job->state = CoroState::Finished;
+		if (job && job->func.is_valid()) {
+			job->state = JobState::Running;
+			job->func.invoke();
+			job->state = JobState::Finished;
 		}
 
 		if (job && job->caller) {
@@ -190,8 +189,8 @@ namespace edge {
 		assert(0 && "Job returned without caller");
 	}
 
-	static Job* job_create(Scheduler* sched, CoroFn func, void* payload) {
-		if (!sched || !func) {
+	static Job* job_create(Scheduler* sched, JobFn func) {
+		if (!sched || !func.is_valid()) {
 			return nullptr;
 		}
 
@@ -210,10 +209,9 @@ namespace edge {
 			goto failed;
 		}
 
-		job->state = CoroState::Suspended;
+		job->state = JobState::Suspended;
 		job->caller = nullptr;
 		job->func = func;
-		job->user_data = payload;
 
 		job->priority = SchedulerPriority::Low;
 
@@ -241,6 +239,10 @@ namespace edge {
 			return;
 		}
 
+		if (job->func.is_valid()) {
+			job->func.destroy(sched->allocator);
+		}
+
 		if (job->context) {
 			void* stack_ptr = fiber_get_stack_ptr(job->context);
 			if (stack_ptr) {
@@ -253,7 +255,7 @@ namespace edge {
 		sched->allocator->deallocate(job);
 	}
 
-	static bool job_state_update(Job* job, CoroState expected_state, CoroState new_state) {
+	static bool job_state_update(Job* job, JobState expected_state, JobState new_state) {
 		if (job->state == expected_state) {
 			job->state = new_state;
 			return true;
@@ -311,7 +313,7 @@ namespace edge {
 				continue;
 			}
 
-			bool claimed = job_state_update(job, CoroState::Suspended, CoroState::Running);
+			bool claimed = job_state_update(job, JobState::Suspended, JobState::Running);
 			if (!claimed) {
 				sched->jobs_failed.fetch_add(1, std::memory_order_relaxed);
 				continue;
@@ -320,7 +322,7 @@ namespace edge {
 			Job* caller = sched_current_job();
 			job->caller = caller;
 
-			caller->state = CoroState::Suspended;
+			caller->state = JobState::Suspended;
 
 			Job* volatile target_job = job;
 			thread_context.current_job = target_job;
@@ -328,16 +330,16 @@ namespace edge {
 			fiber_context_switch(caller->context, job->context);
 
 			thread_context.current_job = caller;
-			caller->state = CoroState::Running;
+			caller->state = JobState::Running;
 
-			CoroState job_state = job->state;
-			if (job_state == CoroState::Finished) {
+			JobState job_state = job->state;
+			if (job_state == JobState::Finished) {
 				job_destroy(sched, job);
 
 				sched->active_jobs.fetch_sub(1, std::memory_order_acq_rel);
 				sched->jobs_completed.fetch_add(1, std::memory_order_relaxed);
 			}
-			else if (job_state == CoroState::Suspended) {
+			else if (job_state == JobState::Suspended) {
 				sched_enqueue_job(sched, job);
 			}
 		}
@@ -511,12 +513,12 @@ namespace edge {
 		alloc->deallocate(sched);
 	}
 
-	void sched_schedule_job(Scheduler* sched, CoroFn func, void* payload, SchedulerPriority priority) {
-		if (!sched || !func) {
+	void sched_schedule_job(Scheduler* sched, JobFn func, SchedulerPriority priority) {
+		if (!sched || !func.is_valid()) {
 			return;
 		}
 
-		Job* job = job_create(sched, func, payload);
+		Job* job = job_create(sched, func);
 		if (!job) {
 			return;
 		}
@@ -539,6 +541,10 @@ namespace edge {
 		return thread_context.scheduler;
 	}
 
+	const Allocator* sched_get_allocator(Scheduler* sched) {
+		return sched->allocator;
+	}
+
 	void sched_run(Scheduler* sched) {
 		if (!sched) {
 			return;
@@ -554,8 +560,8 @@ namespace edge {
 	void sched_yield(void) {
 		Job* job = thread_context.current_job;
 
-		CoroState job_state = job->state;
-		if (!job || job == &thread_context.main_job || job_state == CoroState::Finished) {
+		JobState job_state = job->state;
+		if (!job || job == &thread_context.main_job || job_state == JobState::Finished) {
 			return;
 		}
 
@@ -564,17 +570,11 @@ namespace edge {
 			return;
 		}
 
-		job->state = CoroState::Suspended;
-		caller->state = CoroState::Running;
+		job->state = JobState::Suspended;
+		caller->state = JobState::Running;
 
 		fiber_context_switch(job->context, caller->context);
 
-		job->state = CoroState::Running;
-	}
-
-	void sched_await(CoroFn func, void* payload, SchedulerPriority priority) {
-		if (!func) {
-			return;
-		}
+		job->state = JobState::Running;
 	}
 }

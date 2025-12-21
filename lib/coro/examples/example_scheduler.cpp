@@ -3,23 +3,6 @@
 #include <assert.h>
 #include <stdio.h>
 
-static void job_a(void* payload) {
-    edge::SchedulerEvent* completion_event = (edge::SchedulerEvent*)payload;
-    if (!completion_event) {
-        return;
-    }
-
-    int thread_id = edge::sched_current_thread_id();
-    printf("[Thread %d] [Job A] Downloading began.\n", thread_id);
-
-    for (int i = 0; i < 100; ++i) {
-        printf("[Thread %d] [Job A] Progress: %d%%\n", thread_id, i);
-        edge::sched_yield();
-    }
-
-    edge::sched_event_signal(completion_event);
-}
-
 static void job_b(void* payload) {
     int thread_id = edge::sched_current_thread_id();
     printf("[Thread %d] Job B Online\n", thread_id);
@@ -35,7 +18,18 @@ static void job_b(void* payload) {
     edge::SchedulerEvent* completion_event = edge::sched_event_create();
 
     edge::Scheduler* sched = edge::sched_current_instance();
-    edge::sched_schedule_job(sched, job_a, completion_event, edge::SchedulerPriority::Critical);
+    edge::sched_schedule_job(sched, edge::callable_create_from_lambda(
+        edge::sched_get_allocator(sched), [completion_event]() {
+            int thread_id = edge::sched_current_thread_id();
+            printf("[Thread %d] [Job A] Downloading began.\n", thread_id);
+
+            for (int i = 0; i < 100; ++i) {
+                printf("[Thread %d] [Job A] Progress: %d%%\n", thread_id, i);
+                edge::sched_yield();
+            }
+
+            edge::sched_event_signal(completion_event);
+        }), edge::SchedulerPriority::Critical);
 
     printf("[Thread %d] [Job B] waiting subtask completion\n", thread_id);
     edge::sched_event_wait(completion_event);
@@ -58,7 +52,11 @@ int main(void) {
 
     edge::Scheduler* sched = edge::sched_create(&allocator);
 
-    edge::sched_schedule_job(sched, job_b, NULL, edge::SchedulerPriority::Critical);
+    edge::sched_schedule_job(sched, 
+        edge::callable_create_from_lambda(
+            &allocator, []() -> void {
+                job_b(nullptr);
+        }), edge::SchedulerPriority::Critical);
 
     edge::sched_run(sched);
 
