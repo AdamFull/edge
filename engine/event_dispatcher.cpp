@@ -67,9 +67,9 @@ namespace edge {
 			return;
 		}
 
-		for (usize i = 0; i < dispatcher->listeners.m_size; i++) {
-			EventListener* listener = dispatcher->listeners.get(i);
-			if (listener && listener->id == listener_id) {
+		for (usize i = 0; i < dispatcher->listeners.size(); i++) {
+			EventListener& listener = dispatcher->listeners[i];
+			if (listener.id == listener_id) {
 				EventListener out_elem;
 				dispatcher->listeners.remove(i, &out_elem);
 				return;
@@ -82,15 +82,10 @@ namespace edge {
 			return;
 		}
 
-		for (usize i = 0; i < dispatcher->listeners.m_size; i++) {
-			EventListener* listener = dispatcher->listeners.get(i);
-			if (!listener) {
-				continue;
-			}
-
+		for (EventListener& listener : dispatcher->listeners) {
 			/* Check if any of the event's category flags match the listener's categories */
-			if ((event->categories & listener->listen_categories) != 0) {
-				listener->listener_fn.invoke(event);
+			if ((event->categories & listener.listen_categories) != 0) {
+				listener.listener_fn.invoke(event);
 			}
 		}
 	}
