@@ -4,6 +4,7 @@
 #include "stddef.hpp"
 #include "platform_detect.hpp"
 
+#include <atomic>
 #include <chrono>
 
 namespace edge {
@@ -13,6 +14,12 @@ namespace edge {
 		NoMem = 2,
 		TimedOut = 3,
 		Busy = 4
+	};
+
+	enum class FutexResult {
+		Success = 0,
+		TimedOut = 1,
+		Error = 2
 	};
 
 	enum class MutexType {
@@ -77,6 +84,10 @@ namespace edge {
 	void thread_exit(i32 res) noexcept;
 	void thread_yield();
 	i32 thread_sleep(const std::chrono::nanoseconds& duration);
+
+	FutexResult futex_wait(std::atomic<u32>* addr, u32 expected_value, std::chrono::nanoseconds timeout);
+	i32 futex_wake(std::atomic<u32>* addr, i32 count = 1);
+	i32 futex_wake_all(std::atomic<u32>* addr);
 
 	ThreadResult mutex_init(Mutex* mtx, MutexType type = MutexType::Plain);
 	void mutex_destroy(Mutex* mtx);

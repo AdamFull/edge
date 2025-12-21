@@ -5,6 +5,8 @@
 #include <windows.h>
 #include <process.h>
 
+#pragma comment(lib, "synchronization.lib")
+
 namespace edge {
 	namespace detail {
 		struct ThreadStartInfo {
@@ -95,6 +97,53 @@ namespace edge {
 		auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
 		Sleep(static_cast<DWORD>(ms.count()));
 		return 0;
+	}
+
+	FutexResult futex_wait(std::atomic<u32>* addr, u32 expected_value, std::chrono::nanoseconds timeout) {
+		if (!addr) {
+			return FutexResult::Error;
+		}
+
+		DWORD timeout_ms = INFINITE;
+		if (timeout != std::chrono::nanoseconds::zero()) {
+			auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
+			timeout_ms = static_cast<DWORD>(ms.count());
+		}
+
+		BOOL result = WaitOnAddress(addr, &expected_value, sizeof(u32), timeout_ms);
+		if (!result) {
+			DWORD error = GetLastError();
+			if (error == ERROR_TIMEOUT) {
+				return FutexResult::TimedOut;
+			}
+			return FutexResult::Error;
+		}
+
+		return FutexResult::Success;
+	}
+
+	i32 futex_wake(std::atomic<u32>* addr, i32 count) {
+		if (!addr) {
+			return 0;
+		}
+
+		if (count == 1) {
+			WakeByAddressSingle(addr);
+		}
+		else {
+			WakeByAddressAll(addr);
+		}
+
+		return count;
+	}
+
+	i32 futex_wake_all(std::atomic<u32>* addr) {
+		if (!addr) {
+			return 0;
+		}
+
+		WakeByAddressAll(addr);
+		return 1;
 	}
 
 	ThreadResult mutex_init(Mutex* mtx, MutexType type) {
@@ -469,6 +518,62 @@ namespace edge {
 
 		timespec rem;
 		return nanosleep(&req, &rem);
+	}
+
+	static long futex_syscall(std::atomic<u32>* addr, i32 op, u32 val, const timespec* timeout = nullptr) {
+		return syscall(SYS_futex, addr, op, val, timeout, nullptr, 0);
+	}
+
+	FutexResult futex_wait(std::atomic<u32>* addr, u32 expected_value, std::chrono::nanoseconds timeout) {
+		if (!addr) {
+			return FutexResult::Error;
+		}
+
+		timespec ts;
+		timespec* ts_ptr = nullptr;
+
+		if (timeout != std::chrono::nanoseconds::zero()) {
+			auto secs = std::chrono::duration_cast<std::chrono::seconds>(timeout);
+			auto nsecs = timeout - std::chrono::duration_cast<std::chrono::nanoseconds>(secs);
+
+			ts.tv_sec = secs.count();
+			ts.tv_nsec = nsecs.count();
+			ts_ptr = &ts;
+		}
+
+		long result = futex_syscall(addr, FUTEX_WAIT_PRIVATE, expected_value, ts_ptr);
+
+		if (result == 0) {
+			return FutexResult::Success;
+		}
+
+		if (errno == ETIMEDOUT) {
+			return FutexResult::TimedOut;
+		}
+
+		if (errno == EAGAIN) {
+			return FutexResult::Success;
+		}
+
+		return FutexResult::Error;
+	}
+
+	i32 futex_wake(std::atomic<u32>* addr, i32 count) {
+		if (!addr) {
+			return 0;
+		}
+
+		long result = futex_syscall(addr, FUTEX_WAKE_PRIVATE, count);
+		return result >= 0 ? static_cast<i32>(result) : 0;
+	}
+
+	i32 futex_wake_all(std::atomic<u32>* addr) {
+		if (!addr) {
+			return 0;
+		}
+
+		long result = futex_syscall(addr, FUTEX_WAKE_PRIVATE, INT32_MAX);
+		return result >= 0 ? static_cast<i32>(result) : 0;
 	}
 
 	ThreadResult mutex_init(Mutex* mtx, MutexType type) {
