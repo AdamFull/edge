@@ -44,6 +44,9 @@ namespace edge {
 
 		std::atomic<usize> jobs_completed = 0;
 		std::atomic<usize> jobs_failed = 0;
+
+		std::atomic<u32> worker_futex = 0;
+		std::atomic<u32> sleeping_workers = 0;
 	};
 
 	struct SchedulerThreadContext {
@@ -291,6 +294,11 @@ namespace edge {
 			return;
 		}
 
+		if (sched->sleeping_workers.load(std::memory_order_acquire) > 0) {
+			sched->worker_futex.fetch_add(1, std::memory_order_release);
+			futex_wake_all(&sched->worker_futex);
+		}
+
 		sched->queued_jobs.fetch_add(1, std::memory_order_relaxed);
 	}
 
@@ -307,9 +315,12 @@ namespace edge {
 					break;
 				}
 
-				if (sched->queued_jobs.load(std::memory_order_acquire) == 0) {
-					thread_yield();
-				}
+				sched->sleeping_workers.fetch_add(1, std::memory_order_relaxed);
+
+				u32 futex_val = sched->worker_futex.load(std::memory_order_acquire);
+				futex_wait(&sched->worker_futex, futex_val, std::chrono::nanoseconds::max());
+
+				sched->sleeping_workers.fetch_sub(1, std::memory_order_relaxed);
 				continue;
 			}
 
@@ -396,6 +407,8 @@ namespace edge {
 		sched->queued_jobs.store(0, std::memory_order_relaxed);
 		sched->jobs_completed.store(0, std::memory_order_relaxed);
 		sched->jobs_failed.store(0, std::memory_order_relaxed);
+		sched->worker_futex.store(0, std::memory_order_relaxed);
+		sched->sleeping_workers.store(0, std::memory_order_relaxed);
 
 		for (i32 i = 0; i < num_cores; ++i) {
 			WorkerThread* worker = allocator->allocate<WorkerThread>();
@@ -473,6 +486,9 @@ namespace edge {
 		}
 
 		sched->shutdown.store(true, std::memory_order_release);
+
+		sched->worker_futex.fetch_add(1, std::memory_order_release);
+		futex_wake_all(&sched->worker_futex);
 
 		if (sched->worker_threads.m_data) {
 			for (usize i = 0; i < sched->worker_threads.m_size; ++i) {
