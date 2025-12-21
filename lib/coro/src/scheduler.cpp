@@ -192,51 +192,6 @@ namespace edge {
 		assert(0 && "Job returned without caller");
 	}
 
-	static Job* job_create(Scheduler* sched, JobFn func) {
-		if (!sched || !func.is_valid()) {
-			return nullptr;
-		}
-
-		Job* job = sched->allocator->allocate<Job>();
-		if (!job) {
-			return nullptr;
-		}
-
-		void* stack_ptr = sched_alloc_stack_ptr(sched);
-		if (!stack_ptr) {
-			goto failed;
-		}
-
-		job->context = fiber_context_create(sched->allocator, job_main, stack_ptr, EDGE_FIBER_STACK_SIZE);
-		if (!job->context) {
-			goto failed;
-		}
-
-		job->state = JobState::Suspended;
-		job->caller = nullptr;
-		job->func = func;
-
-		job->priority = SchedulerPriority::Low;
-
-		return job;
-
-	failed:
-		if (job) {
-			if (job->context) {
-				void* stack_ptr = fiber_get_stack_ptr(job->context);
-				if (stack_ptr) {
-					sched_free_stack_ptr(sched, stack_ptr);
-				}
-
-				fiber_context_destroy(sched->allocator, job->context);
-			}
-
-			sched->allocator->deallocate(job);
-		}
-
-		return nullptr;
-	}
-
 	static void job_destroy(Scheduler* sched, Job* job) {
 		if (!sched || !job) {
 			return;
@@ -256,6 +211,37 @@ namespace edge {
 		}
 
 		sched->allocator->deallocate(job);
+	}
+
+	static Job* job_create(Scheduler* sched, JobFn func) {
+		if (!sched || !func.is_valid()) {
+			return nullptr;
+		}
+
+		Job* job = sched->allocator->allocate<Job>();
+		if (!job) {
+			return nullptr;
+		}
+
+		void* stack_ptr = sched_alloc_stack_ptr(sched);
+		if (!stack_ptr) {
+			job_destroy(sched, job);
+			return nullptr;
+		}
+
+		job->context = fiber_context_create(sched->allocator, job_main, stack_ptr, EDGE_FIBER_STACK_SIZE);
+		if (!job->context) {
+			job_destroy(sched, job);
+			return nullptr;
+		}
+
+		job->state = JobState::Suspended;
+		job->caller = nullptr;
+		job->func = func;
+
+		job->priority = SchedulerPriority::Low;
+
+		return job;
 	}
 
 	static bool job_state_update(Job* job, JobState expected_state, JobState new_state) {
@@ -373,20 +359,24 @@ namespace edge {
 		sched->allocator = allocator;
 
 		if (!sched->protected_arena.create()) {
-			goto failed;
+			sched_destroy(sched);
+			return nullptr;
 		}
 
 		if (!sched->free_stacks.reserve(allocator, 16)) {
-			goto failed;
+			sched_destroy(sched);
+			return nullptr;
 		}
 
 		if (mutex_init(&sched->stack_mutex, MutexType::Plain) != ThreadResult::Success) {
-			goto failed;
+			sched_destroy(sched);
+			return nullptr;
 		}
 
 		for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
 			if (!sched->queues[i].create(allocator, 1024)) {
-				goto failed;
+				sched_destroy(sched);
+				return nullptr;
 			}
 		}
 
@@ -398,8 +388,10 @@ namespace edge {
 			num_cores = 4;
 		}
 
+		// TODO: Use fixed runtime array
 		if (!sched->worker_threads.reserve(allocator, num_cores)) {
-			goto failed;
+			sched_destroy(sched);
+			return nullptr;
 		}
 
 		sched->shutdown.store(false, std::memory_order_relaxed);
@@ -413,7 +405,8 @@ namespace edge {
 		for (i32 i = 0; i < num_cores; ++i) {
 			WorkerThread* worker = allocator->allocate<WorkerThread>();
 			if (!worker) {
-				goto failed;
+				sched_destroy(sched);
+				return nullptr;
 			}
 
 			worker->scheduler = sched;
@@ -422,13 +415,15 @@ namespace edge {
 
 			if (thread_create(&worker->thread, sched_worker_thread, worker) != ThreadResult::Success) {
 				allocator->deallocate(worker);
-				goto failed;
+				sched_destroy(sched);
+				return nullptr;
 			}
 
 			if (!sched->worker_threads.push_back(sched->allocator, worker)) {
 				thread_join(worker->thread, nullptr);
 				allocator->deallocate(worker);
-				goto failed;
+				sched_destroy(sched);
+				return nullptr;
 			}
 
 			thread_set_affinity_ex(worker->thread, cpu_info, cpu_count, i, false);
@@ -439,45 +434,6 @@ namespace edge {
 		}
 
 		return sched;
-
-	failed:
-		if (sched) {
-			if (sched->worker_threads.m_data) {
-				for (usize i = 0; i < sched->worker_threads.m_size; ++i) {
-					WorkerThread** worker_ptr = sched->worker_threads.get(i);
-					if (worker_ptr && *worker_ptr) {
-						(*worker_ptr)->should_exit.store(true, std::memory_order_release);
-					}
-				}
-
-				sched->shutdown.store(true, std::memory_order_release);
-
-				for (usize i = 0; i < sched->worker_threads.m_size; ++i) {
-					WorkerThread** worker_ptr = sched->worker_threads.get(i);
-					if (worker_ptr && *worker_ptr) {
-						thread_join((*worker_ptr)->thread, nullptr);
-						allocator->deallocate(*worker_ptr);
-					}
-				}
-
-				sched->worker_threads.destroy(sched->allocator);
-			}
-
-			for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
-				sched->queues[i].destroy(allocator);
-			}
-
-			mutex_destroy(&sched->stack_mutex);
-
-			if (sched->free_stacks.m_data) {
-				sched->free_stacks.destroy(sched->allocator);
-			}
-
-			sched->protected_arena.destroy();
-			allocator->deallocate(sched);
-		}
-
-		return nullptr;
 	}
 
 	void sched_destroy(Scheduler* sched) {
@@ -490,13 +446,12 @@ namespace edge {
 		sched->worker_futex.fetch_add(1, std::memory_order_release);
 		futex_wake_all(&sched->worker_futex);
 
-		if (sched->worker_threads.m_data) {
-			for (usize i = 0; i < sched->worker_threads.m_size; ++i) {
-				WorkerThread** worker_ptr = sched->worker_threads.get(i);
-				if (worker_ptr && *worker_ptr) {
-					(*worker_ptr)->should_exit.store(true, std::memory_order_release);
-					thread_join((*worker_ptr)->thread, nullptr);
-					sched->allocator->deallocate(*worker_ptr);
+		if (!sched->worker_threads.empty()) {
+			for (WorkerThread* worker_thread : sched->worker_threads) {
+				if (worker_thread) {
+					worker_thread->should_exit.store(true, std::memory_order_release);
+					thread_join(worker_thread->thread, nullptr);
+					sched->allocator->deallocate(worker_thread);
 				}
 			}
 
@@ -519,7 +474,7 @@ namespace edge {
 
 		mutex_destroy(&sched->stack_mutex);
 
-		if (sched->free_stacks.m_data) {
+		if (!sched->free_stacks.empty()) {
 			sched->free_stacks.destroy(sched->allocator);
 		}
 
