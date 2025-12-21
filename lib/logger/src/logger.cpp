@@ -118,14 +118,9 @@ namespace edge {
 			return;
 		}
 
-		usize count = logger->outputs.m_size;
-		for (usize i = 0; i < count; i++) {
-			LoggerOutput** output_ptr = logger->outputs.get(i);
-			if (output_ptr && *output_ptr) {
-				LoggerOutput* output = *output_ptr;
-				if (output->vtable && output->vtable->destroy) {
-					output->vtable->destroy(output);
-				}
+		for (LoggerOutput* output : logger->outputs) {
+			if (output->vtable && output->vtable->destroy) {
+				output->vtable->destroy(output);
 			}
 		}
 		logger->outputs.destroy(logger->allocator);
@@ -159,14 +154,9 @@ namespace edge {
 
 		mutex_lock(&logger->mutex);
 
-		usize count = logger->outputs.m_size;
-		for (usize i = 0; i < count; i++) {
-			LoggerOutput** output_ptr = logger->outputs.get(i);
-			if (output_ptr && *output_ptr) {
-				LoggerOutput* output = *output_ptr;
-				if (output->vtable && output->vtable->flush) {
-					output->vtable->flush(output);
-				}
+		for (LoggerOutput* output : logger->outputs) {
+			if (output->vtable && output->vtable->flush) {
+				output->vtable->flush(output);
 			}
 		}
 
@@ -203,14 +193,9 @@ namespace edge {
 
 		mutex_lock(&logger->mutex);
 
-		usize count = logger->outputs.m_size;
-		for (usize i = 0; i < count; i++) {
-			LoggerOutput** output_ptr = logger->outputs.get(i);
-			if (output_ptr && *output_ptr) {
-				LoggerOutput* output = *output_ptr;
-				if (output->vtable && output->vtable->write) {
-					output->vtable->write(output, &entry);
-				}
+		for (LoggerOutput* output : logger->outputs) {
+			if (output->vtable && output->vtable->write) {
+				output->vtable->write(output, &entry);
 			}
 		}
 
