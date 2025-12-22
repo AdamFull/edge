@@ -9,6 +9,14 @@ set(CMAKE_C_EXTENSIONS OFF)
 # Add cmake modules path
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
+if((CMAKE_CXX_COMPILER_ID MATCHES "GNU") OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang"))
+	add_compile_options(-msse4.2)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Intel")
+	add_compile_options(/QxSSE4.2)
+elseif((CMAKE_CXX_COMPILER_ID MATCHES "MSVC") AND NOT CMAKE_CL_64)
+	add_compile_options(/arch:SSE2)
+endif()
+
 if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND EDGE_USE_TSAN)
     if(EDGE_USE_ASAN)
         add_compile_definitions(ASAN_ENABLED=1)
