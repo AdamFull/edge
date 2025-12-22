@@ -5,6 +5,7 @@
 #include <list.hpp>
 #include <mpmc_queue.hpp>
 #include <string.hpp>
+#include <span.hpp>
 
 #include <random.hpp>
 #include <threads.hpp>
@@ -334,11 +335,10 @@ TEST(hashmap_basic) {
 	SHOULD_EQUAL(map.insert(&alloc, 2, 200), true);
 	SHOULD_EQUAL(map.insert(&alloc, 3, 300), true);
 
-	SHOULD_EQUAL(map.m_size, 3);
+	SHOULD_EQUAL(map.size(), 3);
 
-	i32* val = map.get(2);
-	SHOULD_EQUAL(val != nullptr, true);
-	SHOULD_EQUAL(*val, 200);
+	SHOULD_EQUAL(map.contains(2), true);
+	SHOULD_EQUAL(map[2]; , 200);
 
 	map.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
@@ -352,12 +352,12 @@ TEST(hashmap_update) {
 	map.create(&alloc, 0);
 
 	map.insert(&alloc, 5, 50);
-	SHOULD_EQUAL(*map.get(5), 50);
+	SHOULD_EQUAL(map[5], 50);
 
 	// Update existing key
 	map.insert(&alloc, 5, 500);
-	SHOULD_EQUAL(*map.get(5), 500);
-	SHOULD_EQUAL(map.m_size, 1);
+	SHOULD_EQUAL(map[5], 500);
+	SHOULD_EQUAL(map.size(), 1);
 
 	map.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
@@ -377,7 +377,7 @@ TEST(hashmap_remove) {
 	i32 removed_val;
 	SHOULD_EQUAL(map.remove(&alloc, 20, &removed_val), true);
 	SHOULD_EQUAL(removed_val, 200);
-	SHOULD_EQUAL(map.m_size, 2);
+	SHOULD_EQUAL(map.size(), 2);
 
 	SHOULD_EQUAL(map.contains(20), false);
 	SHOULD_EQUAL(map.contains(10), true);
@@ -423,13 +423,12 @@ TEST(hashmap_rehash) {
 		map.insert(&alloc, i, i * 100);
 	}
 
-	SHOULD_EQUAL(map.m_size, 10);
+	SHOULD_EQUAL(map.size(), 10);
 
 	// Verify all elements are still accessible
 	for (i32 i = 0; i < 10; i++) {
-		i32* val = map.get(i);
-		SHOULD_EQUAL(val != nullptr, true);
-		SHOULD_EQUAL(*val, i * 100);
+		SHOULD_EQUAL(map.contains(i), true);
+		SHOULD_EQUAL(map[i]; , i * 100);
 	}
 
 	map.destroy(&alloc);
@@ -447,12 +446,12 @@ TEST(hashmap_clear) {
 		map.insert(&alloc, i, i);
 	}
 
-	SHOULD_EQUAL(map.m_size, 5);
+	SHOULD_EQUAL(map.size(), 5);
 
 	map.clear(&alloc);
 
 	SHOULD_EQUAL(map.empty(), true);
-	SHOULD_EQUAL(map.m_size, 0);
+	SHOULD_EQUAL(map.size(), 0);
 
 	map.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
