@@ -12,8 +12,12 @@ namespace edge {
 		bool create(NotNull<const Allocator*> alloc, usize capacity) noexcept {
 			if (capacity > 0) {
 				m_data = alloc->allocate_array<T>(capacity);
+				if (!m_data) {
+					return false;
+				}
 			}
 			m_capacity = capacity;
+			return true;
 		}
 
 		void destroy(NotNull<const Allocator*> alloc) noexcept {
@@ -60,8 +64,32 @@ namespace edge {
 
 	template<TrivialType T, typename StorageProvider>
 	struct Buffer {
-		StorageProvider m_storage;
+		StorageProvider m_storage = {};
 		usize m_size = 0;
+
+		template<typename S = StorageProvider>
+			requires std::is_same_v<S, HeapStorage<T>>
+		bool create(NotNull<const Allocator*> alloc, usize capacity) noexcept {
+			return m_storage.create(alloc, capacity);
+		}
+
+		template<typename S = StorageProvider>
+			requires std::is_same_v<S, HeapStorage<T>>
+		void destroy(NotNull<const Allocator*> alloc) noexcept {
+			m_storage.destroy(alloc);
+		}
+
+		template<typename S = StorageProvider>
+			requires std::is_same_v<S, ExternalStorage<T>>
+		void attach(T* data, usize capacity) noexcept {
+			m_storage.attach(data, capacity);
+		}
+
+		template<typename S = StorageProvider>
+			requires std::is_same_v<S, ExternalStorage<T>>
+		void detach() noexcept {
+			m_storage.detach();
+		}
 
 		usize size() const noexcept {
 			return m_size;
@@ -185,6 +213,13 @@ namespace edge {
 			return true;
 		}
 	};
+
+	template<typename T>
+	using HeapBuffer = Buffer<T, HeapStorage<T>>;
+	template<typename T, usize N>
+	using StackBuffer = Buffer<T, StackStorage<T, N>>;
+	template<typename T>
+	using ExternalBuffer = Buffer<T, ExternalStorage<T>>;
 
 	template<TrivialType T, typename StorageProvider>
 	inline T* begin(Buffer<T, StorageProvider>& buf) {
