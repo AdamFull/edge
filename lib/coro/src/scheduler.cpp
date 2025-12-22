@@ -31,10 +31,10 @@ namespace edge {
 		const Allocator* allocator = nullptr;
 
 		Arena protected_arena = {};
-		Array<uintptr_t> free_stacks = {};
+		Array<void*> free_stacks = {};
 		Mutex stack_mutex = {};
 
-		MPMCQueue<uintptr_t> queues[static_cast<usize>(SchedulerPriority::Count)] = {};
+		MPMCQueue<Job*> queues[static_cast<usize>(SchedulerPriority::Count)] = {};
 
 		Array<WorkerThread*> worker_threads = {};
 
@@ -153,14 +153,14 @@ namespace edge {
 
 		mutex_lock(&sched->stack_mutex);
 
-		uintptr_t ptr_addr = 0;
-		if (!sched->free_stacks.pop_back(&ptr_addr)) {
+		void* stack = nullptr;
+		if (!sched->free_stacks.pop_back(&stack)) {
 			mutex_unlock(&sched->stack_mutex);
 			return sched->protected_arena.alloc_ex(EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
 		}
 		mutex_unlock(&sched->stack_mutex);
 
-		return reinterpret_cast<void*>(ptr_addr);
+		return stack;
 	}
 
 	static void sched_free_stack_ptr(Scheduler* sched, void* ptr) {
@@ -169,10 +169,7 @@ namespace edge {
 		}
 
 		mutex_lock(&sched->stack_mutex);
-
-		uintptr_t ptr_addr = reinterpret_cast<uintptr_t>(ptr);
-		sched->free_stacks.push_back(sched->allocator, ptr_addr);
-
+		sched->free_stacks.push_back(sched->allocator, ptr);
 		mutex_unlock(&sched->stack_mutex);
 	}
 
@@ -258,10 +255,10 @@ namespace edge {
 		}
 
 		for (i32 i = static_cast<i32>(SchedulerPriority::Count) - 1; i >= 0; i--) {
-			uintptr_t job_addr;
-			if (sched->queues[i].dequeue(&job_addr)) {
+			Job* job;
+			if (sched->queues[i].dequeue(&job)) {
 				sched->queued_jobs.fetch_sub(1, std::memory_order_relaxed);
-				return reinterpret_cast<Job*>(job_addr);
+				return job;
 			}
 		}
 
@@ -274,9 +271,7 @@ namespace edge {
 		}
 
 		i32 priority_index = static_cast<i32>(job->priority);
-		uintptr_t job_addr = reinterpret_cast<uintptr_t>(job);
-
-		if (!sched->queues[priority_index].enqueue(job_addr)) {
+		if (!sched->queues[priority_index].enqueue(job)) {
 			return;
 		}
 
@@ -460,12 +455,10 @@ namespace edge {
 
 		for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
 			while (true) {
-				uintptr_t job_addr;
-				if (!sched->queues[i].dequeue(&job_addr)) {
+				Job* job;
+				if (!sched->queues[i].dequeue(&job)) {
 					break;
 				}
-
-				Job* job = reinterpret_cast<Job*>(job_addr);
 				job_destroy(sched, job);
 			}
 
