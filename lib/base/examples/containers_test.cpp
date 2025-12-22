@@ -1,4 +1,5 @@
 #include <array.hpp>
+#include <buffer.hpp>
 #include <bitarray.hpp>
 #include <hashmap.hpp>
 #include <list.hpp>
@@ -125,9 +126,9 @@ TEST(array_basic) {
 	arr.push_back(&alloc, 60);
 
 	SHOULD_EQUAL(*arr.front(), 99);
-	SHOULD_EQUAL(arr.m_size, 3);
+	SHOULD_EQUAL(arr.size(), 3);
 	SHOULD_EQUAL(arr.insert(&alloc, 1, 50), true);
-	SHOULD_EQUAL(*arr.get(1), 50);
+	SHOULD_EQUAL(arr[1], 50);
 
 	auto found = std::find_if(edge::begin(arr), edge::end(arr), [](const i32& val) { return val == 80; });
 	SHOULD_EQUAL(*found, 80);
@@ -146,13 +147,13 @@ TEST(array_resize) {
 	edge::Array<i32> arr;
 
 	arr.reserve(&alloc, 4);
-	SHOULD_EQUAL(arr.m_capacity, 4);
+	SHOULD_EQUAL(arr.capacity(), 4);
 
 	SHOULD_EQUAL(arr.resize(&alloc, 10), true);
-	SHOULD_EQUAL(arr.m_size, 10);
+	SHOULD_EQUAL(arr.size(), 10);
 
-	arr.set(5, 42);
-	SHOULD_EQUAL(*arr.get(5), 42);
+	arr[5] = 42;
+	SHOULD_EQUAL(arr[5], 42);
 
 	arr.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
@@ -171,8 +172,8 @@ TEST(array_remove) {
 	i32 removed;
 	SHOULD_EQUAL(arr.remove(2, &removed), true);
 	SHOULD_EQUAL(removed, 20);
-	SHOULD_EQUAL(arr.m_size, 4);
-	SHOULD_EQUAL(*arr.get(2), 30);
+	SHOULD_EQUAL(arr.size(), 4);
+	SHOULD_EQUAL(arr[2], 30);
 
 	arr.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
@@ -708,7 +709,7 @@ TEST(mpmc_queue_multithreaded) {
 		producer_args.push_back(&alloc, args);
 
 		edge::Thread thr;
-		edge::thread_create(&thr, producer_thread, producer_args.get(p));
+		edge::thread_create(&thr, producer_thread, &producer_args[p]);
 		threads.push_back(&alloc, thr);
 	}
 
@@ -721,13 +722,13 @@ TEST(mpmc_queue_multithreaded) {
 		consumer_args.push_back(&alloc, args);
 
 		edge::Thread thr;
-		edge::thread_create(&thr, consumer_thread, consumer_args.get(c));
+		edge::thread_create(&thr, consumer_thread, &consumer_args[c]);
 		threads.push_back(&alloc, thr);
 	}
 
 	// Join all threads
-	for (usize i = 0; i < threads.m_size; i++) {
-		edge::thread_join(*threads.get(i));
+	for (usize i = 0; i < threads.size(); i++) {
+		edge::thread_join(threads[i]);
 	}
 
 	printf("  Consumed %d items\n", consumed_count.load());
