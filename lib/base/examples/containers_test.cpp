@@ -193,7 +193,7 @@ TEST(list_basic) {
 
 	SHOULD_EQUAL(*list.front(), 10);
 	SHOULD_EQUAL(*list.back(), 30);
-	SHOULD_EQUAL(list.m_size, 3);
+	SHOULD_EQUAL(list.size(), 3);
 
 	print_list(list);
 
@@ -218,7 +218,7 @@ TEST(list_push_pop) {
 
 	SHOULD_EQUAL(list.pop_back(&alloc, &val), true);
 	SHOULD_EQUAL(val, 5);
-	SHOULD_EQUAL(list.m_size, 1);
+	SHOULD_EQUAL(list.size(), 1);
 
 	list.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
@@ -235,12 +235,12 @@ TEST(list_insert_remove) {
 
 	SHOULD_EQUAL(list.insert(&alloc, 1, 20), true);
 	SHOULD_EQUAL(*list.get(1), 20);
-	SHOULD_EQUAL(list.m_size, 4);
+	SHOULD_EQUAL(list.size(), 4);
 
 	i32 val;
 	SHOULD_EQUAL(list.remove(&alloc, 1, &val), true);
 	SHOULD_EQUAL(val, 20);
-	SHOULD_EQUAL(list.m_size, 3);
+	SHOULD_EQUAL(list.size(), 3);
 
 	list.destroy(&alloc);
 	SHOULD_EQUAL(alloc.get_net(), 0ull);
