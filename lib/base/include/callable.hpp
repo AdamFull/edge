@@ -48,7 +48,6 @@ namespace edge {
 			return invoke_fn != nullptr;
 		}
 
-	private:
 		R(*invoke_fn)(void* data, Args... args);
 		void* data;
 	};
