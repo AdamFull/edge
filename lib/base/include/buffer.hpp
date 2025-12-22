@@ -29,7 +29,38 @@ namespace edge {
 		T* data() noexcept { return m_data; }
 		const T* data() const noexcept { return m_data; }
 		usize capacity() const noexcept { return m_capacity; }
+
+		T& operator[](usize index) {
+			assert(index < m_capacity);
+			return m_data[index];
+		}
+
+		const T& operator[](usize index) const {
+			assert(index < m_capacity);
+			return m_data[index];
+		}
 	};
+
+	template<TrivialType T>
+	inline T* begin(HeapStorage<T>& storage) {
+		return storage.data();
+	}
+
+	template<TrivialType T>
+	inline T* end(HeapStorage<T>& storage) {
+		return storage.data() + storage.capacity();
+	}
+
+	template<TrivialType T>
+	inline const T* begin(const HeapStorage<T>& storage) {
+		return storage.data();
+	}
+
+	template<TrivialType T>
+	inline const T* end(const HeapStorage<T>& storage) {
+		return storage.data() + storage.capacity();
+	}
+
 
 	template<TrivialType T, usize N>
 	struct StackStorage {
@@ -40,7 +71,38 @@ namespace edge {
 		T* data() noexcept { return m_data; }
 		const T* data() const noexcept { return m_data; }
 		constexpr usize capacity() const noexcept { return N; }
+
+		T& operator[](usize index) {
+			assert(index < N);
+			return m_data[index];
+		}
+
+		const T& operator[](usize index) const {
+			assert(index < N);
+			return m_data[index];
+		}
 	};
+
+	template<TrivialType T, usize N>
+	inline T* begin(StackStorage<T, N>& storage) {
+		return storage.data();
+	}
+
+	template<TrivialType T, usize N>
+	inline T* end(StackStorage<T, N>& storage) {
+		return storage.data() + storage.capacity();
+	}
+
+	template<TrivialType T, usize N>
+	inline const T* begin(const StackStorage<T, N>& storage) {
+		return storage.data();
+	}
+
+	template<TrivialType T, usize N>
+	inline const T* end(const StackStorage<T, N>& storage) {
+		return storage.data() + storage.capacity();
+	}
+
 
 	template<TrivialType T>
 	struct ExternalStorage {
@@ -60,7 +122,38 @@ namespace edge {
 			m_data = nullptr;
 			m_capacity = 0;
 		}
+
+		T& operator[](usize index) {
+			assert(index < m_capacity);
+			return m_data[index];
+		}
+
+		const T& operator[](usize index) const {
+			assert(index < m_capacity);
+			return m_data[index];
+		}
 	};
+
+	template<TrivialType T>
+	inline T* begin(ExternalStorage<T>& storage) {
+		return storage.data();
+	}
+
+	template<TrivialType T>
+	inline T* end(ExternalStorage<T>& storage) {
+		return storage.data() + storage.capacity();
+	}
+
+	template<TrivialType T>
+	inline const T* begin(const ExternalStorage<T>& storage) {
+		return storage.data();
+	}
+
+	template<TrivialType T>
+	inline const T* end(const ExternalStorage<T>& storage) {
+		return storage.data() + storage.capacity();
+	}
+
 
 	template<TrivialType T, typename StorageProvider>
 	struct Buffer {
