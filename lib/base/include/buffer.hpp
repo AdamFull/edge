@@ -11,7 +11,7 @@ namespace edge {
 
 		bool create(NotNull<const Allocator*> alloc, usize capacity) noexcept {
 			if (capacity > 0) {
-				m_data = alloc.allocate_array<T>(capacity);
+				m_data = alloc->allocate_array<T>(capacity);
 			}
 			m_capacity = capacity;
 		}
