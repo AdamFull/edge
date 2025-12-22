@@ -341,6 +341,10 @@ namespace edge {
 			return m_size == 0;
 		}
 
+		usize size() const noexcept {
+			return m_size;
+		}
+
 		ListNode<T>* find(const T& element) noexcept {
 			ListNode<T>* current = m_head;
 			while (current) {
