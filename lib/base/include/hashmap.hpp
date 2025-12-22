@@ -10,26 +10,30 @@ namespace edge {
 		constexpr f32 HASHMAP_MAX_LOAD_FACTOR = 0.75f;
 
 		template<TrivialType K>
-		inline usize default_hash(const K& key) {
-			const u8* data = (const u8*)&key;
-			return hash_xxh64(data, sizeof(K));
-		}
+		struct DefaultHash {
+			usize operator()(const K& key) const noexcept {
+				const u8* data = (const u8*)&key;
+				return hash_xxh64(data, sizeof(K));
+			}
+		};
 
 		template<TrivialType K>
-		inline i32 default_compare(const K& key1, const K& key2) {
-			return memcmp(&key1, &key2, sizeof(K));
-		}
+		struct DefaultEqual {
+			bool operator()(const K& key1, const K& key2) const noexcept {
+				return memcmp(&key1, &key2, sizeof(K)) == 0;
+			}
+		};
 	}
 
 	template<TrivialType K, TrivialType V>
 	struct HashMapEntry;
 
-	template<TrivialType K, TrivialType V>
+	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
 	struct HashMap;
 
-	template<TrivialType K, TrivialType V>
+	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
 	struct HashMapIterator {
-		const HashMap<K, V>* map;
+		const HashMap<K, V, Hash, KeyEqual>* map;
 		usize bucket_index;
 		HashMapEntry<K, V>* current;
 
@@ -89,14 +93,10 @@ namespace edge {
 		HashMapEntry* next = nullptr;
 	};
 
-	template<TrivialType K, TrivialType V>
+	template<TrivialType K, TrivialType V,
+		typename Hash = detail::DefaultHash<K>,
+		typename KeyEqual = detail::DefaultEqual<K>>
 	struct HashMap {
-		HashMapEntry<K, V>** m_buckets = nullptr;
-		usize m_bucket_count = 0ull;
-		usize m_size = 0ull;
-		usize(*m_hash_func)(const K&) = nullptr;
-		i32(*m_compare_func)(const K&, const K&) = nullptr;
-
 		bool create(NotNull<const Allocator*> alloc, usize initial_bucket_count = 0ull) {
 			if (initial_bucket_count == 0ull) {
 				initial_bucket_count = detail::HASHMAP_DEFAULT_BUCKET_COUNT;
@@ -109,24 +109,6 @@ namespace edge {
 
 			m_bucket_count = initial_bucket_count;
 			m_size = 0ull;
-			m_hash_func = detail::default_hash<K>;
-			m_compare_func = detail::default_compare<K>;
-
-			return true;
-		}
-
-		bool create(NotNull<const Allocator*> alloc, usize initial_bucket_count,
-			usize(*hash_func)(const K&), i32(*compare_func)(const K&, const K&)) {
-			if (!create(alloc, initial_bucket_count)) {
-				return false;
-			}
-
-			if (hash_func) {
-				m_hash_func = hash_func;
-			}
-			if (compare_func) {
-				m_compare_func = compare_func;
-			}
 
 			return true;
 		}
@@ -199,13 +181,13 @@ namespace edge {
 				rehash(alloc, m_bucket_count * 2);
 			}
 
-			usize hash = m_hash_func(key);
+			usize hash = Hash{}(key);
 			usize bucket_index = hash % m_bucket_count;
 
 			// Check if key already exists
 			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
 			while (entry) {
-				if (entry->hash == hash && m_compare_func(entry->key, key) == 0) {
+				if (entry->hash == hash && KeyEqual{}(entry->key, key)) {
 					// Update existing value
 					entry->value = value;
 					return true;
@@ -227,12 +209,12 @@ namespace edge {
 		}
 
 		V* get(const K& key) noexcept {
-			usize hash = m_hash_func(key);
+			usize hash = Hash{}(key);
 			usize bucket_index = hash % m_bucket_count;
 
 			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
 			while (entry) {
-				if (entry->hash == hash && m_compare_func(entry->key, key) == 0) {
+				if (entry->hash == hash && KeyEqual{}(entry->key, key)) {
 					return &entry->value;
 				}
 				entry = entry->next;
@@ -241,13 +223,13 @@ namespace edge {
 			return nullptr;
 		}
 
-		V const* get(const K& key) const noexcept {
-			usize hash = m_hash_func(key);
+		const V* get(const K& key) const noexcept {
+			usize hash = Hash{}(key);
 			usize bucket_index = hash % m_bucket_count;
 
 			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
 			while (entry) {
-				if (entry->hash == hash && m_compare_func(entry->key, key) == 0) {
+				if (entry->hash == hash && KeyEqual{}(entry->key, key)) {
 					return &entry->value;
 				}
 				entry = entry->next;
@@ -256,15 +238,35 @@ namespace edge {
 			return nullptr;
 		}
 
-		bool remove(NotNull<const Allocator*> alloc, const K& key, V* out_value) {
-			usize hash = m_hash_func(key);
+		V& operator[](const K& key) {
+			if (V* found = get(key)) {
+				return *found;
+			}
+
+			assert(false && "Key not found in HashMap::operator[]");
+			static V dummy{};
+			return dummy;
+		}
+
+		const V& operator[](const K& key) const {
+			if (V* found = get(key)) {
+				return *found;
+			}
+
+			assert(false && "Key not found in HashMap::operator[] const");
+			static V dummy{};
+			return dummy;
+		}
+
+		bool remove(NotNull<const Allocator*> alloc, const K& key, V* out_value = nullptr) {
+			usize hash = Hash{}(key);
 			usize bucket_index = hash % m_bucket_count;
 
 			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
 			HashMapEntry<K, V>* prev = nullptr;
 
 			while (entry) {
-				if (entry->hash == hash && m_compare_func(entry->key, key) == 0) {
+				if (entry->hash == hash && KeyEqual{}(entry->key, key)) {
 					if (out_value) {
 						*out_value = entry->value;
 					}
@@ -296,11 +298,19 @@ namespace edge {
 		bool empty() const noexcept {
 			return m_size == 0;
 		}
+
+		usize size() const noexcept {
+			return m_size;
+		}
+
+		HashMapEntry<K, V>** m_buckets = nullptr;
+		usize m_bucket_count = 0ull;
+		usize m_size = 0ull;
 	};
 
-	template<TrivialType K, TrivialType V>
-	inline HashMapIterator<K, V> begin(HashMap<K, V>& map) {
-		HashMapIterator<K, V> it;
+	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
+	inline HashMapIterator<K, V, Hash, KeyEqual> begin(HashMap<K, V, Hash, KeyEqual>& map) {
+		HashMapIterator<K, V, Hash, KeyEqual> it;
 		it.map = &map;
 		it.bucket_index = 0;
 		it.current = nullptr;
@@ -317,14 +327,14 @@ namespace edge {
 		return it;
 	}
 
-	template<TrivialType K, TrivialType V>
-	inline HashMapIterator<K, V> end(HashMap<K, V>& map) {
-		return HashMapIterator<K, V>{ &map, 0, nullptr };
+	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
+	inline HashMapIterator<K, V, Hash, KeyEqual> end(HashMap<K, V, Hash, KeyEqual>& map) {
+		return HashMapIterator<K, V, Hash, KeyEqual>{ &map, 0, nullptr };
 	}
 
-	template<TrivialType K, TrivialType V>
-	inline HashMapIterator<K, V> begin(const HashMap<K, V>& map) {
-		HashMapIterator<K, V> it;
+	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
+	inline HashMapIterator<K, V, Hash, KeyEqual> begin(const HashMap<K, V, Hash, KeyEqual>& map) {
+		HashMapIterator<K, V, Hash, KeyEqual> it;
 		it.map = &map;
 		it.bucket_index = 0;
 		it.current = nullptr;
@@ -341,9 +351,9 @@ namespace edge {
 		return it;
 	}
 
-	template<TrivialType K, TrivialType V>
-	inline HashMapIterator<K, V> end(const HashMap<K, V>& map) {
-		return HashMapIterator<K, V>{ &map, 0, nullptr };
+	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
+	inline HashMapIterator<K, V, Hash, KeyEqual> end(const HashMap<K, V, Hash, KeyEqual>& map) {
+		return HashMapIterator<K, V, Hash, KeyEqual>{ &map, 0, nullptr };
 	}
 }
 
