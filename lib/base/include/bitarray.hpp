@@ -6,7 +6,13 @@
 namespace edge {
 	template<usize BitCount>
 	struct BitArray {
-		u8 m_data[(BitCount + 7) / 8];
+		constexpr usize bit_count() noexcept {
+			return BitCount;
+		}
+
+		constexpr usize byte_count() noexcept {
+			return BitCount / 8;
+		}
 
 		constexpr void set(usize index) noexcept {
 			m_data[index / 8] |= (1 << (index % 8));
@@ -86,6 +92,9 @@ namespace edge {
 		constexpr bool all_clear() const noexcept {
 			return !any_set();
 		}
+
+	private:
+		u8 m_data[(BitCount + 7) / 8];
 	};
 }
 
