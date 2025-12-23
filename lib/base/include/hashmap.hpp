@@ -8,21 +8,6 @@ namespace edge {
 	namespace detail {
 		constexpr usize HASHMAP_DEFAULT_BUCKET_COUNT = 16;
 		constexpr f32 HASHMAP_MAX_LOAD_FACTOR = 0.75f;
-
-		template<TrivialType K>
-		struct DefaultHash {
-			usize operator()(const K& key) const noexcept {
-				const u8* data = (const u8*)&key;
-				return hash_xxh64(data, sizeof(K));
-			}
-		};
-
-		template<TrivialType K>
-		struct DefaultEqual {
-			bool operator()(const K& key1, const K& key2) const noexcept {
-				return memcmp(&key1, &key2, sizeof(K)) == 0;
-			}
-		};
 	}
 
 	template<TrivialType K, TrivialType V>
@@ -94,8 +79,8 @@ namespace edge {
 	};
 
 	template<TrivialType K, TrivialType V,
-		typename Hash = detail::DefaultHash<K>,
-		typename KeyEqual = detail::DefaultEqual<K>>
+		typename Hash = Hash<K>,
+		typename KeyEqual = std::equal_to<K>>
 	struct HashMap {
 		bool create(NotNull<const Allocator*> alloc, usize initial_bucket_count = 0ull) {
 			if (initial_bucket_count == 0ull) {
@@ -125,14 +110,14 @@ namespace edge {
 			for (usize i = 0; i < m_bucket_count; i++) {
 				HashMapEntry<K, V>* entry = m_buckets[i];
 				while (entry) {
+					entry->value.~V();
+
 					HashMapEntry<K, V>* next = entry->next;
 					alloc->deallocate(entry);
 					entry = next;
 				}
 				m_buckets[i] = nullptr;
 			}
-
-			// TODO: Call destructor for not trivially destructable
 
 			m_size = 0;
 		}

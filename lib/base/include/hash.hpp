@@ -3,7 +3,51 @@
 
 #include "stddef.hpp"
 
+#include <functional>
+
 namespace edge {
+	template<typename T>
+	struct Hash {
+		usize operator()(const T& obj) const noexcept {
+			static_assert(sizeof(T) == 0, "Hash specialization not found for this type. Please provide a Hash<T> specialization.");
+			return 0;
+		}
+	};
+
+	template<std::integral T>
+	struct Hash<T> {
+		usize operator()(const T& value) const noexcept {
+			if constexpr (sizeof(T) == 1) {
+				return static_cast<usize>(value) * 0x9e3779b9u;
+			}
+			else if constexpr (sizeof(T) == 2) {
+				u32 v = static_cast<u32>(value);
+				v *= 0x9e3779b9u;
+				return v ^ (v >> 16);
+			}
+			else if constexpr (sizeof(T) <= 4) {
+				u32 v = static_cast<u32>(value);
+				v = (v ^ 61) ^ (v >> 16);
+				v = v + (v << 3);
+				v = v ^ (v >> 4);
+				v = v * 0x27d4eb2d;
+				v = v ^ (v >> 15);
+				return v;
+			}
+			else {
+				u64 v = static_cast<u64>(value);
+				v = (~v) + (v << 21);
+				v = v ^ (v >> 24);
+				v = (v + (v << 3)) + (v << 8);
+				v = v ^ (v >> 14);
+				v = (v + (v << 2)) + (v << 4);
+				v = v ^ (v >> 28);
+				v = v + (v << 31);
+				return v;
+			}
+		}
+	};
+
 	struct Hash128 {
 		u64 low;
 		u64 high;
@@ -16,26 +60,6 @@ namespace edge {
 
 	u32 hash_murmur3_32(const void* data, usize size, u32 seed = 0);
 	Hash128 hash_murmur3_128(const void* data, usize size, u32 seed = 0);
-
-	constexpr inline u32 hash_int32(u32 value) {
-		value = (value ^ 61) ^ (value >> 16);
-		value = value + (value << 3);
-		value = value ^ (value >> 4);
-		value = value * 0x27d4eb2d;
-		value = value ^ (value >> 15);
-		return value;
-	}
-
-	constexpr inline u64 hash_int64(u64 value) {
-		value = (~value) + (value << 21);
-		value = value ^ (value >> 24);
-		value = (value + (value << 3)) + (value << 8);
-		value = value ^ (value >> 14);
-		value = (value + (value << 2)) + (value << 4);
-		value = value ^ (value >> 28);
-		value = value + (value << 31);
-		return value;
-	}
 
 	u32 hash_string_32(const char* str);
 	u64 hash_string_64(const char* str);

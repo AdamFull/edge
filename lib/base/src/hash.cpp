@@ -384,10 +384,10 @@ namespace edge {
 
 	usize hash_pointer(const void* ptr) {
 		if constexpr (sizeof(usize) == 8) {
-			return hash_int64(reinterpret_cast<u64>(ptr));
+			return Hash<u64>{}(reinterpret_cast<u64>(ptr));
 		}
 		else {
-			return hash_int32(static_cast<u32>(reinterpret_cast<uintptr_t>(ptr)));
+			return Hash<u32>{}(static_cast<u32>(reinterpret_cast<uintptr_t>(ptr)));
 		}
 	}
 }
