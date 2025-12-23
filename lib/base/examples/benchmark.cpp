@@ -18,18 +18,10 @@ namespace edge {
 		return !strncmp(lhs.data, rhs.data, lhs.len);
 	}
 
-	struct DefaultStringHash {
+	template<>
+	struct Hash<string> {
 		usize operator()(const string& str) const noexcept {
-			return hash_xxh64(str.data, str.len);
-		}
-	};
-
-	struct DefaultStringEqual {
-		bool operator()(const string& s1, const string& s2) const noexcept {
-			if (s1.len != s2.len) {
-				return false;
-			}
-			return !strncmp(s1.data, s2.data, s1.len);
+			return hash_crc32(str.data, str.len);
 		}
 	};
 }
@@ -38,14 +30,14 @@ namespace std {
 	template<>
 	struct hash<edge::string> {
 		size_t operator()(const edge::string& s) const noexcept {
-			return edge::hash_xxh32(s.data, s.len);
+			return edge::hash_xxh64(s.data, s.len);
 		}
 	};
 }
 
-using HashMap1 = edge::HashMap<const edge::string, i32, edge::DefaultStringHash, edge::DefaultStringEqual>;
+using HashMap = edge::HashMap<edge::string, i32>;
 
-constexpr usize DATASET_SIZE = 2000;
+constexpr usize DATASET_SIZE = 500;
 
 using DatasetStorage = edge::StackStorage<edge::string, DATASET_SIZE>;
 
@@ -83,7 +75,7 @@ static void generate_dataset1(edge::NotNull<const edge::Allocator*> alloc, Datas
 }
 
 static void run_bench(edge::NotNull<const edge::Allocator*> alloc, DatasetStorage& dataset, usize word_count) {
-	HashMap1 map = {};
+	HashMap map = {};
 	if (!map.create(alloc, word_count * 2)) {
 		printf("Failed to create hash map\n");
 		return;
