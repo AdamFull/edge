@@ -21,23 +21,23 @@ namespace edge {
 	template<>
 	struct Hash<string> {
 		usize operator()(const string& str) const noexcept {
-			return hash_crc32(str.data, str.len);
-		}
-	};
-}
+			u64 hash = 0xcbf29ce484222325;
+			u64 prime = 0x100000001b3;
 
-namespace std {
-	template<>
-	struct hash<edge::string> {
-		size_t operator()(const edge::string& s) const noexcept {
-			return edge::hash_xxh64(s.data, s.len);
+			for (usize i = 0; i < str.len; ++i) {
+				u8 value = str.data[i];
+				hash = hash ^ value;
+				hash *= prime;
+			}
+
+			return hash;
 		}
 	};
 }
 
 using HashMap = edge::HashMap<edge::string, i32>;
 
-constexpr usize DATASET_SIZE = 500;
+constexpr usize DATASET_SIZE = 2000;
 
 using DatasetStorage = edge::StackStorage<edge::string, DATASET_SIZE>;
 
@@ -76,7 +76,7 @@ static void generate_dataset1(edge::NotNull<const edge::Allocator*> alloc, Datas
 
 static void run_bench(edge::NotNull<const edge::Allocator*> alloc, DatasetStorage& dataset, usize word_count) {
 	HashMap map = {};
-	if (!map.create(alloc, word_count * 2)) {
+	if (!map.create(alloc, word_count)) {
 		printf("Failed to create hash map\n");
 		return;
 	}
@@ -190,7 +190,7 @@ static void run_bench(edge::NotNull<const edge::Allocator*> alloc, DatasetStorag
 }
 
 static void run_bench_std(DatasetStorage& dataset, usize word_count) {
-	std::unordered_map<edge::string, i32> map = {};
+	std::unordered_map<edge::string, i32, edge::Hash<edge::string>> map = {};
 	map.reserve(word_count * 2);
 
 	for (usize i = 0; i < word_count; ++i) {
@@ -315,7 +315,7 @@ int main(void) {
 	generate_dataset1(&alloc, words_dataset, DATASET_SIZE, rng);
 
 	run_bench(&alloc, words_dataset, DATASET_SIZE);
-	run_bench_std(words_dataset, DATASET_SIZE);
+	//run_bench_std(words_dataset, DATASET_SIZE);
 	
 	for (edge::string str : words_dataset) {
 		alloc.deallocate(str.data);
