@@ -3,6 +3,7 @@
 
 #include "allocator.hpp"
 #include "hash.hpp"
+#include "math.hpp"
 
 namespace edge {
 	namespace detail {
@@ -87,6 +88,10 @@ namespace edge {
 				initial_bucket_count = detail::HASHMAP_DEFAULT_BUCKET_COUNT;
 			}
 
+			if (!is_pow2(initial_bucket_count)) {
+				initial_bucket_count = next_pow2(initial_bucket_count);
+			}
+
 			m_buckets = alloc->allocate_array<HashMapEntry<K, V>*>(initial_bucket_count);
 			if (!m_buckets) {
 				return false;
@@ -128,6 +133,10 @@ namespace edge {
 				return false;
 			}
 
+			if (!is_pow2(new_bucket_count)) {
+				new_bucket_count = next_pow2(new_bucket_count);
+			}
+
 			HashMapEntry<K, V>** new_buckets = alloc->allocate_array<HashMapEntry<K, V>*>(new_bucket_count);
 			if (!new_buckets) {
 				return false;
@@ -139,7 +148,7 @@ namespace edge {
 				while (entry) {
 					HashMapEntry<K, V>* next = entry->next;
 
-					usize bucket_index = entry->hash % new_bucket_count;
+					usize bucket_index = entry->hash & (new_bucket_count - 1);
 					entry->next = new_buckets[bucket_index];
 					new_buckets[bucket_index] = entry;
 
@@ -168,7 +177,7 @@ namespace edge {
 			}
 
 			usize hash = Hash{}(key);
-			usize bucket_index = hash % m_bucket_count;
+			usize bucket_index = hash & (m_bucket_count - 1);
 
 			// Check if key already exists
 			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
@@ -196,7 +205,7 @@ namespace edge {
 
 		V* get(const K& key) noexcept {
 			usize hash = Hash{}(key);
-			usize bucket_index = hash % m_bucket_count;
+			usize bucket_index = hash & (m_bucket_count - 1);
 
 			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
 			while (entry) {
@@ -211,7 +220,7 @@ namespace edge {
 
 		const V* get(const K& key) const noexcept {
 			usize hash = Hash{}(key);
-			usize bucket_index = hash % m_bucket_count;
+			usize bucket_index = hash & (m_bucket_count - 1);
 
 			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
 			while (entry) {
