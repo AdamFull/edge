@@ -110,6 +110,7 @@ namespace edge {
 			for (usize i = 0; i < m_bucket_count; i++) {
 				HashMapEntry<K, V>* entry = m_buckets[i];
 				while (entry) {
+					entry->key.~K();
 					entry->value.~V();
 
 					HashMapEntry<K, V>* next = entry->next;
