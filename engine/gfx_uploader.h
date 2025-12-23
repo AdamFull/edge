@@ -42,6 +42,8 @@ namespace edge::gfx {
 		CmdPool cmd_pool = {};
 
 		ResourceSet resource_sets[3] = {};
+
+		Thread uploader_thread = {};
 	};
 
 	struct UploaderCreateInfo {

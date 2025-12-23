@@ -8,7 +8,7 @@
 namespace edge::gfx {
 	bool ResourceSet::create(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) noexcept {
 		BufferCreateInfo buffer_create_info = {
-				.size = 1024 * 1024,
+				.size = 32 * 1024 * 1024,
 				.alignment = 1,
 				.flags = BUFFER_FLAG_STAGING
 		};
@@ -113,6 +113,17 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
+		for (isize i = 0; i < 3; ++i) {
+			if (!uploader->resource_sets[i].create(create_info.alloc, uploader)) {
+				uploader_destroy(create_info.alloc, uploader);
+				return nullptr;
+			}
+		}
+
+		// TODO: create uploader thread
+		//Thread thrd;
+		//thread_create(&thrd, )
+
 		return uploader;
 	}
 
@@ -121,6 +132,11 @@ namespace edge::gfx {
 			return;
 		}
 
+		for (isize i = 0; i < 3; ++i) {
+			uploader->resource_sets[i].destroy(alloc, uploader);
+		}
+
+		cmd_pool_destroy(uploader->cmd_pool);
 		alloc->deallocate(uploader);
 	}
 }

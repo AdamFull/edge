@@ -677,7 +677,7 @@ namespace edge::gfx {
 		}
 
 		if (!write_descriptor_sets.empty()) {
-			updete_descriptors(write_descriptor_sets.m_data, write_descriptor_sets.m_size);
+			updete_descriptors(write_descriptor_sets.data(), write_descriptor_sets.size());
 
 			write_descriptor_sets.clear();
 			image_descriptors.clear();
@@ -752,8 +752,8 @@ namespace edge::gfx {
 			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2_KHR,
 			.srcBuffer = update_info.buffer_view.buffer.handle,
 			.dstBuffer = update_info.dst_buffer.handle,
-			.regionCount = (u32)update_info.copy_regions.m_size,
-			.pRegions = update_info.copy_regions.m_data
+			.regionCount = (u32)update_info.copy_regions.size(),
+			.pRegions = update_info.copy_regions.data()
 		};
 
 		vkCmdCopyBuffer2KHR(active_frame->cmd.handle, &copy_buffer_info);
