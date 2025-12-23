@@ -27,8 +27,8 @@ float4 ps_main(VSOutput input) : SV_Target0 {
     {
         return input.color;
     }
-
-    let image = g_srv_textures[pc.image_index];
-    let sampler = g_samplers[pc.sampler_index];
-    return input.color * image.Sample(sampler, input.uv);
+    return input.color;
+    //let image = g_srv_textures[pc.image_index];
+    //let sampler = g_samplers[pc.sampler_index];
+    //return input.color * image.Sample(sampler, input.uv);
 }
