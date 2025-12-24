@@ -212,39 +212,32 @@ namespace edge {
 			return true;
 		}
 
-		V* get(const K& key) noexcept {
+		HashMapIterator<K, V, Hash, KeyEqual> find(const K& key) noexcept {
 			usize hash = Hash{}(key);
 			usize bucket_index = hash & (m_bucket_count - 1);
 
 			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
 			while (entry) {
 				if (entry->hash == hash && KeyEqual{}(entry->key, key)) {
-					return &entry->value;
+					return HashMapIterator<K, V, Hash, KeyEqual> {
+						.map = this,
+						.bucket_index = bucket_index,
+						.current = entry
+					};
 				}
 				entry = entry->next;
 			}
 
-			return nullptr;
+			return end();
 		}
 
-		const V* get(const K& key) const noexcept {
-			usize hash = Hash{}(key);
-			usize bucket_index = hash & (m_bucket_count - 1);
-
-			HashMapEntry<K, V>* entry = m_buckets[bucket_index];
-			while (entry) {
-				if (entry->hash == hash && KeyEqual{}(entry->key, key)) {
-					return &entry->value;
-				}
-				entry = entry->next;
-			}
-
-			return nullptr;
+		HashMapIterator<K, V, Hash, KeyEqual> find(const K& key) const noexcept {
+			return const_cast<HashMap*>(this)->find(key);
 		}
 
 		V& operator[](const K& key) {
-			if (V* found = get(key)) {
-				return *found;
+			if (auto found = find(key); found != end()) {
+				return found->value;
 			}
 
 			assert(false && "Key not found in HashMap::operator[]");
@@ -253,8 +246,8 @@ namespace edge {
 		}
 
 		const V& operator[](const K& key) const {
-			if (V* found = get(key)) {
-				return *found;
+			if (auto found = find(key); found != end()) {
+				return found->value;
 			}
 
 			assert(false && "Key not found in HashMap::operator[] const");
@@ -295,52 +288,39 @@ namespace edge {
 			return false;
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> begin(HashMap<K, V, Hash, KeyEqual>& map) {
+		HashMapIterator<K, V, Hash, KeyEqual> begin() noexcept {
 			HashMapIterator<K, V, Hash, KeyEqual> it;
-			it.map = &map;
+			it.map = this;
 			it.bucket_index = 0;
 			it.current = nullptr;
 
-			// Find first non-empty bucket
-			for (usize i = 0; i < map.m_bucket_count; i++) {
-				if (map.m_buckets[i]) {
-					it.bucket_index = i;
-					it.current = map.m_buckets[i];
-					break;
+			for (usize i = 0; i < m_bucket_count; i++) {
+				if (m_buckets[i]) {
+					return HashMapIterator<K, V, Hash, KeyEqual> {
+						.map = this, 
+						.bucket_index = i,
+						.current = m_buckets[i]
+					};
 				}
 			}
 
-			return it;
+			return HashMapIterator<K, V, Hash, KeyEqual> { this, 0, nullptr };
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> end(HashMap<K, V, Hash, KeyEqual>& map) {
-			return HashMapIterator<K, V, Hash, KeyEqual>{ &map, 0, nullptr };
+		HashMapIterator<K, V, Hash, KeyEqual> end() noexcept {
+			return HashMapIterator<K, V, Hash, KeyEqual>{ this, 0, nullptr };
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> begin(const HashMap<K, V, Hash, KeyEqual>& map) {
-			HashMapIterator<K, V, Hash, KeyEqual> it;
-			it.map = &map;
-			it.bucket_index = 0;
-			it.current = nullptr;
-
-			// Find first non-empty bucket
-			for (usize i = 0; i < map.m_bucket_count; i++) {
-				if (map.m_buckets[i]) {
-					it.bucket_index = i;
-					it.current = map.m_buckets[i];
-					break;
-				}
-			}
-
-			return it;
+		HashMapIterator<K, V, Hash, KeyEqual> begin() const noexcept {
+			return const_cast<HashMap*>(this)->begin();
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> end(const HashMap<K, V, Hash, KeyEqual>& map) {
-			return HashMapIterator<K, V, Hash, KeyEqual>{ &map, 0, nullptr };
+		HashMapIterator<K, V, Hash, KeyEqual> end() const noexcept {
+			return const_cast<HashMap*>(this)->end();
 		}
 
 		bool contains(const K& key) const noexcept {
-			return get(key) != nullptr;
+			return find(key) != end();
 		}
 
 		bool empty() const noexcept {
