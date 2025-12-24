@@ -83,6 +83,15 @@ namespace edge {
 		typename Hash = Hash<K>,
 		typename KeyEqual = std::equal_to<K>>
 	struct HashMap {
+		using hasher = Hash;
+		using key_type = K;
+		using mapped_type = V;
+		using key_equal = KeyEqual;
+
+		using value_type = HashMapEntry<K, V>;
+		using size_type = usize;
+		using iterator = HashMapIterator<K, V, Hash, KeyEqual>;
+
 		bool create(NotNull<const Allocator*> alloc, usize initial_bucket_count = 0ull) {
 			if (initial_bucket_count == 0ull) {
 				initial_bucket_count = detail::HASHMAP_DEFAULT_BUCKET_COUNT;
@@ -286,6 +295,50 @@ namespace edge {
 			return false;
 		}
 
+		HashMapIterator<K, V, Hash, KeyEqual> begin(HashMap<K, V, Hash, KeyEqual>& map) {
+			HashMapIterator<K, V, Hash, KeyEqual> it;
+			it.map = &map;
+			it.bucket_index = 0;
+			it.current = nullptr;
+
+			// Find first non-empty bucket
+			for (usize i = 0; i < map.m_bucket_count; i++) {
+				if (map.m_buckets[i]) {
+					it.bucket_index = i;
+					it.current = map.m_buckets[i];
+					break;
+				}
+			}
+
+			return it;
+		}
+
+		HashMapIterator<K, V, Hash, KeyEqual> end(HashMap<K, V, Hash, KeyEqual>& map) {
+			return HashMapIterator<K, V, Hash, KeyEqual>{ &map, 0, nullptr };
+		}
+
+		HashMapIterator<K, V, Hash, KeyEqual> begin(const HashMap<K, V, Hash, KeyEqual>& map) {
+			HashMapIterator<K, V, Hash, KeyEqual> it;
+			it.map = &map;
+			it.bucket_index = 0;
+			it.current = nullptr;
+
+			// Find first non-empty bucket
+			for (usize i = 0; i < map.m_bucket_count; i++) {
+				if (map.m_buckets[i]) {
+					it.bucket_index = i;
+					it.current = map.m_buckets[i];
+					break;
+				}
+			}
+
+			return it;
+		}
+
+		HashMapIterator<K, V, Hash, KeyEqual> end(const HashMap<K, V, Hash, KeyEqual>& map) {
+			return HashMapIterator<K, V, Hash, KeyEqual>{ &map, 0, nullptr };
+		}
+
 		bool contains(const K& key) const noexcept {
 			return get(key) != nullptr;
 		}
@@ -302,54 +355,6 @@ namespace edge {
 		usize m_bucket_count = 0ull;
 		usize m_size = 0ull;
 	};
-
-	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
-	inline HashMapIterator<K, V, Hash, KeyEqual> begin(HashMap<K, V, Hash, KeyEqual>& map) {
-		HashMapIterator<K, V, Hash, KeyEqual> it;
-		it.map = &map;
-		it.bucket_index = 0;
-		it.current = nullptr;
-
-		// Find first non-empty bucket
-		for (usize i = 0; i < map.m_bucket_count; i++) {
-			if (map.m_buckets[i]) {
-				it.bucket_index = i;
-				it.current = map.m_buckets[i];
-				break;
-			}
-		}
-
-		return it;
-	}
-
-	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
-	inline HashMapIterator<K, V, Hash, KeyEqual> end(HashMap<K, V, Hash, KeyEqual>& map) {
-		return HashMapIterator<K, V, Hash, KeyEqual>{ &map, 0, nullptr };
-	}
-
-	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
-	inline HashMapIterator<K, V, Hash, KeyEqual> begin(const HashMap<K, V, Hash, KeyEqual>& map) {
-		HashMapIterator<K, V, Hash, KeyEqual> it;
-		it.map = &map;
-		it.bucket_index = 0;
-		it.current = nullptr;
-
-		// Find first non-empty bucket
-		for (usize i = 0; i < map.m_bucket_count; i++) {
-			if (map.m_buckets[i]) {
-				it.bucket_index = i;
-				it.current = map.m_buckets[i];
-				break;
-			}
-		}
-
-		return it;
-	}
-
-	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
-	inline HashMapIterator<K, V, Hash, KeyEqual> end(const HashMap<K, V, Hash, KeyEqual>& map) {
-		return HashMapIterator<K, V, Hash, KeyEqual>{ &map, 0, nullptr };
-	}
 }
 
 #endif // !EDGE_HASHMAP_H
