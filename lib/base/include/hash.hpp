@@ -9,6 +9,7 @@ namespace edge {
 	template<typename T>
 	struct Hash {
 		usize operator()(const T& obj) const noexcept {
+			(void)obj;
 			static_assert(sizeof(T) == 0, "Hash specialization not found for this type. Please provide a Hash<T> specialization.");
 			return 0;
 		}
