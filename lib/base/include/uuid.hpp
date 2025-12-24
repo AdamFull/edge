@@ -11,11 +11,6 @@ namespace edge {
 			u8 bytes[16];
 			u32 dwords[4];
 			u64 qwords[2];
-#if defined(EDGE_HAS_SSE2)
-			__m128i m128;
-#elif defined(EDGE_HAS_NEON)
-			uint8x16_t neon;
-#endif
 		};
 
 		constexpr UUID() : bytes{} {}
@@ -47,21 +42,8 @@ namespace edge {
 		}
 	};
 
-	bool operator==(const UUID& lhs, const UUID& rhs) noexcept {
-#if defined(EDGE_HAS_SSE2)
-		return _mm_movemask_epi8(_mm_cmpeq_epi8(lhs.m128, rhs.m128)) == 0xFFFF;
-#elif defined(EDGE_HAS_SSE4_1)
-		__m128i xor_result = _mm_xor_si128(lhs.m128, rhs.m128);
-		return _mm_test_all_zeros(xor_result, xor_result) != 0;
-#elif defined(EDGE_HAS_NEON)
-		uint8x16_t a = vld1q_u8(bytes);
-		uint8x16_t b = vld1q_u8(other.bytes);
-		uint8x16_t xor_result = veorq_u8(a, b);
-		uint64x2_t folded = vreinterpretq_u64_u8(xor_result);
-		return vgetq_lane_u64(folded, 0) == 0 && vgetq_lane_u64(folded, 1) == 0;
-#else
+	EDGE_FORCE_INLINE bool operator==(const UUID& lhs, const UUID& rhs) noexcept {
 		return lhs.qwords[0] == rhs.qwords[0] && lhs.qwords[1] == rhs.qwords[1];
-#endif
 	}
 
 	template<RngAlgorithm Algorithm>
