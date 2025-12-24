@@ -14,6 +14,7 @@ set(EDGE_BASE_SOURCES
     "src/hash.cpp"
     "src/random.cpp"
     "src/threads.cpp"
+    "src/uuid.cpp"
     "src/vmem.cpp"
 )
 
