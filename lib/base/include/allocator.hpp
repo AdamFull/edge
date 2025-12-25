@@ -276,12 +276,12 @@ namespace edge {
 		}
 
 		template<typename T>
-		T* allocate_array(usize count) const noexcept {
+		T* allocate_array(usize count, usize alignment = alignof(T)) const noexcept {
 			if (count == 0) {
 				return nullptr;
 			}
 
-			T* ptr = (T*)malloc(sizeof(T) * count, alignof(T));
+			T* ptr = (T*)malloc(sizeof(T) * count, alignment);
 			if (!ptr) {
 				return nullptr;
 			}
