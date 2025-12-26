@@ -7,6 +7,8 @@
 #include <string.hpp>
 #include <span.hpp>
 
+#include <json.hpp>
+
 #include <random.hpp>
 #include <threads.hpp>
 
@@ -95,7 +97,7 @@ void for_each(Iterator&& ibegin, Iterator&& iend, F&& func) {
 template<edge::TrivialType T>
 void print_array(const edge::Array<T>& arr) {
 	printf("[");
-	for_each(edge::begin(arr), edge::end(arr), [first = true](const T& elem) mutable {
+	for_each(arr.begin(), arr.end(), [first = true](const T& elem) mutable {
 		if (!first) printf(", ");
 		first = false;
 		printer(elem);
@@ -131,10 +133,10 @@ TEST(array_basic) {
 	SHOULD_EQUAL(arr.insert(&alloc, 1, 50), true);
 	SHOULD_EQUAL(arr[1], 50);
 
-	auto found = std::find_if(edge::begin(arr), edge::end(arr), [](const i32& val) { return val == 80; });
+	auto found = std::find_if(arr.begin(), arr.end(), [](const i32& val) { return val == 80; });
 	SHOULD_EQUAL(*found, 80);
 
-	std::sort(edge::begin(arr), edge::end(arr), [](const i32& a, const i32& b) { return a < b; });
+	std::sort(arr.begin(), arr.end(), [](const i32& a, const i32& b) { return a < b; });
 	print_array(arr);
 	SHOULD_EQUAL(*arr.front(), 50);
 
@@ -742,6 +744,12 @@ TEST(mpmc_queue_multithreaded) {
 }
 
 int main(void) {
+	//const char json_str[] = "{ \"key\" = \"Tvoja mama sosala zalupu\" }";
+	const char json_str[] = "\"Tvoja mama sosala zalupu\"";
+
+	edge::Allocator alloc = edge::Allocator::create_default();
+	auto json = edge::json_parse(&alloc, json_str);
+
 	RUN_TEST(array_basic);
 	RUN_TEST(array_resize);
 	RUN_TEST(array_remove);
