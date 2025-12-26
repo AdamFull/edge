@@ -83,6 +83,22 @@ namespace edge {
 			return m_data;
 		}
 
+		T* begin() noexcept {
+			return m_data;
+		}
+
+		T* end() noexcept {
+			return m_data + m_size;
+		}
+
+		const T* begin() const noexcept {
+			return m_data;
+		}
+
+		const T* end() const noexcept {
+			return m_data + m_size;
+		}
+
 		Span<T> subspan(usize offset, usize count) const {
 			if (offset >= m_size) {
 				return Span<T>();
@@ -94,6 +110,10 @@ namespace edge {
 			}
 
 			return Span<T>(m_data + offset, actual_count);
+		}
+
+		Span<T> subspan(usize offset) const {
+			return subspan(offset, m_size);
 		}
 
 		Span<T> first(usize count) const {
@@ -127,25 +147,5 @@ namespace edge {
 		T* m_data = nullptr;
 		usize m_size = 0;
 	};
-
-	template<TrivialType T>
-	inline T* begin(Span<T>& span) {
-		return span.m_data;
-	}
-
-	template<TrivialType T>
-	inline T* end(Span<T>& span) {
-		return span.m_data + span.m_size;
-	}
-
-	template<TrivialType T>
-	inline const T* begin(const Span<T>& span) {
-		return span.m_data;
-	}
-
-	template<TrivialType T>
-	inline const T* end(const Span<T>& span) {
-		return span.m_data + span.m_size;
-	}
 }
 #endif
