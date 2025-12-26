@@ -80,6 +80,47 @@ namespace edge {
 		T m_ptr;
 	};
 
+	template<typename V, typename E>
+	struct Result {
+		Result(V value) noexcept 
+			: m_has_value(true), m_value(value) {
+		}
+
+		Result(E error) noexcept
+			: m_has_value(false), m_error(error) {
+		}
+
+		explicit operator bool() const noexcept {
+			return m_has_value;
+		}
+
+		V* operator->() noexcept {
+			assert(m_has_value && "operator->() called on error state");
+			return &m_value;
+		}
+
+		V& operator*() noexcept {
+			assert(m_has_value && "operator*() called on error state");
+			return m_value;
+		}
+
+		V value() const noexcept {
+			assert(m_has_value && "Result::value() called on error state");
+			return m_value;
+		}
+
+		E error() const noexcept {
+			assert(!m_has_value && "Result::error() called on value state");
+			return m_error;
+		}
+	private:
+		union {
+			V m_value;
+			E m_error;
+		};
+		bool m_has_value = false;
+	};
+
 	template<typename Container>
 	constexpr auto array_size(const Container& c) -> decltype(c.size()) {
 		return c.size();
