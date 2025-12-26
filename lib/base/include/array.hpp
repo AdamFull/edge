@@ -8,7 +8,7 @@
 #include <type_traits>
 
 namespace edge {
-	template<TrivialType T>
+	template<typename T>
 	struct Array {
 		void destroy(NotNull<const Allocator*> alloc) {
 			if (m_data) {
@@ -178,31 +178,27 @@ namespace edge {
 			return m_data;
 		}
 
+		T* begin() noexcept {
+			return m_data;
+		}
+
+		T* end() noexcept {
+			return m_data + m_size;
+		}
+
+		const T* begin() const noexcept {
+			return m_data;
+		}
+
+		const T* end()  const noexcept {
+			return m_data + m_size;
+		}
+
 	private:
 		T* m_data = nullptr;
 		usize m_size = 0;
 		usize m_capacity = 0;
 	};
-
-	template<TrivialType T>
-	inline T* begin(Array<T>& arr) {
-		return arr.data();
-	}
-
-	template<TrivialType T>
-	inline T* end(Array<T>& arr) {
-		return arr.data() + arr.size();
-	}
-
-	template<TrivialType T>
-	inline const T* begin(const Array<T>& arr) {
-		return arr.data();
-	}
-
-	template<TrivialType T>
-	inline const T* end(const Array<T>& arr) {
-		return arr.data() + arr.size();
-	}
 }
 
 #endif
