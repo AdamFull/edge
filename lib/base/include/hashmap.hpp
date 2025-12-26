@@ -11,13 +11,13 @@ namespace edge {
 		constexpr f32 HASHMAP_MAX_LOAD_FACTOR = 0.75f;
 	}
 
-	template<TrivialType K, TrivialType V>
+	template<typename K, typename V>
 	struct HashMapEntry;
 
-	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
+	template<typename K, typename V, typename Hash, typename KeyEqual>
 	struct HashMap;
 
-	template<TrivialType K, TrivialType V, typename Hash, typename KeyEqual>
+	template<typename K, typename V, typename Hash, typename KeyEqual>
 	struct HashMapIterator {
 		const HashMap<K, V, Hash, KeyEqual>* map;
 		usize bucket_index;
@@ -71,7 +71,7 @@ namespace edge {
 		}
 	};
 
-	template<TrivialType K, TrivialType V>
+	template<typename K, typename V>
 	struct HashMapEntry {
 		K key = {};
 		V value = {};
@@ -79,7 +79,7 @@ namespace edge {
 		HashMapEntry* next = nullptr;
 	};
 
-	template<TrivialType K, TrivialType V,
+	template<typename K, typename V,
 		typename Hash = Hash<K>,
 		typename KeyEqual = std::equal_to<K>>
 	struct HashMap {
