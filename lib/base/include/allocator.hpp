@@ -142,7 +142,7 @@ namespace edge {
 			aligned_free(header);
 		}
 
-		inline void* tracked_realloc(void* ptr, usize alignment, usize size, void* user_data) {
+		inline void* tracked_realloc(void* ptr, usize size, usize alignment, void* user_data) {
 			if (!ptr) {
 				return tracked_malloc(size, alignment, user_data);
 			}
