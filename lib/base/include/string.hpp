@@ -259,6 +259,88 @@ namespace edge {
 			return from_utf32(alloc, str, N - 1);
 		}
 
+		char16_t* to_utf16(NotNull<const Allocator*> alloc) noexcept {
+			usize len = 0, pos = 0, out_pos = 0;
+
+			while (pos < m_length) {
+				char8_t first_byte = m_data[pos];
+				usize seq_len = detail::utf8::char_byte_count(first_byte);
+
+				if (seq_len == 0) {
+					return nullptr;
+				}
+
+				// 4-byte UTF-8 sequences become surrogate pairs (2 UTF-16 units)
+				len += (seq_len == 4) ? 2 : 1;
+				pos += seq_len;
+			}
+
+			pos = 0;
+
+			char16_t* out = (char16_t*)alloc->malloc(len * sizeof(char16_t), alignof(char16_t));
+			if (!out) {
+				return nullptr;
+			}
+
+			while (pos < m_length) {
+				usize bytes_readed = 0;
+				char32_t cp;
+				if (!detail::utf8::decode_char(m_data + pos, m_length - pos, cp, bytes_readed)) {
+					alloc->free(out);
+					return nullptr;
+				}
+
+				if (cp <= 0xFFFF) {
+					out[out_pos++] = static_cast<char16_t>(cp);
+				}
+				else {
+					// Encode as surrogate pair
+					cp -= 0x10000;
+					out[out_pos++] = static_cast<char16_t>(0xD800 + (cp >> 10));
+					out[out_pos++] = static_cast<char16_t>(0xDC00 + (cp & 0x3FF));
+				}
+				pos += bytes_readed;
+			}
+
+			out[out_pos] = u'\0';
+			return out;
+		}
+
+		char32_t* to_utf32(NotNull<const Allocator*> alloc) {
+			usize len = 0, pos = 0, out_pos = 0;
+
+			while (pos < m_length) {
+				char8_t first_byte = m_data[pos];
+				usize seq_len = detail::utf8::char_byte_count(first_byte);
+
+				if (seq_len == 0) {
+					return 0;
+				}
+
+				len++;
+				pos += seq_len;
+			}
+
+			pos = 0;
+
+			char32_t* out = (char32_t*)alloc->malloc(len * sizeof(char32_t), alignof(char32_t));
+			if (!out) {
+				return nullptr;
+			}
+
+			while (pos < m_length) {
+				usize bytes_readed = 0;
+				if (!detail::utf8::decode_char(m_data + pos, m_length - pos, out[out_pos++], bytes_readed)) {
+					alloc->free(out);
+					return nullptr;
+				}
+				pos += bytes_readed;
+			}
+
+			out[out_pos] = U'\0';
+			return out;
+		}
+
 		void destroy(NotNull<const Allocator*> alloc) {
 			if (m_data) {
 				alloc->deallocate_array(m_data, m_capacity);
