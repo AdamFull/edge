@@ -2,6 +2,7 @@
 #define EDGE_STRING_H
 
 #include "allocator.hpp"
+#include "hash.hpp"
 
 #include <cstring>
 #include <cstdlib>
@@ -126,11 +127,15 @@ namespace edge {
 		}
 
 		bool reserve(NotNull<const Allocator*> alloc, usize capacity) {
+			if (capacity == 0) {
+				capacity = detail::STRING_DEFAULT_CAPACITY;
+			}
+			
 			if (capacity <= m_capacity) {
 				return true;
 			}
 
-			char8_t* new_data = (char8_t*)alloc->realloc(m_data, capacity);
+			char8_t* new_data = (char8_t*)alloc->realloc(m_data, capacity, 1);
 			if (!new_data) {
 				return false;
 			}
@@ -394,6 +399,34 @@ namespace edge {
 
 			char32_t cp = static_cast<char32_t>(0x10000u + ((cp_high - 0xD800u) << 10) + (cp_low - 0xDC00u));
 			return encode_u32_utf8(alloc, cp);
+		}
+	};
+
+	inline bool operator==(const String& lhs, const String& rhs) noexcept {
+		if (lhs.m_length != rhs.m_length) {
+			return false;
+		}
+		if (lhs.m_data == rhs.m_data) {
+			return true;
+		}
+		if (!lhs.m_data || !rhs.m_data) {
+			return false;
+		}
+
+		if (lhs.m_length > 2 && rhs.m_length > 2) {
+			return lhs.m_data[0] == rhs.m_data[0] && !memcmp(lhs.m_data + 1, rhs.m_data + 1, lhs.m_length - 1);
+		}
+		return !memcmp(lhs.m_data, rhs.m_data, lhs.m_length);
+	}
+
+	template<>
+	struct Hash<String> {
+		EDGE_FORCE_INLINE usize operator()(const String& string) const noexcept {
+#if EDGE_HAS_SSE4_2
+			return hash_crc32(string.m_data, string.m_length);
+#else
+			return hash_fnv1a64(string.m_data, string.m_length);
+#endif
 		}
 	};
 }
