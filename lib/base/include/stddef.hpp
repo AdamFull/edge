@@ -114,11 +114,11 @@ namespace edge {
 			return m_error;
 		}
 	private:
+		bool m_has_value = false;
 		union {
 			V m_value;
 			E m_error;
 		};
-		bool m_has_value = false;
 	};
 
 	template<typename Container>
