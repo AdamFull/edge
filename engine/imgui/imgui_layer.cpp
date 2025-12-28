@@ -230,7 +230,7 @@ namespace edge {
 
 		ImGuiContext* ctx = ImGui::CreateContext();
 		if (!ctx) {
-			return false;
+			return nullptr;
 		}
 
 		ImGuiIO& io = ImGui::GetIO();
@@ -260,7 +260,7 @@ namespace edge {
 			layer->event_dispatcher, 
 			INPUT_EVENT_MASK | WINDOW_EVENT_MASK,
 			callable_create_from_lambda(layer->alocator, 
-				[layer](EventHeader* evt) -> void {
+				[](EventHeader* evt) -> void {
 					ImGuiIO& io = ImGui::GetIO();
 
 					if (evt->categories & INPUT_EVENT_MASK) {
@@ -394,24 +394,42 @@ namespace edge {
 		if (ImGui::BeginMainMenuBar()) {
 			if (ImGui::BeginMenu("File"))
 			{
-				if (ImGui::MenuItem("New"));
-				if (ImGui::MenuItem("Open", "Ctrl+O"));
+				if (ImGui::MenuItem("New")) {
+
+				}
+				if (ImGui::MenuItem("Open", "Ctrl+O")) {
+
+				}
 				if (ImGui::BeginMenu("Open Recent")) {
 					ImGui::EndMenu();
 				}
-				if (ImGui::MenuItem("Save", "Ctrl+S"));
-				if (ImGui::MenuItem("Save As.."));
+				if (ImGui::MenuItem("Save", "Ctrl+S")) {
+
+				}
+				if (ImGui::MenuItem("Save As..")) {
+					
+				}
 
 				ImGui::EndMenu();
 			}
 			if (ImGui::BeginMenu("Edit"))
 			{
-				if (ImGui::MenuItem("Undo", "CTRL+Z"));
-				if (ImGui::MenuItem("Redo", "CTRL+Y", false, false));
+				if (ImGui::MenuItem("Undo", "CTRL+Z")) {
+
+				}
+				if (ImGui::MenuItem("Redo", "CTRL+Y", false, false)) {
+
+				}
 				ImGui::Separator();
-				if (ImGui::MenuItem("Cut", "CTRL+X"));
-				if (ImGui::MenuItem("Copy", "CTRL+C"));
-				if (ImGui::MenuItem("Paste", "CTRL+V"));
+				if (ImGui::MenuItem("Cut", "CTRL+X")) {
+
+				}
+				if (ImGui::MenuItem("Copy", "CTRL+C")) {
+
+				}
+				if (ImGui::MenuItem("Paste", "CTRL+V")) {
+					
+				}
 				ImGui::EndMenu();
 			}
 
