@@ -3,6 +3,7 @@
 
 #include "allocator.hpp"
 #include "hash.hpp"
+#include <string>
 
 #include <cstring>
 #include <cstdlib>
@@ -182,6 +183,17 @@ namespace edge {
 	}
 
 	struct String {
+		using traits_type = std::char_traits<char8_t>;
+		using value_type = char8_t;
+		using pointer = char8_t*;
+		using const_pointer = const char8_t*;
+		using reference = char8_t&;
+		using const_reference = const char8_t&;
+		using iterator = char8_t*;
+		using const_iterator = const char8_t*;
+		using size_type = usize;
+		using difference_type = isize;
+
 		char8_t* m_data = nullptr;
 		usize m_length = 0ull;
 		usize m_capacity = 0ull;
@@ -191,14 +203,14 @@ namespace edge {
 				return allocate(alloc, len + 1);
 			}
 
-			memcpy(m_data, cstr, len);
+			traits_type::copy(m_data, (const_pointer)cstr, len);
 			m_data[len] = u8'\0';
 			m_length = len;
 
 			return true;
 		}
 
-		bool from_utf8(NotNull<const Allocator*> alloc, const char8_t* cstr, usize len) noexcept {
+		bool from_utf8(NotNull<const Allocator*> alloc, const_pointer cstr, usize len) noexcept {
 			if (!cstr) {
 				return allocate(alloc, detail::STRING_DEFAULT_CAPACITY);
 			}
@@ -207,12 +219,12 @@ namespace edge {
 				return false;
 			}
 
-			m_data = (char8_t*)alloc->malloc(len + 1, alignof(char8_t));
+			m_data = (pointer)alloc->malloc(len + 1, alignof(value_type));
 			if (!m_data) {
 				return false;
 			}
 
-			memcpy(m_data, cstr, len);
+			traits_type::copy(m_data, cstr, len);
 			m_data[len] = u8'\0';
 			m_length = len;
 
@@ -225,7 +237,7 @@ namespace edge {
 			}
 
 			usize capacity = len * 4;
-			m_data = (char8_t*)alloc->malloc(capacity + 1, alignof(char8_t));
+			m_data = (pointer)alloc->malloc(capacity + 1, alignof(value_type));
 			if (!m_data) {
 				return false;
 			}
@@ -245,7 +257,7 @@ namespace edge {
 			}
 
 			usize capacity = len * 4;
-			m_data = (char8_t*)alloc->malloc(capacity + 1, alignof(char8_t));
+			m_data = (pointer)alloc->malloc(capacity + 1, alignof(value_type));
 			if (!m_data) {
 				return false;
 			}
@@ -263,7 +275,7 @@ namespace edge {
 			usize len = 0, pos = 0, out_pos = 0;
 
 			while (pos < m_length) {
-				char8_t first_byte = m_data[pos];
+				value_type first_byte = m_data[pos];
 				usize seq_len = detail::utf8::char_byte_count(first_byte);
 
 				if (seq_len == 0) {
@@ -310,7 +322,7 @@ namespace edge {
 			usize len = 0, pos = 0, out_pos = 0;
 
 			while (pos < m_length) {
-				char8_t first_byte = m_data[pos];
+				value_type first_byte = m_data[pos];
 				usize seq_len = detail::utf8::char_byte_count(first_byte);
 
 				if (seq_len == 0) {
@@ -344,6 +356,9 @@ namespace edge {
 		void destroy(NotNull<const Allocator*> alloc) {
 			if (m_data) {
 				alloc->deallocate_array(m_data, m_capacity);
+				m_data = nullptr;
+				m_length = 0;
+				m_capacity = 0;
 			}
 		}
 
@@ -363,7 +378,7 @@ namespace edge {
 				return true;
 			}
 
-			char8_t* new_data = (char8_t*)alloc->realloc(m_data, capacity, 1);
+			pointer new_data = (pointer)alloc->realloc(m_data, capacity, alignof(value_type));
 			if (!new_data) {
 				return false;
 			}
@@ -380,11 +395,11 @@ namespace edge {
 			return append(alloc, str, N - 1);
 		}
 
-		bool append(NotNull<const Allocator*> alloc, const char8_t* text) noexcept {
+		bool append(NotNull<const Allocator*> alloc, const_pointer text) noexcept {
 			return append(alloc, text, strlen((const char*)text));
 		}
 
-		bool append(NotNull<const Allocator*> alloc, const char8_t* buffer, usize length) noexcept {
+		bool append(NotNull<const Allocator*> alloc, const_pointer buffer, usize length) noexcept {
 			if (!buffer || length == 0) {
 				return false;
 			}
@@ -393,7 +408,7 @@ namespace edge {
 				return false;
 			}
 
-			memcpy(m_data + m_length, buffer, length);
+			traits_type::copy(m_data + m_length, buffer, length);
 			m_length += length;
 			m_data[m_length] = u8'\0';
 
@@ -407,7 +422,7 @@ namespace edge {
 				return false;
 			}
 
-			char8_t* data = (char8_t*)alloc->malloc((len * 4) + 1, alignof(char8_t));
+			pointer data = (pointer)alloc->malloc((len * 4) + 1, alignof(value_type));
 			if (!data) {
 				return false;
 			}
@@ -456,7 +471,7 @@ namespace edge {
 				return false;
 			}
 
-			memcpy(m_data + m_length, data, pos);
+			traits_type::copy(m_data + m_length, data, pos);
 			m_length += pos;
 			m_data[m_length] = u8'\0';
 
@@ -464,7 +479,7 @@ namespace edge {
 			return true;
 		}
 
-		bool append(NotNull<const Allocator*> alloc, char8_t c) noexcept {
+		bool append(NotNull<const Allocator*> alloc, value_type c) noexcept {
 			if (!grow(alloc, 2)) {
 				return false;
 			}
@@ -479,7 +494,7 @@ namespace edge {
 			requires std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t>
 		bool append(NotNull<const Allocator*> alloc, T cp) noexcept {
 			usize byte_len = 0;
-			char8_t buf[4];
+			value_type buf[4];
 			if (!detail::utf8::encode_char(cp, buf, byte_len)) {
 				return false;
 			}
@@ -488,10 +503,7 @@ namespace edge {
 				return false;
 			}
 
-			for (usize i = 0; i < byte_len; ++i) {
-				m_data[m_length + i] = buf[i];
-			}
-
+			traits_type::copy(m_data + m_length, buf, byte_len);
 			m_length += byte_len;
 			m_data[m_length] = u8'\0';
 
@@ -500,7 +512,7 @@ namespace edge {
 
 		bool append(NotNull<const Allocator*> alloc, char16_t cp_high, char16_t cp_low) noexcept {
 			usize byte_len = 0;
-			char8_t buf[4];
+			value_type buf[4];
 			if (!detail::utf8::encode_char(cp_high, cp_low, buf, byte_len)) {
 				return false;
 			}
@@ -509,10 +521,7 @@ namespace edge {
 				return false;
 			}
 
-			for (usize i = 0; i < byte_len; ++i) {
-				m_data[m_length + i] = buf[i];
-			}
-
+			traits_type::copy(m_data + m_length, buf, byte_len);
 			m_length += byte_len;
 			m_data[m_length] = u8'\0';
 
@@ -520,12 +529,12 @@ namespace edge {
 		}
 
 		// TODO: Not needed for now, but in future may be having insert for other encodings will be cool to haves
-		bool insert(NotNull<const Allocator*> alloc, usize pos, const char8_t* text) {
+		bool insert(NotNull<const Allocator*> alloc, usize pos, const_pointer text) {
 			if (!text || pos > m_length) {
 				return false;
 			}
 
-			usize text_len = strlen((const char*)text);
+			usize text_len = traits_type::length(text);
 			if (text_len == 0) {
 				return true;
 			}
@@ -534,9 +543,8 @@ namespace edge {
 				return false;
 			}
 
-			memmove(m_data + pos + text_len, m_data + pos, m_length - pos + 1);
-
-			memcpy(m_data + pos, text, text_len);
+			traits_type::move(m_data + pos + text_len, m_data + pos, m_length - pos + 1);
+			traits_type::copy(m_data + pos, text, text_len);
 			m_length += text_len;
 
 			return true;
@@ -551,7 +559,7 @@ namespace edge {
 				length = m_length - pos;
 			}
 
-			memmove(m_data + pos, m_data + pos + length, m_length - pos - length + 1);
+			traits_type::move(m_data + pos, m_data + pos + length, m_length - pos - length + 1);
 			m_length -= length;
 
 			return true;
@@ -563,7 +571,7 @@ namespace edge {
 
 		template<typename CharT>
 			requires std::same_as<CharT, char> || std::same_as<CharT, char8_t>
-		i32 compare(const CharT* other) {
+		i32 compare(const CharT* other) const noexcept {
 			if (!m_data) {
 				return other ? -1 : 0;
 			}
@@ -572,51 +580,83 @@ namespace edge {
 				return 1;
 			}
 
-			return strcmp((const char*)m_data, (const char*)other);
+			return traits_type::compare(m_data, reinterpret_cast<const char8_t*>(other),
+				m_length < traits_type::length(reinterpret_cast<const char8_t*>(other)) ? m_length : traits_type::length(reinterpret_cast<const char8_t*>(other)));
 		}
 
-		i32 compare(const String str2) {
+		i32 compare(const String& str2) const noexcept {
 			if (!m_data) {
-				return (str2.m_data) ? -1 : 0;
+				return str2.m_data ? -1 : 0;
 			}
 
 			if (!str2.m_data) {
 				return 1;
 			}
 
-			return strcmp((const char*)m_data, (const char*)str2.m_data);
+			usize min_len = m_length < str2.m_length ? m_length : str2.m_length;
+			i32 result = traits_type::compare(m_data, str2.m_data, min_len);
+			if (result != 0) {
+				return result;
+			}
+
+			if (m_length < str2.m_length) {
+				return -1;
+			}
+			if (m_length > str2.m_length) {
+				return 1;
+			}
+			return 0;
 		}
 
-		i32 find(const char8_t* needle) {
+		usize find(const_pointer needle) const noexcept {
 			if (!m_data || !needle) {
-				return -1;
+				return SIZE_MAX;
 			}
 
-			const char8_t* found = (char8_t*)strstr((char *const)m_data, (const char* const)needle);
-			if (!found) {
-				return -1;
+			usize needle_len = traits_type::length(needle);
+			if (needle_len == 0) {
+				return 0;
 			}
 
-			return static_cast<i32>(found - m_data);
+			if (needle_len > m_length) {
+				return SIZE_MAX;
+			}
+
+			for (usize i = 0; i <= m_length - needle_len; ++i) {
+				if (traits_type::compare(m_data + i, needle, needle_len) == 0) {
+					return i;
+				}
+			}
+
+			return SIZE_MAX;
+		}
+
+		usize find(value_type c, usize pos = 0) const noexcept {
+			if (!m_data || pos >= m_length) {
+				return SIZE_MAX;
+			}
+
+			const_pointer result = traits_type::find(m_data + pos, m_length - pos, c);
+			return result ? static_cast<usize>(result - m_data) : SIZE_MAX;
 		}
 
 		bool duplicate(NotNull<const Allocator*> alloc, String dest) {
 			return dest.from_utf8(alloc, m_data, m_length);
 		}
 
-		char8_t* begin() noexcept {
+		iterator begin() noexcept {
 			return m_data;
 		}
 
-		char8_t* end() noexcept {
+		iterator end() noexcept {
 			return m_data + m_length;
 		}
 
-		const char8_t* begin() const noexcept {
+		const_iterator begin() const noexcept {
 			return m_data;
 		}
 
-		const char8_t* end() const noexcept {
+		const_iterator end() const noexcept {
 			return m_data + m_length;
 		}
 
@@ -638,36 +678,27 @@ namespace edge {
 			return true;
 		}
 
-		bool grow(NotNull<const Allocator*> alloc, usize size) noexcept {
-			usize required = m_length + size;
-			if (required > m_capacity) {
-				usize new_capacity = m_capacity * 2;
-				while (new_capacity < required) {
-					new_capacity *= 2;
-				}
-				if (!reserve(alloc, new_capacity)) {
-					return false;
-				}
+		bool grow(NotNull<const Allocator*> alloc, usize additional) noexcept {
+			usize required = m_length + additional;
+			if (required <= m_capacity) {
+				return true;
 			}
-			return true;
+
+			usize new_capacity = m_capacity;
+			if (new_capacity == 0) {
+				new_capacity = detail::STRING_DEFAULT_CAPACITY;
+			}
+
+			while (new_capacity < required) {
+				new_capacity *= 2;
+			}
+
+			return reserve(alloc, new_capacity);
 		}
 	};
 
 	inline bool operator==(const String& lhs, const String& rhs) noexcept {
-		if (lhs.m_length != rhs.m_length) {
-			return false;
-		}
-		if (lhs.m_data == rhs.m_data) {
-			return true;
-		}
-		if (!lhs.m_data || !rhs.m_data) {
-			return false;
-		}
-
-		if (lhs.m_length > 2 && rhs.m_length > 2) {
-			return lhs.m_data[0] == rhs.m_data[0] && !memcmp(lhs.m_data + 1, rhs.m_data + 1, lhs.m_length - 1);
-		}
-		return !memcmp(lhs.m_data, rhs.m_data, lhs.m_length);
+		return lhs.compare(rhs) == 0;
 	}
 
 	template<>
