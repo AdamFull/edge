@@ -13,6 +13,9 @@ namespace edge {
 		void destroy(NotNull<const Allocator*> alloc) {
 			if (m_data) {
 				alloc->deallocate_array(m_data, m_capacity);
+				m_data = nullptr;
+				m_size = 0;
+				m_capacity = 0;
 			}
 		}
 
