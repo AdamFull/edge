@@ -152,18 +152,41 @@ namespace edge::gfx {
 		};
 	}
 
-	bool BufferUpdateInfo::write(NotNull<const Allocator*> alloc, const void* data, VkDeviceSize size, VkDeviceSize dst_offset) noexcept {
+	bool BufferUpdateInfo::write(NotNull<const Allocator*> alloc, Span<const u8> data, VkDeviceSize dst_offset) noexcept {
 		VkDeviceSize available_size = buffer_view.size - offset;
-		if (size > available_size) {
+		if (data.size() > available_size) {
 			return false;
 		}
 
-		buffer_view_write(buffer_view, data, size, offset);
+		buffer_view_write(buffer_view, data, offset);
 		copy_regions.push_back(alloc, {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_COPY_2_KHR,
-			.srcOffset = buffer_view.offset + std::exchange(offset, offset + size),
+			.srcOffset = buffer_view.offset + std::exchange(offset, offset + data.size()),
 			.dstOffset = dst_offset,
-			.size = size
+			.size = data.size()
+			});
+
+		return true;
+	}
+
+	bool ImageUpdateInfo::write(NotNull<const Allocator*> alloc, const ImageSubresourceData& subresource_info) noexcept {
+		VkDeviceSize available_size = buffer_view.size - offset;
+		if (subresource_info.data.size() > available_size) {
+			return false;
+		}
+
+		buffer_view_write(buffer_view, subresource_info.data, offset);
+		copy_regions.push_back(alloc, {
+			.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2_KHR,
+			.bufferOffset = buffer_view.offset + std::exchange(offset, offset + subresource_info.data.size()),
+			.imageSubresource = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.mipLevel = subresource_info.mip_level,
+				.baseArrayLayer = subresource_info.array_layer,
+				.layerCount = 1u
+				},
+			.imageOffset = subresource_info.offset,
+			.imageExtent = subresource_info.extent
 			});
 
 		return true;
@@ -324,11 +347,47 @@ namespace edge::gfx {
 			return nullptr;
 		}
 
+		VkSamplerCreateInfo sampler_create_info = {
+			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+			.magFilter = VK_FILTER_LINEAR,
+			.minFilter = VK_FILTER_LINEAR,
+			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+			.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.mipLodBias = 1.0f,
+			.anisotropyEnable = VK_TRUE,
+			.maxAnisotropy = 4.0f
+		};
+
+		if (!sampler_create(sampler_create_info, renderer->default_sampler)) {
+			renderer_destroy(renderer);
+			return nullptr;
+		}
+
+		VkDescriptorImageInfo sampler_descriptor = {
+			.sampler = renderer->default_sampler.handle
+		};
+		renderer->image_descriptors.push_back(renderer->alloc, sampler_descriptor);
+
+		VkWriteDescriptorSet sampler_write = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = renderer->descriptor_set.handle,
+			.dstBinding = RENDERER_SAMPLER_SLOT,
+			.dstArrayElement = 0,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+			.pImageInfo = renderer->image_descriptors.back()
+		};
+		renderer->write_descriptor_sets.push_back(renderer->alloc, sampler_write);
+
 		return renderer;
 	}
 
 	void renderer_destroy(Renderer* renderer) {
 		queue_wait_idle(renderer->direct_queue);
+
+		sampler_destroy(renderer->default_sampler);
 
 		renderer->write_descriptor_sets.destroy(renderer->alloc);
 		renderer->image_descriptors.destroy(renderer->alloc);
@@ -743,11 +802,29 @@ namespace edge::gfx {
 		return true;
 	}
 
+	void Renderer::image_update_begin(VkDeviceSize size, ImageUpdateInfo& update_info) noexcept {
+		update_info.buffer_view = active_frame->try_allocate_staging_memory(alloc, size, 1);
+	}
+
+	void Renderer::image_update_end(ImageUpdateInfo& update_info) noexcept {
+		const VkCopyBufferToImageInfo2KHR copy_image_info = {
+			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
+			.srcBuffer = update_info.buffer_view.buffer.handle,
+			.dstImage = update_info.dst_image.handle,
+			.dstImageLayout = update_info.dst_image.layout,
+			.regionCount = (u32)update_info.copy_regions.size(),
+			.pRegions = update_info.copy_regions.data()
+		};
+		
+		vkCmdCopyBufferToImage2KHR(active_frame->cmd.handle, &copy_image_info);
+		update_info.copy_regions.destroy(alloc);
+	}
+
 	void Renderer::buffer_update_begin(VkDeviceSize size, BufferUpdateInfo& update_info) noexcept {
 		update_info.buffer_view = active_frame->try_allocate_staging_memory(alloc, size, 1);
 	}
 
-	void Renderer::buffer_update_end(const BufferUpdateInfo& update_info) {
+	void Renderer::buffer_update_end(BufferUpdateInfo& update_info) {
 		const VkCopyBufferInfo2KHR copy_buffer_info = {
 			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2_KHR,
 			.srcBuffer = update_info.buffer_view.buffer.handle,
@@ -757,5 +834,6 @@ namespace edge::gfx {
 		};
 
 		vkCmdCopyBuffer2KHR(active_frame->cmd.handle, &copy_buffer_info);
+		update_info.copy_regions.destroy(alloc);
 	}
 }

@@ -75,7 +75,24 @@ namespace edge::gfx {
 		Array<VkBufferCopy2KHR> copy_regions = {};
 		VkDeviceSize offset = 0;
 
-		bool write(NotNull<const Allocator*> alloc, const void* data, VkDeviceSize size, VkDeviceSize dst_offset) noexcept;
+		bool write(NotNull<const Allocator*> alloc, Span<const u8> data, VkDeviceSize dst_offset) noexcept;
+	};
+
+	struct ImageSubresourceData {
+		Span<const u8> data = {};
+		uint32_t mip_level = 0;
+		uint32_t array_layer = 0;
+		VkOffset3D offset = {};
+		VkExtent3D extent = {};
+	};
+
+	struct ImageUpdateInfo {
+		Image dst_image = {};
+		BufferView buffer_view = {};
+		Array<VkBufferImageCopy2KHR> copy_regions = {};
+		VkDeviceSize offset = 0;
+
+		bool write(NotNull<const Allocator*> alloc, const ImageSubresourceData& subresource_info) noexcept;
 	};
 
 	struct Renderer {
@@ -118,6 +135,8 @@ namespace edge::gfx {
 		Array<VkDescriptorImageInfo> image_descriptors = {};
 		Array<VkDescriptorBufferInfo> buffer_descriptors = {};
 
+		Sampler default_sampler = {};
+
 		Handle add_resource() noexcept;
 		bool setup_resource(Handle handle, Image image) noexcept;
 		bool setup_resource(Handle handle, Buffer buffer) noexcept;
@@ -129,8 +148,11 @@ namespace edge::gfx {
 		bool frame_begin() noexcept;
 		bool frame_end() noexcept;
 
+		void image_update_begin(VkDeviceSize size, ImageUpdateInfo& update_info) noexcept;
+		void image_update_end(ImageUpdateInfo& update_info) noexcept;
+
 		void buffer_update_begin(VkDeviceSize size, BufferUpdateInfo& update_info) noexcept;
-		void buffer_update_end(const BufferUpdateInfo& update_info);
+		void buffer_update_end(BufferUpdateInfo& update_info);
 
 		template<typename T>
 		void push_constants(VkShaderStageFlags, T data) {
