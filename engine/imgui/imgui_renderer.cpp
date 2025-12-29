@@ -1,4 +1,5 @@
 #include "imgui_renderer.h"
+#include <logger.hpp>
 
 #include "../gfx_context.h"
 #include "../gfx_renderer.h"
@@ -207,7 +208,140 @@ namespace edge::gfx {
 	}
 
 	void ImGuiRenderer::update_texture(NotNull<ImTextureData*> tex) noexcept {
-		
+		if (tex->Status == ImTextureStatus_OK) {
+			return;
+		}
+
+		if (tex->Status == ImTextureStatus_WantCreate) {
+			font_image = renderer->add_resource();
+
+			ImageCreateInfo create_info = {
+				.extent = {
+					.width = (u32)tex->Width,
+					.height = (u32)tex->Height,
+					.depth = 1u
+					},
+				.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				.format = VK_FORMAT_R8G8B8A8_SRGB
+			};
+
+			Image image = {};
+			if (!image_create(create_info, image)) {
+				EDGE_LOG_ERROR("Failed to create font image.");
+				tex->SetTexID(ImTextureID_Invalid);
+				tex->SetStatus(ImTextureStatus_Destroyed);
+				return;
+			}
+
+			PipelineBarrierBuilder barrier_builder = {};
+
+			pipeline_barrier_add_image(barrier_builder, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+				});
+			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
+			image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+			ImageUpdateInfo update_info = {
+				.dst_image = image,
+			};
+
+			usize whole_size = tex->Width * tex->Height * tex->BytesPerPixel;
+			renderer->image_update_begin(whole_size, update_info);
+			update_info.write(renderer->alloc, {
+				.data = { tex->Pixels, whole_size },
+				.extent = {
+					.width = (u32)tex->Width,
+					.height = (u32)tex->Height,
+					.depth = 1
+					}
+				});
+			renderer->image_update_end(update_info);
+			renderer->setup_resource(font_image, image);
+
+			tex->SetTexID(font_image);
+			tex->SetStatus(ImTextureStatus_OK);
+		}
+		else if (tex->Status == ImTextureStatus_WantUpdates) {
+			Handle resource_id = (Handle)tex->GetTexID();
+			Resource* resource = renderer->get_resource(resource_id);
+
+			usize total_size = 0;
+			for (const ImTextureRect& update_region : tex->Updates) {
+				//EDGE_LOG_DEBUG("Updating image {} region: [{}, {}, {}, {}]", tex->GetTexID(), update_region.x, update_region.y, update_region.w, update_region.h);
+				usize region_pitch = update_region.w * tex->BytesPerPixel;
+				total_size += region_pitch * update_region.h;
+			}
+
+			PipelineBarrierBuilder barrier_builder = {};
+			VkImageSubresourceRange subresource_range = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			};
+
+			pipeline_barrier_add_image(barrier_builder, resource->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subresource_range);
+			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
+			pipeline_barrier_builder_reset(barrier_builder);
+			resource->image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+			ImageUpdateInfo update_info = {
+				.dst_image = resource->image
+			};
+
+			renderer->image_update_begin(total_size, update_info);
+
+			u8* compacted_data = (u8*)renderer->alloc->malloc(total_size, 1);
+			// TODO: Check allocation result
+
+			usize buffer_offset = 0;
+			for (const ImTextureRect& update_region : tex->Updates) {
+				usize region_pitch = update_region.w * tex->BytesPerPixel;
+
+				for (usize y = 0; y < update_region.h; y++) {
+					const void* src_pixels = tex->GetPixelsAt(update_region.x, update_region.y + y);
+					memcpy(compacted_data + buffer_offset + (region_pitch * y), src_pixels, region_pitch);
+				}
+
+				usize region_size = region_pitch * update_region.h;
+
+				update_info.write(renderer->alloc, {
+				.data = { compacted_data + buffer_offset, region_size },
+				.offset = {
+						.x = update_region.x,
+						.y = update_region.y,
+						.z = 0
+					},
+				.extent = {
+					.width = update_region.w,
+					.height = update_region.h,
+					.depth = 1
+					}
+					});
+
+				buffer_offset += region_size;
+			}
+
+			renderer->image_update_end(update_info);
+			renderer->alloc->free(compacted_data);
+
+			pipeline_barrier_add_image(barrier_builder, resource->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, subresource_range);
+			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
+			resource->image.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+			tex->SetStatus(ImTextureStatus_OK);
+		}
+		else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
+			renderer->free_resource(font_image);
+
+			tex->SetTexID(ImTextureID_Invalid);
+			tex->SetStatus(ImTextureStatus_Destroyed);
+		}
 	}
 
 	void ImGuiRenderer::update_geometry(NotNull<ImDrawData*> draw_data) noexcept {
@@ -237,10 +371,10 @@ namespace edge::gfx {
 			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
 
 			auto vtx_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
-			vb_update.write(renderer->alloc, im_cmd_list->VtxBuffer.Data, vtx_size, std::exchange(vtx_offset, vtx_offset + vtx_size));
+			vb_update.write(renderer->alloc, { (u8*)im_cmd_list->VtxBuffer.Data, vtx_size }, std::exchange(vtx_offset, vtx_offset + vtx_size));
 
 			auto idx_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
-			ib_update.write(renderer->alloc, im_cmd_list->IdxBuffer.Data, idx_size, std::exchange(idx_offset, idx_offset + idx_size));
+			ib_update.write(renderer->alloc, { (u8*)im_cmd_list->IdxBuffer.Data, idx_size }, std::exchange(idx_offset, idx_offset + idx_size));
 		}
 
 		// TODO: barriers
@@ -373,18 +507,13 @@ namespace edge::gfx {
 				// Apply scissor/clipping rectangle
 				cmd_set_scissor(cmd, clip_min.x, clip_min.y, clip_max.x - clip_min.x, clip_max.y - clip_min.y);
 
-#if 0 // TODO
 				Handle new_image_index = (Handle)pcmd->GetTexID();
 				if (new_image_index != last_image_index) {
-					Resource* render_resource = renderer_get_resource(renderer, new_image_index);
+					Resource* render_resource = renderer->get_resource(new_image_index);
 					push_constant.image_index = render_resource->srv_index;
 					renderer->push_constants(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, push_constant);
 					last_image_index = new_image_index;
 				}
-#else
-				push_constant.image_index = 0;
-				renderer->push_constants(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, push_constant);
-#endif
 
 				cmd_draw_indexed(cmd, pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
 			}

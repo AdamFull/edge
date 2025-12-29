@@ -15,17 +15,19 @@ namespace edge::gfx {
 	struct Renderer;
 
 	struct ImGuiRenderer {
-		Renderer* renderer;
+		Renderer* renderer = nullptr;
 
-		ShaderModule vertex_shader;
-		ShaderModule fragment_shader;
-		Pipeline pipeline;
+		ShaderModule vertex_shader = {};
+		ShaderModule fragment_shader = {};
+		Pipeline pipeline = {};
 
-		Handle vertex_buffer;
-		u64 vertex_buffer_capacity;
+		Handle vertex_buffer = HANDLE_INVALID;
+		u64 vertex_buffer_capacity = 0;
 
-		Handle index_buffer;
-		u64 index_buffer_capacity;
+		Handle index_buffer = HANDLE_INVALID;
+		u64 index_buffer_capacity = 0;
+
+		Handle font_image = HANDLE_INVALID;
 
 		void update_texture(NotNull<ImTextureData*> tex) noexcept;
 		void update_geometry(NotNull<ImDrawData*> draw_data) noexcept;
