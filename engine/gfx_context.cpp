@@ -2135,16 +2135,16 @@ namespace edge::gfx {
 		vmaDestroyBuffer(g_ctx.vma, buffer.handle, buffer.memory.handle);
 	}
 
-	void buffer_view_write(BufferView& buffer_view, const void* data, VkDeviceSize size, VkDeviceSize offset) {
+	void buffer_view_write(BufferView& buffer_view, Span<const u8> data, VkDeviceSize offset) {
 		if (!buffer_view) {
 			return;
 		}
 
-		if (offset + size > buffer_view.size) {
+		if (offset + data.size() > buffer_view.size) {
 			return;
 		}
 
-		memcpy((u8*)device_memory_map(buffer_view.buffer.memory) + buffer_view.offset + offset, data, size);
+		memcpy((u8*)device_memory_map(buffer_view.buffer.memory) + buffer_view.offset + offset, data.data(), data.size());
 	}
 
 	bool semaphore_create(VkSemaphoreType type, u64 value, Semaphore& semaphore) {
@@ -2405,5 +2405,15 @@ namespace edge::gfx {
 		builder.buffer_barrier_count = 0;
 		builder.image_barrier_count = 0;
 		builder.dependency_flags = 0;
+	}
+
+	bool sampler_create(VkSamplerCreateInfo create_info, Sampler& sampler) noexcept {
+		return vkCreateSampler(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &sampler.handle) == VK_SUCCESS;
+	}
+
+	void sampler_destroy(Sampler sampler) noexcept {
+		if (sampler) {
+			vkDestroySampler(g_ctx.dev, sampler.handle, &g_ctx.vk_alloc);
+		}
 	}
 }

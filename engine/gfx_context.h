@@ -1,6 +1,8 @@
 #ifndef GFX_CONTEXT_H
 #define GFX_CONTEXT_H
 
+#include <span.hpp>
+
 #include "gfx_interface.h"
 
 namespace edge::gfx {
@@ -180,7 +182,7 @@ namespace edge::gfx {
 	bool buffer_create(BufferCreateInfo create_info, Buffer& buffer);
 	void buffer_destroy(Buffer buffer);
 
-	void buffer_view_write(BufferView& buffer_view, const void* data, VkDeviceSize size, VkDeviceSize offset);
+	void buffer_view_write(BufferView& buffer_view, Span<const u8> data, VkDeviceSize offset);
 
 	bool semaphore_create(VkSemaphoreType type, u64 value, Semaphore& semaphore);
 	void semaphore_destroy(Semaphore semaphore);
@@ -195,6 +197,9 @@ namespace edge::gfx {
 	bool pipeline_barrier_add_buffer(PipelineBarrierBuilder& builder, Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size);
 	bool pipeline_barrier_add_image(PipelineBarrierBuilder& builder, Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range);
 	void pipeline_barrier_builder_reset(PipelineBarrierBuilder& builder);
+
+	bool sampler_create(VkSamplerCreateInfo create_info, Sampler& sampler) noexcept;
+	void sampler_destroy(Sampler sampler) noexcept;
 }
 
 #endif // GFX_CONTEXT_H

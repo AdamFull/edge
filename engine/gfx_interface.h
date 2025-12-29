@@ -138,6 +138,11 @@ namespace edge::gfx {
 		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
 	};
 
+	struct Sampler {
+		VkSampler handle = VK_NULL_HANDLE;
+		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
+	};
+
 	enum BufferFlag {
 		BUFFER_FLAG_NONE = 0,
 		BUFFER_FLAG_READBACK = 0x01,
