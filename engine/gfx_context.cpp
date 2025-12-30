@@ -2221,13 +2221,14 @@ namespace edge::gfx {
 		vkDestroyFence(g_ctx.dev, fence.handle, &g_ctx.vk_alloc);
 	}
 
-	bool pipeline_barrier_add_memory(PipelineBarrierBuilder& builder, VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
-		VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask) {
-		if (builder.memory_barrier_count >= MEMORY_BARRIERS_MAX) {
+	bool PipelineBarrierBuilder::add_memory(VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
+		VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask) noexcept {
+		if (memory_barrier_count >= MEMORY_BARRIERS_MAX) {
 			return false;
 		}
 
-		builder.memory_barriers[builder.memory_barrier_count++] = {
+		// TODO: Use StackBuffer
+		memory_barriers[memory_barrier_count++] = {
 			.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2,
 			.srcStageMask = src_stage_mask,
 			.srcAccessMask = src_access_mask,
@@ -2244,8 +2245,8 @@ namespace edge::gfx {
 	};
 
 	static LayoutInfo get_buffer_layout_info(BufferLayout layout) {
-		constexpr VkPipelineStageFlags2KHR shader_stages = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | 
-			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | 
+		constexpr VkPipelineStageFlags2KHR shader_stages = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
+			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
 			VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
 
 		switch (layout) {
@@ -2313,15 +2314,16 @@ namespace edge::gfx {
 		}
 	}
 
-	bool pipeline_barrier_add_buffer(PipelineBarrierBuilder& builder, Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size) {
-		if (builder.buffer_barrier_count >= BUFFER_BARRIERS_MAX || !buffer) {
+	bool PipelineBarrierBuilder::add_buffer(Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size) noexcept {
+		if (buffer_barrier_count >= BUFFER_BARRIERS_MAX || !buffer) {
 			return false;
 		}
 
 		LayoutInfo src_layout_info = get_buffer_layout_info(buffer.layout);
 		LayoutInfo dst_layout_info = get_buffer_layout_info(new_layout);
 
-		builder.buffer_barriers[builder.buffer_barrier_count++] = {
+		// TODO: Use StackBuffer
+		buffer_barriers[buffer_barrier_count++] = {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
 			.srcStageMask = src_layout_info.stageFlags,
 			.srcAccessMask = src_layout_info.accessFlags,
@@ -2338,12 +2340,12 @@ namespace edge::gfx {
 	static LayoutInfo get_image_layout_info(VkImageLayout layout) {
 		switch (layout)
 		{
-		case VK_IMAGE_LAYOUT_UNDEFINED: return { 
-			.stageFlags = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT, 
-			.accessFlags = VK_ACCESS_2_NONE 
+		case VK_IMAGE_LAYOUT_UNDEFINED: return {
+			.stageFlags = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+			.accessFlags = VK_ACCESS_2_NONE
 		};
-		case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return { 
-			.stageFlags = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT, 
+		case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return {
+			.stageFlags = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
 			.accessFlags = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
 		};
 		case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL: return {
@@ -2377,15 +2379,16 @@ namespace edge::gfx {
 		}
 	}
 
-	bool pipeline_barrier_add_image(PipelineBarrierBuilder& builder, Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range) {
-		if (builder.image_barrier_count >= IMAGE_BARRIERS_MAX || !image) {
+	bool PipelineBarrierBuilder::add_image(Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range) noexcept {
+		if (image_barrier_count >= IMAGE_BARRIERS_MAX || !image) {
 			return false;
 		}
 
 		LayoutInfo src_layout_info = get_image_layout_info(image.layout);
 		LayoutInfo dst_layout_info = get_image_layout_info(new_layout);
 
-		builder.image_barriers[builder.image_barrier_count++] = {
+		// TODO: Use StackBuffer
+		image_barriers[image_barrier_count++] = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
 			.srcStageMask = src_layout_info.stageFlags,
 			.srcAccessMask = src_layout_info.accessFlags,
@@ -2400,11 +2403,11 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void pipeline_barrier_builder_reset(PipelineBarrierBuilder& builder) {
-		builder.memory_barrier_count = 0;
-		builder.buffer_barrier_count = 0;
-		builder.image_barrier_count = 0;
-		builder.dependency_flags = 0;
+	void PipelineBarrierBuilder::reset() noexcept {
+		memory_barrier_count = 0;
+		buffer_barrier_count = 0;
+		image_barrier_count = 0;
+		dependency_flags = 0;
 	}
 
 	bool sampler_create(VkSamplerCreateInfo create_info, Sampler& sampler) noexcept {

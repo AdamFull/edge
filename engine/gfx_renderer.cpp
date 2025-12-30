@@ -532,7 +532,7 @@ namespace edge::gfx {
 			};
 
 			// TODO: Make batching updates
-			pipeline_barrier_add_image(builder, image_source, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
+			barrier_builder.add_image(image_source, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
 			cmd_pipeline_barrier(active_frame->cmd, builder);
 
 			image_source.layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
@@ -728,7 +728,7 @@ namespace edge::gfx {
 				.layerCount = 1u
 				};
 
-				pipeline_barrier_add_image(barrier_builder, backbuffer_resource->image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
+				barrier_builder.add_image(backbuffer_resource->image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
 				cmd_pipeline_barrier(active_frame->cmd, barrier_builder);
 
 				backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;

@@ -74,6 +74,12 @@ namespace edge::gfx {
 		u32 image_barrier_count = 0u;
 
 		VkDependencyFlags dependency_flags = 0;
+
+		bool add_memory(VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
+			VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask) noexcept;
+		bool add_buffer(Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size) noexcept;
+		bool add_image(Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range) noexcept;
+		void reset() noexcept;
 	};
 
 	struct GraphicsPipelineCreateInfo {
@@ -191,12 +197,6 @@ namespace edge::gfx {
 	bool fence_wait(Fence fence, u64 timeout);
 	void fence_reset(Fence fence);
 	void fence_destroy(Fence fence);
-
-	bool pipeline_barrier_add_memory(PipelineBarrierBuilder& builder, VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
-		VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask);
-	bool pipeline_barrier_add_buffer(PipelineBarrierBuilder& builder, Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size);
-	bool pipeline_barrier_add_image(PipelineBarrierBuilder& builder, Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range);
-	void pipeline_barrier_builder_reset(PipelineBarrierBuilder& builder);
 
 	bool sampler_create(VkSamplerCreateInfo create_info, Sampler& sampler) noexcept;
 	void sampler_destroy(Sampler sampler) noexcept;

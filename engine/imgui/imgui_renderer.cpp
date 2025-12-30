@@ -235,7 +235,7 @@ namespace edge::gfx {
 
 			PipelineBarrierBuilder barrier_builder = {};
 
-			pipeline_barrier_add_image(barrier_builder, image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
+			barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.baseMipLevel = 0,
 				.levelCount = 1,
@@ -285,9 +285,9 @@ namespace edge::gfx {
 				.layerCount = 1
 			};
 
-			pipeline_barrier_add_image(barrier_builder, resource->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subresource_range);
+			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subresource_range);
 			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
-			pipeline_barrier_builder_reset(barrier_builder);
+			barrier_builder.reset();
 			resource->image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
 			ImageUpdateInfo update_info = {
@@ -330,7 +330,7 @@ namespace edge::gfx {
 			renderer->image_update_end(update_info);
 			renderer->alloc->free(compacted_data);
 
-			pipeline_barrier_add_image(barrier_builder, resource->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, subresource_range);
+			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, subresource_range);
 			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
 			resource->image.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
@@ -380,21 +380,21 @@ namespace edge::gfx {
 
 		// TODO: barriers
 		PipelineBarrierBuilder barrier_builder = {};
-		pipeline_barrier_add_buffer(barrier_builder, vertex_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
+		barrier_builder.add_buffer(vertex_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
 		vertex_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
-		pipeline_barrier_add_buffer(barrier_builder, index_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
+		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
 		index_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
 
 		cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
-		pipeline_barrier_builder_reset(barrier_builder);
+		barrier_builder.reset();
 
 		renderer->buffer_update_end(vb_update);
 		renderer->buffer_update_end(ib_update);
 
-		pipeline_barrier_add_buffer(barrier_builder, vertex_buffer_resorce->buffer, BufferLayout::ShaderRead, 0, VK_WHOLE_SIZE);
+		barrier_builder.add_buffer(vertex_buffer_resorce->buffer, BufferLayout::ShaderRead, 0, VK_WHOLE_SIZE);
 		vertex_buffer_resorce->buffer.layout = BufferLayout::ShaderRead;
 
-		pipeline_barrier_add_buffer(barrier_builder, index_buffer_resorce->buffer, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
+		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
 		index_buffer_resorce->buffer.layout = BufferLayout::IndexBuffer;
 
 		cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
@@ -425,7 +425,7 @@ namespace edge::gfx {
 		VkAttachmentLoadOp load_op = VK_ATTACHMENT_LOAD_OP_LOAD;
 		if (backbuffer_resource->image.layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
 			PipelineBarrierBuilder barrier_builder = {};
-			pipeline_barrier_add_image(barrier_builder, backbuffer_resource->image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VkImageSubresourceRange{
+			barrier_builder.add_image(backbuffer_resource->image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VkImageSubresourceRange{
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.baseMipLevel = 0,
 				.levelCount = 1,
