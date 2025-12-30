@@ -1,7 +1,7 @@
 #ifndef IMGUI_RENDERER_H
 #define IMGUI_RENDERER_H
 
-#include "../gfx_interface.h"
+#include "../gfx_context.h"
 #include <handle_pool.hpp>
 
 struct ImDrawData;

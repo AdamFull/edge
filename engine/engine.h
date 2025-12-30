@@ -2,7 +2,7 @@
 #define EDGE_ENGINE_H
 
 #include "runtime/platform.h"
-#include "gfx_interface.h"
+#include "gfx_context.h"
 
 namespace edge {
 	struct Logger;
@@ -34,7 +34,7 @@ namespace edge {
 		gfx::Queue copy_queue;
 
 		gfx::Renderer* renderer;
-		gfx::Uploader* uploader;
+		//gfx::Uploader* uploader;
 
 		ImGuiLayer* imgui_layer;
 		gfx::ImGuiRenderer* imgui_renderer;

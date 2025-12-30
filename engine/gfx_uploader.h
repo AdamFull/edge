@@ -1,7 +1,7 @@
 #ifndef GFX_UPLOADER_H
 #define GFX_UPLOADER_H
 
-#include "gfx_interface.h"
+#include "gfx_context.h"
 
 #include <array.hpp>
 #include <threads.hpp>
