@@ -397,11 +397,6 @@ namespace edge::gfx {
 
 		for (auto entry : renderer->resource_handle_pool) {
 			Resource* resource = entry.element;
-			if (resource->type == ResourceType::Unknown) {
-				continue;
-			}
-
-			// TODO: Ignore backbuffer
 			if (resource->type == ResourceType::Image) {
 				resource->srv.destroy();
 				renderer->srv_indices_list.free(resource->srv_index);
