@@ -76,10 +76,6 @@ namespace edge::gfx {
 
 	void RendererFrame::release_resources(NotNull<Renderer*> renderer) noexcept {
 		for (auto& resource : free_resources) {
-			if (resource.type != ResourceType::Unknown) {
-				continue;
-			}
-
 			if (resource.type == ResourceType::Image) {
 				resource.srv.destroy();
 				renderer->srv_indices_list.free(resource.srv_index);
