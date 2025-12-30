@@ -19,6 +19,10 @@
 #define WIN32_LEAN_AND_MEAN
 #endif
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
 #include <Windows.h>
 
 extern i32 edge_main(edge::PlatformLayout* platform_layout);
@@ -584,11 +588,42 @@ namespace edge {
 			return 1.0f;
 		}
 
-		GLFWmonitor* primary_monitor = glfwGetPrimaryMonitor();
-		const GLFWvidmode* vidmode = glfwGetVideoMode(primary_monitor);
+#if 0
+		GLFWmonitor* monitor = glfwGetWindowMonitor(ctx->wnd->handle);
+		if (!monitor) {
+			i32 window_x, window_y, window_width, window_height;
+			glfwGetWindowPos(ctx->wnd->handle, &window_x, &window_y);
+			glfwGetWindowSize(ctx->wnd->handle, &window_width, &window_height);
+
+			int monitor_count;
+			GLFWmonitor** monitors = glfwGetMonitors(&monitor_count);
+
+			int max_overlap_area = 0;
+			for (int i = 0; i < monitor_count; i++) {
+				int monitor_x, monitor_y;
+				glfwGetMonitorPos(monitors[i], &monitor_x, &monitor_y);
+
+				const GLFWvidmode* mode = glfwGetVideoMode(monitors[i]);
+
+				int overlap_x = max(0, min(window_x + window_width, monitor_x + mode->width) - max(window_x, monitor_x));
+				int overlap_y = max(0, min(window_y + window_height, monitor_y + mode->height) - max(window_y, monitor_y));
+				int overlap_area = overlap_x * overlap_y;
+
+				if (overlap_area > max_overlap_area) {
+					max_overlap_area = overlap_area;
+					monitor = monitors[i];
+				}
+			}
+
+			if (!monitor) {
+				monitor = glfwGetPrimaryMonitor();
+			}
+		}
+
+		const GLFWvidmode* vidmode = glfwGetVideoMode(monitor);
 
 		i32 width_mm, height_mm;
-		glfwGetMonitorPhysicalSize(primary_monitor, &width_mm, &height_mm);
+		glfwGetMonitorPhysicalSize(monitor, &width_mm, &height_mm);
 
 		// As suggested by the GLFW monitor guide
 		const f32 inch_to_mm = 25.0f;
@@ -596,6 +631,11 @@ namespace edge {
 
 		f32 dpi = (f32)(vidmode->width / (width_mm / inch_to_mm));
 		return dpi / win_base_density;
+#else
+		f32 xscale, yscale;
+		glfwGetWindowContentScale(ctx->wnd->handle, &xscale, &yscale);
+		return xscale;
+#endif
 	}
 
 	f32 platform_context_window_content_scale_factor(NotNull<PlatformContext*> ctx) {
