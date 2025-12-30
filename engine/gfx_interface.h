@@ -135,139 +135,114 @@ namespace edge::gfx {
 	struct CmdBuf;
 
 	template<typename T>
-	struct HandleTraits;
+	struct VkObjectTraits;
 
 	template<>
-	struct HandleTraits<CmdPool> {
-		using VulkanType = VkCommandPool;
+	struct VkObjectTraits<VkCommandPool> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_COMMAND_POOL;
-		static constexpr const char* name = "CmdPool";
+		static constexpr const char* name = "VkCommandPool";
 	};
 
 	template<>
-	struct HandleTraits<CmdBuf> {
-		using VulkanType = VkCommandBuffer;
+	struct VkObjectTraits<VkCommandBuffer> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_COMMAND_BUFFER;
-		static constexpr const char* name = "CmdBuf";
+		static constexpr const char* name = "VkCommandBuffer";
 	};
 
 	template<>
-	struct HandleTraits<QueryPool> {
-		using VulkanType = VkQueryPool;
+	struct VkObjectTraits<VkQueryPool> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_QUERY_POOL;
-		static constexpr const char* name = "QueryPool";
+		static constexpr const char* name = "VkQueryPool";
 	};
 
 	template<>
-	struct HandleTraits<DescriptorSetLayout> {
-		using VulkanType = VkDescriptorSetLayout;
+	struct VkObjectTraits<VkDescriptorSetLayout> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
-		static constexpr const char* name = "DescriptorSetLayout";
+		static constexpr const char* name = "VkDescriptorSetLayout";
 	};
 
 	template<>
-	struct HandleTraits<DescriptorPool> {
-		using VulkanType = VkDescriptorPool;
+	struct VkObjectTraits<VkDescriptorPool> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_DESCRIPTOR_POOL;
-		static constexpr const char* name = "DescriptorPool";
+		static constexpr const char* name = "VkDescriptorPool";
 	};
 
 	template<>
-	struct HandleTraits<DescriptorSet> {
-		using VulkanType = VkDescriptorSet;
+	struct VkObjectTraits<VkDescriptorSet> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_DESCRIPTOR_SET;
-		static constexpr const char* name = "DescriptorSet";
+		static constexpr const char* name = "VkDescriptorSet";
 	};
 
 	template<>
-	struct HandleTraits<PipelineLayout> {
-		using VulkanType = VkPipelineLayout;
+	struct VkObjectTraits<VkPipelineLayout> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_PIPELINE_LAYOUT;
-		static constexpr const char* name = "PipelineLayout";
+		static constexpr const char* name = "VkPipelineLayout";
 	};
 
 	template<>
-	struct HandleTraits<Swapchain> {
-		using VulkanType = VkSwapchainKHR;
+	struct VkObjectTraits<VkSwapchainKHR> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_SWAPCHAIN_KHR;
-		static constexpr const char* name = "Swapchain";
+		static constexpr const char* name = "VkSwapchainKHR";
 	};
 
 	template<>
-	struct HandleTraits<DeviceMemory> {
-		using VulkanType = VmaAllocation;
+	struct VkObjectTraits<VmaAllocation> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_DEVICE_MEMORY;
-		static constexpr const char* name = "DeviceMemory";
+		static constexpr const char* name = "VmaAllocation";
 	};
 
 	template<>
-	struct HandleTraits<Image> {
-		using VulkanType = VkImage;
+	struct VkObjectTraits<VkImage> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_IMAGE;
-		static constexpr const char* name = "Image";
+		static constexpr const char* name = "VkImage";
 	};
 
 	template<>
-	struct HandleTraits<ImageView> {
-		using VulkanType = VkImageView;
+	struct VkObjectTraits<VkImageView> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_IMAGE_VIEW;
-		static constexpr const char* name = "ImageView";
+		static constexpr const char* name = "VkImageView";
 	};
 
 	template<>
-	struct HandleTraits<Buffer> {
-		using VulkanType = VkBuffer;
+	struct VkObjectTraits<VkBuffer> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_BUFFER;
-		static constexpr const char* name = "Buffer";
+		static constexpr const char* name = "VkBuffer";
 	};
 
 	template<>
-	struct HandleTraits<PipelineCache> {
-		using VulkanType = VkPipelineCache;
+	struct VkObjectTraits<VkPipelineCache> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_PIPELINE_CACHE;
-		static constexpr const char* name = "PipelineCache";
+		static constexpr const char* name = "VkPipelineCache";
 	};
 
 	template<>
-	struct HandleTraits<ShaderModule> {
-		using VulkanType = VkShaderModule;
+	struct VkObjectTraits<VkShaderModule> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_SHADER_MODULE;
-		static constexpr const char* name = "ShaderModule";
+		static constexpr const char* name = "VkShaderModule";
 	};
 
 	template<>
-	struct HandleTraits<Pipeline> {
-		using VulkanType = VkPipeline;
+	struct VkObjectTraits<VkPipeline> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_PIPELINE;
-		static constexpr const char* name = "Pipeline";
+		static constexpr const char* name = "VkPipeline";
 	};
 
 	template<>
-	struct HandleTraits<Sampler> {
-		using VulkanType = VkSampler;
+	struct VkObjectTraits<VkSampler> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_SAMPLER;
-		static constexpr const char* name = "Sampler";
+		static constexpr const char* name = "VkSampler";
 	};
 
 	template<>
-	struct HandleTraits<Fence> {
-		using VulkanType = VkFence;
-		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_FENCE;
-		static constexpr const char* name = "Fence";
-	};
-
-	template<>
-	struct HandleTraits<Semaphore> {
-		using VulkanType = VkSemaphore;
+	struct VkObjectTraits<VkSemaphore> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_SEMAPHORE;
-		static constexpr const char* name = "Semaphore";
+		static constexpr const char* name = "VkSemaphore";
 	};
 
 	template<>
-	struct HandleTraits<Queue> {
-		using VulkanType = VkQueue;
+	struct VkObjectTraits<VkQueue> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_QUEUE;
-		static constexpr const char* name = "Queue";
+		static constexpr const char* name = "VkQueue";
 	};
 }
 
