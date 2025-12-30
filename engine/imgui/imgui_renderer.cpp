@@ -213,7 +213,7 @@ namespace edge::gfx {
 		}
 
 		if (tex->Status == ImTextureStatus_WantCreate) {
-			font_image = renderer->add_resource();
+			Handle image_handle = renderer->add_resource();
 
 			ImageCreateInfo create_info = {
 				.extent = {
@@ -260,9 +260,9 @@ namespace edge::gfx {
 					}
 				});
 			renderer->image_update_end(update_info);
-			renderer->setup_resource(font_image, image);
+			renderer->setup_resource(image_handle, image);
 
-			tex->SetTexID(font_image);
+			tex->SetTexID(image_handle);
 			tex->SetStatus(ImTextureStatus_OK);
 		}
 		else if (tex->Status == ImTextureStatus_WantUpdates) {
@@ -337,7 +337,8 @@ namespace edge::gfx {
 			tex->SetStatus(ImTextureStatus_OK);
 		}
 		else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
-			renderer->free_resource(font_image);
+			Handle image_handle = (Handle)tex->GetTexID();
+			renderer->free_resource(image_handle);
 
 			tex->SetTexID(ImTextureID_Invalid);
 			tex->SetStatus(ImTextureStatus_Destroyed);

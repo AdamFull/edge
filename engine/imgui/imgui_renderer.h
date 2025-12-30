@@ -27,8 +27,6 @@ namespace edge::gfx {
 		Handle index_buffer = HANDLE_INVALID;
 		u64 index_buffer_capacity = 0;
 
-		Handle font_image = HANDLE_INVALID;
-
 		void update_texture(NotNull<ImTextureData*> tex) noexcept;
 		void update_geometry(NotNull<ImDrawData*> draw_data) noexcept;
 
