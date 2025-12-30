@@ -37,7 +37,7 @@ static void edge_cleanup_engine(void) {
 		gfx::renderer_destroy(engine_context.renderer);
 	}
 
-	gfx::release_queue(engine_context.main_queue);
+	engine_context.main_queue.release();
 	
 	gfx::context_shutdown();
 
@@ -143,7 +143,7 @@ int edge_main(PlatformLayout* platform_layout) {
 		.prefer_separate_family = false
 	};
 
-	if (!gfx::get_queue(direct_queue_request, engine_context.main_queue)) {
+	if (!engine_context.main_queue.request(direct_queue_request)) {
 		edge_cleanup_engine();
 		return -1;
 	}
@@ -154,7 +154,7 @@ int edge_main(PlatformLayout* platform_layout) {
 		.strategy = gfx::QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED,
 		.prefer_separate_family = false
 	};
-	gfx::get_queue(copy_queue_request, engine_context.copy_queue);
+	engine_context.copy_queue.request(copy_queue_request);
 
 	const gfx::RendererCreateInfo renderer_create_info = {
 		.alloc = &allocator,

@@ -156,7 +156,7 @@ namespace edge::gfx {
 
 		template<typename T>
 		void push_constants(VkShaderStageFlags, T data) {
-			cmd_push_constants(active_frame->cmd, pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(T), &data);
+			active_frame->cmd.push_constants(pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(T), &data);
 		}
 	};
 

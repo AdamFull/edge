@@ -1071,16 +1071,16 @@ namespace edge::gfx {
 		return score;
 	}
 
-	bool get_queue(QueueRequest request, Queue& queue) {
-		queue.queue_index = 0; // TODO: Select specific index
+	bool Queue::request(QueueRequest create_info) noexcept {
+		queue_index = 0; // TODO: Select specific index
 
 		i32 best_score = -1;
 
 		for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
-			i32 score = queue_calculate_family_score(request, i);
+			i32 score = queue_calculate_family_score(create_info, i);
 			if (score > best_score) {
 				best_score = score;
-				queue.family_index = i;
+				family_index = i;
 			}
 		}
 
@@ -1091,31 +1091,27 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void release_queue(Queue queue) {
-		if (!queue) {
-			return;
-		}
-
+	void Queue::release() noexcept {
 		// TODO: release indices
 	}
 
-	VkQueue queue_handle(Queue queue) {
-		if (!queue) {
+	VkQueue Queue::get_handle() noexcept {
+		if (family_index == -1) {
 			return VK_NULL_HANDLE;
 		}
 
 		VkQueue handle;
-		vkGetDeviceQueue(g_ctx.dev, queue.family_index, queue.queue_index, &handle);
+		vkGetDeviceQueue(g_ctx.dev, family_index, queue_index, &handle);
 
 		return handle;
 	}
 
-	bool queue_submit(Queue queue, Fence fence, const VkSubmitInfo2KHR* submit_info) {
-		if (!queue || !submit_info) {
+	bool Queue::submit(Fence fence, const VkSubmitInfo2KHR* submit_info) noexcept {
+		if (!submit_info) {
 			return false;
 		}
 
-		VkQueue queue_ = queue_handle(queue);
+		VkQueue queue_ = get_handle();
 		if (queue_ == VK_NULL_HANDLE) {
 			return false;
 		}
@@ -1123,12 +1119,12 @@ namespace edge::gfx {
 		return vkQueueSubmit2KHR(queue_, 1, submit_info, fence ? fence.handle : VK_NULL_HANDLE) == VK_SUCCESS;
 	}
 
-	bool queue_present(Queue queue, const VkPresentInfoKHR* present_info) {
-		if (!queue || !present_info) {
+	bool Queue::present(const VkPresentInfoKHR* present_info) noexcept {
+		if (!present_info) {
 			return false;
 		}
 
-		VkQueue queue_ = queue_handle(queue);
+		VkQueue queue_ = get_handle();
 		if (queue_ == VK_NULL_HANDLE) {
 			return false;
 		}
@@ -1136,12 +1132,12 @@ namespace edge::gfx {
 		return vkQueuePresentKHR(queue_, present_info) == VK_SUCCESS;
 	}
 
-	void queue_wait_idle(Queue queue) {
-		if (!queue) {
+	void Queue::wait_idle() noexcept {
+		if (family_index == -1) {
 			return;
 		}
 
-		VkQueue queue_ = queue_handle(queue);
+		VkQueue queue_ = get_handle();
 		if (queue_ == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1172,11 +1168,11 @@ namespace edge::gfx {
 		if (handle != VK_NULL_HANDLE) {
 			return;
 		}
-
 		vkDestroyCommandPool(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool cmd_buf_create(CmdPool cmd_pool, CmdBuf& cmd) {
+	bool CmdBuf::create(CmdPool cmd_pool) noexcept {
 		if (!cmd_pool) {
 			return false;
 		}
@@ -1188,35 +1184,36 @@ namespace edge::gfx {
 			.commandBufferCount = 1
 		};
 
-		VkResult result = vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &cmd.handle);
+		VkResult result = vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		cmd.pool = cmd_pool;
-
+		pool = cmd_pool;
 		return true;
 	}
 
-	bool cmd_begin(CmdBuf cmd) {
-		if (!cmd) {
-			return false;
+	void CmdBuf::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
+			return;
 		}
+		vkFreeCommandBuffers(g_ctx.dev, pool.handle, 1, &handle);
+		handle = VK_NULL_HANDLE;
+	}
 
+	bool CmdBuf::begin() noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		const VkCommandBufferBeginInfo begin_info = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
 			.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
 		};
 
-		return vkBeginCommandBuffer(cmd.handle, &begin_info) == VK_SUCCESS;
+		return vkBeginCommandBuffer(handle, &begin_info) == VK_SUCCESS;
 	}
 
-	bool cmd_end(CmdBuf cmd) {
-		if (!cmd) {
-			return false;
-		}
-
-		return vkEndCommandBuffer(cmd.handle) == VK_SUCCESS;
+	bool CmdBuf::end() noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		return vkEndCommandBuffer(handle) == VK_SUCCESS;
 	}
 
 	static void make_color(uint32_t color, f32(&out_color)[4]) {
@@ -1226,10 +1223,8 @@ namespace edge::gfx {
 		out_color[3] = (color & 0xFF) / 255.0f;
 	}
 
-	void cmd_begin_marker(CmdBuf cmd, const char* name, u32 color) {
-		if (!cmd) {
-			return;
-		}
+	void CmdBuf::begin_marker(const char* name, u32 color) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
 		VkDebugMarkerMarkerInfoEXT marker_info = {
 			.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT,
@@ -1237,45 +1232,38 @@ namespace edge::gfx {
 		};
 		make_color(color, marker_info.color);
 
-		vkCmdDebugMarkerBeginEXT(cmd.handle, &marker_info);
+		vkCmdDebugMarkerBeginEXT(handle, &marker_info);
 	}
 
-	void cmd_end_marker(CmdBuf cmd) {
-		if (!cmd) {
-			return;
-		}
-
-		vkCmdDebugMarkerEndEXT(cmd.handle);
+	void CmdBuf::end_marker() noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		vkCmdDebugMarkerEndEXT(handle);
 	}
 
-	bool cmd_reset(CmdBuf cmd) {
-		if (!cmd) {
-			return false;
-		}
-
-		return vkResetCommandBuffer(cmd.handle, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) == VK_SUCCESS;
+	bool CmdBuf::reset() noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		return vkResetCommandBuffer(handle, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) == VK_SUCCESS;
 	}
 
-	void cmd_write_timestamp(CmdBuf cmd, QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index) {
-		if (!cmd || !query) {
-			return;
-		}
+	void CmdBuf::reset_query(QueryPool query, u32 first_query, u32 query_count) noexcept {
 
-		vkCmdWriteTimestamp2KHR(cmd.handle, stage, query.handle, query_index);
 	}
 
-	void cmd_bind_descriptor(CmdBuf cmd, PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point) {
-		if (!cmd || !layout || !descriptor) {
-			return;
-		}
-
-		vkCmdBindDescriptorSets(cmd.handle, bind_point, layout.handle, 0u, 1u, &descriptor.handle, 0u, NULL);
+	void CmdBuf::write_timestamp(QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		assert(query && "QueryPool handle is null");
+		vkCmdWriteTimestamp2KHR(handle, stage, query.handle, query_index);
 	}
 
-	void cmd_pipeline_barrier(CmdBuf cmd, const PipelineBarrierBuilder& builder) {
-		if (!cmd) {
-			return;
-		}
+	void CmdBuf::bind_descriptor(PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		assert(layout && "PipelineLayout handle is null");
+		assert(descriptor && "DescriptorSet handle is null");
+		vkCmdBindDescriptorSets(handle, bind_point, layout.handle, 0u, 1u, &descriptor.handle, 0u, NULL);
+	}
+
+	void CmdBuf::pipeline_barrier(const PipelineBarrierBuilder& builder) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
 		const VkDependencyInfoKHR dependency_info = {
 			.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO_KHR,
@@ -1287,50 +1275,38 @@ namespace edge::gfx {
 			.pImageMemoryBarriers = builder.image_barriers
 		};
 
-		vkCmdPipelineBarrier2KHR(cmd.handle, &dependency_info);
+		vkCmdPipelineBarrier2KHR(handle, &dependency_info);
 	}
 
-	void cmd_begin_rendering(CmdBuf cmd, const VkRenderingInfoKHR& rendering_info) {
-		if (!cmd) {
-			return;
-		}
-
-		vkCmdBeginRenderingKHR(cmd.handle, &rendering_info);
+	void CmdBuf::begin_rendering(const VkRenderingInfoKHR& rendering_info) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		vkCmdBeginRenderingKHR(handle, &rendering_info);
 	}
 
-	void cmd_end_rendering(CmdBuf cmd) {
-		if (!cmd) {
-			return;
-		}
-		vkCmdEndRenderingKHR(cmd.handle);
+	void CmdBuf::end_rendering() noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		vkCmdEndRenderingKHR(handle);
 	}
 
-	void cmd_bind_index_buffer(CmdBuf cmd, Buffer buffer, VkIndexType type) {
-		if (!cmd || !buffer) {
-			return;
-		}
-		vkCmdBindIndexBuffer(cmd.handle, buffer.handle, 0, type);
+	void CmdBuf::bind_index_buffer(Buffer buffer, VkIndexType type) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		assert(buffer && "Buffer handle is null");
+		vkCmdBindIndexBuffer(handle, buffer.handle, 0, type);
 	}
 
-	void cmd_bind_pipeline(CmdBuf cmd, Pipeline pipeline) {
-		if (!cmd || !pipeline) {
-			return;
-		}
-
-		vkCmdBindPipeline(cmd.handle, pipeline.bind_point, pipeline.handle);
+	void CmdBuf::bind_pipeline(Pipeline pipeline) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		assert(pipeline && "Pipeline handle is null");
+		vkCmdBindPipeline(handle, pipeline.bind_point, pipeline.handle);
 	}
 
-	void cmd_set_viewport(CmdBuf cmd, VkViewport viewport) {
-		if (!cmd) {
-			return;
-		}
-		vkCmdSetViewport(cmd.handle, 0u, 1u, &viewport);
+	void CmdBuf::set_viewport(VkViewport viewport) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		vkCmdSetViewport(handle, 0u, 1u, &viewport);
 	}
 
-	void cmd_set_viewport(CmdBuf cmd, f32 x, f32 y, f32 width, f32 height, f32 depth_min, f32 depth_max) {
-		if (!cmd) {
-			return;
-		}
+	void CmdBuf::set_viewport(f32 x, f32 y, f32 width, f32 height, f32 depth_min, f32 depth_max) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
 		VkViewport viewport = {
 			.x = x,
@@ -1340,103 +1316,82 @@ namespace edge::gfx {
 			.minDepth = depth_min,
 			.maxDepth = depth_max
 		};
-		vkCmdSetViewport(cmd.handle, 0u, 1u, &viewport);
+		vkCmdSetViewport(handle, 0u, 1u, &viewport);
 	}
 
-	void cmd_set_scissor(CmdBuf cmd, VkRect2D rect) {
-		if (!cmd) {
-			return;
-		}
-		vkCmdSetScissor(cmd.handle, 0u, 1u, &rect);
+	void CmdBuf::set_scissor(VkRect2D rect) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		vkCmdSetScissor(handle, 0u, 1u, &rect);
 	}
 
-	void cmd_set_scissor(CmdBuf cmd, i32 off_x, i32 off_y, u32 width, u32 height) {
-		if (!cmd) {
-			return;
-		}
-
+	void CmdBuf::set_scissor(i32 off_x, i32 off_y, u32 width, u32 height) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		VkRect2D rect = {
-			.offset = { .x = off_x, .y = off_y },
-			.extent = { .width = width, .height = height }
+			.offset = {.x = off_x, .y = off_y },
+			.extent = {.width = width, .height = height }
 		};
-		vkCmdSetScissor(cmd.handle, 0u, 1u, &rect);
+		vkCmdSetScissor(handle, 0u, 1u, &rect);
 	}
 
-	void cmd_push_constants(CmdBuf cmd, PipelineLayout layout, VkShaderStageFlags flags, u32 offset, u32 size, const void* data) {
-		if (!cmd || !layout || !data) {
-			return;
-		}
-		vkCmdPushConstants(cmd.handle, layout.handle, flags, offset, size, data);
+	void CmdBuf::push_constants(PipelineLayout layout, VkShaderStageFlags flags, u32 offset, u32 size, const void* data) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		assert(layout && "PipelineLayout handle is null");
+		vkCmdPushConstants(handle, layout.handle, flags, offset, size, data);
 	}
 
-	void cmd_draw_indexed(CmdBuf cmd, u32 idx_cnt, u32 inst_cnt, u32 first_idx, i32 vtx_offset, u32 first_inst) {
-		if (!cmd) {
-			return;
-		}
-		vkCmdDrawIndexed(cmd.handle, idx_cnt, inst_cnt, first_idx, vtx_offset, first_inst);
-	}
-
-	void cmd_buf_destroy(CmdBuf cmd) {
-		if (!cmd) {
-			return;
-		}
-
-		vkFreeCommandBuffers(g_ctx.dev, cmd.pool.handle, 1, &cmd.handle);
+	void CmdBuf::draw_indexed(u32 idx_cnt, u32 inst_cnt, u32 first_idx, i32 vtx_offset, u32 first_inst) noexcept {
+		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
+		vkCmdDrawIndexed(handle, idx_cnt, inst_cnt, first_idx, vtx_offset, first_inst);
 	}
 
 	void updete_descriptors(const VkWriteDescriptorSet* writes, u32 count) {
 		vkUpdateDescriptorSets(g_ctx.dev, count, writes, 0u, NULL);
 	}
 
-	void cmd_reset_query(CmdBuf cmd, QueryPool query, u32 first_query, u32 query_count) {
-		if (!cmd || !query) {
-			return;
-		}
-
-		vkCmdResetQueryPool(cmd.handle, query.handle, first_query, query_count);
-	}
-
-	bool query_pool_create(VkQueryType type, u32 count, QueryPool& query_pool) {
+	bool QueryPool::create(VkQueryType type, u32 count) noexcept {
 		const VkQueryPoolCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
 			.queryType = type,
 			.queryCount = type == VK_QUERY_TYPE_TIMESTAMP ? count * 2 : count
 		};
 
-		VkResult result = vkCreateQueryPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &query_pool.handle);
+		VkResult result = vkCreateQueryPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		query_pool.type = type;
-		query_pool.max_query = create_info.queryCount;
-		query_pool.host_reset_enabled = context_is_extension_enabled(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
+		this->type = type;
+		max_query = create_info.queryCount;
+		host_reset_enabled = context_is_extension_enabled(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
 
 		return true;
 	}
 
-	void query_pool_reset(QueryPool& query_pool) {
-		if (!query_pool) {
+	void QueryPool::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkResetQueryPoolEXT(g_ctx.dev, query_pool.handle, 0, query_pool.max_query);
+		vkDestroyQueryPool(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool query_pool_get_data(QueryPool query_pool, u32 first_query, void* out_data) {
-		if (!query_pool || !out_data) {
-			return false;
-		}
+	void QueryPool::reset() noexcept {
+		assert(handle != VK_NULL_HANDLE && "QueryPool handle is null");
+		vkResetQueryPoolEXT(g_ctx.dev, handle, 0, max_query);
+	}
+
+	bool QueryPool::get_data(u32 first_query, void* out_data) noexcept {
+		assert(handle != VK_NULL_HANDLE && "QueryPool handle is null");
 
 		VkResult result = VK_SUCCESS;
-		switch (query_pool.type)
+		switch (type)
 		{
 		case VK_QUERY_TYPE_OCCLUSION: {
-			result = vkGetQueryPoolResults(g_ctx.dev, query_pool.handle, first_query, 1, sizeof(u64), out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
+			result = vkGetQueryPoolResults(g_ctx.dev, handle, first_query, 1, sizeof(u64), out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
 			break;
 		}
 		case VK_QUERY_TYPE_TIMESTAMP: {
-			result = vkGetQueryPoolResults(g_ctx.dev, query_pool.handle, first_query * 2, 2, sizeof(u64) * 2, out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
+			result = vkGetQueryPoolResults(g_ctx.dev, handle, first_query * 2, 2, sizeof(u64) * 2, out_data, sizeof(u64), VK_QUERY_RESULT_64_BIT);
 			break;
 		}
 		default:
@@ -1446,21 +1401,13 @@ namespace edge::gfx {
 		return result == VK_SUCCESS;
 	}
 
-	void query_pool_destroy(QueryPool query_pool) {
-		if (!query_pool) {
-			return;
-		}
-
-		vkDestroyQueryPool(g_ctx.dev, query_pool.handle, &g_ctx.vk_alloc);
+	void DescriptorLayoutBuilder::add_binding(VkDescriptorSetLayoutBinding binding, VkDescriptorBindingFlags flags) noexcept {
+		u32 index = binding_count++;
+		bindings[index] = binding;
+		binding_flags[index] = flags;
 	}
 
-	void descriptor_layout_builder_add_binding(DescriptorLayoutBuilder& builder, VkDescriptorSetLayoutBinding binding, VkDescriptorBindingFlags flags) {
-		u32 index = builder.binding_count++;
-		builder.bindings[index] = binding;
-		builder.binding_flags[index] = flags;
-	}
-
-	bool descriptor_set_layout_create(const DescriptorLayoutBuilder& builder, DescriptorSetLayout& descriptor_set_layout) {
+	bool DescriptorSetLayout::create(const DescriptorLayoutBuilder& builder) noexcept {
 		const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT binding_flags_create_info = {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
 			.bindingCount = builder.binding_count,
@@ -1475,28 +1422,28 @@ namespace edge::gfx {
 			.pBindings = builder.bindings,
 		};
 
-		VkResult result = vkCreateDescriptorSetLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_set_layout.handle);
+		VkResult result = vkCreateDescriptorSetLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
 		for (i32 i = 0; i < builder.binding_count; ++i) {
 			VkDescriptorSetLayoutBinding binding = builder.bindings[i];
-			descriptor_set_layout.descriptor_sizes[binding.descriptorType] += binding.descriptorCount;
+			descriptor_sizes[binding.descriptorType] += binding.descriptorCount;
 		}
 
 		return true;
 	}
 
-	void descriptor_set_layout_destroy(DescriptorSetLayout descriptor_set_layout) {
-		if (!descriptor_set_layout) {
+	void DescriptorSetLayout::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkDestroyDescriptorSetLayout(g_ctx.dev, descriptor_set_layout.handle, &g_ctx.vk_alloc);
+		vkDestroyDescriptorSetLayout(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool descriptor_pool_create(u32* descriptor_sizes, DescriptorPool& descriptor_pool) {
+	bool DescriptorPool::create(u32* descriptor_sizes) noexcept {
 		if (!descriptor_sizes) {
 			return false;
 		}
@@ -1516,25 +1463,25 @@ namespace edge::gfx {
 			.pPoolSizes = pool_sizes
 		};
 
-		VkResult result = vkCreateDescriptorPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &descriptor_pool.handle);
+		VkResult result = vkCreateDescriptorPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		memcpy(descriptor_pool.descriptor_sizes, descriptor_sizes, DESCRIPTOR_SIZES_COUNT * sizeof(u32));
+		memcpy(this->descriptor_sizes, descriptor_sizes, DESCRIPTOR_SIZES_COUNT * sizeof(u32));
 
 		return true;
 	}
 
-	void descriptor_pool_destroy(DescriptorPool descriptor_pool) {
-		if (!descriptor_pool) {
+	void DescriptorPool::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkDestroyDescriptorPool(g_ctx.dev, descriptor_pool.handle, &g_ctx.vk_alloc);
+		vkDestroyDescriptorPool(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool descriptor_set_create(DescriptorPool pool, const DescriptorSetLayout* layouts, DescriptorSet& set) {
+	bool DescriptorSet::create(DescriptorPool pool, const DescriptorSetLayout* layouts) noexcept {
 		if (!pool || !layouts) {
 			return false;
 		}
@@ -1546,43 +1493,42 @@ namespace edge::gfx {
 			.pSetLayouts = &layouts->handle
 		};
 
-		VkResult result = vkAllocateDescriptorSets(g_ctx.dev, &alloc_info, &set.handle);
+		VkResult result = vkAllocateDescriptorSets(g_ctx.dev, &alloc_info, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		set.pool = pool;
-
+		this->pool = pool;
 		return true;
 	}
 
-	void descriptor_set_destroy(DescriptorSet set) {
-		if (!set) {
+	void DescriptorSet::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkFreeDescriptorSets(g_ctx.dev, set.pool.handle, 1, &set.handle);
+		vkFreeDescriptorSets(g_ctx.dev, pool.handle, 1, &handle);
+		handle = VK_NULL_HANDLE;
 	}
 
-	void pipeline_layout_builder_add_range(PipelineLayoutBuilder& builder, VkShaderStageFlags stage_flags, u32 offset, u32 size) {
+	void PipelineLayoutBuilder::add_range(VkShaderStageFlags stage_flags, u32 offset, u32 size) noexcept {
 		VkPushConstantRange constant_range = {
 			.stageFlags = stage_flags,
 			.offset = offset,
 			.size = size
 		};
 
-		builder.constant_ranges[builder.constant_range_count++] = constant_range;
+		constant_ranges[constant_range_count++] = constant_range;
 	}
 
-	void pipeline_layout_builder_add_layout(PipelineLayoutBuilder& builder, DescriptorSetLayout layout) {
+	void PipelineLayoutBuilder::add_layout(DescriptorSetLayout layout) noexcept {
 		if (!layout) {
 			return;
 		}
 
-		builder.descriptor_layouts[builder.descriptor_layout_count++] = layout.handle;
+		descriptor_layouts[descriptor_layout_count++] = layout.handle;
 	}
 
-	bool pipeline_layout_create(const PipelineLayoutBuilder& builder, PipelineLayout& pipeline_layout) {
+	bool PipelineLayout::create(const PipelineLayoutBuilder& builder) noexcept {
 		const VkPipelineLayoutCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = builder.descriptor_layout_count,
@@ -1591,7 +1537,7 @@ namespace edge::gfx {
 			.pPushConstantRanges = builder.constant_ranges
 		};
 
-		VkResult result = vkCreatePipelineLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_layout.handle);
+		VkResult result = vkCreatePipelineLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
@@ -1599,67 +1545,65 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void pipeline_layout_destroy(PipelineLayout pipeline_layout) {
-		if (!pipeline_layout) {
+	void PipelineLayout::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkDestroyPipelineLayout(g_ctx.dev, pipeline_layout.handle, &g_ctx.vk_alloc);
+		vkDestroyPipelineLayout(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool pipeline_cache_create(const u8* data, size_t data_size, PipelineCache& pipeline_cache) {
+	bool PipelineCache::create(const u8* data, usize data_size) noexcept {
 		const VkPipelineCacheCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
 			.initialDataSize = data_size,
 			.pInitialData = data
 		};
 
-		VkResult result = vkCreatePipelineCache(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &pipeline_cache.handle);
-		return result == VK_SUCCESS;
+		return vkCreatePipelineCache(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle) == VK_SUCCESS;
 	}
 
-	void pipeline_cache_destroy(PipelineCache pipeline_cache) {
-		if (!pipeline_cache) {
+	void PipelineCache::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkDestroyPipelineCache(g_ctx.dev, pipeline_cache.handle, &g_ctx.vk_alloc);
+		vkDestroyPipelineCache(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool shader_module_create(const u32* code, size_t size, ShaderModule& shader_module) {
+	bool ShaderModule::create(const u32* code, usize size) noexcept {
 		const VkShaderModuleCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 			.codeSize = size,
 			.pCode = code
 		};
 
-		return vkCreateShaderModule(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &shader_module.handle) == VK_SUCCESS;
+		return vkCreateShaderModule(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle) == VK_SUCCESS;
 	}
 
-	void shader_module_destroy(ShaderModule shader_module) {
-		if (!shader_module) {
+	void ShaderModule::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkDestroyShaderModule(g_ctx.dev, shader_module.handle, &g_ctx.vk_alloc);
+		vkDestroyShaderModule(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool pipeline_graphics_create(const VkGraphicsPipelineCreateInfo* create_info, Pipeline& pipeline) {
+	bool Pipeline::create(const VkGraphicsPipelineCreateInfo* create_info) noexcept {
 		if (!create_info) {
 			return false;
 		}
 
-		VkResult result = vkCreateGraphicsPipelines(g_ctx.dev, VK_NULL_HANDLE, 1u, create_info, &g_ctx.vk_alloc, &pipeline.handle);
+		VkResult result = vkCreateGraphicsPipelines(g_ctx.dev, VK_NULL_HANDLE, 1u, create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		pipeline.bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS;
-
+		bind_point = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		return true;
 	}
 
-	bool pipeline_compute_create(ComputePipelineCreateInfo create_info, Pipeline& pipeline) {
+	bool Pipeline::create(ComputePipelineCreateInfo create_info) noexcept {
 		const VkComputePipelineCreateInfo pipeline_create_info = {
 			.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
 			.stage = {
@@ -1670,25 +1614,24 @@ namespace edge::gfx {
 			.layout = create_info.layout.handle
 		};
 
-		VkResult result = vkCreateComputePipelines(g_ctx.dev, create_info.cache ? create_info.cache.handle : VK_NULL_HANDLE, 1, &pipeline_create_info, &g_ctx.vk_alloc, &pipeline.handle);
+		VkResult result = vkCreateComputePipelines(g_ctx.dev, create_info.cache ? create_info.cache.handle : VK_NULL_HANDLE, 1, &pipeline_create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		pipeline.bind_point = VK_PIPELINE_BIND_POINT_COMPUTE;
-
+		bind_point = VK_PIPELINE_BIND_POINT_COMPUTE;
 		return true;
 	}
 
-	void pipeline_destroy(Pipeline pipeline) {
-		if (!pipeline) {
+	void Pipeline::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkDestroyPipeline(g_ctx.dev, pipeline.handle, &g_ctx.vk_alloc);
+		vkDestroyPipeline(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool swapchain_create(SwapchainCreateInfo create_info, Swapchain& swapchain) {
+	bool Swapchain::create(SwapchainCreateInfo create_info) noexcept {
 		VkPresentModeKHR present_mode = create_info.vsync_enable ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
 		VkPresentModeKHR present_mode_priority_list[3] = {
 	#ifdef VK_USE_PLATFORM_ANDROID_KHR
@@ -1721,7 +1664,7 @@ namespace edge::gfx {
 			.minImageCount = clamp(2u, surf_caps.minImageCount, surf_caps.maxImageCount ? surf_caps.maxImageCount : 16),
 			.imageFormat = selected_surface_format.format,
 			.imageColorSpace = selected_surface_format.colorSpace,
-			.imageExtent = choose_suitable_extent(swapchain.extent, &surf_caps),
+			.imageExtent = choose_suitable_extent(extent, &surf_caps),
 			.imageArrayLayers = 1,
 			.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 			.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
@@ -1731,28 +1674,34 @@ namespace edge::gfx {
 			.compositeAlpha = choose_suitable_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surf_caps.supportedCompositeAlpha),
 			.presentMode = choose_suitable_present_mode(present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
 			present_mode_priority_list, array_size(present_mode_priority_list)),
-			.oldSwapchain = swapchain.handle
+			.oldSwapchain = handle
 		};
 
-		result = vkCreateSwapchainKHR(g_ctx.dev, &swapchain_create_info, &g_ctx.vk_alloc, &swapchain.handle);
+		result = vkCreateSwapchainKHR(g_ctx.dev, &swapchain_create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		swapchain.format = selected_surface_format.format;
-		swapchain.color_space = selected_surface_format.colorSpace;
-		swapchain.image_count = swapchain_create_info.minImageCount;
-		swapchain.extent = swapchain_create_info.imageExtent;
-		swapchain.present_mode = swapchain_create_info.presentMode;
-		swapchain.composite_alpha = swapchain_create_info.compositeAlpha;
+		format = selected_surface_format.format;
+		color_space = selected_surface_format.colorSpace;
+		image_count = swapchain_create_info.minImageCount;
+		extent = swapchain_create_info.imageExtent;
+		this->present_mode = swapchain_create_info.presentMode;
+		composite_alpha = swapchain_create_info.compositeAlpha;
 
 		return true;
 	}
 
-	bool swapchain_update(Swapchain& swapchain) {
-		if (!swapchain) {
-			return false;
+	void Swapchain::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
+			return;
 		}
+		vkDestroySwapchainKHR(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
+	}
+
+	bool Swapchain::update() noexcept {
+		assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 
 		VkSurfaceCapabilitiesKHR surf_caps;
 		VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_ctx.adapter, g_ctx.surf, &surf_caps);
@@ -1768,35 +1717,32 @@ namespace edge::gfx {
 		const VkSwapchainCreateInfoKHR create_info = {
 			.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
 			.surface = g_ctx.surf,
-			.minImageCount = swapchain.image_count,
-			.imageFormat = swapchain.format,
-			.imageColorSpace = swapchain.color_space,
-			.imageExtent = choose_suitable_extent(swapchain.extent, &surf_caps),
+			.minImageCount = image_count,
+			.imageFormat = format,
+			.imageColorSpace = color_space,
+			.imageExtent = choose_suitable_extent(extent, &surf_caps),
 			.imageArrayLayers = 1,
 			.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 			.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
 			.queueFamilyIndexCount = g_ctx.queue_family_count,
 			.pQueueFamilyIndices = queue_family_indices,
 			.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
-			.compositeAlpha = swapchain.composite_alpha,
-			.presentMode = swapchain.present_mode,
-			.oldSwapchain = swapchain.handle
+			.compositeAlpha = composite_alpha,
+			.presentMode = present_mode,
+			.oldSwapchain = handle
 		};
 
-		result = vkCreateSwapchainKHR(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &swapchain.handle);
+		result = vkCreateSwapchainKHR(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		swapchain.extent = create_info.imageExtent;
-
+		extent = create_info.imageExtent;
 		return true;
 	}
 
-	bool swapchain_is_outdated(Swapchain swapchain) {
-		if (!swapchain) {
-			return false;
-		}
+	bool Swapchain::is_outdated() noexcept {
+		assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 
 		VkSurfaceCapabilitiesKHR surf_caps;
 		VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_ctx.adapter, g_ctx.surf, &surf_caps);
@@ -1808,130 +1754,99 @@ namespace edge::gfx {
 			return false;
 		}
 
-		return swapchain.extent.width != surf_caps.currentExtent.width || swapchain.extent.height != surf_caps.currentExtent.height;
+		return extent.width != surf_caps.currentExtent.width || extent.height != surf_caps.currentExtent.height;
 	}
 
-	bool swapchain_get_images(Swapchain swapchain, Image* image_out) {
-		if (!swapchain || !image_out) {
-			return false;
-		}
+	bool Swapchain::get_images(Image* image_out) noexcept {
+		assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 
 		VkImage images[GFX_SWAPCHAIN_IMAGES_MAX];
 
 		u32 image_count;
-		VkResult result = vkGetSwapchainImagesKHR(g_ctx.dev, swapchain.handle, &image_count, images);
-		if (result != VK_SUCCESS || image_count != swapchain.image_count) {
+		VkResult result = vkGetSwapchainImagesKHR(g_ctx.dev, handle, &image_count, images);
+		if (result != VK_SUCCESS || image_count != image_count) {
 			return false;
 		}
 
-		for (i32 i = 0; i < swapchain.image_count; ++i) {
+		for (i32 i = 0; i < image_count; ++i) {
 			Image& image = image_out[i];
 			image.handle = images[i];
-			image.extent.width = swapchain.extent.width;
-			image.extent.height = swapchain.extent.height;
+			image.extent.width = extent.width;
+			image.extent.height = extent.height;
 			image.extent.depth = 1;
 			image.level_count = 1;
 			image.layer_count = 1;
 			image.face_count = 1;
 			image.usage_flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-			image.format = swapchain.format;
+			image.format = format;
 			image.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 		}
 
 		return true;
 	}
 
-	bool swapchain_acquire_next_image(Swapchain swapchain, u64 timeout, Semaphore semaphore, u32* next_image_idx) {
-		if (!swapchain || !semaphore || !next_image_idx) {
-			return false;
-		}
-
-		return vkAcquireNextImageKHR(g_ctx.dev, swapchain.handle, timeout, semaphore.handle, VK_NULL_HANDLE, next_image_idx) == VK_SUCCESS;
+	bool Swapchain::acquire_next_image(u64 timeout, Semaphore semaphore, u32* next_image_idx) noexcept {
+		assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
+		assert(semaphore && "Semaphore handle is null");
+		assert(next_image_idx && "next_image_ids is null");
+		return vkAcquireNextImageKHR(g_ctx.dev, handle, timeout, semaphore.handle, VK_NULL_HANDLE, next_image_idx) == VK_SUCCESS;
 	}
 
-	void swapchain_destroy(Swapchain swapchain) {
-		if (!swapchain) {
-			return;
-		}
-
-		vkDestroySwapchainKHR(g_ctx.dev, swapchain.handle, &g_ctx.vk_alloc);
-	}
-
-	void device_memory_setup(DeviceMemory& mem) {
+	void DeviceMemory::setup() noexcept {
 		VkMemoryPropertyFlags memory_properties;
-		vmaGetAllocationMemoryProperties(g_ctx.vma, mem.handle, &memory_properties);
+		vmaGetAllocationMemoryProperties(g_ctx.vma, handle, &memory_properties);
 
-		mem.coherent = memory_properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
-		mem.persistent = mem.mapped != nullptr;
+		coherent = memory_properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+		persistent = mapped != nullptr;
 	}
 
-	bool device_memory_is_mapped(DeviceMemory mem) {
-		if (!mem) {
-			return false;
-		}
-
-		return mem.mapped != nullptr;
+	bool DeviceMemory::is_mapped() noexcept {
+		return mapped != nullptr;
 	}
 
-	void* device_memory_map(DeviceMemory& mem) {
-		if (!mem) {
-			return nullptr;
-		}
-
-		if (!mem.persistent && !mem.mapped) {
+	void* DeviceMemory::map() noexcept {
+		if (!persistent && !mapped) {
 			void* mappedMemory;
-			VkResult result = vmaMapMemory(g_ctx.vma, mem.handle, &mappedMemory);
+			VkResult result = vmaMapMemory(g_ctx.vma, handle, &mappedMemory);
 			if (result != VK_SUCCESS) {
 				return nullptr;
 			}
-			mem.mapped = mappedMemory;
+			mapped = mappedMemory;
 		}
 
-		return mem.mapped;
+		return mapped;
 	}
 
-	void device_memory_unmap(DeviceMemory& mem) {
-		if (!mem) {
-			return;
-		}
-
-		if (!mem.persistent && mem.mapped != nullptr) {
-			vmaUnmapMemory(g_ctx.vma, mem.handle);
-			mem.mapped = nullptr;
+	void DeviceMemory::unmap() noexcept {
+		if (!persistent && mapped != nullptr) {
+			vmaUnmapMemory(g_ctx.vma, handle);
+			mapped = nullptr;
 		}
 	}
 
-	void device_memory_flush(DeviceMemory& mem, VkDeviceSize offset, VkDeviceSize size) {
-		if (!mem) {
-			return;
-		}
-
-		if (!mem.coherent) {
-			VkResult result = vmaFlushAllocation(g_ctx.vma, mem.handle, offset, size);
+	void DeviceMemory::flush(VkDeviceSize offset, VkDeviceSize size) noexcept {
+		if (!coherent) {
+			VkResult result = vmaFlushAllocation(g_ctx.vma, handle, offset, size);
 			// TODO: fatal error
 		}
 	}
 
-	void device_memory_update(DeviceMemory& mem, const void* data, VkDeviceSize size, VkDeviceSize offset) {
-		if (!mem) {
-			return;
-		}
-
-		if (mem.persistent) {
-			memcpy((i8*)mem.mapped + offset, data, size);
-			device_memory_flush(mem, offset, size);
+	void DeviceMemory::update(const void* data, VkDeviceSize size, VkDeviceSize offset) noexcept {
+		if (persistent) {
+			memcpy((i8*)mapped + offset, data, size);
+			flush(offset, size);
 		}
 		else {
-			device_memory_map(mem);
+			map();
 
-			memcpy((i8*)mem.mapped + offset, data, size);
-			device_memory_unmap(mem);
+			memcpy((i8*)mapped + offset, data, size);
+			unmap();
 
-			device_memory_flush(mem, offset, size);
+			flush(offset, size);
 		}
 	}
 
-	bool image_create(ImageCreateInfo create_info, Image& image) {
+	bool Image::create(ImageCreateInfo create_info) noexcept {
 		u32 max_dimension = (create_info.extent.width > create_info.extent.height) ? create_info.extent.width : create_info.extent.height;
 		u32 max_mip_levels = compute_max_mip_level(max_dimension);
 
@@ -1968,39 +1883,36 @@ namespace edge::gfx {
 			allocation_create_info.priority = 1.0f;
 		}
 		VmaAllocationInfo alloc_info;
-		VkResult result = vmaCreateImage(g_ctx.vma, &image_create_info, &allocation_create_info, &image.handle, &image.memory.handle, &alloc_info);
+		VkResult result = vmaCreateImage(g_ctx.vma, &image_create_info, &allocation_create_info, &handle, &memory.handle, &alloc_info);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		image.memory.size = alloc_info.size;
-		image.memory.mapped = alloc_info.pMappedData;
+		memory.size = alloc_info.size;
+		memory.mapped = alloc_info.pMappedData;
+		memory.setup();
 
-		device_memory_setup(image.memory);
-
-		image.extent = create_info.extent;
-		image.level_count = create_info.level_count;
-		image.layer_count = create_info.layer_count;
-		image.face_count = create_info.face_count;
-		image.usage_flags = create_info.usage_flags;
-		image.format = create_info.format;
-		image.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		extent = create_info.extent;
+		level_count = create_info.level_count;
+		layer_count = create_info.layer_count;
+		face_count = create_info.face_count;
+		usage_flags = create_info.usage_flags;
+		format = create_info.format;
+		layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 		return true;
 	}
 
-	void image_destroy(Image image) {
-		if (!image) {
+	void Image::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE && memory) {
 			return;
 		}
-
-		vmaDestroyImage(g_ctx.vma, image.handle, image.memory.handle);
+		vmaDestroyImage(g_ctx.vma, handle, memory.handle);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool image_view_create(Image image, VkImageViewType type, VkImageSubresourceRange subresource_range, ImageView& view) {
-		if (!image) {
-			return false;
-		}
+	bool ImageView::create(Image image, VkImageViewType type, VkImageSubresourceRange subresource_range) noexcept {
+		assert(image && "Image handle is null");
 
 		const VkImageViewCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -2016,26 +1928,25 @@ namespace edge::gfx {
 			.subresourceRange = subresource_range
 		};
 
-		VkResult result = vkCreateImageView(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &view.handle);
+		VkResult result = vkCreateImageView(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		view.type = type;
-		view.range = subresource_range;
-
+		this->type = type;
+		range = subresource_range;
 		return true;
 	}
 
-	void image_view_destroy(ImageView view) {
-		if (!view) {
+	void ImageView::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkDestroyImageView(g_ctx.dev, view.handle, &g_ctx.vk_alloc);
+		vkDestroyImageView(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool buffer_create(BufferCreateInfo create_info, Buffer& buffer) {
+	bool Buffer::create(BufferCreateInfo create_info) noexcept {
 		u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
 		for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
 			queue_family_indices[i] = i;
@@ -2104,50 +2015,45 @@ namespace edge::gfx {
 		buffer_create_info.size = align_up((u32)create_info.size, minimal_alignment);
 
 		VmaAllocationInfo alloc_info;
-		VkResult result = vmaCreateBuffer(g_ctx.vma, &buffer_create_info, &allocation_create_info, &buffer.handle, &buffer.memory.handle, &alloc_info);
+		VkResult result = vmaCreateBuffer(g_ctx.vma, &buffer_create_info, &allocation_create_info, &handle, &memory.handle, &alloc_info);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		buffer.memory.size = alloc_info.size;
-		buffer.memory.mapped = alloc_info.pMappedData;
+		memory.size = alloc_info.size;
+		memory.mapped = alloc_info.pMappedData;
 
-		device_memory_setup(buffer.memory);
+		memory.setup();
 
 		if (create_info.flags & BUFFER_FLAG_DEVICE_ADDRESS) {
 			const VkBufferDeviceAddressInfo device_address_info = {
 				.sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
-				.buffer = buffer.handle
+				.buffer = handle
 			};
-			buffer.address = vkGetBufferDeviceAddressKHR(g_ctx.dev, &device_address_info);
+			address = vkGetBufferDeviceAddressKHR(g_ctx.dev, &device_address_info);
 		}
 
-		buffer.flags = create_info.flags;
-
+		flags = create_info.flags;
 		return true;
 	}
 
-	void buffer_destroy(Buffer buffer) {
-		if (!buffer) {
+	void Buffer::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vmaDestroyBuffer(g_ctx.vma, buffer.handle, buffer.memory.handle);
+		vmaDestroyBuffer(g_ctx.vma, handle, memory.handle);
+		handle = VK_NULL_HANDLE;
 	}
 
-	void buffer_view_write(BufferView& buffer_view, Span<const u8> data, VkDeviceSize offset) {
-		if (!buffer_view) {
+	void BufferView::write(Span<const u8> data, VkDeviceSize offset) noexcept {
+		if (offset + data.size() > size) {
 			return;
 		}
 
-		if (offset + data.size() > buffer_view.size) {
-			return;
-		}
-
-		memcpy((u8*)device_memory_map(buffer_view.buffer.memory) + buffer_view.offset + offset, data.data(), data.size());
+		memcpy((u8*)buffer.memory.map() + local_offset + offset, data.data(), data.size());
 	}
 
-	bool semaphore_create(VkSemaphoreType type, u64 value, Semaphore& semaphore) {
+	bool Semaphore::create(VkSemaphoreType type, u64 value) noexcept {
 		const VkSemaphoreTypeCreateInfo type_create_info = {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
 			.semaphoreType = type,
@@ -2159,32 +2065,32 @@ namespace edge::gfx {
 			.pNext = &type_create_info
 		};
 
-		VkResult result = vkCreateSemaphore(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &semaphore.handle);
+		VkResult result = vkCreateSemaphore(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
 
-		semaphore.type = type;
-		semaphore.value = value;
+		this->type = type;
+		this->value = value;
 
 		return true;
 	}
 
-	void semaphore_destroy(Semaphore semaphore) {
-		if (!semaphore) {
+	void Semaphore::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-
-		vkDestroySemaphore(g_ctx.dev, semaphore.handle, &g_ctx.vk_alloc);
+		vkDestroySemaphore(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 
-	bool fence_create(VkFenceCreateFlags flags, Fence& fence) {
+	bool Fence::create(VkFenceCreateFlags flags) noexcept {
 		const VkFenceCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 			.flags = flags
 		};
 
-		VkResult result = vkCreateFence(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &fence.handle);
+		VkResult result = vkCreateFence(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
@@ -2192,12 +2098,18 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool fence_wait(Fence fence, u64 timeout) {
-		if (!fence) {
-			return false;
+	void Fence::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
+			return;
 		}
+		vkDestroyFence(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
+	}
 
-		VkResult result = vkWaitForFences(g_ctx.dev, 1, &fence.handle, VK_TRUE, timeout);
+	bool Fence::wait(u64 timeout) noexcept {
+		assert(handle != VK_NULL_HANDLE && "Fence handle is null");
+
+		VkResult result = vkWaitForFences(g_ctx.dev, 1, &handle, VK_TRUE, timeout);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
@@ -2205,20 +2117,9 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void fence_reset(Fence fence) {
-		if (!fence) {
-			return;
-		}
-
-		vkResetFences(g_ctx.dev, 1, &fence.handle);
-	}
-
-	void fence_destroy(Fence fence) {
-		if (!fence) {
-			return;
-		}
-
-		vkDestroyFence(g_ctx.dev, fence.handle, &g_ctx.vk_alloc);
+	void Fence::reset() noexcept {
+		assert(handle != VK_NULL_HANDLE && "Fence handle is null");
+		vkResetFences(g_ctx.dev, 1, &handle);
 	}
 
 	bool PipelineBarrierBuilder::add_memory(VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
@@ -2410,13 +2311,15 @@ namespace edge::gfx {
 		dependency_flags = 0;
 	}
 
-	bool sampler_create(VkSamplerCreateInfo create_info, Sampler& sampler) noexcept {
-		return vkCreateSampler(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &sampler.handle) == VK_SUCCESS;
+	bool Sampler::create(const VkSamplerCreateInfo& create_info) noexcept {
+		return vkCreateSampler(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle) == VK_SUCCESS;
 	}
 
-	void sampler_destroy(Sampler sampler) noexcept {
-		if (sampler) {
-			vkDestroySampler(g_ctx.dev, sampler.handle, &g_ctx.vk_alloc);
+	void Sampler::destroy() noexcept {
+		if (handle == VK_NULL_HANDLE) {
+			return;
 		}
+		vkDestroySampler(g_ctx.dev, handle, &g_ctx.vk_alloc);
+		handle = VK_NULL_HANDLE;
 	}
 }

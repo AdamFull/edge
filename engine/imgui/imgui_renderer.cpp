@@ -33,7 +33,7 @@ namespace edge::gfx {
 		};
 
 		Buffer buffer;
-		if (!buffer_create(buffer_create_info, buffer)) {
+		if (!buffer.create(buffer_create_info)) {
 			return;
 		}
 		imgui_renderer->renderer->update_resource(handle, buffer);
@@ -47,12 +47,12 @@ namespace edge::gfx {
 
 		imgui_renderer->renderer = create_info.renderer;
 
-		if (!shader_module_create(imgui_vs, imgui_vs_size, imgui_renderer->vertex_shader)) {
+		if (!imgui_renderer->vertex_shader.create(imgui_vs, imgui_vs_size)) {
 			imgui_renderer_destroy(imgui_renderer);
 			return nullptr;
 		}
 
-		if (!shader_module_create(imgui_fs, imgui_fs_size, imgui_renderer->fragment_shader)) {
+		if (!imgui_renderer->fragment_shader.create(imgui_fs, imgui_fs_size)) {
 			imgui_renderer_destroy(imgui_renderer);
 			return nullptr;
 		}
@@ -174,7 +174,7 @@ namespace edge::gfx {
 			.renderPass = VK_NULL_HANDLE
 		};
 
-		if (!pipeline_graphics_create(&pipeline_create_info, imgui_renderer->pipeline)) {
+		if (!imgui_renderer->pipeline.create(&pipeline_create_info)) {
 			imgui_renderer_destroy(imgui_renderer);
 			return nullptr;
 		}
@@ -195,10 +195,10 @@ namespace edge::gfx {
 			return;
 		}
 
-		pipeline_destroy(imgui_renderer->pipeline);
+		imgui_renderer->pipeline.destroy();
 
-		shader_module_destroy(imgui_renderer->fragment_shader);
-		shader_module_destroy(imgui_renderer->vertex_shader);
+		imgui_renderer->fragment_shader.destroy();
+		imgui_renderer->vertex_shader.destroy();
 
 		imgui_renderer->renderer->free_resource(imgui_renderer->index_buffer);
 		imgui_renderer->renderer->free_resource(imgui_renderer->vertex_buffer);
@@ -211,6 +211,8 @@ namespace edge::gfx {
 		if (tex->Status == ImTextureStatus_OK) {
 			return;
 		}
+
+		CmdBuf cmd = renderer->active_frame->cmd;
 
 		if (tex->Status == ImTextureStatus_WantCreate) {
 			Handle image_handle = renderer->add_resource();
@@ -226,7 +228,7 @@ namespace edge::gfx {
 			};
 
 			Image image = {};
-			if (!image_create(create_info, image)) {
+			if (!image.create(create_info)) {
 				EDGE_LOG_ERROR("Failed to create font image.");
 				tex->SetTexID(ImTextureID_Invalid);
 				tex->SetStatus(ImTextureStatus_Destroyed);
@@ -242,7 +244,7 @@ namespace edge::gfx {
 				.baseArrayLayer = 0,
 				.layerCount = 1
 				});
-			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
+			cmd.pipeline_barrier(barrier_builder);
 			image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
 			ImageUpdateInfo update_info = {
@@ -286,7 +288,7 @@ namespace edge::gfx {
 			};
 
 			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subresource_range);
-			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
+			cmd.pipeline_barrier(barrier_builder);
 			barrier_builder.reset();
 			resource->image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
@@ -331,7 +333,7 @@ namespace edge::gfx {
 			renderer->alloc->free(compacted_data);
 
 			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, subresource_range);
-			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
+			cmd.pipeline_barrier(barrier_builder);
 			resource->image.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 			tex->SetStatus(ImTextureStatus_OK);
@@ -385,7 +387,9 @@ namespace edge::gfx {
 		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
 		index_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
 
-		cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
+		CmdBuf cmd = renderer->active_frame->cmd;
+
+		cmd.pipeline_barrier(barrier_builder);
 		barrier_builder.reset();
 
 		renderer->buffer_update_end(vb_update);
@@ -397,7 +401,7 @@ namespace edge::gfx {
 		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
 		index_buffer_resorce->buffer.layout = BufferLayout::IndexBuffer;
 
-		cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
+		cmd.pipeline_barrier(barrier_builder);
 	}
 
 	void ImGuiRenderer::execute() noexcept {
@@ -422,6 +426,8 @@ namespace edge::gfx {
 		Resource* index_buffer_resorce = renderer->get_resource(index_buffer);
 		Resource* backbuffer_resource = renderer->get_resource(renderer->backbuffer_handle);
 
+		CmdBuf cmd = renderer->active_frame->cmd;
+
 		VkAttachmentLoadOp load_op = VK_ATTACHMENT_LOAD_OP_LOAD;
 		if (backbuffer_resource->image.layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
 			PipelineBarrierBuilder barrier_builder = {};
@@ -434,7 +440,7 @@ namespace edge::gfx {
 				});
 			backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
-			cmd_pipeline_barrier(renderer->active_frame->cmd, barrier_builder);
+			cmd.pipeline_barrier(barrier_builder);
 			load_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		}
 
@@ -461,14 +467,12 @@ namespace edge::gfx {
 			.pColorAttachments = &color_attachment
 		};
 
-		CmdBuf cmd = renderer->active_frame->cmd;
+		cmd.begin_rendering(rendering_info);
 
-		cmd_begin_rendering(cmd, rendering_info);
+		cmd.bind_index_buffer(index_buffer_resorce->buffer, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+		cmd.bind_pipeline(pipeline);
 
-		cmd_bind_index_buffer(cmd, index_buffer_resorce->buffer, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
-		cmd_bind_pipeline(cmd, pipeline);
-
-		cmd_set_viewport(cmd, 0.0f, 0.0f, (f32)backbuffer_resource->image.extent.width, (f32)backbuffer_resource->image.extent.height);
+		cmd.set_viewport(0.0f, 0.0f, (f32)backbuffer_resource->image.extent.width, (f32)backbuffer_resource->image.extent.height);
 
 		ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
 		ImVec2 clip_scale = draw_data->FramebufferScale; // (1,1) unless using retina display which are often (2,2)
@@ -506,7 +510,7 @@ namespace edge::gfx {
 					continue;
 
 				// Apply scissor/clipping rectangle
-				cmd_set_scissor(cmd, clip_min.x, clip_min.y, clip_max.x - clip_min.x, clip_max.y - clip_min.y);
+				cmd.set_scissor(clip_min.x, clip_min.y, clip_max.x - clip_min.x, clip_max.y - clip_min.y);
 
 				Handle new_image_index = (Handle)pcmd->GetTexID();
 				if (new_image_index != last_image_index) {
@@ -516,13 +520,13 @@ namespace edge::gfx {
 					last_image_index = new_image_index;
 				}
 
-				cmd_draw_indexed(cmd, pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
+				cmd.draw_indexed(pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
 			}
 
 			global_idx_offset += im_cmd_list->IdxBuffer.Size;
 			global_vtx_offset += im_cmd_list->VtxBuffer.Size;
 		}
 
-		cmd_end_rendering(cmd);
+		cmd.end_rendering();
 	}
 }

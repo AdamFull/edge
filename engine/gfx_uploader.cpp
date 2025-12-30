@@ -13,17 +13,17 @@ namespace edge::gfx {
 				.flags = BUFFER_FLAG_STAGING
 		};
 
-		if (!buffer_create(buffer_create_info, staging_memory)) {
+		if (!staging_memory.create(buffer_create_info)) {
 			return false;
 		}
 
 		temp_staging_memory.reserve(alloc, 128);
 
-		if (!semaphore_create(VK_SEMAPHORE_TYPE_TIMELINE_KHR, 0ull, semaphore)) {
+		if (!semaphore.create(VK_SEMAPHORE_TYPE_TIMELINE_KHR, 0ull)) {
 			return false;
 		}
 
-		if (!cmd_buf_create(uploader->cmd_pool, cmd)) {
+		if (!cmd.create(uploader->cmd_pool)) {
 			return false;
 		}
 
@@ -31,12 +31,12 @@ namespace edge::gfx {
 	}
 
 	void ResourceSet::destroy(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) noexcept {
-		cmd_buf_destroy(cmd);
-		semaphore_destroy(semaphore);
-		buffer_destroy(staging_memory);
+		cmd.destroy();
+		semaphore.destroy();
+		staging_memory.destroy();
 
 		for (auto& buffer : temp_staging_memory) {
-			buffer_destroy(buffer);
+			buffer.destroy();
 		}
 		temp_staging_memory.destroy(alloc);
 	}
@@ -46,23 +46,23 @@ namespace edge::gfx {
 			staging_offset = 0;
 
 			for (auto& buffer : temp_staging_memory) {
-				buffer_destroy(buffer);
+				buffer.destroy();
 			}
 			temp_staging_memory.clear();
 
-			if (!cmd_begin(cmd)) {
+			if (!cmd.begin()) {
 				return false;
 			}
 
-			cmd_begin_marker(cmd, "update", 0xFFFFFFFF);
+			cmd.begin_marker("update", 0xFFFFFFFF);
 			recording = true;
 		}
 	}
 
 	bool ResourceSet::end() noexcept {
 		if (recording) {
-			cmd_end_marker(cmd);
-			cmd_end(cmd);
+			cmd.end_marker();
+			cmd.end();
 			recording = false;
 			return true;
 		}
@@ -85,16 +85,16 @@ namespace edge::gfx {
 			};
 
 			Buffer new_buffer;
-			if (!buffer_create(create_info, new_buffer) || !temp_staging_memory.push_back(alloc, new_buffer)) {
+			if (!new_buffer.create(create_info) || !temp_staging_memory.push_back(alloc, new_buffer)) {
 				return {};
 			}
 
-			return BufferView{ .buffer = new_buffer, .offset = 0, .size = aligned_requested_size };
+			return BufferView{ .buffer = new_buffer, .local_offset = 0, .size = aligned_requested_size };
 		}
 
 		return BufferView{
 			.buffer = staging_memory,
-			.offset = std::exchange(staging_offset, staging_offset + aligned_requested_size),
+			.local_offset = std::exchange(staging_offset, staging_offset + aligned_requested_size),
 			.size = aligned_requested_size
 		};
 	}
