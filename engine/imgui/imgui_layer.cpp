@@ -250,6 +250,13 @@ namespace edge {
 #endif
 		io.ConfigDpiScaleFonts = true;
 
+		f32 scale_factor = platform_context_window_dpi_scale_factor(init_info.platform_context);
+
+		io.FontGlobalScale = scale_factor;
+
+		ImGuiStyle& style = ImGui::GetStyle();
+		style.ScaleAllSizes(scale_factor);
+
 		i32 width, height;
 		platform_context_window_get_size(init_info.platform_context, &width, &height);
 
