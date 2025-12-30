@@ -108,7 +108,7 @@ namespace edge::gfx {
 		uploader->sched = create_info.sched;
 		uploader->queue = create_info.queue;
 
-		if (!cmd_pool_create(uploader->queue, uploader->cmd_pool)) {
+		if (!uploader->cmd_pool.create(uploader->queue)) {
 			uploader_destroy(create_info.alloc, uploader);
 			return nullptr;
 		}
@@ -136,7 +136,7 @@ namespace edge::gfx {
 			uploader->resource_sets[i].destroy(alloc, uploader);
 		}
 
-		cmd_pool_destroy(uploader->cmd_pool);
+		uploader->cmd_pool.destroy();
 		alloc->deallocate(uploader);
 	}
 }

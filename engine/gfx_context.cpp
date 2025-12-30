@@ -1149,7 +1149,7 @@ namespace edge::gfx {
 		vkQueueWaitIdle(queue_);
 	}
 
-	bool cmd_pool_create(Queue queue, CmdPool& cmd_pool) {
+	bool CmdPool::create(Queue queue) noexcept {
 		if (!queue) {
 			return false;
 		}
@@ -1160,7 +1160,7 @@ namespace edge::gfx {
 			.queueFamilyIndex = (u32)queue.family_index
 		};
 
-		VkResult result = vkCreateCommandPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &cmd_pool.handle);
+		VkResult result = vkCreateCommandPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
@@ -1168,12 +1168,12 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void cmd_pool_destroy(CmdPool command_pool) {
-		if (!command_pool) {
+	void CmdPool::destroy() noexcept {
+		if (handle != VK_NULL_HANDLE) {
 			return;
 		}
 
-		vkDestroyCommandPool(g_ctx.dev, command_pool.handle, &g_ctx.vk_alloc);
+		vkDestroyCommandPool(g_ctx.dev, handle, &g_ctx.vk_alloc);
 	}
 
 	bool cmd_buf_create(CmdPool cmd_pool, CmdBuf& cmd) {

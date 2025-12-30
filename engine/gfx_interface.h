@@ -15,6 +15,14 @@ namespace edge::gfx {
 	constexpr u64 MAX_BINDING_COUNT = 16;
 	constexpr u64 DESCRIPTOR_SIZES_COUNT = 11;
 
+	template<typename T>
+	struct VulkanHandle {
+		T handle = VK_NULL_HANDLE;
+
+		explicit operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
+		explicit operator T() const noexcept { return handle; }
+	};
+
 	// Primitives
 	struct Queue {
 		i32 family_index = -1;
@@ -23,17 +31,13 @@ namespace edge::gfx {
 		operator bool() const noexcept { return family_index != -1 && queue_index != -1; }
 	};
 
-	struct CmdPool {
-		VkCommandPool handle = VK_NULL_HANDLE;
-
-		operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
+	struct CmdPool : VulkanHandle<VkCommandPool> {
+		bool create(Queue queue) noexcept;
+		void destroy() noexcept;
 	};
 
-	struct CmdBuf {
-		VkCommandBuffer handle = VK_NULL_HANDLE;
+	struct CmdBuf : VulkanHandle<VkCommandBuffer> {
 		CmdPool pool = {};
-
-		operator bool() const noexcept { return handle != VK_NULL_HANDLE && pool; }
 	};
 
 	struct QueryPool {

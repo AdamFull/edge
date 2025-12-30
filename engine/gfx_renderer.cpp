@@ -205,7 +205,7 @@ namespace edge::gfx {
 		renderer->alloc = create_info.alloc;
 		renderer->direct_queue = create_info.main_queue;
 
-		if (!cmd_pool_create(renderer->direct_queue, renderer->cmd_pool)) {
+		if (!renderer->cmd_pool.create(renderer->direct_queue)) {
 			renderer_destroy(renderer);
 			return nullptr;
 		}
@@ -436,7 +436,7 @@ namespace edge::gfx {
 		descriptor_pool_destroy(renderer->descriptor_pool);
 		descriptor_set_layout_destroy(renderer->descriptor_layout);
 		query_pool_destroy(renderer->frame_timestamp);
-		cmd_pool_destroy(renderer->cmd_pool);
+		renderer->cmd_pool.destroy();
 
 		const Allocator* alloc = renderer->alloc;
 		alloc->deallocate(renderer);

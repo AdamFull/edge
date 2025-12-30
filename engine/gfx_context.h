@@ -107,9 +107,6 @@ namespace edge::gfx {
 	bool queue_present(Queue queue, const VkPresentInfoKHR* present_info);
 	void queue_wait_idle(Queue queue);
 
-	bool cmd_pool_create(Queue queue, CmdPool& cmd_pool);
-	void cmd_pool_destroy(CmdPool command_pool);
-
 	bool cmd_buf_create(CmdPool cmd_pool, CmdBuf& cmd);
 	bool cmd_begin(CmdBuf cmd);
 	bool cmd_end(CmdBuf cmd);
