@@ -8,12 +8,14 @@ namespace edge::gfx {
 	struct DescriptorLayoutBuilder;
 	struct PipelineLayoutBuilder;
 
+	void context_set_object_name(const char* name, VkObjectType type, u64 handle) noexcept;
+
 	template<typename T>
 	struct VulkanHandle {
 		T handle = VK_NULL_HANDLE;
 
 		void set_name(const char* name) const noexcept {
-			context_set_object_name(name, HandleTraits<T>::object_type, (u64)handle);
+			context_set_object_name(name, VkObjectTraits<T>::object_type, (u64)handle);
 		}
 
 		explicit operator bool() const noexcept { return handle != VK_NULL_HANDLE; }
@@ -271,7 +273,6 @@ namespace edge::gfx {
 	bool context_init(const ContextCreateInfo* cteate_info);
 	void context_shutdown();
 
-	void context_set_object_name(const char* name, VkObjectType type, u64 handle) noexcept;
 	bool context_is_extension_enabled(const char* name);
 
 	const VkPhysicalDeviceProperties* get_adapter_props();
