@@ -41,6 +41,10 @@ namespace edge {
 			return;
 		}
 
+		for (EventListener& listener : dispatcher->listeners) {
+			listener.listener_fn.destroy(dispatcher->allocator);
+		}
+
 		dispatcher->listeners.destroy(dispatcher->allocator);
 		dispatcher->allocator->deallocate(dispatcher);
 	}
@@ -72,6 +76,7 @@ namespace edge {
 			if (listener.id == listener_id) {
 				EventListener out_elem;
 				dispatcher->listeners.remove(i, &out_elem);
+				out_elem.listener_fn.destroy(dispatcher->allocator);
 				return;
 			}
 		}
