@@ -31,9 +31,9 @@ static void edge_cleanup_engine(void) {
 		gfx::imgui_renderer_destroy(engine_context.imgui_renderer);
 	}
 
-	if (engine_context.uploader) {
-		gfx::uploader_destroy(engine_context.allocator, engine_context.uploader);
-	}
+	//if (engine_context.uploader) {
+	//	gfx::uploader_destroy(engine_context.allocator, engine_context.uploader);
+	//}
 
 	if (engine_context.renderer) {
 		gfx::renderer_destroy(engine_context.renderer);
@@ -184,11 +184,11 @@ int edge_main(PlatformLayout* platform_layout) {
 		.queue = engine_context.copy_queue ? engine_context.copy_queue : engine_context.main_queue
 	};
 
-	engine_context.uploader = gfx::uploader_create(uploader_create_info);
-	if (!engine_context.uploader) {
-		edge_cleanup_engine();
-		return -1;
-	}
+	//engine_context.uploader = gfx::uploader_create(uploader_create_info);
+	//if (!engine_context.uploader) {
+	//	edge_cleanup_engine();
+	//	return -1;
+	//}
 
 	const ImGuiLayerInitInfo imgui_init_info = {
 		.alocator = engine_context.allocator,
