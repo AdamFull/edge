@@ -138,8 +138,8 @@ namespace edge::gfx {
 		Sampler default_sampler = {};
 
 		Handle add_resource() noexcept;
-		bool setup_resource(Handle handle, Image image) noexcept;
-		bool setup_resource(Handle handle, Buffer buffer) noexcept;
+		bool setup_resource(Handle handle, Image image) noexcept; // TODO: Maybe attach_resource sounds better
+		bool setup_resource(Handle handle, Buffer buffer) noexcept; // TODO: Maybe attach_resource sounds better
 		void update_resource(Handle handle, Image image) noexcept;
 		void update_resource(Handle handle, Buffer buffer) noexcept;
 		Resource* get_resource(Handle handle) noexcept;
