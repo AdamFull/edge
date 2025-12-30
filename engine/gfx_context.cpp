@@ -982,6 +982,16 @@ namespace edge::gfx {
 		volkFinalize();
 	}
 
+	void context_set_object_name(const char* name, VkObjectType type, u64 handle) noexcept {
+		VkDebugUtilsObjectNameInfoEXT name_info = { 
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
+			.objectType = type,
+			.objectHandle = handle,
+			.pObjectName = name
+		};
+		vkSetDebugUtilsObjectNameEXT(g_ctx.dev, &name_info);
+	}
+
 	bool context_is_extension_enabled(const char* name) {
 		for (i32 i = 0; i < g_ctx.enabled_extension_count; ++i) {
 			if (strcmp(g_ctx.enabled_extensions[i], name) == 0) {
@@ -1909,6 +1919,7 @@ namespace edge::gfx {
 		}
 		vmaDestroyImage(g_ctx.vma, handle, memory.handle);
 		handle = VK_NULL_HANDLE;
+		memory.handle = VK_NULL_HANDLE;
 	}
 
 	bool ImageView::create(Image image, VkImageViewType type, VkImageSubresourceRange subresource_range) noexcept {
@@ -2043,6 +2054,7 @@ namespace edge::gfx {
 		}
 		vmaDestroyBuffer(g_ctx.vma, handle, memory.handle);
 		handle = VK_NULL_HANDLE;
+		memory.handle = VK_NULL_HANDLE;
 	}
 
 	void BufferView::write(Span<const u8> data, VkDeviceSize offset) noexcept {
