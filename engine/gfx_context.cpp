@@ -1175,7 +1175,7 @@ namespace edge::gfx {
 	}
 
 	void CmdPool::destroy() noexcept {
-		if (handle != VK_NULL_HANDLE) {
+		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
 		vkDestroyCommandPool(g_ctx.dev, handle, &g_ctx.vk_alloc);
