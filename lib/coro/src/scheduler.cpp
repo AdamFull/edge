@@ -467,10 +467,7 @@ namespace edge {
 
 		mutex_destroy(&sched->stack_mutex);
 
-		if (!sched->free_stacks.empty()) {
-			sched->free_stacks.destroy(sched->allocator);
-		}
-
+		sched->free_stacks.destroy(sched->allocator);
 		sched->protected_arena.destroy();
 
 		const Allocator* alloc = sched->allocator;
