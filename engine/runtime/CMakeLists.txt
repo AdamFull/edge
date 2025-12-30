@@ -28,6 +28,7 @@ endif()
 if(WIN32)
     # Windows-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
+        "desktop_window.cpp"
         "windows_platform.cpp"
     )
 elseif(ANDROID)
@@ -44,6 +45,7 @@ elseif(ANDROID)
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
+        "desktop_window.cpp"
         #"linux_context.cpp"
         #"unix_filesystem.cpp"
     )

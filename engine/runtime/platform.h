@@ -9,6 +9,7 @@ namespace edge {
 
 	struct PlatformLayout;
 	struct PlatformContext;
+	struct Window;
 
 	struct PlatformContextCreateInfo {
 		const Allocator* alloc;
@@ -29,6 +30,9 @@ namespace edge {
 	};
 
 	struct WindowCreateInfo {
+		const Allocator* alloc;
+		EventDispatcher* event_dispatcher;
+
 		const char* title;
 		WindowMode mode;
 		bool resizable;
@@ -41,22 +45,23 @@ namespace edge {
 	PlatformContext* platform_context_create(PlatformContextCreateInfo create_info);
 	void platform_context_destroy(PlatformContext* ctx);
 
-	void platform_context_get_surface(NotNull<PlatformContext*> ctx, void* surface_info);
+	// Window interface
+	Window* window_create(WindowCreateInfo create_info);
+	void window_destroy(NotNull<const Allocator*> alloc, Window* wnd);
 
-	bool platform_context_window_init(NotNull<PlatformContext*> ctx, WindowCreateInfo create_info);
+	bool window_should_close(NotNull<Window*> wnd);
+	void window_process_events(NotNull<Window*> wnd, f32 delta_time);
 
-	bool platform_context_window_should_close(NotNull<PlatformContext*> ctx);
-	void platform_context_window_process_events(NotNull<PlatformContext*> ctx, f32 delta_time);
+	void window_show(NotNull<Window*> wnd);
+	void window_hide(NotNull<Window*> wnd);
 
-	void platform_context_window_show(NotNull<PlatformContext*> ctx);
-	void platform_context_window_hide(NotNull<PlatformContext*> ctx);
+	void window_get_surface(NotNull<Window*> wnd, void* surface_info);
 
-	void platform_context_window_set_title(NotNull<PlatformContext*> ctx, const char* title);
+	void window_set_title(NotNull<Window*> wnd, const char* title);
 
-	void platform_context_window_get_size(NotNull<PlatformContext*> ctx, i32* width, i32* height);
-
-	f32 platform_context_window_dpi_scale_factor(NotNull<PlatformContext*> ctx);
-	f32 platform_context_window_content_scale_factor(NotNull<PlatformContext*> ctx);
+	void window_get_size(NotNull<Window*> wnd, i32* width, i32* height);
+	f32 window_dpi_scale_factor(NotNull<Window*> wnd);
+	f32 window_content_scale_factor(NotNull<Window*> wnd);
 }
 
 #endif //PLATFORM_CONTEXT_H

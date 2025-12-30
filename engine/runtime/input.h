@@ -191,23 +191,24 @@ namespace edge {
 	};
 
 	EDGE_ALIGN(16) struct InputPadState {
-		BitArray<(usize)InputPadBtn::Count> btn_states;
-		f32 stick_left_x, stick_left_y;
-		f32 stick_right_x, stick_right_y;
-		f32 trigger_left, trigger_right;
-		f32 accel_x, accel_y, accel_z;
-		f32 gyro_x, gyro_y, gyro_z;
+		BitArray<(usize)InputPadBtn::Count> btn_states = {};
+		// TODO: Use union
+		f32 stick_left_x = 0.0f, stick_left_y = 0.0f;
+		f32 stick_right_x = 0.0f, stick_right_y = 0.0f;
+		f32 trigger_left = 0.0f, trigger_right = 0.0f;
+		f32 accel_x = 0.0f, accel_y = 0.0f, accel_z = 0.0f;
+		f32 gyro_x = 0.0f, gyro_y = 0.0f, gyro_z = 0.0f;
 	};
 
 	EDGE_ALIGN(16) struct InputMouseState {
-		BitArray<(usize)InputMouseBtn::Count> btn_states;
-		f32 x, y;
+		BitArray<(usize)InputMouseBtn::Count> btn_states = {};
+		f32 x = 0.0f, y = 0.0f;
 	};
 
 	EDGE_ALIGN(16) struct InputState {
-		BitArray<(usize)InputKeyboardKey::Count> btn_states;
-		InputMouseState mouse;
-		InputPadState pads[MAX_PAD_SLOTS];
+		BitArray<(usize)InputKeyboardKey::Count> btn_states = {};
+		InputMouseState mouse = {};
+		InputPadState pads[MAX_PAD_SLOTS] = {};
 	};
 }
 

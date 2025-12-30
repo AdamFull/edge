@@ -901,7 +901,7 @@ namespace edge::gfx {
 		// Surface initialize
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
 		VkWin32SurfaceCreateInfoKHR surface_create_info;
-		platform_context_get_surface(cteate_info->platform_context, &surface_create_info);
+		window_get_surface(cteate_info->window, &surface_create_info);
 
 		result = vkCreateWin32SurfaceKHR(g_ctx.inst, &surface_create_info, &g_ctx.vk_alloc, &g_ctx.surf);
 		if (result != VK_SUCCESS) {
@@ -1904,7 +1904,7 @@ namespace edge::gfx {
 	}
 
 	void Image::destroy() noexcept {
-		if (handle == VK_NULL_HANDLE && memory) {
+		if (handle == VK_NULL_HANDLE || memory.handle == VK_NULL_HANDLE) {
 			return;
 		}
 		vmaDestroyImage(g_ctx.vma, handle, memory.handle);

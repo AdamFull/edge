@@ -7,6 +7,7 @@ namespace edge {
 	struct Allocator;
 	struct EventDispatcher;
 	struct PlatformContext;
+	struct Window;
 
 	struct ImGuiLayer {
 		const Allocator* alocator;
@@ -20,6 +21,7 @@ namespace edge {
 		EventDispatcher* event_dispatcher;
 
 		PlatformContext* platform_context;
+		Window* window;
 	};
 
 	ImGuiLayer* imgui_layer_create(ImGuiLayerInitInfo init_info);

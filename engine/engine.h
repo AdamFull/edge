@@ -28,6 +28,7 @@ namespace edge {
 
 		PlatformLayout* platform_layout;
 		PlatformContext* platform_context;
+		Window* window;
 
 		gfx::Queue main_queue;
 		gfx::Queue copy_queue;

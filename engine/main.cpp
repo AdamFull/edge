@@ -21,6 +21,8 @@ using namespace edge;
 static EngineContext engine_context = {};
 
 static void edge_cleanup_engine(void) {
+	engine_context.main_queue.wait_idle();
+
 	if (engine_context.imgui_layer) {
 		imgui_layer_destroy(engine_context.imgui_layer);
 	}
@@ -43,6 +45,10 @@ static void edge_cleanup_engine(void) {
 
 	if (engine_context.event_dispatcher) {
 		event_dispatcher_destroy(engine_context.event_dispatcher);
+	}
+
+	if (engine_context.window) {
+		window_destroy(engine_context.allocator, engine_context.window);
 	}
 
 	if (engine_context.platform_context) {
@@ -113,6 +119,9 @@ int edge_main(PlatformLayout* platform_layout) {
 	logger_flush(logger_get_global());
 
 	const WindowCreateInfo window_create_info = {
+		.alloc = &allocator,
+		.event_dispatcher = engine_context.event_dispatcher,
+
 		.title = "Window",
 		.mode = WindowMode::Default,
 		.resizable = true,
@@ -121,14 +130,16 @@ int edge_main(PlatformLayout* platform_layout) {
 		.height = 720
 	};
 
-	if (!platform_context_window_init(engine_context.platform_context, window_create_info)) {
+	engine_context.window = window_create(window_create_info);
+	if (!engine_context.window) {
 		edge_cleanup_engine();
 		return -1;
 	}
 
 	const gfx::ContextCreateInfo gfx_cteate_info = {
 		.alloc = &allocator,
-		.platform_context = engine_context.platform_context
+		.platform_context = engine_context.platform_context,
+		.window = engine_context.window
 	};
 
 	if (!gfx::context_init(&gfx_cteate_info)) {
@@ -182,7 +193,8 @@ int edge_main(PlatformLayout* platform_layout) {
 	const ImGuiLayerInitInfo imgui_init_info = {
 		.alocator = engine_context.allocator,
 		.event_dispatcher = engine_context.event_dispatcher,
-		.platform_context = engine_context.platform_context
+		.platform_context = engine_context.platform_context,
+		.window = engine_context.window
 	};
 
 	engine_context.imgui_layer = imgui_layer_create(imgui_init_info);
@@ -201,8 +213,8 @@ int edge_main(PlatformLayout* platform_layout) {
 		return -1;
 	}
 
-    while (!platform_context_window_should_close(engine_context.platform_context)) {
-		platform_context_window_process_events(engine_context.platform_context, 0.1f);
+    while (!window_should_close(engine_context.window)) {
+		window_process_events(engine_context.window, 0.1f);
 
 		imgui_layer_update(engine_context.imgui_layer, 0.1f);
 

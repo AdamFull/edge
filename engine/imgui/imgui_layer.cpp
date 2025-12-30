@@ -250,7 +250,7 @@ namespace edge {
 #endif
 		io.ConfigDpiScaleFonts = true;
 
-		f32 scale_factor = platform_context_window_dpi_scale_factor(init_info.platform_context);
+		f32 scale_factor = window_dpi_scale_factor(init_info.window);
 
 		io.FontGlobalScale = scale_factor;
 
@@ -258,7 +258,7 @@ namespace edge {
 		style.ScaleAllSizes(scale_factor);
 
 		i32 width, height;
-		platform_context_window_get_size(init_info.platform_context, &width, &height);
+		window_get_size(init_info.window, &width, &height);
 
 		io.DisplaySize.x = (f32)width;
 		io.DisplaySize.y = (f32)height;
@@ -383,6 +383,10 @@ namespace edge {
 		}
 
 		ImGui::EndFrame();
+
+		ImGuiIO& io = ImGui::GetIO();
+		io.BackendRendererUserData = nullptr;
+
 		ImGui::DestroyContext();
 
 		event_dispatcher_remove_listener(layer->event_dispatcher, layer->listener_id);

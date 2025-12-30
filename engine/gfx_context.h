@@ -7,6 +7,7 @@ namespace edge::gfx {
 	struct ContextCreateInfo {
 		const Allocator* alloc = nullptr;
 		PlatformContext* platform_context = nullptr;
+		Window* window = nullptr;
 	};
 
 	bool context_init(const ContextCreateInfo* cteate_info);

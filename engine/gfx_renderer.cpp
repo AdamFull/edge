@@ -393,6 +393,12 @@ namespace edge::gfx {
 		renderer->image_descriptors.destroy(renderer->alloc);
 		renderer->buffer_descriptors.destroy(renderer->alloc);
 
+		Resource* backbuffer_resource = renderer->get_resource(renderer->backbuffer_handle);
+		if (backbuffer_resource) {
+			backbuffer_resource->image = {};
+			backbuffer_resource->srv = {};
+		}
+
 		for (auto entry : renderer->resource_handle_pool) {
 			Resource* resource = entry.element;
 			if (resource->type == ResourceType::Unknown) {
