@@ -452,7 +452,7 @@ namespace edge::gfx {
 			.imageView = backbuffer_resource->srv.handle,
 			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			.loadOp = load_op,
-			.storeOp = VK_ATTACHMENT_STORE_OP_NONE,
+			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
 			.clearValue = {}
 		};
 
