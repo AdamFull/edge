@@ -476,11 +476,23 @@ namespace edge {
         }
     }
 
+    void window_show(NotNull<Window*> wnd) {
+
+    }
+
+    void window_hide(NotNull<Window*> wnd) {
+
+    }
+
     void window_get_surface(NotNull<Window*> wnd, void* surface_info) {
         *(VkAndroidSurfaceCreateInfoKHR*)surface_info = {
                 .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
                 .window = wnd->ctx->layout->app->window
         };
+    }
+
+    void window_set_title(NotNull<Window*> wnd, const char* title) {
+
     }
 
     void window_get_size(NotNull<Window*> wnd, i32* width, i32* height) {
