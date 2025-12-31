@@ -53,12 +53,12 @@ namespace edge {
 	bool window_should_close(NotNull<Window*> wnd);
 	void window_process_events(NotNull<Window*> wnd, f32 delta_time);
 
-	inline void window_show(NotNull<Window*> wnd) {}
-	inline void window_hide(NotNull<Window*> wnd) {}
+	void window_show(NotNull<Window*> wnd);
+	void window_hide(NotNull<Window*> wnd);
 
 	void window_get_surface(NotNull<Window*> wnd, void* surface_info);
 
-	inline void window_set_title(NotNull<Window*> wnd, const char* title) {}
+	void window_set_title(NotNull<Window*> wnd, const char* title);
 
 	void window_get_size(NotNull<Window*> wnd, i32* width, i32* height);
 	f32 window_dpi_scale_factor(NotNull<Window*> wnd);
