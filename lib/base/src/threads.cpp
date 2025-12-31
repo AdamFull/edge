@@ -427,6 +427,8 @@ namespace edge {
 }
 
 #elif EDGE_PLATFORM_POSIX
+#include <linux/futex.h>
+#include <sys/syscall.h>
 #include <pthread.h>
 #include <sched.h>
 #include <unistd.h>
@@ -458,7 +460,7 @@ namespace edge {
 
 		detail::ThreadStartInfo* info = new detail::ThreadStartInfo{ func, arg };
 
-		i32 result = pthread_create(&thr->handle, nullptr, detail::thread_start_wrapper, info);
+		i32 result = pthread_create(reinterpret_cast<pthread_t *>(&thr->handle), nullptr, detail::thread_start_wrapper, info);
 		if (result != 0) {
 			delete info;
 			return result == ENOMEM ? ThreadResult::NoMem : ThreadResult::Error;
@@ -592,7 +594,7 @@ namespace edge {
 			pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
 		}
 
-		i32 result = pthread_mutex_init(&mtx->data, &attr);
+		i32 result = pthread_mutex_init(reinterpret_cast<pthread_mutex_t *>(&mtx->data), &attr);
 		pthread_mutexattr_destroy(&attr);
 
 		return result == 0 ? ThreadResult::Success : ThreadResult::Error;
@@ -603,7 +605,7 @@ namespace edge {
 			return;
 		}
 
-		pthread_mutex_destroy(&mtx->data);
+		pthread_mutex_destroy(reinterpret_cast<pthread_mutex_t *>(&mtx->data));
 	}
 
 	ThreadResult mutex_lock(Mutex* mtx) {
@@ -611,7 +613,7 @@ namespace edge {
 			return ThreadResult::Error;
 		}
 
-		i32 result = pthread_mutex_lock(&mtx->data);
+		i32 result = pthread_mutex_lock(reinterpret_cast<pthread_mutex_t *>(&mtx->data));
 		return result == 0 ? ThreadResult::Success : ThreadResult::Error;
 	}
 
@@ -620,7 +622,7 @@ namespace edge {
 			return ThreadResult::Error;
 		}
 
-		i32 result = pthread_mutex_trylock(&mtx->data);
+		i32 result = pthread_mutex_trylock(reinterpret_cast<pthread_mutex_t *>(&mtx->data));
 		if (result == 0) {
 			return ThreadResult::Success;
 		}
@@ -649,7 +651,7 @@ namespace edge {
 			ts.tv_nsec -= 1000000000;
 		}
 
-		i32 result = pthread_mutex_timedlock(&mtx->data, &ts);
+		i32 result = pthread_mutex_timedlock(reinterpret_cast<pthread_mutex_t *>(&mtx->data), &ts);
 		if (result == 0) {
 			return ThreadResult::Success;
 		}
@@ -664,7 +666,7 @@ namespace edge {
 			return ThreadResult::Error;
 		}
 
-		i32 result = pthread_mutex_unlock(&mtx->data);
+		i32 result = pthread_mutex_unlock(reinterpret_cast<pthread_mutex_t *>(&mtx->data));
 		return result == 0 ? ThreadResult::Success : ThreadResult::Error;
 	}
 
@@ -673,7 +675,7 @@ namespace edge {
 			return ThreadResult::Error;
 		}
 
-		i32 result = pthread_cond_init(&cnd->data, nullptr);
+		i32 result = pthread_cond_init(reinterpret_cast<pthread_cond_t *>(&cnd->data), nullptr);
 		return result == 0 ? ThreadResult::Success : ThreadResult::Error;
 	}
 
@@ -682,7 +684,7 @@ namespace edge {
 			return;
 		}
 
-		pthread_cond_destroy(&cnd->data);
+		pthread_cond_destroy(reinterpret_cast<pthread_cond_t *>(&cnd->data));
 	}
 
 	ThreadResult cond_signal(ConditionVariable* cnd) {
@@ -690,7 +692,7 @@ namespace edge {
 			return ThreadResult::Error;
 		}
 
-		i32 result = pthread_cond_signal(&cnd->data);
+		i32 result = pthread_cond_signal(reinterpret_cast<pthread_cond_t *>(&cnd->data));
 		return result == 0 ? ThreadResult::Success : ThreadResult::Error;
 	}
 
@@ -699,7 +701,7 @@ namespace edge {
 			return ThreadResult::Error;
 		}
 
-		i32 result = pthread_cond_broadcast(&cnd->data);
+		i32 result = pthread_cond_broadcast(reinterpret_cast<pthread_cond_t *>(&cnd->data));
 		return result == 0 ? ThreadResult::Success : ThreadResult::Error;
 	}
 
@@ -708,7 +710,8 @@ namespace edge {
 			return ThreadResult::Error;
 		}
 
-		i32 result = pthread_cond_wait(&cnd->data, &mtx->data);
+		i32 result = pthread_cond_wait(reinterpret_cast<pthread_cond_t *>(&cnd->data),
+                                       reinterpret_cast<pthread_mutex_t *>(&mtx->data));
 		return result == 0 ? ThreadResult::Success : ThreadResult::Error;
 	}
 
@@ -731,7 +734,8 @@ namespace edge {
 			ts.tv_nsec -= 1000000000;
 		}
 
-		i32 result = pthread_cond_timedwait(&cnd->data, &mtx->data, &ts);
+		i32 result = pthread_cond_timedwait(reinterpret_cast<pthread_cond_t *>(&cnd->data),
+                                            reinterpret_cast<pthread_mutex_t *>(&mtx->data), &ts);
 		if (result == 0) {
 			return ThreadResult::Success;
 		}
