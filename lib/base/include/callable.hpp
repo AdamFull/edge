@@ -41,6 +41,7 @@ namespace edge {
 			if (data) {
 				alloc->deallocate(data);
 			}
+			invoke_fn = nullptr;
 			data = nullptr;
 		}
 
