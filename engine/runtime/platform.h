@@ -12,9 +12,9 @@ namespace edge {
 	struct Window;
 
 	struct PlatformContextCreateInfo {
-		const Allocator* alloc;
-		PlatformLayout* layout;
-		EventDispatcher* event_dispatcher;
+		const Allocator* alloc = nullptr;
+		PlatformLayout* layout = nullptr;
+		EventDispatcher* event_dispatcher = nullptr;
 	};
 
 	enum class WindowMode {
@@ -30,16 +30,17 @@ namespace edge {
 	};
 
 	struct WindowCreateInfo {
-		const Allocator* alloc;
-		EventDispatcher* event_dispatcher;
+		const Allocator* alloc = nullptr;
+		EventDispatcher* event_dispatcher = nullptr;
+        PlatformContext* platform_context = nullptr;
 
-		const char* title;
-		WindowMode mode;
-		bool resizable;
-		WindowVsyncMode vsync_mode;
+		const char* title = nullptr;
+		WindowMode mode = WindowMode::Default;
+		bool resizable = true;
+		WindowVsyncMode vsync_mode = WindowVsyncMode::Default;
 
-		i32 width;
-		i32 height;
+		i32 width = 1280;
+		i32 height = 720;
 	};
 
 	PlatformContext* platform_context_create(PlatformContextCreateInfo create_info);
@@ -52,12 +53,12 @@ namespace edge {
 	bool window_should_close(NotNull<Window*> wnd);
 	void window_process_events(NotNull<Window*> wnd, f32 delta_time);
 
-	void window_show(NotNull<Window*> wnd);
-	void window_hide(NotNull<Window*> wnd);
+	inline void window_show(NotNull<Window*> wnd) {}
+	inline void window_hide(NotNull<Window*> wnd) {}
 
 	void window_get_surface(NotNull<Window*> wnd, void* surface_info);
 
-	void window_set_title(NotNull<Window*> wnd, const char* title);
+	inline void window_set_title(NotNull<Window*> wnd, const char* title) {}
 
 	void window_get_size(NotNull<Window*> wnd, i32* width, i32* height);
 	f32 window_dpi_scale_factor(NotNull<Window*> wnd);
