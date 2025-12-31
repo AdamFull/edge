@@ -52,7 +52,7 @@ void range_generator(void* arg) {
 int main(void) {
     printf("=== Generator Example ===\n\n");
 
-    edge::Allocator allocator = edge::allocator_create_tracking();
+    edge::Allocator allocator = edge::Allocator::create_tracking();
     edge::coro_init_thread_context(&allocator);
 
     /* Example 1: Fibonacci generator */

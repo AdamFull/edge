@@ -35,7 +35,7 @@ int main(void) {
     printf("=== Pipeline Example ===\n");
     printf("Simple producer-consumer pipeline\n\n");
 
-    edge::Allocator allocator = edge::allocator_create_default();
+    edge::Allocator allocator = edge::Allocator::create_tracking();
 
     edge::coro_init_thread_context(&allocator);
 
