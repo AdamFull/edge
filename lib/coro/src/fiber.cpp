@@ -125,7 +125,7 @@ namespace edge {
 			ctx->rip = reinterpret_cast<void*>(fiber_main);
 			ctx->rsp = stack_top;
 #elif defined(__aarch64__)
-			ctx->lr = fiber_main;
+			ctx->lr = reinterpret_cast<void*>(fiber_main);
 			ctx->sp = stack_top;
 #endif
 		}
