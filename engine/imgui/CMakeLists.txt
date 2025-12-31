@@ -9,7 +9,7 @@ add_shader_compile_multi(
     DEFINES
         __SLANG__=1
     SLANGC_FLAGS
-        -profile spirv_1_2
+        -profile spirv_1_3
 )
 
 target_link_libraries(${PROJECT_NAME}
