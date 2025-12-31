@@ -1689,7 +1689,7 @@ namespace edge::gfx {
 			.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
 			.queueFamilyIndexCount = g_ctx.queue_family_count,
 			.pQueueFamilyIndices = queue_family_indices,
-			.preTransform = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR,
+			.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
 			.compositeAlpha = choose_suitable_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surf_caps.supportedCompositeAlpha),
 			.presentMode = choose_suitable_present_mode(present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
 			present_mode_priority_list, array_size(present_mode_priority_list)),
@@ -1745,7 +1745,7 @@ namespace edge::gfx {
 			.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
 			.queueFamilyIndexCount = g_ctx.queue_family_count,
 			.pQueueFamilyIndices = queue_family_indices,
-			.preTransform = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR,
+			.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
 			.compositeAlpha = composite_alpha,
 			.presentMode = present_mode,
 			.oldSwapchain = handle
