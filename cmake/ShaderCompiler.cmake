@@ -17,8 +17,6 @@ message(STATUS "Found slangc: ${SLANGC_EXECUTABLE}")
 
 set(SLANG_DEFAULT_FLAGS
     -target spirv
-    -fvk-use-dx-layout
-    -fvk-use-scalar-layout
 )
 
 function(add_shader_compile SHADER_SOURCE)
