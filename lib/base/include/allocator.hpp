@@ -301,9 +301,9 @@ namespace edge {
 				return;
 			}
 
-			//if constexpr (!std::destructale_v<T>) {
+			if constexpr (!std::is_same_v<T, void>) {
 				ptr->~T();
-			//}
+			}
 
 			free(ptr);
 		}
@@ -314,11 +314,11 @@ namespace edge {
 				return;
 			}
 
-			//if constexpr (!std::is_destructable_v<T>) {
+			if constexpr (!std::is_same_v<T, void>) {
 				for (usize i = count; i > 0; --i) {
 					ptr[i - 1].~T();
 				}
-			//}
+			}
 
 			free(ptr);
 		}
