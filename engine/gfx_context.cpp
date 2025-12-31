@@ -532,13 +532,14 @@ namespace edge::gfx {
 			available_extensions = nullptr;
 		}
 
-		VkApplicationInfo app_info;
-		app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-		app_info.pApplicationName = "applicationname";
-		app_info.applicationVersion = VK_MAKE_VERSION(1, 0, 0); // TODO: Generate
-		app_info.pEngineName = "enginename";
-		app_info.engineVersion = VK_MAKE_VERSION(1, 0, 0); // TODO: Generate
-		app_info.apiVersion = g_required_api_version;
+		VkApplicationInfo app_info = {
+            .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
+            .pApplicationName = "applicationname",
+            .applicationVersion = VK_MAKE_VERSION(1, 0, 0), // TODO: Generate
+            .pEngineName = "enginename",
+            .engineVersion = VK_MAKE_VERSION(1, 0, 0), // TODO: Generate
+            .apiVersion = g_required_api_version
+        };
 
 		VkInstanceCreateInfo instance_info = {
 			.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -909,6 +910,13 @@ namespace edge::gfx {
 		}
 #elif defined(VK_USE_PLATFORM_XLIB_KHR)
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
+        VkAndroidSurfaceCreateInfoKHR surface_create_info;
+        window_get_surface(cteate_info->window, &surface_create_info);
+
+        result = vkCreateAndroidSurfaceKHR(g_ctx.inst, &surface_create_info, &g_ctx.vk_alloc, &g_ctx.surf);
+        if (result != VK_SUCCESS) {
+            goto fatal_error;
+        }
 #endif
 
 		if (!select_adapter()) {

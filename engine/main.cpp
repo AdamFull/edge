@@ -121,6 +121,7 @@ int edge_main(PlatformLayout* platform_layout) {
 	const WindowCreateInfo window_create_info = {
 		.alloc = &allocator,
 		.event_dispatcher = engine_context.event_dispatcher,
+        .platform_context = engine_context.platform_context,
 
 		.title = "Window",
 		.mode = WindowMode::Default,

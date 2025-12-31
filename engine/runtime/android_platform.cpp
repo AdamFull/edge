@@ -10,36 +10,39 @@
 #include <game-text-input/gametextinput.h>
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 
-extern "C" int edge_main(PlatformLayout* platform_layout);
+#include <vulkan/vulkan.h>
+
+extern int edge_main(edge::PlatformLayout* platform_layout);
 
 namespace edge {
     struct PlatformLayout {
-        struct android_app* app;
+        struct android_app* app = nullptr;
     };
 
     struct Window {
-        WindowMode mode;
-        bool resizable;
-        WindowVsyncMode vsync_mode;
+        PlatformContext* ctx = nullptr;
 
-        bool should_close;
-        bool surface_ready;
+        WindowMode mode = WindowMode::Default;
+        bool resizable = false;
+        WindowVsyncMode vsync_mode = WindowVsyncMode::Default;
+
+        bool should_close = false;
+        bool surface_ready = false;
     };
 
-    struct platform_context {
-        const Allocator* alloc;
-        PlatformLayout* layout;
-        EventDispatcher* event_dispatcher;
-
-        Window* wnd;
+    struct PlatformContext {
+        const Allocator* alloc = nullptr;
+        PlatformLayout* layout = nullptr;
+        EventDispatcher* event_dispatcher = nullptr;
+        Window* wnd = nullptr;
     };
 
     static JNIEnv* get_jni_env(struct android_app* app) {
-        JNIEnv* env = NULL;
+        JNIEnv* env = nullptr;
         jint get_env_result = app->activity->vm->GetEnv((void**)&env, JNI_VERSION_1_6);
         if (get_env_result == JNI_EDETACHED) {
-            if (app->activity->vm->AttachCurrentThread(&env, NULL) != JNI_OK) {
-                return NULL;
+            if (app->activity->vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+                return nullptr;
             }
         }
 
@@ -196,7 +199,6 @@ namespace edge {
         }
 
         PlatformContext* ctx = (PlatformContext*)user_data;
-
         if (mouse_status == PADDLEBOAT_MOUSE_NONE) {
             EDGE_LOG_DEBUG("Mouse disconnected.");
         }
@@ -211,28 +213,37 @@ namespace edge {
         }
 
         PlatformContext* ctx = (PlatformContext*)user_data;
-
         EDGE_LOG_DEBUG("Physical keyboard %sconnected.", physical_keyboard_status ? "" : "dis");
     }
 
-    PlatformContext* platform_context_create(platform_context_create_info_t* create_info) {
-        if (!create_info || !create_info->alloc || !create_info->layout) {
-            return NULL;
+    PlatformContext* platform_context_create(PlatformContextCreateInfo create_info) {
+        if (!create_info.alloc || !create_info.layout) {
+            return nullptr;
         }
 
-        PlatformContext* ctx = allocate<PlatformContext>(create_info->alloc);
+        PlatformContext* ctx = create_info.alloc->allocate<PlatformContext>();
         if (!ctx) {
-            return NULL;
+            return nullptr;
         }
 
-        ctx->alloc = create_info->alloc;
-        ctx->layout = create_info->layout;
-        ctx->event_dispatcher = create_info->event_dispatcher;
-        ctx->wnd = NULL;
+        ctx->alloc = create_info.alloc;
+        ctx->layout = create_info.layout;
+        ctx->event_dispatcher = create_info.event_dispatcher;
 
         Logger* logger = logger_get_global();
-        LoggerOutput* debug_output = logger_create_logcat_output(create_info->alloc, EDGE_LOG_FORMAT_DEFAULT);
+        LoggerOutput* debug_output = logger_create_logcat_output(create_info.alloc, LogFormat_Default);
         logger_add_output(logger, debug_output);
+
+
+
+        struct android_app* app = ctx->layout->app;
+        app->onAppCmd = on_app_cmd_cb;
+        app->userData = ctx;
+
+        Paddleboat_setMotionDataCallbackWithIntegratedFlags(motion_data_cb, Paddleboat_getIntegratedMotionSensorFlags(), ctx);
+        Paddleboat_setControllerStatusCallback(controller_status_cb, ctx);
+        Paddleboat_setMouseStatusCallback(mouse_status_cb, ctx);
+        Paddleboat_setPhysicalKeyboardStatusCallback(keyboard_status_cb, ctx);
 
         return ctx;
     }
@@ -242,95 +253,77 @@ namespace edge {
             return;
         }
 
-        if (ctx->wnd) {
-            struct android_app* app = ctx->layout->app;
+        if (Paddleboat_isInitialized()) {
+            Paddleboat_setControllerStatusCallback(NULL, NULL);
+            Paddleboat_setMouseStatusCallback(NULL, NULL);
+            Paddleboat_setPhysicalKeyboardStatusCallback(NULL, NULL);
+            Paddleboat_setMotionDataCallback(NULL, NULL);
 
-            if (Paddleboat_isInitialized()) {
-                Paddleboat_setControllerStatusCallback(NULL, NULL);
-                Paddleboat_setMouseStatusCallback(NULL, NULL);
-                Paddleboat_setPhysicalKeyboardStatusCallback(NULL, NULL);
-                Paddleboat_setMotionDataCallback(NULL, NULL);
-
-                JNIEnv* jni_env = get_jni_env(app);
-                Paddleboat_destroy(jni_env);
-            }
-
-            GameActivity_finish(app->activity);
-            ctx->wnd->should_close = true;
-
-            Window* wnd = ctx->wnd;
-            edge_allocator_free(ctx->alloc, wnd);
-            ctx->wnd = NULL;
+            JNIEnv* jni_env = get_jni_env(ctx->layout->app);
+            Paddleboat_destroy(jni_env);
         }
 
         const Allocator* alloc = ctx->alloc;
-        deallocate(alloc, ctx);
+        alloc->deallocate(ctx);
     }
 
-    bool platform_context_window_init(PlatformContext* ctx, WindowCreateInfo* create_info) {
-        if (!ctx || !ctx->layout || !ctx->layout->app || !create_info) {
-            return false;
-        }
-
-        Window* wnd = allocate<Window>(ctx->alloc);
+    Window* window_create(WindowCreateInfo create_info) {
+        Window* wnd = create_info.alloc->allocate<Window>();
         if (!wnd) {
-            return false;
+            return nullptr;
         }
 
-        wnd->mode = create_info->mode;
-        wnd->resizable = create_info->resizable;
-        wnd->vsync_mode = create_info->vsync_mode;
+        wnd->mode = create_info.mode;
+        wnd->resizable = create_info.resizable;
+        wnd->vsync_mode = create_info.vsync_mode;
         wnd->should_close = false;
 
-        struct android_app* app = ctx->layout->app;
-        app->onAppCmd = on_app_cmd_cb;
-        app->userData = ctx;
+        struct android_app* app = create_info.platform_context->layout->app;
 
         JNIEnv* jni_env = get_jni_env(app);
         if(!jni_env) {
-            edge_allocator_free(ctx->alloc, wnd);
-            return false;
+            create_info.alloc->deallocate(wnd);
+            return nullptr;
         }
 
-        enum Paddleboat_ErrorCode result = Paddleboat_init(jni_env, app->activity->javaGameActivity);
+        Paddleboat_ErrorCode result = Paddleboat_init(jni_env, app->activity->javaGameActivity);
         if (result != PADDLEBOAT_NO_ERROR) {
-            edge_allocator_free(ctx->alloc, wnd);
+            create_info.alloc->deallocate(wnd);
 
             EDGE_LOG_DEBUG("Failed to initialize Paddleboat: %d", (i32)result);
-            return false;
+            return nullptr;
         }
 
         if (!Paddleboat_isInitialized()) {
-            edge_allocator_free(ctx->alloc, wnd);
+            create_info.alloc->deallocate(wnd);
 
             EDGE_LOG_DEBUG("Paddleboat initialization verification failed");
-            return false;
+            return nullptr;
         }
 
-        Paddleboat_setMotionDataCallbackWithIntegratedFlags(motion_data_cb, Paddleboat_getIntegratedMotionSensorFlags(), ctx);
-        Paddleboat_setControllerStatusCallback(controller_status_cb, ctx);
-        Paddleboat_setMouseStatusCallback(mouse_status_cb, ctx);
-        Paddleboat_setPhysicalKeyboardStatusCallback(keyboard_status_cb, ctx);
+        create_info.platform_context->wnd = wnd;
+        wnd->ctx = create_info.platform_context;
 
-        ctx->wnd = wnd;
+        while(!wnd->surface_ready) {
+            window_process_events(wnd, 0.33f);
+        }
 
-        return true;
+        return wnd;
     }
 
-    bool platform_context_window_should_close(PlatformContext* ctx) {
-        if (!ctx || !ctx->wnd) {
-            return false;
-        }
+    void window_destroy(NotNull<const Allocator*> alloc, Window* wnd) {
+        GameActivity_finish(wnd->ctx->layout->app->activity);
+        wnd->should_close = true;
 
-        return ctx->wnd->should_close;
+        alloc->deallocate(wnd);
     }
 
-    void platform_context_window_process_events(PlatformContext* ctx, f32 delta_time) {
-        if (!ctx || !ctx->wnd) {
-            return;
-        }
+    bool window_should_close(NotNull<Window*> wnd) {
+        return wnd->should_close;
+    }
 
-        struct android_app* app = ctx->layout->app;
+    void window_process_events(NotNull<Window*> wnd, f32 delta_time) {
+        struct android_app* app = wnd->ctx->layout->app;
         struct android_poll_source* source;
         i32 ident, events;
 
@@ -342,7 +335,7 @@ namespace edge {
             if (app->destroyRequested != 0) {
                 EDGE_LOG_DEBUG("Requested window destroy.");
                 // TODO: DISPATCH EVENT WINDOW CLOSE
-                ctx->wnd->should_close = true;
+                wnd->ctx->wnd->should_close = true;
             }
         }
 
@@ -483,39 +476,32 @@ namespace edge {
         }
     }
 
-    void platform_context_window_show(PlatformContext* ctx) {
-        if (!ctx || !ctx->wnd) {
-            return;
-        }
+    void window_get_surface(NotNull<Window*> wnd, void* surface_info) {
+        *(VkAndroidSurfaceCreateInfoKHR*)surface_info = {
+                .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
+                .window = wnd->ctx->layout->app->window
+        };
     }
 
-    void platform_context_window_hide(PlatformContext* ctx) {
-        if (!ctx || !ctx->wnd) {
-            return;
-        }
+    void window_get_size(NotNull<Window*> wnd, i32* width, i32* height) {
+        struct android_app* app = wnd->ctx->layout->app;
+        *width = app->contentRect.right - app->contentRect.left;
+        *height = app->contentRect.bottom - app->contentRect.top;
     }
 
-    void platform_context_window_set_title(PlatformContext* ctx, const char* title) {
-        if (!ctx || !ctx->wnd || !title) {
-            return;
-        }
-    }
-
-    f32 platform_context_window_dpi_scale_factor(PlatformContext* ctx) {
-        if (!ctx || !ctx->wnd) {
-            return 1.0f;
-        }
-
-        struct android_app* app = ctx->layout->app;
+    f32 window_dpi_scale_factor(NotNull<Window*> wnd) {
+        struct android_app* app = wnd->ctx->layout->app;
         return (f32)AConfiguration_getDensity(app->config) / (f32)ACONFIGURATION_DENSITY_MEDIUM;
     }
 
-    f32 platform_context_window_content_scale_factor(PlatformContext* ctx) {
+    f32 window_content_scale_factor(NotNull<Window*> wnd) {
         return 1.0f;
     }
 }
 
 extern "C" void android_main(struct android_app* state) {
-    PlatformLayout platform_layout = {};
+    edge::PlatformLayout platform_layout = {
+            .app = state
+    };
     edge_main(&platform_layout);
 }

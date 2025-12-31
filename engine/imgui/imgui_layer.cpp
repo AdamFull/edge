@@ -20,7 +20,7 @@ namespace edge {
 		}
 
 		f32 scale = (magnitude - deadzone) / (1.0f - deadzone);
-		scale = std::min(scale, 1.0f);
+		scale = min(scale, 1.0f);
 
 		f32 normalized_x = x / magnitude;
 		f32 normalized_y = y / magnitude;
