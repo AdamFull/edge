@@ -200,8 +200,8 @@ namespace edge::gfx {
 		imgui_renderer->fragment_shader.destroy();
 		imgui_renderer->vertex_shader.destroy();
 
-		imgui_renderer->renderer->free_resource(imgui_renderer->index_buffer);
-		imgui_renderer->renderer->free_resource(imgui_renderer->vertex_buffer);
+		//imgui_renderer->renderer->free_resource(imgui_renderer->index_buffer);
+		//imgui_renderer->renderer->free_resource(imgui_renderer->vertex_buffer);
 
 		const Allocator* allocator = imgui_renderer->renderer->alloc;
 		allocator->deallocate(imgui_renderer);
