@@ -53,7 +53,7 @@ namespace edge {
 		}
 
 		LoggerOutputLogcat* logcat_output = (LoggerOutputLogcat*)output;
-		deallocate(output->allocator, logcat_output);
+        output->allocator->deallocate(logcat_output);
 	}
 
 	static const LoggerOutputVTable logcat_vtable = {
@@ -67,7 +67,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		LoggerOutputLogcat* output = allocate<LoggerOutputLogcat>(allocator);
+		LoggerOutputLogcat* output = allocator->allocate<LoggerOutputLogcat>();
 		if (!output) {
 			return nullptr;
 		}
