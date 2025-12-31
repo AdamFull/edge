@@ -487,25 +487,26 @@ namespace edge::gfx {
 		const char* enabled_layers[GFX_LAYERS_MAX];
 		u32 enabled_layer_count = 0;
 
+#ifdef USE_VALIDATION_LAYERS
 		for (i32 i = 0; i < array_size(g_instance_layers); ++i) {
 			assert(enabled_layer_count < GFX_LAYERS_MAX && "Validation layer enables overflow.");
 
 			const char* layer_name = g_instance_layers[i];
 			if (is_layer_supported(layer_name, available_layers, layer_count)) {
 				enabled_layers[enabled_layer_count++] = layer_name;
-#ifdef USE_VALIDATION_LAYERS
+
 				if (strcmp(layer_name, "VK_LAYER_KHRONOS_validation") == 0) {
 					g_ctx.validation_enabled = true;
 				}
 				else if (strcmp(layer_name, "VK_LAYER_KHRONOS_synchronization2") == 0) {
 					g_ctx.synchronization_validation_enabled = true;
 				}
-#endif
 			}
 			else {
 				EDGE_LOG_WARN("Layer not supported: %s", layer_name);
 			}
 		}
+#endif
 
 		const char* enabled_extensions[GFX_INSTANCE_EXTENSIONS_MAX];
 		u32 enabled_extension_count = 0;;
@@ -1688,7 +1689,7 @@ namespace edge::gfx {
 			.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
 			.queueFamilyIndexCount = g_ctx.queue_family_count,
 			.pQueueFamilyIndices = queue_family_indices,
-			.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+			.preTransform = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR,
 			.compositeAlpha = choose_suitable_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR, surf_caps.supportedCompositeAlpha),
 			.presentMode = choose_suitable_present_mode(present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
 			present_mode_priority_list, array_size(present_mode_priority_list)),
@@ -1744,7 +1745,7 @@ namespace edge::gfx {
 			.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
 			.queueFamilyIndexCount = g_ctx.queue_family_count,
 			.pQueueFamilyIndices = queue_family_indices,
-			.preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+			.preTransform = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR,
 			.compositeAlpha = composite_alpha,
 			.presentMode = present_mode,
 			.oldSwapchain = handle
