@@ -11,7 +11,11 @@ struct VSOutput {
 
 [shader("vertex")]
 VSOutput vs_main(uint32_t vertex_index: SV_VertexID) {
+#ifdef USE_POINTERS
     edge::gfx::imgui::Vertex vert = pc.vertices[vertex_index];
+#else
+    edge::gfx::imgui::Vertex vert = *(pc.vertices.getPtr() + vertex_index);
+#endif
 
     VSOutput output;
     output.uv = vert.uv;

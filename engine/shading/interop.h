@@ -23,6 +23,8 @@ using namespace glm;
 
 #endif
 
+//#define USE_POINTERS
+
 #ifdef __cplusplus
 
 #include <glm/glm.hpp>
@@ -119,7 +121,12 @@ namespace edge::gfx {
 #define AS_OUT(type) type&
 #define AS_INOUT(type) type&
 #elif __SLANG__
+#ifdef USE_POINTERS
 #define TYPE_PTR(type) type*
+#else
+#define TYPE_PTR(type) vk::BufferPointer<type>
+#endif // USE_POINTERS
+
 #define CONSTRUCTOR(type, ...) __init(__VA_ARGS__)
 #define AS_IN(type) in type
 #define AS_OUT(type) out type
