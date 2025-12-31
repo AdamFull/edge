@@ -246,7 +246,7 @@ namespace edge::gfx {
 			return request_extent;
 		}
 
-		if (request_extent.width < 1 || request_extent.height < 1) {
+		if (request_extent.width <= 1 || request_extent.height <= 1) {
 			EDGE_LOG_WARN("Image extent %dx%d is not supported. Selecting available %dx%d.",
 				request_extent.width, request_extent.height,
 				surface_caps->currentExtent.width, surface_caps->currentExtent.height);
@@ -1739,7 +1739,7 @@ namespace edge::gfx {
 			.minImageCount = image_count,
 			.imageFormat = format,
 			.imageColorSpace = color_space,
-			.imageExtent = choose_suitable_extent(extent, &surf_caps),
+			.imageExtent = choose_suitable_extent(surf_caps.currentExtent, &surf_caps),
 			.imageArrayLayers = 1,
 			.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
 			.imageSharingMode = g_ctx.queue_family_count > 1 ? VK_SHARING_MODE_CONCURRENT : VK_SHARING_MODE_EXCLUSIVE,
