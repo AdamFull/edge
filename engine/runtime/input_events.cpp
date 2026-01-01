@@ -33,13 +33,16 @@ namespace edge {
 			return;
 		}
 
-		InputMouseMoveEvent evt;
-		evt.header.categories = INPUT_EVENT_MASK;
-		evt.header.type = (u64)InputEventType::MouseMove;
-		evt.x = x;
-		evt.y = y;
-		evt.dx = x - evt.x;
-		evt.dy = y - evt.y;
+		InputMouseMoveEvent evt = {
+			.header = {
+				.categories = INPUT_EVENT_MASK,
+				.type = (u64)InputEventType::MouseMove
+			},
+			.x = x, 
+			.y = y,
+			.dx = x - state->mouse.x,
+			.dy = y - state->mouse.y
+		};
 
 		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
 
