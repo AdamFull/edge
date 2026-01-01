@@ -266,32 +266,32 @@ namespace edge {
 					switch ((InputEventType)evt->type)
 					{
 					case InputEventType::Keyboard: {
-						InputKeyboardEvent* e = (InputKeyboardEvent*)evt;
+						auto* e = evt->as<InputKeyboardEvent>();
 						io.AddKeyEvent(translate_key_code(e->key), e->action == InputKeyAction::Down);
 						break;
 					}
 					case InputEventType::MouseMove: {
-						InputMouseMoveEvent* e = (InputMouseMoveEvent*)evt;
+						auto* e = evt->as<InputMouseMoveEvent>();
 						io.AddMousePosEvent(e->x, e->y);
 						break;
 					}
 					case InputEventType::MouseBtn: {
-						InputMouseBtnEvent* e = (InputMouseBtnEvent*)evt;
+						auto* e = evt->as<InputMouseBtnEvent>();
 						io.AddMouseButtonEvent(translate_mouse_code(e->btn), e->action == InputKeyAction::Down);
 						break;
 					}
 					case InputEventType::MouseScroll: {
-						InputMouseScrollEvent* e = (InputMouseScrollEvent*)evt;
+						auto* e = evt->as<InputMouseScrollEvent>();
 						io.AddMouseWheelEvent(e->xoffset, e->yoffset);
 						break;
 					}
 					case InputEventType::TextInput: {
-						InputTextInputEvent* e = (InputTextInputEvent*)evt;
+						auto* e = evt->as<InputTextInputEvent>();
 						io.AddInputCharacter(e->codepoint);
 						break;
 					}
 					case InputEventType::PadConnection: {
-						InputPadConnectionEvent* e = (InputPadConnectionEvent*)evt;
+						auto* e = evt->as<InputPadConnectionEvent>();
 						if (e->connected) {
 							io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
 						}
@@ -301,7 +301,7 @@ namespace edge {
 						break;
 					}
 					case InputEventType::PadButton: {
-						InputPadButtonEvent* e = (InputPadButtonEvent*)evt;
+						auto* e = evt->as<InputPadButtonEvent>();
 						ImGuiKey key = translate_gamepad_button(e->btn);
 						if (key != ImGuiKey_None) {
 							io.AddKeyEvent(key, e->state == InputKeyAction::Down);
@@ -310,7 +310,7 @@ namespace edge {
 						break;
 					}
 					case InputEventType::PadAxis: {
-						InputPadAxisEvent* e = (InputPadAxisEvent*)evt;
+						auto* e = evt->as<InputPadAxisEvent>();
 						switch (e->axis) {
 						case InputPadAxis::StickLeft: {
 							auto [x, y] = radial_deadzone(e->x, e->y, IMGUI_STICK_DEADZONE);
@@ -325,12 +325,12 @@ namespace edge {
 							break;
 						}
 						case InputPadAxis::TriggerLeft: {
-							float value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
+							f32 value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
 							io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, value > IMGUI_TRIGGER_THRESHOLD, value);
 							break;
 						}
 						case InputPadAxis::TriggerRight: {
-							float value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
+							f32 value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
 							io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, value > IMGUI_TRIGGER_THRESHOLD, value);
 							break;
 						}
@@ -349,13 +349,13 @@ namespace edge {
 					switch ((WindowEventType)evt->type)
 					{
 					case WindowEventType::Resize: {
-						WindowResizeEvent* e = (WindowResizeEvent*)evt;
+						auto* e = evt->as<WindowResizeEvent>();
 						io.DisplaySize.x = (f32)e->width;
 						io.DisplaySize.y = (f32)e->height;
 						break;
 					}
 					case WindowEventType::Focus: {
-						WindowFocusEvent* e = (WindowFocusEvent*)evt;
+						auto* e = evt->as<WindowFocusEvent>();
 						io.AddFocusEvent(e->focused);
 						break;
 					}

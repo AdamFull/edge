@@ -10,6 +10,12 @@ namespace edge {
 	struct EventHeader {
 		u64 categories = 0;
 		u64 type = 0;
+
+		template<typename T>
+		auto as() {
+			using BaseType = std::remove_pointer_t<std::remove_reference_t<T>>;
+			return reinterpret_cast<BaseType*>(this);
+		}
 	};
 
 	using EventListenerFn = Callable<void(EventHeader* evt)>;
