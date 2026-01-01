@@ -38,8 +38,8 @@ namespace edge {
 		evt.header.type = (u64)InputEventType::MouseMove;
 		evt.x = x;
 		evt.y = y;
-		evt.dx = evt.x - x;
-		evt.dy = evt.y - y;
+		evt.dx = x - evt.x;
+		evt.dy = y - evt.y;
 
 		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
 
@@ -72,7 +72,7 @@ namespace edge {
 			return;
 		}
 
-		InputKeyAction current_state = (InputKeyAction)state->pads->btn_states.get((usize)btn);
+		InputKeyAction current_state = (InputKeyAction)state->pads[pad_id].btn_states.get((usize)btn);
 		if (current_state == new_state) {
 			return;
 		}
@@ -85,7 +85,7 @@ namespace edge {
 		evt.state = new_state;
 		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
 
-		state->pads->btn_states.put((usize)btn, (bool)new_state);
+		state->pads[pad_id].btn_states.put((usize)btn, (bool)new_state);
 	}
 
 	void input_update_pad_axis_state(InputState* state, EventDispatcher* dispatcher, i32 pad_id, InputPadAxis axis, f32 x, f32 y, f32 z) {
