@@ -26,48 +26,30 @@ namespace edge::gfx {
 		return result;
 	}
 
-	static void update_buffer_resource(NotNull<ImGuiRenderer*> imgui_renderer, Handle handle, u64 size, BufferFlags flags) {
-		BufferCreateInfo buffer_create_info = {
-			.size = size,
-			.flags = flags
-		};
+	bool ImGuiRenderer::create(ImGuiRendererCreateInfo create_info) noexcept {
+		renderer = create_info.renderer;
 
-		Buffer buffer;
-		if (!buffer.create(buffer_create_info)) {
-			return;
-		}
-		imgui_renderer->renderer->update_resource(handle, buffer);
-	}
-
-	ImGuiRenderer* imgui_renderer_create(ImGuiRendererCreateInfo create_info) {
-		ImGuiRenderer* imgui_renderer = create_info.renderer->alloc->allocate<ImGuiRenderer>();
-		if (!imgui_renderer) {
-			return nullptr;
+		if (!vertex_shader.create(imgui_vs, imgui_vs_size)) {
+			destroy(create_info.alloc);
+			return false;
 		}
 
-		imgui_renderer->renderer = create_info.renderer;
-
-		if (!imgui_renderer->vertex_shader.create(imgui_vs, imgui_vs_size)) {
-			imgui_renderer_destroy(imgui_renderer);
-			return nullptr;
-		}
-
-		if (!imgui_renderer->fragment_shader.create(imgui_fs, imgui_fs_size)) {
-			imgui_renderer_destroy(imgui_renderer);
-			return nullptr;
+		if (!fragment_shader.create(imgui_fs, imgui_fs_size)) {
+			destroy(create_info.alloc);
+			return false;
 		}
 
 		VkPipelineShaderStageCreateInfo shader_stages[2] = {
 			{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 				.stage = VK_SHADER_STAGE_VERTEX_BIT,
-				.module = imgui_renderer->vertex_shader.handle,
+				.module = vertex_shader.handle,
 				.pName = "main"
 			},
 			{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 				.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-				.module = imgui_renderer->fragment_shader.handle,
+				.module = fragment_shader.handle,
 				.pName = "main"
 			}
 		};
@@ -153,7 +135,7 @@ namespace edge::gfx {
 		VkPipelineRenderingCreateInfoKHR rendering_create_info = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR,
 			.colorAttachmentCount = 1u,
-			.pColorAttachmentFormats = &imgui_renderer->renderer->swapchain.format
+			.pColorAttachmentFormats = &renderer->swapchain.format
 		};
 
 		VkGraphicsPipelineCreateInfo pipeline_create_info = {
@@ -170,241 +152,37 @@ namespace edge::gfx {
 			.pDepthStencilState = &depth_stencil_create_info,
 			.pColorBlendState = &color_blend_create_info,
 			.pDynamicState = &dynamic_state_create_info,
-			.layout = imgui_renderer->renderer->pipeline_layout.handle,
+			.layout = renderer->pipeline_layout.handle,
 			.renderPass = VK_NULL_HANDLE
 		};
 
-		if (!imgui_renderer->pipeline.create(&pipeline_create_info)) {
-			imgui_renderer_destroy(imgui_renderer);
-			return nullptr;
+		if (!pipeline.create(&pipeline_create_info)) {
+			destroy(create_info.alloc);
+			return false;
 		}
 
-		imgui_renderer->vertex_buffer = imgui_renderer->renderer->add_resource();
-		imgui_renderer->vertex_buffer_capacity = k_initial_vertex_count;
-		update_buffer_resource(imgui_renderer, imgui_renderer->vertex_buffer, k_initial_vertex_count * sizeof(ImDrawVert), k_vertex_buffer_flags);
+		vertex_buffer = renderer->add_resource();
+		vertex_buffer_capacity = k_initial_vertex_count;
 
-		imgui_renderer->index_buffer = imgui_renderer->renderer->add_resource();
-		imgui_renderer->index_buffer_capacity = k_initial_index_count;
-		update_buffer_resource(imgui_renderer, imgui_renderer->index_buffer, k_initial_index_count * sizeof(ImDrawIdx), k_index_buffer_flags);
+		index_buffer = renderer->add_resource();
+		index_buffer_capacity = k_initial_index_count;
 
-		return imgui_renderer;
+		update_buffers(create_info.alloc);
+
+		return true;
 	}
 
-	void imgui_renderer_destroy(ImGuiRenderer* imgui_renderer) {
-		if (!imgui_renderer) {
-			return;
-		}
+	void ImGuiRenderer::destroy(NotNull<const Allocator*> alloc) noexcept {
+		pipeline.destroy();
 
-		imgui_renderer->pipeline.destroy();
+		fragment_shader.destroy();
+		vertex_shader.destroy();
 
-		imgui_renderer->fragment_shader.destroy();
-		imgui_renderer->vertex_shader.destroy();
-
-		//imgui_renderer->renderer->free_resource(imgui_renderer->index_buffer);
-		//imgui_renderer->renderer->free_resource(imgui_renderer->vertex_buffer);
-
-		const Allocator* allocator = imgui_renderer->renderer->alloc;
-		allocator->deallocate(imgui_renderer);
+		//renderer->free_resource(alloc, index_buffer);
+		//renderer->free_resource(alloc, vertex_buffer);
 	}
 
-	void ImGuiRenderer::update_texture(NotNull<ImTextureData*> tex) noexcept {
-		if (tex->Status == ImTextureStatus_OK) {
-			return;
-		}
-
-		CmdBuf cmd = renderer->active_frame->cmd;
-
-		if (tex->Status == ImTextureStatus_WantCreate) {
-			Handle image_handle = renderer->add_resource();
-
-			ImageCreateInfo create_info = {
-				.extent = {
-					.width = (u32)tex->Width,
-					.height = (u32)tex->Height,
-					.depth = 1u
-					},
-				.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-				.format = VK_FORMAT_R8G8B8A8_SRGB
-			};
-
-			Image image = {};
-			if (!image.create(create_info)) {
-				EDGE_LOG_ERROR("Failed to create font image.");
-				tex->SetTexID(ImTextureID_Invalid);
-				tex->SetStatus(ImTextureStatus_Destroyed);
-				return;
-			}
-
-			PipelineBarrierBuilder barrier_builder = {};
-
-			barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.baseMipLevel = 0,
-				.levelCount = 1,
-				.baseArrayLayer = 0,
-				.layerCount = 1
-				});
-			cmd.pipeline_barrier(barrier_builder);
-			image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-
-			ImageUpdateInfo update_info = {
-				.dst_image = image,
-			};
-
-			usize whole_size = tex->Width * tex->Height * tex->BytesPerPixel;
-			renderer->image_update_begin(whole_size, update_info);
-			update_info.write(renderer->alloc, {
-				.data = { tex->Pixels, whole_size },
-				.extent = {
-					.width = (u32)tex->Width,
-					.height = (u32)tex->Height,
-					.depth = 1
-					}
-				});
-			renderer->image_update_end(update_info);
-			renderer->setup_resource(image_handle, image);
-
-			tex->SetTexID(image_handle);
-			tex->SetStatus(ImTextureStatus_OK);
-		}
-		else if (tex->Status == ImTextureStatus_WantUpdates) {
-			Handle resource_id = (Handle)tex->GetTexID();
-			Resource* resource = renderer->get_resource(resource_id);
-
-			usize total_size = 0;
-			for (const ImTextureRect& update_region : tex->Updates) {
-				//EDGE_LOG_DEBUG("Updating image {} region: [{}, {}, {}, {}]", tex->GetTexID(), update_region.x, update_region.y, update_region.w, update_region.h);
-				usize region_pitch = update_region.w * tex->BytesPerPixel;
-				total_size += region_pitch * update_region.h;
-			}
-
-			PipelineBarrierBuilder barrier_builder = {};
-			VkImageSubresourceRange subresource_range = {
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.baseMipLevel = 0,
-				.levelCount = 1,
-				.baseArrayLayer = 0,
-				.layerCount = 1
-			};
-
-			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subresource_range);
-			cmd.pipeline_barrier(barrier_builder);
-			barrier_builder.reset();
-			resource->image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-
-			ImageUpdateInfo update_info = {
-				.dst_image = resource->image
-			};
-
-			renderer->image_update_begin(total_size, update_info);
-
-			u8* compacted_data = (u8*)renderer->alloc->malloc(total_size, 1);
-			// TODO: Check allocation result
-
-			usize buffer_offset = 0;
-			for (const ImTextureRect& update_region : tex->Updates) {
-				usize region_pitch = update_region.w * tex->BytesPerPixel;
-
-				for (usize y = 0; y < update_region.h; y++) {
-					const void* src_pixels = tex->GetPixelsAt(update_region.x, update_region.y + y);
-					memcpy(compacted_data + buffer_offset + (region_pitch * y), src_pixels, region_pitch);
-				}
-
-				usize region_size = region_pitch * update_region.h;
-
-				update_info.write(renderer->alloc, {
-				.data = { compacted_data + buffer_offset, region_size },
-				.offset = {
-						.x = update_region.x,
-						.y = update_region.y,
-						.z = 0
-					},
-				.extent = {
-					.width = update_region.w,
-					.height = update_region.h,
-					.depth = 1
-					}
-					});
-
-				buffer_offset += region_size;
-			}
-
-			renderer->image_update_end(update_info);
-			renderer->alloc->free(compacted_data);
-
-			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, subresource_range);
-			cmd.pipeline_barrier(barrier_builder);
-			resource->image.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-			tex->SetStatus(ImTextureStatus_OK);
-		}
-		else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
-			Handle image_handle = (Handle)tex->GetTexID();
-			renderer->free_resource(image_handle);
-
-			tex->SetTexID(ImTextureID_Invalid);
-			tex->SetStatus(ImTextureStatus_Destroyed);
-		}
-	}
-
-	void ImGuiRenderer::update_geometry(NotNull<ImDrawData*> draw_data) noexcept {
-		if (draw_data->TotalVtxCount > vertex_buffer_capacity) {
-			vertex_buffer_capacity = grow(vertex_buffer_capacity, draw_data->TotalVtxCount);
-			update_buffer_resource(this, vertex_buffer,
-				vertex_buffer_capacity * sizeof(ImDrawVert), k_vertex_buffer_flags);
-		}
-
-		if (draw_data->TotalIdxCount > index_buffer_capacity) {
-			index_buffer_capacity = grow(index_buffer_capacity, draw_data->TotalIdxCount);
-			update_buffer_resource(this, index_buffer, index_buffer_capacity * sizeof(ImDrawIdx), k_index_buffer_flags);
-		}
-
-		Resource* vertex_buffer_resorce = renderer->get_resource(vertex_buffer);
-		Resource* index_buffer_resorce = renderer->get_resource(index_buffer);
-
-		BufferUpdateInfo vb_update = { .dst_buffer = vertex_buffer_resorce->buffer };
-		renderer->buffer_update_begin(draw_data->TotalVtxCount * sizeof(ImDrawVert), vb_update);
-
-		BufferUpdateInfo ib_update = { .dst_buffer = index_buffer_resorce->buffer };
-		renderer->buffer_update_begin(draw_data->TotalIdxCount * sizeof(ImDrawIdx), ib_update);
-
-		VkDeviceSize vtx_offset = 0, idx_offset = 0;
-
-		for (i32 n = 0; n < draw_data->CmdListsCount; n++) {
-			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
-
-			auto vtx_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
-			vb_update.write(renderer->alloc, { (u8*)im_cmd_list->VtxBuffer.Data, vtx_size }, std::exchange(vtx_offset, vtx_offset + vtx_size));
-
-			auto idx_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
-			ib_update.write(renderer->alloc, { (u8*)im_cmd_list->IdxBuffer.Data, idx_size }, std::exchange(idx_offset, idx_offset + idx_size));
-		}
-
-		// TODO: barriers
-		PipelineBarrierBuilder barrier_builder = {};
-		barrier_builder.add_buffer(vertex_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
-		vertex_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
-		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
-		index_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
-
-		CmdBuf cmd = renderer->active_frame->cmd;
-
-		cmd.pipeline_barrier(barrier_builder);
-		barrier_builder.reset();
-
-		renderer->buffer_update_end(vb_update);
-		renderer->buffer_update_end(ib_update);
-
-		barrier_builder.add_buffer(vertex_buffer_resorce->buffer, BufferLayout::ShaderRead, 0, VK_WHOLE_SIZE);
-		vertex_buffer_resorce->buffer.layout = BufferLayout::ShaderRead;
-
-		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
-		index_buffer_resorce->buffer.layout = BufferLayout::IndexBuffer;
-
-		cmd.pipeline_barrier(barrier_builder);
-	}
-
-	void ImGuiRenderer::execute() noexcept {
+	void ImGuiRenderer::execute(NotNull<const Allocator*> alloc) noexcept {
 		if (!ImGui::GetCurrentContext()) {
 			return;
 		}
@@ -412,7 +190,7 @@ namespace edge::gfx {
 		ImDrawData* draw_data = ImGui::GetDrawData();
 		if (draw_data && draw_data->Textures) {
 			for (ImTextureData* tex : *draw_data->Textures) {
-				update_texture(tex);
+				update_texture(alloc, tex);
 			}
 		}
 
@@ -420,7 +198,7 @@ namespace edge::gfx {
 			return;
 		}
 
-		update_geometry(draw_data);
+		update_geometry(alloc, draw_data);
 
 		Resource* vertex_buffer_resorce = renderer->get_resource(vertex_buffer);
 		Resource* index_buffer_resorce = renderer->get_resource(index_buffer);
@@ -528,5 +306,237 @@ namespace edge::gfx {
 		}
 
 		cmd.end_rendering();
+	}
+
+	void ImGuiRenderer::update_buffers(NotNull<const Allocator*> alloc) noexcept {
+		if (vertex_need_to_grow) {
+			BufferCreateInfo create_info = {
+			.size = vertex_buffer_capacity * sizeof(ImDrawVert),
+			.flags = k_vertex_buffer_flags
+			};
+
+			Buffer buffer;
+			if (!buffer.create(create_info)) {
+				return;
+			}
+			renderer->update_resource(alloc, vertex_buffer, buffer);
+			vertex_need_to_grow = false;
+		}
+
+		if (index_need_to_grow) {
+			BufferCreateInfo create_info = {
+			.size = index_buffer_capacity * sizeof(ImDrawIdx),
+			.flags = k_index_buffer_flags
+			};
+
+			Buffer buffer;
+			if (!buffer.create(create_info)) {
+				return;
+			}
+			renderer->update_resource(alloc, index_buffer, buffer);
+			index_need_to_grow = false;
+		}
+	}
+
+	void ImGuiRenderer::update_texture(NotNull<const Allocator*> alloc, NotNull<ImTextureData*> tex) noexcept {
+		if (tex->Status == ImTextureStatus_OK) {
+			return;
+		}
+
+		CmdBuf cmd = renderer->active_frame->cmd;
+
+		if (tex->Status == ImTextureStatus_WantCreate) {
+			Handle image_handle = renderer->add_resource();
+
+			ImageCreateInfo create_info = {
+				.extent = {
+					.width = (u32)tex->Width,
+					.height = (u32)tex->Height,
+					.depth = 1u
+					},
+				.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				.format = VK_FORMAT_R8G8B8A8_SRGB
+			};
+
+			Image image = {};
+			if (!image.create(create_info)) {
+				EDGE_LOG_ERROR("Failed to create font image.");
+				tex->SetTexID(ImTextureID_Invalid);
+				tex->SetStatus(ImTextureStatus_Destroyed);
+				return;
+			}
+
+			PipelineBarrierBuilder barrier_builder = {};
+
+			barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+				});
+			cmd.pipeline_barrier(barrier_builder);
+			image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+			usize whole_size = tex->Width * tex->Height * tex->BytesPerPixel;
+
+			ImageUpdateInfo update_info = {
+				.dst_image = image,
+				.buffer_view = renderer->active_frame->try_allocate_staging_memory(alloc, whole_size, 1)
+			};
+
+			update_info.write(alloc, {
+				.data = { tex->Pixels, whole_size },
+				.extent = {
+					.width = (u32)tex->Width,
+					.height = (u32)tex->Height,
+					.depth = 1
+					}
+				});
+			renderer->image_update_end(alloc, update_info);
+			renderer->setup_resource(alloc, image_handle, image);
+
+			tex->SetTexID(image_handle);
+			tex->SetStatus(ImTextureStatus_OK);
+		}
+		else if (tex->Status == ImTextureStatus_WantUpdates) {
+			Handle resource_id = (Handle)tex->GetTexID();
+			Resource* resource = renderer->get_resource(resource_id);
+
+			usize total_size = 0;
+			for (const ImTextureRect& update_region : tex->Updates) {
+				//EDGE_LOG_DEBUG("Updating image {} region: [{}, {}, {}, {}]", tex->GetTexID(), update_region.x, update_region.y, update_region.w, update_region.h);
+				usize region_pitch = update_region.w * tex->BytesPerPixel;
+				total_size += region_pitch * update_region.h;
+			}
+
+			PipelineBarrierBuilder barrier_builder = {};
+			VkImageSubresourceRange subresource_range = {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = 1,
+				.baseArrayLayer = 0,
+				.layerCount = 1
+			};
+
+			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subresource_range);
+			cmd.pipeline_barrier(barrier_builder);
+			barrier_builder.reset();
+			resource->image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+			ImageUpdateInfo update_info = {
+				.dst_image = resource->image,
+				.buffer_view = renderer->active_frame->try_allocate_staging_memory(alloc, total_size, 1)
+			};
+
+			u8* compacted_data = (u8*)alloc->malloc(total_size, 1);
+			// TODO: Check allocation result
+
+			usize buffer_offset = 0;
+			for (const ImTextureRect& update_region : tex->Updates) {
+				usize region_pitch = update_region.w * tex->BytesPerPixel;
+
+				for (usize y = 0; y < update_region.h; y++) {
+					const void* src_pixels = tex->GetPixelsAt(update_region.x, update_region.y + y);
+					memcpy(compacted_data + buffer_offset + (region_pitch * y), src_pixels, region_pitch);
+				}
+
+				usize region_size = region_pitch * update_region.h;
+
+				update_info.write(alloc, {
+				.data = { compacted_data + buffer_offset, region_size },
+				.offset = {
+						.x = update_region.x,
+						.y = update_region.y,
+						.z = 0
+					},
+				.extent = {
+					.width = update_region.w,
+					.height = update_region.h,
+					.depth = 1
+					}
+					});
+
+				buffer_offset += region_size;
+			}
+
+			renderer->image_update_end(alloc, update_info);
+			alloc->free(compacted_data);
+
+			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, subresource_range);
+			cmd.pipeline_barrier(barrier_builder);
+			resource->image.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+			tex->SetStatus(ImTextureStatus_OK);
+		}
+		else if (tex->Status == ImTextureStatus_WantDestroy && tex->UnusedFrames >= 256) {
+			Handle image_handle = (Handle)tex->GetTexID();
+			renderer->free_resource(alloc, image_handle);
+
+			tex->SetTexID(ImTextureID_Invalid);
+			tex->SetStatus(ImTextureStatus_Destroyed);
+		}
+	}
+
+	void ImGuiRenderer::update_geometry(NotNull<const Allocator*> alloc, NotNull<ImDrawData*> draw_data) noexcept {
+		if (draw_data->TotalVtxCount > vertex_buffer_capacity) {
+			vertex_buffer_capacity = grow(vertex_buffer_capacity, draw_data->TotalVtxCount);
+			vertex_need_to_grow = true;
+		}
+
+		if (draw_data->TotalIdxCount > index_buffer_capacity) {
+			index_buffer_capacity = grow(index_buffer_capacity, draw_data->TotalIdxCount);
+			index_need_to_grow = true;
+		}
+
+		update_buffers(alloc);
+
+		Resource* vertex_buffer_resorce = renderer->get_resource(vertex_buffer);
+		Resource* index_buffer_resorce = renderer->get_resource(index_buffer);
+
+		BufferUpdateInfo vb_update = {
+			.dst_buffer = vertex_buffer_resorce->buffer,
+			.buffer_view = renderer->active_frame->try_allocate_staging_memory(alloc, draw_data->TotalVtxCount * sizeof(ImDrawVert), 1)
+		};
+
+		BufferUpdateInfo ib_update = {
+			.dst_buffer = index_buffer_resorce->buffer,
+			.buffer_view = renderer->active_frame->try_allocate_staging_memory(alloc, draw_data->TotalIdxCount * sizeof(ImDrawIdx), 1)
+		};
+
+		VkDeviceSize vtx_offset = 0, idx_offset = 0;
+
+		for (i32 n = 0; n < draw_data->CmdListsCount; n++) {
+			const ImDrawList* im_cmd_list = draw_data->CmdLists[n];
+
+			auto vtx_size = im_cmd_list->VtxBuffer.Size * sizeof(ImDrawVert);
+			vb_update.write(alloc, { (u8*)im_cmd_list->VtxBuffer.Data, vtx_size }, std::exchange(vtx_offset, vtx_offset + vtx_size));
+
+			auto idx_size = im_cmd_list->IdxBuffer.Size * sizeof(ImDrawIdx);
+			ib_update.write(alloc, { (u8*)im_cmd_list->IdxBuffer.Data, idx_size }, std::exchange(idx_offset, idx_offset + idx_size));
+		}
+
+		// TODO: barriers
+		PipelineBarrierBuilder barrier_builder = {};
+		barrier_builder.add_buffer(vertex_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
+		vertex_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
+		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
+		index_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
+
+		CmdBuf cmd = renderer->active_frame->cmd;
+
+		cmd.pipeline_barrier(barrier_builder);
+		barrier_builder.reset();
+
+		renderer->buffer_update_end(alloc, vb_update);
+		renderer->buffer_update_end(alloc, ib_update);
+
+		barrier_builder.add_buffer(vertex_buffer_resorce->buffer, BufferLayout::ShaderRead, 0, VK_WHOLE_SIZE);
+		vertex_buffer_resorce->buffer.layout = BufferLayout::ShaderRead;
+
+		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
+		index_buffer_resorce->buffer.layout = BufferLayout::IndexBuffer;
+
+		cmd.pipeline_barrier(barrier_builder);
 	}
 }

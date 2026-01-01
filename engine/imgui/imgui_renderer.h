@@ -14,6 +14,11 @@ namespace edge {
 namespace edge::gfx {
 	struct Renderer;
 
+	struct ImGuiRendererCreateInfo {
+		const Allocator* alloc = nullptr;
+		Renderer* renderer = nullptr;
+	};
+
 	struct ImGuiRenderer {
 		Renderer* renderer = nullptr;
 
@@ -23,22 +28,21 @@ namespace edge::gfx {
 
 		Handle vertex_buffer = HANDLE_INVALID;
 		u64 vertex_buffer_capacity = 0;
+		bool vertex_need_to_grow = true;
 
 		Handle index_buffer = HANDLE_INVALID;
 		u64 index_buffer_capacity = 0;
+		bool index_need_to_grow = true;
 
-		void update_texture(NotNull<ImTextureData*> tex) noexcept;
-		void update_geometry(NotNull<ImDrawData*> draw_data) noexcept;
+		bool create(ImGuiRendererCreateInfo create_info) noexcept;
+		void destroy(NotNull<const Allocator*> alloc) noexcept;
 
-		void execute() noexcept;
+		void execute(NotNull<const Allocator*> alloc) noexcept;
+	private:
+		void update_buffers(NotNull<const Allocator*> alloc) noexcept;
+		void update_texture(NotNull<const Allocator*> alloc, NotNull<ImTextureData*> tex) noexcept;
+		void update_geometry(NotNull<const Allocator*> alloc, NotNull<ImDrawData*> draw_data) noexcept;
 	};
-
-	struct ImGuiRendererCreateInfo {
-		Renderer* renderer;
-	};
-
-	ImGuiRenderer* imgui_renderer_create(ImGuiRendererCreateInfo create_info);
-	void imgui_renderer_destroy(ImGuiRenderer* imgui_renderer);
 }
 
 #endif

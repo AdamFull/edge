@@ -60,8 +60,8 @@ namespace edge::gfx {
 
 		Array<Resource> free_resources = {};
 
-		bool create(NotNull<Renderer*> renderer) noexcept;
-		void destroy(NotNull<Renderer*> renderer) noexcept;
+		bool create(NotNull<const Allocator*> alloc, CmdPool cmd_pool) noexcept;
+		void destroy(NotNull<const Allocator*> alloc, NotNull<Renderer*> renderer) noexcept;
 		void release_resources(NotNull<Renderer*> renderer) noexcept;
 
 		bool begin(NotNull<Renderer*> renderer) noexcept;
@@ -96,8 +96,6 @@ namespace edge::gfx {
 	};
 
 	struct Renderer {
-		const Allocator* alloc = nullptr;
-
 		Queue direct_queue = {};
 
 		CmdPool cmd_pool = {};
@@ -137,31 +135,28 @@ namespace edge::gfx {
 
 		Sampler default_sampler = {};
 
+		bool create(RendererCreateInfo create_info) noexcept;
+		void destroy(NotNull<const Allocator*> alloc) noexcept;
+
 		Handle add_resource() noexcept;
-		bool setup_resource(Handle handle, Image image) noexcept; // TODO: Maybe attach_resource sounds better
+		bool setup_resource(NotNull<const Allocator*> alloc, Handle handle, Image image) noexcept; // TODO: Maybe attach_resource sounds better
 		bool setup_resource(Handle handle, Buffer buffer) noexcept; // TODO: Maybe attach_resource sounds better
-		void update_resource(Handle handle, Image image) noexcept;
-		void update_resource(Handle handle, Buffer buffer) noexcept;
+		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Image image) noexcept;
+		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Buffer buffer) noexcept;
 		Resource* get_resource(Handle handle) noexcept;
-		void free_resource(Handle handle) noexcept;
+		void free_resource(NotNull<const Allocator*> alloc, Handle handle) noexcept;
 
 		bool frame_begin() noexcept;
 		bool frame_end() noexcept;
 
-		void image_update_begin(VkDeviceSize size, ImageUpdateInfo& update_info) noexcept;
-		void image_update_end(ImageUpdateInfo& update_info) noexcept;
-
-		void buffer_update_begin(VkDeviceSize size, BufferUpdateInfo& update_info) noexcept;
-		void buffer_update_end(BufferUpdateInfo& update_info);
+		void image_update_end(NotNull<const Allocator*> alloc, ImageUpdateInfo& update_info) noexcept;
+		void buffer_update_end(NotNull<const Allocator*> alloc, BufferUpdateInfo& update_info);
 
 		template<typename T>
 		void push_constants(VkShaderStageFlags, T data) {
 			active_frame->cmd.push_constants(pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(T), &data);
 		}
 	};
-
-	Renderer* renderer_create(RendererCreateInfo create_info);
-	void renderer_destroy(Renderer* renderer);
 }
 
 #endif // GFX_RENDERER_H

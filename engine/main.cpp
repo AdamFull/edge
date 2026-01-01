@@ -31,10 +31,10 @@ static Window* window = nullptr;
 static gfx::Queue main_queue = {};
 static gfx::Queue copy_queue = {};
 
-static gfx::Renderer* renderer = {};
+static gfx::Renderer renderer = {};
 
 static ImGuiLayer* imgui_layer = nullptr;
-static gfx::ImGuiRenderer* imgui_renderer = nullptr;
+static gfx::ImGuiRenderer imgui_renderer = {};
 
 static void edge_cleanup_engine(void) {
 	main_queue.wait_idle();
@@ -43,18 +43,8 @@ static void edge_cleanup_engine(void) {
 		imgui_layer_destroy(imgui_layer);
 	}
 
-	if (imgui_renderer) {
-		gfx::imgui_renderer_destroy(imgui_renderer);
-	}
-
-	//if (uploader) {
-	//	gfx::uploader_destroy(engine_context.allocator, engine_context.uploader);
-	//}
-
-	if (renderer) {
-		gfx::renderer_destroy(renderer);
-	}
-
+	imgui_renderer.destroy(&allocator);
+	renderer.destroy(&allocator);
 	main_queue.release();
 	
 	gfx::context_shutdown();
@@ -183,8 +173,7 @@ int edge_main(PlatformLayout* platform_layout) {
 		.main_queue = main_queue
 	};
 
-	renderer = gfx::renderer_create(renderer_create_info);
-	if (!renderer) {
+	if (!renderer.create(renderer_create_info)) {
 		edge_cleanup_engine();
 		return -1;
 	}
@@ -215,11 +204,11 @@ int edge_main(PlatformLayout* platform_layout) {
 	}
 
 	const gfx::ImGuiRendererCreateInfo imgui_renderer_create_info = {
-		.renderer = renderer
+		.alloc = &allocator,
+		.renderer = &renderer
 	};
 
-	imgui_renderer = gfx::imgui_renderer_create(imgui_renderer_create_info);
-	if (!imgui_renderer) {
+	if (!imgui_renderer.create(imgui_renderer_create_info)) {
 		edge_cleanup_engine();
 		return -1;
 	}
@@ -229,10 +218,10 @@ int edge_main(PlatformLayout* platform_layout) {
 
 		imgui_layer_update(imgui_layer, 0.1f);
 
-		if (renderer->frame_begin()) {
-			imgui_renderer->execute();
+		if (renderer.frame_begin()) {
+			imgui_renderer.execute(&allocator);
 			
-			renderer->frame_end();
+			renderer.frame_end();
 		}
     }
 
