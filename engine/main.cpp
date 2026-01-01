@@ -1,4 +1,4 @@
-#include "engine.h"
+#include "runtime/platform.h"
 #include "event_dispatcher.h"
 
 #include "gfx_context.h"
@@ -18,87 +18,100 @@
 
 using namespace edge;
 
-static EngineContext engine_context = {};
+static Allocator allocator = {};
+
+static Logger* logger = nullptr;
+static Scheduler* sched = nullptr;
+
+static EventDispatcher* event_dispatcher = nullptr;
+
+static PlatformContext* platform_context = nullptr;
+static Window* window = nullptr;
+
+static gfx::Queue main_queue = {};
+static gfx::Queue copy_queue = {};
+
+static gfx::Renderer* renderer = {};
+
+static ImGuiLayer* imgui_layer = nullptr;
+static gfx::ImGuiRenderer* imgui_renderer = nullptr;
 
 static void edge_cleanup_engine(void) {
-	engine_context.main_queue.wait_idle();
+	main_queue.wait_idle();
 
-	if (engine_context.imgui_layer) {
-		imgui_layer_destroy(engine_context.imgui_layer);
+	if (imgui_layer) {
+		imgui_layer_destroy(imgui_layer);
 	}
 
-	if (engine_context.imgui_renderer) {
-		gfx::imgui_renderer_destroy(engine_context.imgui_renderer);
+	if (imgui_renderer) {
+		gfx::imgui_renderer_destroy(imgui_renderer);
 	}
 
-	//if (engine_context.uploader) {
+	//if (uploader) {
 	//	gfx::uploader_destroy(engine_context.allocator, engine_context.uploader);
 	//}
 
-	if (engine_context.renderer) {
-		gfx::renderer_destroy(engine_context.renderer);
+	if (renderer) {
+		gfx::renderer_destroy(renderer);
 	}
 
-	engine_context.main_queue.release();
+	main_queue.release();
 	
 	gfx::context_shutdown();
 
-	if (engine_context.event_dispatcher) {
-		event_dispatcher_destroy(engine_context.event_dispatcher);
+	if (event_dispatcher) {
+		event_dispatcher_destroy(event_dispatcher);
 	}
 
-	if (engine_context.window) {
-		window_destroy(engine_context.allocator, engine_context.window);
+	if (window) {
+		window_destroy(&allocator, window);
 	}
 
-	if (engine_context.platform_context) {
-		platform_context_destroy(engine_context.platform_context);
+	if (platform_context) {
+		platform_context_destroy(platform_context);
 	}
 
-	if (engine_context.sched) {
-		sched_destroy(engine_context.sched);
+	if (sched) {
+		sched_destroy(sched);
 	}
 
-	if (engine_context.logger) {
-		logger_destroy(engine_context.logger);
+	if (logger) {
+		logger_destroy(logger);
 	}
 
-	size_t net_allocated = engine_context.allocator->get_net();
+	size_t net_allocated = allocator.get_net();
 	assert(net_allocated == 0 && "Memory leaks detected.");
 }
 
 int edge_main(PlatformLayout* platform_layout) {
 #if EDGE_DEBUG
-	Allocator allocator = Allocator::create_tracking();
+	allocator = Allocator::create_tracking();
 #else
-	Allocator allocator = Allocator::create(mi_malloc, mi_free, mi_realloc, mi_calloc, mi_strdup);
+	allocator = Allocator::create(mi_malloc, mi_free, mi_realloc, mi_calloc, mi_strdup);
 #endif
 
-	engine_context.allocator = &allocator;
-	engine_context.platform_layout = platform_layout;
-
-	engine_context.logger = logger_create(&allocator, LogLevel::Trace);
-	if (!engine_context.logger) {
+	logger = logger_create(&allocator, LogLevel::Trace);
+	if (!logger) {
 		edge_cleanup_engine();
 		return -1;
 	}
 
-	logger_set_global(engine_context.logger);
+	logger_set_global(logger);
 
 	LoggerOutput* stdout_output = logger_create_stdout_output(&allocator, LogFormat_Default | LogFormat_Color);
-	logger_add_output(engine_context.logger, stdout_output);
+	logger_add_output(logger, stdout_output);
 
 	LoggerOutput* file_output = logger_create_file_output(&allocator, LogFormat_Default, "log.log", false);
-	logger_add_output(engine_context.logger, file_output);
+	logger_add_output(logger, file_output);
 
-	engine_context.sched = sched_create(&allocator);
-	if (!engine_context.sched) {
+	sched = sched_create(&allocator);
+	if (!sched) {
 		edge_cleanup_engine();
 		return -1;
 	}
 
-	engine_context.event_dispatcher = event_dispatcher_create(&allocator);
-	if (!engine_context.event_dispatcher) {
+	event_dispatcher = event_dispatcher_create(&allocator);
+	if (!event_dispatcher) {
 		edge_cleanup_engine();
 		return -1;
 	}
@@ -106,11 +119,11 @@ int edge_main(PlatformLayout* platform_layout) {
 	const PlatformContextCreateInfo platform_context_create_info = {
 		.alloc = &allocator,
 		.layout = platform_layout,
-		.event_dispatcher = engine_context.event_dispatcher
+		.event_dispatcher = event_dispatcher
 	};
 
-	engine_context.platform_context = platform_context_create(platform_context_create_info);
-	if (!engine_context.platform_context) {
+	platform_context = platform_context_create(platform_context_create_info);
+	if (!platform_context) {
 		edge_cleanup_engine();
 		return -1;
 	}
@@ -120,8 +133,8 @@ int edge_main(PlatformLayout* platform_layout) {
 
 	const WindowCreateInfo window_create_info = {
 		.alloc = &allocator,
-		.event_dispatcher = engine_context.event_dispatcher,
-        .platform_context = engine_context.platform_context,
+		.event_dispatcher = event_dispatcher,
+        .platform_context = platform_context,
 
 		.title = "Window",
 		.mode = WindowMode::Default,
@@ -131,16 +144,16 @@ int edge_main(PlatformLayout* platform_layout) {
 		.height = 720
 	};
 
-	engine_context.window = window_create(window_create_info);
-	if (!engine_context.window) {
+	window = window_create(window_create_info);
+	if (!window) {
 		edge_cleanup_engine();
 		return -1;
 	}
 
 	const gfx::ContextCreateInfo gfx_cteate_info = {
 		.alloc = &allocator,
-		.platform_context = engine_context.platform_context,
-		.window = engine_context.window
+		.platform_context = platform_context,
+		.window = window
 	};
 
 	if (!gfx::context_init(&gfx_cteate_info)) {
@@ -155,7 +168,7 @@ int edge_main(PlatformLayout* platform_layout) {
 		.prefer_separate_family = false
 	};
 
-	if (!engine_context.main_queue.request(direct_queue_request)) {
+	if (!main_queue.request(direct_queue_request)) {
 		edge_cleanup_engine();
 		return -1;
 	}
@@ -166,23 +179,23 @@ int edge_main(PlatformLayout* platform_layout) {
 		.strategy = gfx::QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED,
 		.prefer_separate_family = false
 	};
-	engine_context.copy_queue.request(copy_queue_request);
+	copy_queue.request(copy_queue_request);
 
 	const gfx::RendererCreateInfo renderer_create_info = {
 		.alloc = &allocator,
-		.main_queue = engine_context.main_queue
+		.main_queue = main_queue
 	};
 
-	engine_context.renderer = gfx::renderer_create(renderer_create_info);
-	if (!engine_context.renderer) {
+	renderer = gfx::renderer_create(renderer_create_info);
+	if (!renderer) {
 		edge_cleanup_engine();
 		return -1;
 	}
 
 	const gfx::UploaderCreateInfo uploader_create_info = {
 		.alloc = &allocator,
-		.sched = engine_context.sched,
-		.queue = engine_context.copy_queue ? engine_context.copy_queue : engine_context.main_queue
+		.sched = sched,
+		.queue = copy_queue ? copy_queue : main_queue
 	};
 
 	//engine_context.uploader = gfx::uploader_create(uploader_create_info);
@@ -192,37 +205,37 @@ int edge_main(PlatformLayout* platform_layout) {
 	//}
 
 	const ImGuiLayerInitInfo imgui_init_info = {
-		.alocator = engine_context.allocator,
-		.event_dispatcher = engine_context.event_dispatcher,
-		.platform_context = engine_context.platform_context,
-		.window = engine_context.window
+		.alocator = &allocator,
+		.event_dispatcher = event_dispatcher,
+		.platform_context = platform_context,
+		.window = window
 	};
 
-	engine_context.imgui_layer = imgui_layer_create(imgui_init_info);
-	if (!engine_context.imgui_layer) {
+	imgui_layer = imgui_layer_create(imgui_init_info);
+	if (!imgui_layer) {
 		edge_cleanup_engine();
 		return -1;
 	}
 
 	const gfx::ImGuiRendererCreateInfo imgui_renderer_create_info = {
-		.renderer = engine_context.renderer
+		.renderer = renderer
 	};
 
-	engine_context.imgui_renderer = gfx::imgui_renderer_create(imgui_renderer_create_info);
-	if (!engine_context.imgui_renderer) {
+	imgui_renderer = gfx::imgui_renderer_create(imgui_renderer_create_info);
+	if (!imgui_renderer) {
 		edge_cleanup_engine();
 		return -1;
 	}
 
-    while (!window_should_close(engine_context.window)) {
-		window_process_events(engine_context.window, 0.1f);
+    while (!window_should_close(window)) {
+		window_process_events(window, 0.1f);
 
-		imgui_layer_update(engine_context.imgui_layer, 0.1f);
+		imgui_layer_update(imgui_layer, 0.1f);
 
-		if (engine_context.renderer->frame_begin()) {
-			engine_context.imgui_renderer->execute();
+		if (renderer->frame_begin()) {
+			imgui_renderer->execute();
 			
-			engine_context.renderer->frame_end();
+			renderer->frame_end();
 		}
     }
 
