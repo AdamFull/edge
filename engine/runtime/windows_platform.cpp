@@ -67,8 +67,8 @@ namespace edge {
 #endif
 		
 		Logger* logger = logger_get_global();
-		LoggerOutput* debug_output = logger_create_debug_console_output(create_info.alloc, LogFormat::LogFormat_Default);
-		logger_add_output(logger, debug_output);
+		ILoggerOutput* debug_output = logger_create_debug_console_output(create_info.alloc, LogFormat::LogFormat_Default);
+		logger->add_output(create_info.alloc, debug_output);
 
 		return ctx;
 	}

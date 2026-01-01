@@ -20,7 +20,7 @@ using namespace edge;
 
 static Allocator allocator = {};
 
-static Logger* logger = nullptr;
+static Logger logger = {};
 static Scheduler* sched = nullptr;
 
 static EventDispatcher event_dispatcher = {};
@@ -60,9 +60,7 @@ static void edge_cleanup_engine(void) {
 		sched_destroy(sched);
 	}
 
-	if (logger) {
-		logger_destroy(logger);
-	}
+	logger.destroy(&allocator);
 
 	size_t net_allocated = allocator.get_net();
 	assert(net_allocated == 0 && "Memory leaks detected.");
@@ -75,19 +73,18 @@ int edge_main(PlatformLayout* platform_layout) {
 	allocator = Allocator::create(mi_malloc, mi_free, mi_realloc, mi_calloc, mi_strdup);
 #endif
 
-	logger = logger_create(&allocator, LogLevel::Trace);
-	if (!logger) {
+	if (!logger.create(&allocator, LogLevel::Trace)) {
 		edge_cleanup_engine();
 		return -1;
 	}
 
-	logger_set_global(logger);
+	logger_set_global(&logger);
 
-	LoggerOutput* stdout_output = logger_create_stdout_output(&allocator, LogFormat_Default | LogFormat_Color);
-	logger_add_output(logger, stdout_output);
+	ILoggerOutput* stdout_output = logger_create_stdout_output(&allocator, LogFormat_Default | LogFormat_Color);
+	logger.add_output(&allocator, stdout_output);
 
-	LoggerOutput* file_output = logger_create_file_output(&allocator, LogFormat_Default, "log.log", false);
-	logger_add_output(logger, file_output);
+	ILoggerOutput* file_output = logger_create_file_output(&allocator, LogFormat_Default, "log.log", false);
+	logger.add_output(&allocator, file_output);
 
 	sched = sched_create(&allocator);
 	if (!sched) {
@@ -113,7 +110,7 @@ int edge_main(PlatformLayout* platform_layout) {
 	}
 
 	EDGE_LOG_INFO("Context initialization finished.");
-	logger_flush(logger_get_global());
+	logger.flush();
 
 	const WindowCreateInfo window_create_info = {
 		.alloc = &allocator,
