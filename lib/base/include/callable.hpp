@@ -33,7 +33,7 @@ namespace edge {
 
 	template<typename R, typename... Args>
 	struct Callable<R(Args...)> {
-		R invoke(Args... args) {
+		R invoke(Args... args) const noexcept {
 			return invoke_fn(data, std::forward<Args>(args)...);
 		}
 
@@ -49,8 +49,8 @@ namespace edge {
 			return invoke_fn != nullptr;
 		}
 
-		R(*invoke_fn)(void* data, Args... args);
-		void* data;
+		R(*invoke_fn)(void* data, Args... args) = nullptr;
+		void* data = nullptr;
 	};
 
 	template<typename R, typename... Args>
