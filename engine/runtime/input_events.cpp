@@ -19,7 +19,7 @@ namespace edge {
 		evt.key = key;
 		evt.action = new_state;
 
-		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+		dispatcher->dispatch((EventHeader*)&evt);
 
 		state->btn_states.put((usize)key, (bool)new_state);
 	}
@@ -44,7 +44,7 @@ namespace edge {
 			.dy = y - state->mouse.y
 		};
 
-		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+		dispatcher->dispatch((EventHeader*)&evt);
 
 		state->mouse.x = x;
 		state->mouse.y = y;
@@ -65,7 +65,7 @@ namespace edge {
 		evt.header.type = (u64)InputEventType::MouseBtn;
 		evt.btn = btn;
 		evt.action = new_state;
-		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+		dispatcher->dispatch((EventHeader*)&evt);
 
 		state->mouse.btn_states.put((usize)btn, (bool)new_state);
 	}
@@ -86,7 +86,7 @@ namespace edge {
 		evt.pad_id = pad_id;
 		evt.btn = btn;
 		evt.state = new_state;
-		event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+		dispatcher->dispatch((EventHeader*)&evt);
 
 		state->pads[pad_id].btn_states.put((usize)btn, (bool)new_state);
 	}
@@ -113,7 +113,7 @@ namespace edge {
 			if (x_diff > axis_threshold || y_diff > axis_threshold) {
 				evt.x = x;
 				evt.y = y;
-				event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+				dispatcher->dispatch((EventHeader*)&evt);
 
 				state->pads[pad_id].stick_left_x = x;
 				state->pads[pad_id].stick_left_y = y;
@@ -127,7 +127,7 @@ namespace edge {
 			if (x_diff > axis_threshold || y_diff > axis_threshold) {
 				evt.x = x;
 				evt.y = y;
-				event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+				dispatcher->dispatch((EventHeader*)&evt);
 
 				state->pads[pad_id].stick_right_x = x;
 				state->pads[pad_id].stick_right_y = y;
@@ -139,7 +139,7 @@ namespace edge {
 			f32 diff = fabs(x - state->pads[pad_id].trigger_left);
 			if (diff > axis_threshold) {
 				evt.x = x;
-				event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+				dispatcher->dispatch((EventHeader*)&evt);
 
 				state->pads[pad_id].trigger_left = x;
 			}
@@ -149,7 +149,7 @@ namespace edge {
 			f32 diff = fabs(x - state->pads[pad_id].trigger_right);
 			if (diff > axis_threshold) {
 				evt.x = x;
-				event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+				dispatcher->dispatch((EventHeader*)&evt);
 
 				state->pads[pad_id].trigger_right = x;
 			}
@@ -164,7 +164,7 @@ namespace edge {
 				evt.x = x;
 				evt.y = y;
 				evt.z = z;
-				event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+				dispatcher->dispatch((EventHeader*)&evt);
 
 				state->pads[pad_id].accel_x = x;
 				state->pads[pad_id].accel_y = y;
@@ -181,7 +181,7 @@ namespace edge {
 				evt.x = x;
 				evt.y = y;
 				evt.z = z;
-				event_dispatcher_dispatch(dispatcher, (EventHeader*)&evt);
+				dispatcher->dispatch((EventHeader*)&evt);
 
 				state->pads[pad_id].gyro_x = x;
 				state->pads[pad_id].gyro_y = y;

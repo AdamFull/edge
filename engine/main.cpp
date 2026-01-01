@@ -23,7 +23,7 @@ static Allocator allocator = {};
 static Logger* logger = nullptr;
 static Scheduler* sched = nullptr;
 
-static EventDispatcher* event_dispatcher = nullptr;
+static EventDispatcher event_dispatcher = {};
 
 static PlatformContext* platform_context = nullptr;
 static Window* window = nullptr;
@@ -59,9 +59,7 @@ static void edge_cleanup_engine(void) {
 	
 	gfx::context_shutdown();
 
-	if (event_dispatcher) {
-		event_dispatcher_destroy(event_dispatcher);
-	}
+	event_dispatcher.destroy(&allocator);
 
 	if (window) {
 		window_destroy(&allocator, window);
@@ -110,8 +108,7 @@ int edge_main(PlatformLayout* platform_layout) {
 		return -1;
 	}
 
-	event_dispatcher = event_dispatcher_create(&allocator);
-	if (!event_dispatcher) {
+	if (!event_dispatcher.create(&allocator)) {
 		edge_cleanup_engine();
 		return -1;
 	}
@@ -119,7 +116,7 @@ int edge_main(PlatformLayout* platform_layout) {
 	const PlatformContextCreateInfo platform_context_create_info = {
 		.alloc = &allocator,
 		.layout = platform_layout,
-		.event_dispatcher = event_dispatcher
+		.event_dispatcher = &event_dispatcher
 	};
 
 	platform_context = platform_context_create(platform_context_create_info);
@@ -133,7 +130,7 @@ int edge_main(PlatformLayout* platform_layout) {
 
 	const WindowCreateInfo window_create_info = {
 		.alloc = &allocator,
-		.event_dispatcher = event_dispatcher,
+		.event_dispatcher = &event_dispatcher,
         .platform_context = platform_context,
 
 		.title = "Window",
@@ -206,7 +203,7 @@ int edge_main(PlatformLayout* platform_layout) {
 
 	const ImGuiLayerInitInfo imgui_init_info = {
 		.alocator = &allocator,
-		.event_dispatcher = event_dispatcher,
+		.event_dispatcher = &event_dispatcher,
 		.platform_context = platform_context,
 		.window = window
 	};

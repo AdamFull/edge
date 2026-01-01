@@ -160,32 +160,32 @@ namespace edge {
 	};
 
 	static InputMouseBtn glfw_mouse_btn_code_to_edge[] = {
-		[GLFW_MOUSE_BUTTON_1] = InputMouseBtn::Left,
-		[GLFW_MOUSE_BUTTON_2] = InputMouseBtn::Right,
-		[GLFW_MOUSE_BUTTON_3] = InputMouseBtn::Middle,
-		[GLFW_MOUSE_BUTTON_4] = InputMouseBtn::_4,
-		[GLFW_MOUSE_BUTTON_5] = InputMouseBtn::_5,
-		[GLFW_MOUSE_BUTTON_6] = InputMouseBtn::_6,
-		[GLFW_MOUSE_BUTTON_7] = InputMouseBtn::_7,
-		[GLFW_MOUSE_BUTTON_8] = InputMouseBtn::_8
+		InputMouseBtn::Left,
+		InputMouseBtn::Right,
+		InputMouseBtn::Middle,
+		InputMouseBtn::_4,
+		InputMouseBtn::_5,
+		InputMouseBtn::_6,
+		InputMouseBtn::_7,
+		InputMouseBtn::_8
 	};
 
 	static InputPadBtn glfw_pad_btn_code_to_edge[] = {
-		[GLFW_GAMEPAD_BUTTON_A] = InputPadBtn::A,
-		[GLFW_GAMEPAD_BUTTON_B] = InputPadBtn::B,
-		[GLFW_GAMEPAD_BUTTON_X] = InputPadBtn::X,
-		[GLFW_GAMEPAD_BUTTON_Y] = InputPadBtn::Y,
-		[GLFW_GAMEPAD_BUTTON_LEFT_BUMPER] = InputPadBtn::BumperLeft,
-		[GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER] = InputPadBtn::BumperRight,
-		[GLFW_GAMEPAD_BUTTON_BACK] = InputPadBtn::Back,
-		[GLFW_GAMEPAD_BUTTON_START] = InputPadBtn::Start,
-		[GLFW_GAMEPAD_BUTTON_GUIDE] = InputPadBtn::Guide,
-		[GLFW_GAMEPAD_BUTTON_LEFT_THUMB] = InputPadBtn::ThumbLeft,
-		[GLFW_GAMEPAD_BUTTON_RIGHT_THUMB] = InputPadBtn::ThumbRight,
-		[GLFW_GAMEPAD_BUTTON_DPAD_UP] = InputPadBtn::DpadUp,
-		[GLFW_GAMEPAD_BUTTON_DPAD_RIGHT] = InputPadBtn::DpadRight,
-		[GLFW_GAMEPAD_BUTTON_DPAD_DOWN] = InputPadBtn::DpadDown,
-		[GLFW_GAMEPAD_BUTTON_DPAD_LEFT] = InputPadBtn::DpadLeft
+		InputPadBtn::A,
+		InputPadBtn::B,
+		InputPadBtn::X,
+		InputPadBtn::Y,
+		InputPadBtn::BumperLeft,
+		InputPadBtn::BumperRight,
+		InputPadBtn::Back,
+		InputPadBtn::Start,
+		InputPadBtn::Guide,
+		InputPadBtn::ThumbLeft,
+		InputPadBtn::ThumbRight,
+		InputPadBtn::DpadUp,
+		InputPadBtn::DpadRight,
+		InputPadBtn::DpadDown,
+		InputPadBtn::DpadLeft
 	};
 
 	static void* glfw_allocate_cb(size_t size, void* user) {
@@ -257,7 +257,7 @@ namespace edge {
 
 		WindowCloseEvent evt;
 		window_close_event_init(&evt);
-		event_dispatcher_dispatch(ctx->event_dispatcher, (EventHeader*)&evt);
+		ctx->event_dispatcher->dispatch((EventHeader*)&evt);
 	}
 
 	static void window_size_cb(GLFWwindow* window, i32 width, i32 height) {
@@ -268,7 +268,7 @@ namespace edge {
 
 		WindowResizeEvent evt;
 		window_resize_event_init(&evt, width, height);
-		event_dispatcher_dispatch(ctx->event_dispatcher, (EventHeader*)&evt);
+		ctx->event_dispatcher->dispatch((EventHeader*)&evt);
 	}
 
 	static void window_focus_cb(GLFWwindow* window, i32 focused) {
@@ -279,7 +279,7 @@ namespace edge {
 
 		WindowFocusEvent evt;
 		window_focus_event_init(&evt, focused == 1);
-		event_dispatcher_dispatch(ctx->event_dispatcher, (EventHeader*)&evt);
+		ctx->event_dispatcher->dispatch((EventHeader*)&evt);
 	}
 
 	static void window_key_cb(GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods) {
@@ -318,7 +318,7 @@ namespace edge {
 		InputMouseScrollEvent evt;
 		input_mouse_scroll_event_init(&evt, (f32)xoffset, (f32)yoffset);
 
-		event_dispatcher_dispatch(ctx->event_dispatcher, (EventHeader*)&evt);
+		ctx->event_dispatcher->dispatch((EventHeader*)&evt);
 	}
 
 	static void character_input_cb(GLFWwindow* window, u32 codepoint) {
@@ -330,7 +330,7 @@ namespace edge {
 		InputTextInputEvent evt;
 		input_text_input_event_init(&evt, codepoint);
 
-		event_dispatcher_dispatch(ctx->event_dispatcher, (EventHeader*)&evt);
+		ctx->event_dispatcher->dispatch((EventHeader*)&evt);
 	}
 
 	static void gamepad_connected_cb(i32 jid, i32 event) {
@@ -349,7 +349,7 @@ namespace edge {
 			glfwGetJoystickName(jid)
 		);
 
-		event_dispatcher_dispatch(g_wnd_ctx->event_dispatcher, (EventHeader*)&evt);
+		g_wnd_ctx->event_dispatcher->dispatch((EventHeader*)&evt);
 	}
 
 	Window* window_create(WindowCreateInfo create_info) {

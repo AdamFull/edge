@@ -3,93 +3,44 @@
 #include <array.hpp>
 
 namespace edge {
-	struct EventListener {
-		u64 id;
-		u64 listen_categories;
-		EventListenerFn listener_fn;
-	};
-
-	struct EventDispatcher {
-		const Allocator* allocator;
-		Array<EventListener> listeners;
-		u64 next_listener_id;
-	};
-
-	EventDispatcher* event_dispatcher_create(const Allocator* alloc) {
-		if (!alloc) {
-			return nullptr;
-		}
-
-		EventDispatcher* dispatcher = alloc->allocate<EventDispatcher>();
-		if (!dispatcher) {
-			return nullptr;
-		}
-
-		if (!dispatcher->listeners.reserve(alloc, 16)) {
-			alloc->deallocate(dispatcher);
-			return nullptr;
-		}
-
-		dispatcher->allocator = alloc;
-		dispatcher->next_listener_id = 1;
-
-		return dispatcher;
+	void EventListener::destroy(NotNull<const Allocator*> alloc) noexcept {
+		listener_fn.destroy(alloc);
 	}
 
-	void event_dispatcher_destroy(EventDispatcher* dispatcher) {
-		if (!dispatcher) {
-			return;
+	bool EventDispatcher::create(NotNull<const Allocator*> alloc) noexcept {
+		if (!listeners.reserve(alloc, 16)) {
+			return false;
 		}
-
-		for (EventListener& listener : dispatcher->listeners) {
-			listener.listener_fn.destroy(dispatcher->allocator);
-		}
-
-		dispatcher->listeners.destroy(dispatcher->allocator);
-		dispatcher->allocator->deallocate(dispatcher);
+		return true;
 	}
 
-	u64 event_dispatcher_add_listener(EventDispatcher* dispatcher, u64 listen_categories, EventListenerFn listener_fn) {
-		if (!dispatcher || !listener_fn.is_valid()) {
-			return 0;
+	void EventDispatcher::destroy(NotNull<const Allocator*> alloc) noexcept {
+		for (EventListener& listener : listeners) {
+			listener.destroy(alloc);
 		}
-
-		EventListener listener;
-		listener.id = dispatcher->next_listener_id++;
-		listener.listen_categories = listen_categories;
-		listener.listener_fn = listener_fn;
-
-		if (!dispatcher->listeners.push_back(dispatcher->allocator, listener)) {
-			return 0;
-		}
-
-		return listener.id;
+		listeners.destroy(alloc);
 	}
 
-	void event_dispatcher_remove_listener(EventDispatcher* dispatcher, u64 listener_id) {
-		if (!dispatcher || listener_id == 0) {
-			return;
-		}
+	void EventDispatcher::remove_listener(NotNull<const Allocator*> alloc, u64 listener_id) noexcept {
+		assert(listener_id != 0 && "Listener is invalid.");
 
-		for (usize i = 0; i < dispatcher->listeners.size(); i++) {
-			EventListener& listener = dispatcher->listeners[i];
+		for (usize i = 0; i < listeners.size(); i++) {
+			EventListener& listener = listeners[i];
 			if (listener.id == listener_id) {
 				EventListener out_elem;
-				dispatcher->listeners.remove(i, &out_elem);
-				out_elem.listener_fn.destroy(dispatcher->allocator);
+				listeners.remove(i, &out_elem);
+				out_elem.listener_fn.destroy(alloc);
 				return;
 			}
 		}
 	}
 
-	void event_dispatcher_dispatch(EventDispatcher* dispatcher, EventHeader* event) {
-		if (!dispatcher || !event) {
-			return;
-		}
+	void EventDispatcher::dispatch(EventHeader* event) const noexcept {
+		assert(event && "Event should be valid pointer.");
 
-		for (EventListener& listener : dispatcher->listeners) {
+		for (auto& listener : listeners) {
 			/* Check if any of the event's category flags match the listener's categories */
-			if ((event->categories & listener.listen_categories) != 0) {
+			if ((event->categories & listener.categories) != 0) {
 				listener.listener_fn.invoke(event);
 			}
 		}

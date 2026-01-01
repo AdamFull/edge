@@ -177,7 +177,7 @@ namespace edge {
 		}
 	}
 
-	constexpr ImGuiKey translate_gamepad_button(InputPadBtn code)  {
+	constexpr ImGuiKey translate_gamepad_button(InputPadBtn code) {
 		switch (code)
 		{
 		case InputPadBtn::A: return ImGuiKey_GamepadFaceDown;
@@ -263,116 +263,115 @@ namespace edge {
 		io.DisplaySize.x = (f32)width;
 		io.DisplaySize.y = (f32)height;
 
-		layer->listener_id = event_dispatcher_add_listener(
-			layer->event_dispatcher, 
+		layer->listener_id = layer->event_dispatcher->add_listener(
+			layer->alocator,
 			INPUT_EVENT_MASK | WINDOW_EVENT_MASK,
-			callable_create_from_lambda(layer->alocator, 
-				[](EventHeader* evt) -> void {
-					ImGuiIO& io = ImGui::GetIO();
+			[](EventHeader* evt) -> void {
+				ImGuiIO& io = ImGui::GetIO();
 
-					if (evt->categories & INPUT_EVENT_MASK) {
-						switch ((InputEventType)evt->type)
-						{
-						case InputEventType::Keyboard: {
-							InputKeyboardEvent* e = (InputKeyboardEvent*)evt;
-							io.AddKeyEvent(translate_key_code(e->key), e->action == InputKeyAction::Down);
-							break;
-						}
-						case InputEventType::MouseMove: {
-							InputMouseMoveEvent* e = (InputMouseMoveEvent*)evt;
-							io.AddMousePosEvent(e->x, e->y);
-							break;
-						}
-						case InputEventType::MouseBtn: {
-							InputMouseBtnEvent* e = (InputMouseBtnEvent*)evt;
-							io.AddMouseButtonEvent(translate_mouse_code(e->btn), e->action == InputKeyAction::Down);
-							break;
-						}
-						case InputEventType::MouseScroll: {
-							InputMouseScrollEvent* e = (InputMouseScrollEvent*)evt;
-							io.AddMouseWheelEvent(e->xoffset, e->yoffset);
-							break;
-						}
-						case InputEventType::TextInput: {
-							InputTextInputEvent* e = (InputTextInputEvent*)evt;
-							io.AddInputCharacter(e->codepoint);
-							break;
-						}
-						case InputEventType::PadConnection: {
-							InputPadConnectionEvent* e = (InputPadConnectionEvent*)evt;
-							if (e->connected) {
-								io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
-							}
-							else {
-								io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
-							}
-							break;
-						}
-						case InputEventType::PadButton: {
-							InputPadButtonEvent* e = (InputPadButtonEvent*)evt;
-							ImGuiKey key = translate_gamepad_button(e->btn);
-							if (key != ImGuiKey_None) {
-								io.AddKeyEvent(key, e->state == InputKeyAction::Down);
-								io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
-							}
-							break;
-						}
-						case InputEventType::PadAxis: {
-							InputPadAxisEvent* e = (InputPadAxisEvent*)evt;
-							switch (e->axis) {
-							case InputPadAxis::StickLeft: {
-								auto [x, y] = radial_deadzone(e->x, e->y, IMGUI_STICK_DEADZONE);
-								handle_axis_direction(io, ImGuiKey_GamepadLStickLeft, ImGuiKey_GamepadLStickRight, x, 0.0f);
-								handle_axis_direction(io, ImGuiKey_GamepadLStickUp, ImGuiKey_GamepadLStickDown, y, 0.0f);
-								break;
-							}
-							case InputPadAxis::StickRight: {
-								auto [x, y] = radial_deadzone(e->x, e->y, IMGUI_STICK_DEADZONE);
-								handle_axis_direction(io, ImGuiKey_GamepadRStickLeft, ImGuiKey_GamepadRStickRight, x, 0.0f);
-								handle_axis_direction(io, ImGuiKey_GamepadRStickUp, ImGuiKey_GamepadRStickDown, y, 0.0f);
-								break;
-							}
-							case InputPadAxis::TriggerLeft: {
-								float value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
-								io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, value > IMGUI_TRIGGER_THRESHOLD, value);
-								break;
-							}
-							case InputPadAxis::TriggerRight: {
-								float value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
-								io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, value > IMGUI_TRIGGER_THRESHOLD, value);
-								break;
-							}
-							default:
-								break;
-							}
-
+				if (evt->categories & INPUT_EVENT_MASK) {
+					switch ((InputEventType)evt->type)
+					{
+					case InputEventType::Keyboard: {
+						InputKeyboardEvent* e = (InputKeyboardEvent*)evt;
+						io.AddKeyEvent(translate_key_code(e->key), e->action == InputKeyAction::Down);
+						break;
+					}
+					case InputEventType::MouseMove: {
+						InputMouseMoveEvent* e = (InputMouseMoveEvent*)evt;
+						io.AddMousePosEvent(e->x, e->y);
+						break;
+					}
+					case InputEventType::MouseBtn: {
+						InputMouseBtnEvent* e = (InputMouseBtnEvent*)evt;
+						io.AddMouseButtonEvent(translate_mouse_code(e->btn), e->action == InputKeyAction::Down);
+						break;
+					}
+					case InputEventType::MouseScroll: {
+						InputMouseScrollEvent* e = (InputMouseScrollEvent*)evt;
+						io.AddMouseWheelEvent(e->xoffset, e->yoffset);
+						break;
+					}
+					case InputEventType::TextInput: {
+						InputTextInputEvent* e = (InputTextInputEvent*)evt;
+						io.AddInputCharacter(e->codepoint);
+						break;
+					}
+					case InputEventType::PadConnection: {
+						InputPadConnectionEvent* e = (InputPadConnectionEvent*)evt;
+						if (e->connected) {
 							io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
+						}
+						else {
+							io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
+						}
+						break;
+					}
+					case InputEventType::PadButton: {
+						InputPadButtonEvent* e = (InputPadButtonEvent*)evt;
+						ImGuiKey key = translate_gamepad_button(e->btn);
+						if (key != ImGuiKey_None) {
+							io.AddKeyEvent(key, e->state == InputKeyAction::Down);
+							io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
+						}
+						break;
+					}
+					case InputEventType::PadAxis: {
+						InputPadAxisEvent* e = (InputPadAxisEvent*)evt;
+						switch (e->axis) {
+						case InputPadAxis::StickLeft: {
+							auto [x, y] = radial_deadzone(e->x, e->y, IMGUI_STICK_DEADZONE);
+							handle_axis_direction(io, ImGuiKey_GamepadLStickLeft, ImGuiKey_GamepadLStickRight, x, 0.0f);
+							handle_axis_direction(io, ImGuiKey_GamepadLStickUp, ImGuiKey_GamepadLStickDown, y, 0.0f);
+							break;
+						}
+						case InputPadAxis::StickRight: {
+							auto [x, y] = radial_deadzone(e->x, e->y, IMGUI_STICK_DEADZONE);
+							handle_axis_direction(io, ImGuiKey_GamepadRStickLeft, ImGuiKey_GamepadRStickRight, x, 0.0f);
+							handle_axis_direction(io, ImGuiKey_GamepadRStickUp, ImGuiKey_GamepadRStickDown, y, 0.0f);
+							break;
+						}
+						case InputPadAxis::TriggerLeft: {
+							float value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, value > IMGUI_TRIGGER_THRESHOLD, value);
+							break;
+						}
+						case InputPadAxis::TriggerRight: {
+							float value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
+							io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, value > IMGUI_TRIGGER_THRESHOLD, value);
 							break;
 						}
 						default:
 							break;
 						}
+
+						io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
+						break;
 					}
-					else if (evt->categories & WINDOW_EVENT_MASK) {
-						switch ((WindowEventType)evt->type)
-						{
-						case WindowEventType::Resize: {
-							WindowResizeEvent* e = (WindowResizeEvent*)evt;
-							io.DisplaySize.x = (f32)e->width;
-							io.DisplaySize.y = (f32)e->height;
-							break;
-						}
-						case WindowEventType::Focus: {
-							WindowFocusEvent* e = (WindowFocusEvent*)evt;
-							io.AddFocusEvent(e->focused);
-							break;
-						}
-						default:
-							break;
-						}
+					default:
+						break;
 					}
-				})
-			);
+				}
+				else if (evt->categories & WINDOW_EVENT_MASK) {
+					switch ((WindowEventType)evt->type)
+					{
+					case WindowEventType::Resize: {
+						WindowResizeEvent* e = (WindowResizeEvent*)evt;
+						io.DisplaySize.x = (f32)e->width;
+						io.DisplaySize.y = (f32)e->height;
+						break;
+					}
+					case WindowEventType::Focus: {
+						WindowFocusEvent* e = (WindowFocusEvent*)evt;
+						io.AddFocusEvent(e->focused);
+						break;
+					}
+					default:
+						break;
+					}
+				}
+			}
+		);
 
 		return layer;
 	}
@@ -389,7 +388,7 @@ namespace edge {
 
 		ImGui::DestroyContext();
 
-		event_dispatcher_remove_listener(layer->event_dispatcher, layer->listener_id);
+		layer->event_dispatcher->remove_listener(layer->alocator, layer->listener_id);
 
 		const Allocator* allocator = layer->alocator;
 		allocator->deallocate(layer);
@@ -418,7 +417,7 @@ namespace edge {
 
 				}
 				if (ImGui::MenuItem("Save As..")) {
-					
+
 				}
 
 				ImGui::EndMenu();
@@ -439,7 +438,7 @@ namespace edge {
 
 				}
 				if (ImGui::MenuItem("Paste", "CTRL+V")) {
-					
+
 				}
 				ImGui::EndMenu();
 			}

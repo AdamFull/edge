@@ -1,27 +1,60 @@
 #ifndef EDGE_EVENT_DISPATCHER_H
 #define EDGE_EVENT_DISPATCHER_H
 
+#include <array.hpp>
 #include <callable.hpp>
 
 namespace edge {
 	struct Allocator;
 
 	struct EventHeader {
-		u64 categories;
-		u64 type;
+		u64 categories = 0;
+		u64 type = 0;
 	};
 
 	using EventListenerFn = Callable<void(EventHeader* evt)>;
 
-	struct EventDispatcher;
+	struct EventListener {
+		u64 id = 0;
+		u64 categories = 0;
+		EventListenerFn listener_fn = {};
 
-	EventDispatcher* event_dispatcher_create(const Allocator* alloc);
-	void event_dispatcher_destroy(EventDispatcher* dispatcher);
+		template<typename F>
+		bool create(NotNull<const Allocator*> alloc, F&& fn) noexcept {
+			listener_fn = callable_create_from_lambda(alloc, std::forward<F>(fn));
+			return listener_fn.is_valid();
+		}
 
-	u64 event_dispatcher_add_listener(EventDispatcher* dispatcher, u64 listen_categories, EventListenerFn listener_fn);
-	void event_dispatcher_remove_listener(EventDispatcher* dispatcher, u64 listener_id);
+		void destroy(NotNull<const Allocator*> alloc) noexcept;
+	};
 
-	void event_dispatcher_dispatch(EventDispatcher* dispatcher, EventHeader* event);
+	struct EventDispatcher {
+		Array<EventListener> listeners = {};
+		u64 next_listener_id = 1;
+
+		bool create(NotNull<const Allocator*> alloc) noexcept;
+		void destroy(NotNull<const Allocator*> alloc) noexcept;
+
+		template<typename F>
+		u64 add_listener(NotNull<const Allocator*> alloc, u64 categories, F&& fn) noexcept {
+			EventListener listener = {};
+			if (!listener.create(alloc, std::forward<F>(fn))) {
+				return 0;
+			}
+
+			listener.id = next_listener_id++;
+			listener.categories = categories;
+
+			if (!listeners.push_back(alloc, listener)) {
+				return 0;
+			}
+
+			return listener.id;
+		}
+
+		void remove_listener(NotNull<const Allocator*> alloc, u64 listener_id) noexcept;
+		void dispatch(EventHeader* event) const noexcept;
+	};
 }
 
 #endif // EDGE_EVENT_DISPATCHER_H
