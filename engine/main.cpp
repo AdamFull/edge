@@ -33,16 +33,13 @@ static gfx::Queue copy_queue = {};
 
 static gfx::Renderer renderer = {};
 
-static ImGuiLayer* imgui_layer = nullptr;
+static ImGuiLayer imgui_layer = {};
 static gfx::ImGuiRenderer imgui_renderer = {};
 
 static void edge_cleanup_engine(void) {
 	main_queue.wait_idle();
 
-	if (imgui_layer) {
-		imgui_layer_destroy(imgui_layer);
-	}
-
+	imgui_layer.destroy(&allocator);
 	imgui_renderer.destroy(&allocator);
 	renderer.destroy(&allocator);
 	main_queue.release();
@@ -191,14 +188,13 @@ int edge_main(PlatformLayout* platform_layout) {
 	//}
 
 	const ImGuiLayerInitInfo imgui_init_info = {
-		.alocator = &allocator,
+		.alloc = &allocator,
 		.event_dispatcher = &event_dispatcher,
 		.platform_context = platform_context,
 		.window = window
 	};
 
-	imgui_layer = imgui_layer_create(imgui_init_info);
-	if (!imgui_layer) {
+	if (!imgui_layer.create(imgui_init_info)) {
 		edge_cleanup_engine();
 		return -1;
 	}
@@ -216,7 +212,7 @@ int edge_main(PlatformLayout* platform_layout) {
     while (!window_should_close(window)) {
 		window_process_events(window, 0.1f);
 
-		imgui_layer_update(imgui_layer, 0.1f);
+		imgui_layer.update(0.1f);
 
 		if (renderer.frame_begin()) {
 			imgui_renderer.execute(&allocator);

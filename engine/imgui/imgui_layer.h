@@ -9,19 +9,21 @@ namespace edge {
 	struct PlatformContext;
 	struct Window;
 
-	struct ImGuiLayer {
-		const Allocator* alocator;
-		EventDispatcher* event_dispatcher;
+	struct ImGuiLayerInitInfo {
+		const Allocator* alloc = nullptr;
+		EventDispatcher* event_dispatcher = nullptr;
 
-		u64 listener_id;
+		PlatformContext* platform_context = nullptr;
+		Window* window = nullptr;
 	};
 
-	struct ImGuiLayerInitInfo {
-		const Allocator* alocator;
-		EventDispatcher* event_dispatcher;
+	struct ImGuiLayer {
+		EventDispatcher* event_dispatcher = nullptr;
+		u64 listener_id = 0;
 
-		PlatformContext* platform_context;
-		Window* window;
+		bool create(ImGuiLayerInitInfo init_info) noexcept;
+		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		void update(f32 dt) noexcept;
 	};
 
 	ImGuiLayer* imgui_layer_create(ImGuiLayerInitInfo init_info);

@@ -209,14 +209,8 @@ namespace edge {
 		}
 	}
 
-	ImGuiLayer* imgui_layer_create(ImGuiLayerInitInfo init_info) {
-		ImGuiLayer* layer = init_info.alocator->allocate<ImGuiLayer>();
-		if (!layer) {
-			return nullptr;
-		}
-
-		layer->alocator = init_info.alocator;
-		layer->event_dispatcher = init_info.event_dispatcher;
+	bool ImGuiLayer::create(ImGuiLayerInitInfo init_info) noexcept {
+		event_dispatcher = init_info.event_dispatcher;
 
 		ImGui::SetAllocatorFunctions(
 			[](size_t size, void* user_data) -> void* {
@@ -226,18 +220,17 @@ namespace edge {
 			[](void* ptr, void* user_data) -> void {
 				const Allocator* allocator = (const Allocator*)user_data;
 				allocator->free(ptr);
-			}, (void*)init_info.alocator);
+			}, (void*)init_info.alloc);
 
-		ImGuiContext* ctx = ImGui::CreateContext();
-		if (!ctx) {
-			return nullptr;
+		if (!ImGui::CreateContext()) {
+			return false;
 		}
 
 		ImGuiIO& io = ImGui::GetIO();
 		IMGUI_CHECKVERSION();
 		IM_ASSERT(io.BackendRendererUserData == nullptr && "Already initialized a renderer backend!");
 
-		io.BackendRendererUserData = layer;
+		io.BackendRendererUserData = this;
 		io.BackendRendererName = "edge";
 		//io.BackendFlags |= ImGuiBackendFlags_HasMouseCursors;
 		io.BackendFlags |= ImGuiBackendFlags_RendererHasVtxOffset;
@@ -263,8 +256,8 @@ namespace edge {
 		io.DisplaySize.x = (f32)width;
 		io.DisplaySize.y = (f32)height;
 
-		layer->listener_id = layer->event_dispatcher->add_listener(
-			layer->alocator,
+		listener_id = event_dispatcher->add_listener(
+			init_info.alloc,
 			INPUT_EVENT_MASK | WINDOW_EVENT_MASK,
 			[](EventHeader* evt) -> void {
 				ImGuiIO& io = ImGui::GetIO();
@@ -373,30 +366,21 @@ namespace edge {
 			}
 		);
 
-		return layer;
+		return true;
 	}
 
-	void imgui_layer_destroy(ImGuiLayer* layer) {
-		if (!layer) {
-			return;
-		}
-
+	void ImGuiLayer::destroy(NotNull<const Allocator*> alloc) noexcept {
 		ImGui::EndFrame();
-
 		ImGuiIO& io = ImGui::GetIO();
 		io.BackendRendererUserData = nullptr;
-
 		ImGui::DestroyContext();
 
-		layer->event_dispatcher->remove_listener(layer->alocator, layer->listener_id);
-
-		const Allocator* allocator = layer->alocator;
-		allocator->deallocate(layer);
+		event_dispatcher->remove_listener(alloc, listener_id);
 	}
 
-	void imgui_layer_update(NotNull<ImGuiLayer*> layer, f32 delta_time) {
+	void ImGuiLayer::update(f32 dt) noexcept {
 		ImGuiIO& io = ImGui::GetIO();
-		io.DeltaTime = delta_time;
+		io.DeltaTime = dt;
 
 		ImGui::NewFrame();
 		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
