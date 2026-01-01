@@ -1,8 +1,7 @@
 #ifndef EDGE_LOGGER_H
 #define EDGE_LOGGER_H
 
-#include "platform_detect.hpp"
-#include "stddef.hpp"
+#include <array.hpp>
 #include <stdarg.h>
 
 #ifndef EDGE_LOGGER_BUFFER_SIZE
@@ -35,62 +34,31 @@ namespace edge {
     };
 
     struct LogEntry {
-        LogLevel level;
-        const char* message;
-        const char* file;
-        i32 line;
-        const char* func;
-        u32 thread_id;
-        char timestamp[32];
+        LogLevel level = LogLevel::Trace;
+        const char* message = nullptr;
+        const char* file = nullptr;
+        i32 line = 0;
+        const char* func = nullptr;
+        char timestamp[32] = {};
     };
 
-    struct LoggerOutputVTable {
-        void (*write)(struct LoggerOutput* self, const LogEntry* entry);
-        void (*flush)(struct LoggerOutput* self);
-        void (*destroy)(struct LoggerOutput* self);
+    struct ILoggerOutput {
+        virtual void write(const LogEntry* entry) noexcept = 0;
+        virtual void flush() noexcept = 0;
+        virtual void destroy() noexcept = 0;
     };
 
-    struct LoggerOutput {
-        const LoggerOutputVTable* vtable;
-        i32 format_flags;
-        const Allocator* allocator;
-        void* user_data;
+    struct Logger {
+        LogLevel min_level = LogLevel::Trace;
+        Array<ILoggerOutput*> outputs = {};
+
+        bool create(NotNull<const Allocator*> alloc, LogLevel min_level = LogLevel::Trace) noexcept;
+        void destroy(NotNull<const Allocator*> alloc) noexcept;
+
+        bool add_output(NotNull<const Allocator*> alloc, ILoggerOutput* output) noexcept;
+        void set_level(LogLevel level) noexcept;
+        void flush() noexcept;
     };
-
-    struct Logger;
-
-    /**
-     * Create a new logger
-     *
-     * @param allocator Memory allocator to use
-     * @param min_level Minimum log level to output
-     * @return Logger instance or NULL on failure
-     */
-    Logger* logger_create(const Allocator* allocator, LogLevel min_level);
-
-    /**
-     * Destroy logger and free resources
-     */
-    void logger_destroy(Logger* logger);
-
-    /**
-     * Add an output to the logger
-     *
-     * @param logger Logger instance
-     * @param output Output to add (logger takes ownership)
-     * @return true on success
-     */
-    bool logger_add_output(Logger* logger, LoggerOutput* output);
-
-    /**
-     * Set minimum log level
-     */
-    void logger_set_level(Logger* logger, LogLevel level);
-
-    /**
-     * Flush all outputs
-     */
-    void logger_flush(Logger* logger);
 
     /**
      * Log a message with full context information
@@ -145,14 +113,13 @@ namespace edge {
     Logger* logger_get_global();
 
 #if EDGE_HAS_WINDOWS_API
-    LoggerOutput* logger_create_debug_console_output(const Allocator* allocator, i32 format_flags);
+    ILoggerOutput* logger_create_debug_console_output(NotNull<const Allocator*> alloc, i32 format_flags);
 #elif defined(EDGE_HAS_ANDROID_NDK)
-    LoggerOutput* logger_create_logcat_output(const Allocator* allocator, i32 format_flags);
+    LoggerOutput* logger_create_logcat_output(NotNull<const Allocator*> alloc, i32 format_flags);
 #endif
 
-    LoggerOutput* logger_create_file_output(const Allocator* allocator, i32 format_flags, const char* file_path, bool auto_flush);
-
-    LoggerOutput* logger_create_stdout_output(const Allocator* allocator, i32 format_flags);
+    ILoggerOutput* logger_create_file_output(NotNull<const Allocator*> alloc, i32 format_flags, const char* file_path, bool auto_flush);
+    ILoggerOutput* logger_create_stdout_output(NotNull<const Allocator*> alloc, i32 format_flags);
 
 #define EDGE_LOG_TRACE(...) \
 	edge::logger_log(edge::logger_get_global(), edge::LogLevel::Trace, __FILE__, __LINE__, __func__, __VA_ARGS__)

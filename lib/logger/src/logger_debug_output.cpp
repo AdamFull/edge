@@ -9,59 +9,34 @@
 #include <windows.h>
 
 namespace edge {
-	struct LoggerOutputDebugConsole {
-		LoggerOutput base;
+	struct LoggerOutputDebugConsole final : ILoggerOutput {
+		i32 format_flags = 0;
+
+		void write(const LogEntry* entry) noexcept override {
+			char buffer[EDGE_LOGGER_BUFFER_SIZE];
+
+			// debug console does not have color support
+			logger_format_entry(buffer, sizeof(buffer), entry, format_flags & ~LogFormat_Color);
+
+			OutputDebugStringA(buffer);
+			OutputDebugStringA("\n");
+		}
+
+		void flush() noexcept override {
+		}
+
+		void destroy() noexcept override {
+		}
 	};
 
-	static void debug_console_write(LoggerOutput* output, const LogEntry* entry) {
-		if (!output || !entry) {
-			return;
-		}
-
-		char buffer[EDGE_LOGGER_BUFFER_SIZE];
-		// debug console does not have color support
-		i32 format_flags = output->format_flags & ~LogFormat_Color;
-		logger_format_entry(buffer, sizeof(buffer), entry, format_flags);
-
-		OutputDebugStringA(buffer);
-		OutputDebugStringA("\n");
-	}
-
-	static void debug_console_flush(LoggerOutput* output) {
-		(void)output;
-	}
-
-	static void debug_console_destroy(LoggerOutput* output) {
-		if (!output) {
-			return;
-		}
-
-		LoggerOutputDebugConsole* debug_console_output = (LoggerOutputDebugConsole*)output;
-		output->allocator->deallocate(debug_console_output);
-	}
-
-	static const LoggerOutputVTable debug_console_vtable = {
-		.write = debug_console_write,
-		.flush = debug_console_flush,
-		.destroy = debug_console_destroy
-	};
-
-	LoggerOutput* logger_create_debug_console_output(const Allocator* allocator, i32 format_flags) {
-		if (!allocator) {
-			return nullptr;
-		}
-
-		LoggerOutputDebugConsole* output = allocator->allocate<LoggerOutputDebugConsole>();
+	ILoggerOutput* logger_create_debug_console_output(NotNull<const Allocator*> alloc, i32 format_flags) {
+		LoggerOutputDebugConsole* output = alloc->allocate<LoggerOutputDebugConsole>();
 		if (!output) {
 			return nullptr;
 		}
 
-		output->base.vtable = &debug_console_vtable;
-		output->base.format_flags = format_flags;
-		output->base.allocator = allocator;
-		output->base.user_data = nullptr;
-
-		return (LoggerOutput*)output;
+		output->format_flags = format_flags;
+		return output;
 	}
 }
 

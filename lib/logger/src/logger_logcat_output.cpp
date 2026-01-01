@@ -7,8 +7,23 @@
 #include <string.h>
 
 namespace edge {
-	struct LoggerOutputLogcat {
-		LoggerOutput base;
+	struct LoggerOutputLogcat final : ILoggerOutput {
+		i32 format_flags = 0;
+
+		void write(const LogEntry* entry) noexcept override {
+			char buffer[EDGE_LOGGER_BUFFER_SIZE];
+			/* Strip color codes for Android logcat */
+			logger_format_entry(buffer, sizeof(buffer), entry, format_flags & ~LogFormat_Color);
+
+			i32 priority = get_android_priority(entry->level);
+			__android_log_print(priority, "EdgeLogger", "%s", buffer);
+		}
+
+		void flush() noexcept override {
+		}
+
+		void destroy() noexcept override {
+		}
 	};
 
 	static i32 get_android_priority(LogLevel level) {
@@ -29,55 +44,14 @@ namespace edge {
 		}
 	}
 
-	static void logcat_write(LoggerOutput* output, const LogEntry* entry) {
-		if (!output || !entry) {
-			return;
-		}
-
-		char buffer[EDGE_LOGGER_BUFFER_SIZE];
-		/* Strip color codes for Android logcat */
-		i32 format_flags = output->format_flags & ~LogFormat_Color;
-		logger_format_entry(buffer, sizeof(buffer), entry, format_flags);
-
-		i32 priority = get_android_priority(entry->level);
-		__android_log_print(priority, "EdgeLogger", "%s", buffer);
-	}
-
-	static void logcat_flush(LoggerOutput* output) {
-		(void)output;
-	}
-
-	static void logcat_destroy(LoggerOutput* output) {
-		if (!output) {
-			return;
-		}
-
-		LoggerOutputLogcat* logcat_output = (LoggerOutputLogcat*)output;
-        output->allocator->deallocate(logcat_output);
-	}
-
-	static const LoggerOutputVTable logcat_vtable = {
-		.write = logcat_write,
-		.flush = logcat_flush,
-		.destroy = logcat_destroy
-	};
-
-	LoggerOutput* logger_create_logcat_output(const Allocator* allocator, i32 format_flags) {
-		if (!allocator) {
-			return nullptr;
-		}
-
-		LoggerOutputLogcat* output = allocator->allocate<LoggerOutputLogcat>();
+	ILoggerOutput* logger_create_logcat_output(NotNull<const Allocator*> alloc, i32 format_flags) {
+		LoggerOutputLogcat* output = alloc->allocate<LoggerOutputLogcat>();
 		if (!output) {
 			return nullptr;
 		}
 
-		output->base.vtable = &logcat_vtable;
-		output->base.format_flags = format_flags;
-		output->base.allocator = allocator;
-		output->base.user_data = nullptr;
-
-		return (LoggerOutput*)output;
+		output->format_flags = format_flags;
+		return output;
 	}
 }
 

@@ -5,55 +5,30 @@
 #include <string.h>
 
 namespace edge {
-	struct LoggerOutputStdout {
-		LoggerOutput base;
+	struct LoggerOutputStdout final : ILoggerOutput {
+		i32 format_flags = 0;
+
+		void write(const LogEntry* entry) noexcept override {
+			char buffer[EDGE_LOGGER_BUFFER_SIZE];
+			logger_format_entry(buffer, sizeof(buffer), entry, format_flags);
+			printf("%s\n", buffer);
+		}
+
+		void flush() noexcept override {
+			fflush(stdout);
+		}
+
+		void destroy() noexcept override {
+		}
 	};
 
-	static void stdout_write(LoggerOutput* output, const LogEntry* entry) {
-		if (!output || !entry) {
-			return;
-		}
-
-		char buffer[EDGE_LOGGER_BUFFER_SIZE];
-		logger_format_entry(buffer, sizeof(buffer), entry, output->format_flags);
-		printf("%s\n", buffer);
-	}
-
-	static void stdout_flush(LoggerOutput* output) {
-		(void)output;
-		fflush(stdout);
-	}
-
-	static void stdout_destroy(LoggerOutput* output) {
-		if (!output) {
-			return;
-		}
-
-		LoggerOutputStdout* stdout_output = (LoggerOutputStdout*)output;
-		output->allocator->deallocate(stdout_output);
-	}
-
-	static const LoggerOutputVTable stdout_vtable = {
-		.write = stdout_write,
-		.flush = stdout_flush,
-		.destroy = stdout_destroy
-	};
-
-	LoggerOutput* logger_create_stdout_output(const Allocator* allocator, i32 format_flags) {
-		if (!allocator) {
-			return nullptr;
-		}
-
-		LoggerOutputStdout* output = allocator->allocate<LoggerOutputStdout>();
+	ILoggerOutput* logger_create_stdout_output(NotNull<const Allocator*> alloc, i32 format_flags) {
+		LoggerOutputStdout* output = alloc->allocate<LoggerOutputStdout>();
 		if (!output) {
 			return nullptr;
 		}
 
-		output->base.vtable = &stdout_vtable;
-		output->base.format_flags = format_flags;
-		output->base.allocator = allocator;
-		output->base.user_data = nullptr;
-
-		return (LoggerOutput*)output;
+		output->format_flags = format_flags;
+		return output;
 	}
 }

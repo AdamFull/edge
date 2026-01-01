@@ -1,7 +1,4 @@
 #include "logger.hpp"
-#include "allocator.hpp"
-#include "threads.hpp"
-#include "array.hpp"
 
 #include <stdio.h>
 #include <string.h>
@@ -16,13 +13,6 @@
 #define ANSI_COLOR_FATAL   "\x1b[35;1m"    /* Bold Magenta */
 
 namespace edge {
-	struct Logger {
-		LogLevel min_level;
-		Array<LoggerOutput*> outputs;
-		Mutex mutex;
-		const Allocator* allocator;
-	};
-
 	static Logger* g_global_logger = nullptr;
 
 	static const char* get_filename(const char* path) {
@@ -57,9 +47,10 @@ namespace edge {
 			pos += snprintf(buffer + pos, buffer_size - pos, "[%s] ", entry->timestamp);
 		}
 
-		if (format_flags & LogFormat_ThreadId) {
-			pos += snprintf(buffer + pos, buffer_size - pos, "[%u] ", entry->thread_id);
-		}
+		// TODO: Need to do it after fix issuer with fibers and threading
+		//if (format_flags & LogFormat_ThreadId) {
+		//	pos += snprintf(buffer + pos, buffer_size - pos, "[%u] ", entry->thread_id);
+		//}
 
 		if (format_flags & LogFormat_Level) {
 			pos += snprintf(buffer + pos, buffer_size - pos, "%s[%s]%s ", color, logger_level_string(entry->level), reset);
@@ -86,81 +77,38 @@ namespace edge {
 		return pos;
 	}
 
-	Logger* logger_create(const Allocator* allocator, LogLevel min_level) {
-		if (!allocator) {
-			return nullptr;
-		}
-
-		Logger* logger = allocator->allocate<Logger>();
-		if (!logger) {
-			return nullptr;
-		}
-
-		logger->min_level = min_level;
-		logger->allocator = allocator;
-
-		if (!logger->outputs.reserve(allocator, 4)) {
-			allocator->deallocate(logger);
-			return nullptr;
-		}
-
-		if (mutex_init(&logger->mutex, MutexType::Plain) != ThreadResult::Success) {
-			logger->outputs.destroy(allocator);
-			allocator->deallocate(logger);
-			return nullptr;
-		}
-
-		return logger;
+	bool Logger::create(NotNull<const Allocator*> alloc, LogLevel min_level) noexcept {
+		min_level = min_level;
+		return outputs.reserve(alloc, 4);
 	}
 
-	void logger_destroy(Logger* logger) {
-		if (!logger) {
-			return;
-		}
-
-		for (LoggerOutput* output : logger->outputs) {
-			if (output->vtable && output->vtable->destroy) {
-				output->vtable->destroy(output);
+	void Logger::destroy(NotNull<const Allocator*> alloc) noexcept {
+		for (ILoggerOutput* output : outputs) {
+			if (output) {
+				output->destroy();
+				alloc->deallocate(output);
 			}
 		}
-		logger->outputs.destroy(logger->allocator);
-
-		mutex_destroy(&logger->mutex);
-		logger->allocator->deallocate(logger);
+		outputs.destroy(alloc);
 	}
 
-	bool logger_add_output(Logger* logger, LoggerOutput* output) {
-		if (!logger || !output) {
+	bool Logger::add_output(NotNull<const Allocator*> alloc, ILoggerOutput* output) noexcept {
+		if (!output) {
 			return false;
 		}
-
-		mutex_lock(&logger->mutex);
-		bool result = logger->outputs.push_back(logger->allocator, output);
-		mutex_unlock(&logger->mutex);
-
-		return result;
+		return outputs.push_back(alloc, output);
 	}
 
-	void logger_set_level(Logger* logger, LogLevel level) {
-		if (logger) {
-			logger->min_level = level;
-		}
+	void Logger::set_level(LogLevel level) noexcept {
+		min_level = level;
 	}
 
-	void logger_flush(Logger* logger) {
-		if (!logger) {
-			return;
-		}
-
-		mutex_lock(&logger->mutex);
-
-		for (LoggerOutput* output : logger->outputs) {
-			if (output->vtable && output->vtable->flush) {
-				output->vtable->flush(output);
+	void Logger::flush() noexcept {
+		for (ILoggerOutput* output : outputs) {
+			if (output) {
+				output->flush();
 			}
 		}
-
-		mutex_unlock(&logger->mutex);
 	}
 
 	void logger_vlog(Logger* logger, LogLevel level,
@@ -173,13 +121,13 @@ namespace edge {
 		char message[EDGE_LOGGER_BUFFER_SIZE];
 		vsnprintf(message, sizeof(message), format, args);
 
-		LogEntry entry;
-		entry.level = level;
-		entry.message = message;
-		entry.file = file;
-		entry.line = line;
-		entry.func = func;
-		entry.thread_id = thread_current_id();
+		LogEntry entry = {
+			.level = level,
+			.message = message,
+			.file = file,
+			.line = line,
+			.func = func
+		};
 
 		time_t now = time(nullptr);
 		struct tm* tm_info = localtime(&now);
@@ -191,15 +139,11 @@ namespace edge {
 			snprintf(entry.timestamp, sizeof(entry.timestamp), "UNKNOWN");
 		}
 
-		mutex_lock(&logger->mutex);
-
-		for (LoggerOutput* output : logger->outputs) {
-			if (output->vtable && output->vtable->write) {
-				output->vtable->write(output, &entry);
+		for (ILoggerOutput* output : logger->outputs) {
+			if (output) {
+				output->write(&entry);
 			}
 		}
-
-		mutex_unlock(&logger->mutex);
 	}
 
 	void logger_log(Logger* logger, LogLevel level,
