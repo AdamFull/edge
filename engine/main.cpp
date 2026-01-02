@@ -1,4 +1,4 @@
-#include "runtime/platform.h"
+#include "runtime/runtime.h"
 #include "event_dispatcher.h"
 
 #include "gfx_context.h"
@@ -25,8 +25,7 @@ static Scheduler* sched = nullptr;
 
 static EventDispatcher event_dispatcher = {};
 
-static PlatformContext* platform_context = nullptr;
-static Window* window = nullptr;
+static IRuntime* runtime = nullptr;
 
 static gfx::Queue main_queue = {};
 static gfx::Queue copy_queue = {};
@@ -48,12 +47,9 @@ static void edge_cleanup_engine(void) {
 
 	event_dispatcher.destroy(&allocator);
 
-	if (window) {
-		window_destroy(&allocator, window);
-	}
-
-	if (platform_context) {
-		platform_context_destroy(platform_context);
+	if (runtime) {
+		runtime->deinit(&allocator);
+		allocator.deallocate(runtime);
 	}
 
 	if (sched) {
@@ -66,7 +62,7 @@ static void edge_cleanup_engine(void) {
 	assert(net_allocated == 0 && "Memory leaks detected.");
 }
 
-int edge_main(PlatformLayout* platform_layout) {
+int edge_main(RuntimeLayout* runtime_layout) {
 #if EDGE_DEBUG
 	allocator = Allocator::create_tracking();
 #else
@@ -97,14 +93,17 @@ int edge_main(PlatformLayout* platform_layout) {
 		return -1;
 	}
 
-	const PlatformContextCreateInfo platform_context_create_info = {
+	RuntimeInitInfo runtime_info = {
 		.alloc = &allocator,
-		.layout = platform_layout,
-		.event_dispatcher = &event_dispatcher
+		.layout = runtime_layout,
+
+		.title = "Vulkan",
+		.width = 1920,
+		.height = 1080
 	};
 
-	platform_context = platform_context_create(platform_context_create_info);
-	if (!platform_context) {
+	runtime = create_runtime(&allocator);
+	if (!runtime || !runtime->init(runtime_info)) {
 		edge_cleanup_engine();
 		return -1;
 	}
@@ -112,29 +111,28 @@ int edge_main(PlatformLayout* platform_layout) {
 	EDGE_LOG_INFO("Context initialization finished.");
 	logger.flush();
 
-	const WindowCreateInfo window_create_info = {
-		.alloc = &allocator,
-		.event_dispatcher = &event_dispatcher,
-        .platform_context = platform_context,
-
-		.title = "Window",
-		.mode = WindowMode::Default,
-		.resizable = true,
-		.vsync_mode = WindowVsyncMode::Off,
-		.width = 1280,
-		.height = 720
-	};
-
-	window = window_create(window_create_info);
-	if (!window) {
-		edge_cleanup_engine();
-		return -1;
-	}
+	//const WindowCreateInfo window_create_info = {
+	//	.alloc = &allocator,
+	//	.event_dispatcher = &event_dispatcher,
+    //    .platform_context = platform_context,
+	//
+	//	.title = "Window",
+	//	.mode = WindowMode::Default,
+	//	.resizable = true,
+	//	.vsync_mode = WindowVsyncMode::Off,
+	//	.width = 1280,
+	//	.height = 720
+	//};
+	//
+	//window = window_create(window_create_info);
+	//if (!window) {
+	//	edge_cleanup_engine();
+	//	return -1;
+	//}
 
 	const gfx::ContextCreateInfo gfx_cteate_info = {
 		.alloc = &allocator,
-		.platform_context = platform_context,
-		.window = window
+		.runtime = runtime
 	};
 
 	if (!gfx::context_init(&gfx_cteate_info)) {
@@ -186,9 +184,7 @@ int edge_main(PlatformLayout* platform_layout) {
 
 	const ImGuiLayerInitInfo imgui_init_info = {
 		.alloc = &allocator,
-		.event_dispatcher = &event_dispatcher,
-		.platform_context = platform_context,
-		.window = window
+		.runtime = runtime
 	};
 
 	if (!imgui_layer.create(imgui_init_info)) {
@@ -206,8 +202,9 @@ int edge_main(PlatformLayout* platform_layout) {
 		return -1;
 	}
 
-    while (!window_should_close(window)) {
-		window_process_events(window, 0.1f);
+	// TODO: Remove requested_close and return bool in process_events
+    while (!runtime->requested_close()) {
+		runtime->process_events();
 
 		imgui_layer.update(0.1f);
 

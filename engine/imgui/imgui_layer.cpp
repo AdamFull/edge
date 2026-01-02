@@ -1,12 +1,13 @@
 #include "imgui_layer.h"
-#include "../runtime/input_events.h"
-#include "../runtime/window_events.h"
-#include "../runtime/platform.h"
+#include "../runtime/input.h"
+#include "../runtime/runtime.h"
 
 #include <allocator.hpp>
 #include <math.hpp>
 
 #include <imgui.h>
+
+#include <utility>
 
 namespace edge {
 	constexpr f32 IMGUI_STICK_DEADZONE = 0.15f;
@@ -210,7 +211,7 @@ namespace edge {
 	}
 
 	bool ImGuiLayer::create(ImGuiLayerInitInfo init_info) noexcept {
-		event_dispatcher = init_info.event_dispatcher;
+		runtime = init_info.runtime;
 
 		ImGui::SetAllocatorFunctions(
 			[](size_t size, void* user_data) -> void* {
@@ -243,7 +244,7 @@ namespace edge {
 #endif
 		io.ConfigDpiScaleFonts = true;
 
-		f32 scale_factor = window_dpi_scale_factor(init_info.window);
+		f32 scale_factor = init_info.runtime->get_surface_scale_factor();
 
 		io.FontGlobalScale = scale_factor;
 
@@ -251,120 +252,10 @@ namespace edge {
 		style.ScaleAllSizes(scale_factor);
 
 		i32 width, height;
-		window_get_size(init_info.window, &width, &height);
+		init_info.runtime->get_surface_extent(width, height);
 
 		io.DisplaySize.x = (f32)width;
 		io.DisplaySize.y = (f32)height;
-
-		listener_id = event_dispatcher->add_listener(
-			init_info.alloc,
-			INPUT_EVENT_MASK | WINDOW_EVENT_MASK,
-			[](EventHeader* evt) -> void {
-				ImGuiIO& io = ImGui::GetIO();
-
-				if (evt->categories & INPUT_EVENT_MASK) {
-					switch ((InputEventType)evt->type)
-					{
-					case InputEventType::Keyboard: {
-						auto* e = evt->as<InputKeyboardEvent>();
-						io.AddKeyEvent(translate_key_code(e->key), e->action == InputKeyAction::Down);
-						break;
-					}
-					case InputEventType::MouseMove: {
-						auto* e = evt->as<InputMouseMoveEvent>();
-						io.AddMousePosEvent(e->x, e->y);
-						break;
-					}
-					case InputEventType::MouseBtn: {
-						auto* e = evt->as<InputMouseBtnEvent>();
-						io.AddMouseButtonEvent(translate_mouse_code(e->btn), e->action == InputKeyAction::Down);
-						break;
-					}
-					case InputEventType::MouseScroll: {
-						auto* e = evt->as<InputMouseScrollEvent>();
-						io.AddMouseWheelEvent(e->xoffset, e->yoffset);
-						break;
-					}
-					case InputEventType::TextInput: {
-						auto* e = evt->as<InputTextInputEvent>();
-						io.AddInputCharacter(e->codepoint);
-						break;
-					}
-					case InputEventType::PadConnection: {
-						auto* e = evt->as<InputPadConnectionEvent>();
-						if (e->connected) {
-							io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
-						}
-						else {
-							io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
-						}
-						break;
-					}
-					case InputEventType::PadButton: {
-						auto* e = evt->as<InputPadButtonEvent>();
-						ImGuiKey key = translate_gamepad_button(e->btn);
-						if (key != ImGuiKey_None) {
-							io.AddKeyEvent(key, e->state == InputKeyAction::Down);
-							io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
-						}
-						break;
-					}
-					case InputEventType::PadAxis: {
-						auto* e = evt->as<InputPadAxisEvent>();
-						switch (e->axis) {
-						case InputPadAxis::StickLeft: {
-							auto [x, y] = radial_deadzone(e->x, e->y, IMGUI_STICK_DEADZONE);
-							handle_axis_direction(io, ImGuiKey_GamepadLStickLeft, ImGuiKey_GamepadLStickRight, x, 0.0f);
-							handle_axis_direction(io, ImGuiKey_GamepadLStickUp, ImGuiKey_GamepadLStickDown, y, 0.0f);
-							break;
-						}
-						case InputPadAxis::StickRight: {
-							auto [x, y] = radial_deadzone(e->x, e->y, IMGUI_STICK_DEADZONE);
-							handle_axis_direction(io, ImGuiKey_GamepadRStickLeft, ImGuiKey_GamepadRStickRight, x, 0.0f);
-							handle_axis_direction(io, ImGuiKey_GamepadRStickUp, ImGuiKey_GamepadRStickDown, y, 0.0f);
-							break;
-						}
-						case InputPadAxis::TriggerLeft: {
-							f32 value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, value > IMGUI_TRIGGER_THRESHOLD, value);
-							break;
-						}
-						case InputPadAxis::TriggerRight: {
-							f32 value = simple_deadzone(e->x, IMGUI_TRIGGER_DEADZONE);
-							io.AddKeyAnalogEvent(ImGuiKey_GamepadR2, value > IMGUI_TRIGGER_THRESHOLD, value);
-							break;
-						}
-						default:
-							break;
-						}
-
-						io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
-						break;
-					}
-					default:
-						break;
-					}
-				}
-				else if (evt->categories & WINDOW_EVENT_MASK) {
-					switch ((WindowEventType)evt->type)
-					{
-					case WindowEventType::Resize: {
-						auto* e = evt->as<WindowResizeEvent>();
-						io.DisplaySize.x = (f32)e->width;
-						io.DisplaySize.y = (f32)e->height;
-						break;
-					}
-					case WindowEventType::Focus: {
-						auto* e = evt->as<WindowFocusEvent>();
-						io.AddFocusEvent(e->focused);
-						break;
-					}
-					default:
-						break;
-					}
-				}
-			}
-		);
 
 		return true;
 	}
@@ -374,13 +265,65 @@ namespace edge {
 		ImGuiIO& io = ImGui::GetIO();
 		io.BackendRendererUserData = nullptr;
 		ImGui::DestroyContext();
-
-		event_dispatcher->remove_listener(alloc, listener_id);
 	}
 
 	void ImGuiLayer::update(f32 dt) noexcept {
 		ImGuiIO& io = ImGui::GetIO();
 		io.DeltaTime = dt;
+
+		InputSystem* input = runtime->get_input();
+
+		for (InputKeyboardKey key = InputKeyboardKey::Space; key != InputKeyboardKey::Count; key = (InputKeyboardKey)((usize)key + 1)) {
+			ImGuiKey imgui_key = translate_key_code(key);
+			if (imgui_key != ImGuiKey_None) {
+				io.AddKeyEvent(imgui_key, input->get_state(key));
+			}
+		}
+
+		io.AddMousePosEvent(input->get_axis(InputMouseAxis::PosX), input->get_axis(InputMouseAxis::PosY));
+		io.AddMouseWheelEvent(input->get_axis(InputMouseAxis::ScrollX), input->get_axis(InputMouseAxis::ScrollY));
+
+		for (InputMouseBtn btn = InputMouseBtn::Left; btn != InputMouseBtn::Count; btn = (InputMouseBtn)((usize)btn + 1)) {
+			ImGuiMouseButton imgui_btn = translate_mouse_code(btn);
+			if (imgui_btn != ImGuiMouseButton_COUNT) {
+				io.AddMouseButtonEvent(imgui_btn, input->get_state(btn));
+			}
+		}
+
+		// TODO: io.AddInputCharacter(codepoint);
+
+		for (usize pad_id = 0; pad_id < MAX_PAD_SLOTS; ++pad_id) {
+			io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
+
+			const InputPadState* pad = input->get_pad(pad_id);
+			if (!pad->connected) {
+				break;
+			}
+
+			// Process only first controller
+			for (InputPadBtn btn = InputPadBtn::A; btn != InputPadBtn::Count; btn = (InputPadBtn)((usize)btn + 1)) {
+				ImGuiKey key = translate_gamepad_button(btn);
+				if (key != ImGuiKey_None) {
+					io.AddKeyEvent(key, input->get_state(pad_id, btn));
+				}
+			}
+
+			// TODO: Analog axis
+			// io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, );
+			// io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, );
+
+			io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
+			break;
+		}
+
+		// Update extent
+		i32 width, height;
+		runtime->get_surface_extent(width, height);
+
+		io.DisplaySize.x = (f32)width;
+		io.DisplaySize.y = (f32)height;
+
+		io.AddFocusEvent(runtime->is_focused());
 
 		ImGui::NewFrame();
 		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());

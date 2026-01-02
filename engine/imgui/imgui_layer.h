@@ -6,20 +6,15 @@
 namespace edge {
 	struct Allocator;
 	struct EventDispatcher;
-	struct PlatformContext;
-	struct Window;
+	struct IRuntime;
 
 	struct ImGuiLayerInitInfo {
 		const Allocator* alloc = nullptr;
-		EventDispatcher* event_dispatcher = nullptr;
-
-		PlatformContext* platform_context = nullptr;
-		Window* window = nullptr;
+		IRuntime* runtime = nullptr;
 	};
 
 	struct ImGuiLayer {
-		EventDispatcher* event_dispatcher = nullptr;
-		u64 listener_id = 0;
+		IRuntime* runtime = nullptr;
 
 		bool create(ImGuiLayerInitInfo init_info) noexcept;
 		void destroy(NotNull<const Allocator*> alloc) noexcept;

@@ -8,8 +8,7 @@
 
 namespace edge {
 	struct Allocator;
-	struct PlatformContext;
-	struct Window;
+	struct IRuntime;
 }
 
 namespace edge::gfx {

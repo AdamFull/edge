@@ -1,5 +1,5 @@
 #include "gfx_context.h"
-#include "runtime/platform.h"
+#include "runtime/runtime.h"
 
 #include <allocator.hpp>
 #include <math.hpp>
@@ -875,8 +875,8 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool context_init(const ContextCreateInfo* cteate_info) {
-		if (!cteate_info || !cteate_info->alloc || !cteate_info->platform_context) {
+	bool context_init(const ContextCreateInfo* create_info) {
+		if (!create_info || !create_info->alloc || !create_info->runtime) {
 			return false;
 		}
 
@@ -886,7 +886,7 @@ namespace edge::gfx {
 			return false;
 		}
 
-		g_ctx.alloc = cteate_info->alloc;
+		g_ctx.alloc = create_info->alloc;
 
 		// Init allocation callbacks
 		g_ctx.vk_alloc.pUserData = (void*)g_ctx.alloc;
@@ -903,7 +903,7 @@ namespace edge::gfx {
 		// Surface initialize
 #if defined(VK_USE_PLATFORM_WIN32_KHR)
 		VkWin32SurfaceCreateInfoKHR surface_create_info;
-		window_get_surface(cteate_info->window, &surface_create_info);
+		create_info->runtime->get_surface(&surface_create_info);
 
 		result = vkCreateWin32SurfaceKHR(g_ctx.inst, &surface_create_info, &g_ctx.vk_alloc, &g_ctx.surf);
 		if (result != VK_SUCCESS) {
@@ -912,7 +912,7 @@ namespace edge::gfx {
 #elif defined(VK_USE_PLATFORM_XLIB_KHR)
 #elif defined(VK_USE_PLATFORM_ANDROID_KHR)
         VkAndroidSurfaceCreateInfoKHR surface_create_info;
-        window_get_surface(cteate_info->window, &surface_create_info);
+		create_info->runtime->get_surface(&surface_create_info);
 
         result = vkCreateAndroidSurfaceKHR(g_ctx.inst, &surface_create_info, &g_ctx.vk_alloc, &g_ctx.surf);
         if (result != VK_SUCCESS) {

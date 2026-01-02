@@ -2,8 +2,7 @@ include(FetchContent)
 
 target_sources(${PROJECT_NAME}
     PRIVATE
-    "input_events.cpp"
-    "window_events.cpp"
+    "input_system.cpp"
 )
 
 # Platform categories
@@ -28,8 +27,7 @@ endif()
 if(WIN32)
     # Windows-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
-        "desktop_window.cpp"
-        "windows_platform.cpp"
+        "desktop_runtime.cpp"
     )
 elseif(ANDROID)
     find_package(games-controller REQUIRED CONFIG)
@@ -45,9 +43,7 @@ elseif(ANDROID)
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux-specific sources
     target_sources(${PROJECT_NAME} PRIVATE 
-        "desktop_window.cpp"
-        #"linux_context.cpp"
-        #"unix_filesystem.cpp"
+        "desktop_runtime.cpp"
     )
 else()
 endif()
