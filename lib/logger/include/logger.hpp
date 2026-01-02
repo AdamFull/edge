@@ -115,7 +115,7 @@ namespace edge {
 #if EDGE_HAS_WINDOWS_API
     ILoggerOutput* logger_create_debug_console_output(NotNull<const Allocator*> alloc, i32 format_flags);
 #elif defined(EDGE_HAS_ANDROID_NDK)
-    LoggerOutput* logger_create_logcat_output(NotNull<const Allocator*> alloc, i32 format_flags);
+    ILoggerOutput* logger_create_logcat_output(NotNull<const Allocator*> alloc, i32 format_flags);
 #endif
 
     ILoggerOutput* logger_create_file_output(NotNull<const Allocator*> alloc, i32 format_flags, const char* file_path, bool auto_flush);
