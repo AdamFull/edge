@@ -38,7 +38,7 @@ elseif(ANDROID)
 
     # Android-specific sources
     target_sources(${PROJECT_NAME} PRIVATE
-        "android_platform.cpp"
+        "android_runtime.cpp"
     )
 elseif(UNIX AND NOT APPLE AND NOT ANDROID)
     # Linux-specific sources
