@@ -312,7 +312,8 @@ namespace edge {
 				[](GLFWwindow* window, double xpos, double ypos) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
 					MouseDevice* mouse = rt->input_system->get_mouse();
-					mouse->set_position(static_cast<f32>(xpos), static_cast<f32>(ypos));
+					mouse->set_axis(MouseAxis::PosX, static_cast<f32>(xpos));
+					mouse->set_axis(MouseAxis::PosY, static_cast<f32>(ypos));
 				});
 
 			glfwSetMouseButtonCallback(wnd_handle, 
@@ -322,7 +323,7 @@ namespace edge {
 
 					MouseBtn engine_btn = glfw_mouse_btn_to_engine_btn(button);
 					if (action != GLFW_REPEAT) {
-						mouse->set_button(engine_btn, action == GLFW_PRESS);
+						mouse->set_btn(engine_btn, action == GLFW_PRESS);
 					}
 				});
 
@@ -330,7 +331,8 @@ namespace edge {
 				[](GLFWwindow* window, double xoffset, double yoffset) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
 					MouseDevice* mouse = rt->input_system->get_mouse();
-					mouse->set_scroll(static_cast<f32>(xoffset), static_cast<f32>(yoffset));
+					mouse->set_axis(MouseAxis::ScrollX, static_cast<f32>(xoffset));
+					mouse->set_axis(MouseAxis::ScrollY, static_cast<f32>(yoffset));
 				});
 
 			glfwSetCharCallback(wnd_handle, 
@@ -384,17 +386,17 @@ namespace edge {
 				PadDevice* pad = input_system->get_gamepad(pad_idx);
 
 				if (glfwJoystickPresent(jid) && glfwJoystickIsGamepad(jid)) {
-					if (!pad->state.connected) {
-						pad->state.connected = true;
+					if (!pad->connected) {
+						pad->connected = true;
 
 						const char* name = glfwGetGamepadName(jid);
 						if (name) {
-							strncpy(pad->state.name, name, sizeof(pad->state.name) - 1);
+							strncpy(pad->name, name, sizeof(pad->name) - 1);
 						}
 
 						const char* guid = glfwGetJoystickGUID(jid);
 						if (guid) {
-							sscanf(guid, "%04hx%04hx", &pad->state.vendor_id, &pad->state.product_id);
+							sscanf(guid, "%04hx%04hx", &pad->vendor_id, &pad->product_id);
 						}
 					}
 
@@ -402,7 +404,7 @@ namespace edge {
 					if (glfwGetGamepadState(jid, &state)) {
 						for (i32 btn = 0; btn < GLFW_GAMEPAD_BUTTON_LAST + 1; ++btn) {
 							PadBtn engine_btn = glfw_gamepad_btn_to_engine_btn(btn);
-							pad->set_button(engine_btn, state.buttons[btn] == GLFW_PRESS);
+							pad->set_btn(engine_btn, state.buttons[btn] == GLFW_PRESS);
 						}
 
 						f32 left_x = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], pad->stick_deadzone);
@@ -424,12 +426,12 @@ namespace edge {
 						pad->set_axis(PadAxis::TriggerLeft, trigger_left);
 						pad->set_axis(PadAxis::TriggerRight, trigger_right);
 
-						pad->set_button(PadBtn::TriggerLeft, trigger_left > 0.5f);
-						pad->set_button(PadBtn::TriggerRight, trigger_right > 0.5f);
+						pad->set_btn(PadBtn::TriggerLeft, trigger_left > 0.5f);
+						pad->set_btn(PadBtn::TriggerRight, trigger_right > 0.5f);
 					}
 				}
 				else {
-					if (pad->state.connected) {
+					if (pad->connected) {
 						pad->clear();
 					}
 				}

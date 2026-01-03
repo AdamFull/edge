@@ -98,74 +98,64 @@ namespace edge {
 		Count
 	};
 
+	enum class MouseAxis : u8 {
+		PosX = 0, PosY,
+		ScrollX, ScrollY,
+		Count
+	};
+
 	struct MouseState {
-		BitArray<static_cast<usize>(MouseBtn::Count)> cur = {};
-		BitArray<static_cast<usize>(MouseBtn::Count)> prev = {};
+		BitArray<static_cast<usize>(MouseBtn::Count)> cur_btn = {};
+		BitArray<static_cast<usize>(MouseBtn::Count)> prev_btn = {};
 
-		f32 x = 0.0f, y = 0.0f;
-		f32 x_prev = 0.0f, y_prev = 0.0f;
-
-		f32 scroll_x = 0.0f;
-		f32 scroll_y = 0.0f;
+		f32 cur_axes[static_cast<usize>(MouseAxis::Count)] = {};
+		f32 prev_axes[static_cast<usize>(MouseAxis::Count)] = {};
 	};
 
 	struct MouseDevice {
 		MouseState state = {};
 
-		void set_button(MouseBtn btn, bool pressed) noexcept {
-			state.cur.put(static_cast<usize>(btn), pressed);
+		void set_btn(MouseBtn btn, bool pressed) noexcept {
+			state.cur_btn.put(static_cast<usize>(btn), pressed);
 		}
 
-		void set_position(f32 new_x, f32 new_y) noexcept {
-			state.x = new_x;
-			state.y = new_y;
+		void set_axis(MouseAxis axis, f32 value) noexcept {
+			state.cur_axes[static_cast<usize>(axis)] = value;
 		}
 
-		void set_scroll(f32 dx, f32 dy) noexcept {
-			state.scroll_x = dx;
-			state.scroll_y = dy;
+		f32 get_axis(MouseAxis axis) const noexcept {
+			return state.cur_axes[static_cast<usize>(axis)];
 		}
 
 		bool is_down(MouseBtn btn) const noexcept {
-			return state.cur.get(static_cast<usize>(btn));
+			return state.cur_btn.get(static_cast<usize>(btn));
 		}
 
 		bool is_up(MouseBtn btn) const noexcept {
-			return !state.cur.get(static_cast<usize>(btn));
+			return !state.cur_btn.get(static_cast<usize>(btn));
 		}
 
 		bool was_pressed(MouseBtn btn) const noexcept {
 			auto index = static_cast<usize>(btn);
-			return state.cur.get(index) && !state.prev.get(index);
+			return state.cur_btn.get(index) && !state.prev_btn.get(index);
 		}
 
 		bool was_released(MouseBtn btn) const noexcept {
 			auto index = static_cast<usize>(btn);
-			return !state.cur.get(index) && state.prev.get(index);
-		}
-
-		f32 get_delta_x() const noexcept {
-			return state.x - state.x_prev;
-		}
-
-		f32 get_delta_y() const noexcept {
-			return state.y - state.y_prev;
+			return !state.cur_btn.get(index) && state.prev_btn.get(index);
 		}
 
 		void update() noexcept {
-			state.prev = state.cur;
-
-			state.x_prev = state.x;
-			state.y_prev = state.y;
-			state.scroll_x = 0.0f;
-			state.scroll_y = 0.0f;
+			state.prev_btn = state.cur_btn;
+			memcpy(state.prev_axes, state.cur_axes, sizeof(state.cur_axes));
 		}
 
 		void clear() noexcept {
-			state.cur.clear_all();
-			state.prev.clear_all();
-			state.x = state.y = state.x_prev = state.y_prev = 0.0f;
-			state.scroll_x = state.scroll_y = 0.0f;
+			state.cur_btn.clear_all();
+			state.prev_btn.clear_all();
+
+			memset(state.cur_axes, 0, sizeof(state.cur_axes));
+			memset(state.prev_axes, 0, sizeof(state.prev_axes));
 		}
 	};
 #pragma endregion Mouse
@@ -196,20 +186,20 @@ namespace edge {
 
 		f32 cur_axes[static_cast<usize>(PadAxis::Count)] = {};
 		f32 prev_axes[static_cast<usize>(PadAxis::Count)] = {};
-
-		bool connected = false;
-		char name[128] = {};
-		i32 vendor_id = 0;
-		i32 product_id = 0;
 	};
 
 	struct PadDevice {
 		PadState state = {};
 
+		bool connected = false;
+		char name[128] = {};
+		i32 vendor_id = 0;
+		i32 product_id = 0;
+
 		f32 stick_deadzone = 0.15f;
 		f32 trigger_deadzone = 0.0f;
 
-		void set_button(PadBtn btn, bool pressed) {
+		void set_btn(PadBtn btn, bool pressed) {
 			state.cur_btn.put(static_cast<usize>(btn), pressed);
 		}
 
@@ -246,16 +236,15 @@ namespace edge {
 
 		void update() noexcept {
 			state.prev_btn = state.cur_btn;
-			memcpy(state.prev_axes, state.cur_axes, sizeof(f32) * static_cast<usize>(PadAxis::Count));
+			memcpy(state.prev_axes, state.cur_axes, sizeof(state.cur_axes));
 		}
 
 		void clear() noexcept {
 			state.cur_btn.clear_all();
 			state.prev_btn.clear_all();
-			for (usize i = 0; i < static_cast<usize>(PadAxis::Count); ++i) {
-				state.cur_axes[i] = 0.0f;
-				state.prev_axes[i] = 0.0f;
-			}
+
+			memset(state.cur_axes, 0, sizeof(state.cur_axes));
+			memset(state.prev_axes, 0, sizeof(state.prev_axes));
 		}
 	};
 #pragma endregion Gamepad
@@ -431,6 +420,20 @@ namespace edge {
 	};
 #pragma endregion Touch
 
+	enum class DeviceType {
+		Keyboard,
+		Mouse,
+		Pad0,
+		Pad1,
+		Pad2,
+		Pad3,
+		Pad4,
+		Pad5,
+		Pad6,
+		Pad67,
+		Touch
+	};
+
 	struct InputSystem {
 		KeyboardDevice keyboard = {};
 		MouseDevice mouse = {};
@@ -438,13 +441,62 @@ namespace edge {
 		TouchDevice touch = {};
 
 		void update(f64 current_time = 0.0) noexcept {
-			keyboard.update();
-			mouse.update();
-
-			for (usize i = 0; i < MAX_GAMEPADS; ++i) {
-				gamepads[i].update();
+			// Dispatch keyboard state changes
+			{
+				// TODO: Speedup bit checks with simd
+				for (auto key : Range{ Key::Space, Key::Menu }) {
+					auto index = static_cast<usize>(key);
+					dispatch(DeviceType::Keyboard, index, 
+						keyboard.state.cur.get(index), 
+						keyboard.state.prev.get(index));
+				}
+				keyboard.update();
 			}
 
+			// Dispatch mouse state changes
+			{
+				// TODO: Speedup bit checks with simd
+				for (auto btn : Range{ MouseBtn::Left, MouseBtn::_8 }) {
+					auto index = static_cast<usize>(btn);
+					dispatch(DeviceType::Mouse, index, 
+						mouse.state.cur_btn.get(index), 
+						mouse.state.prev_btn.get(index));
+				}
+
+				for (auto axis : Range{ MouseAxis::PosX, MouseAxis::ScrollY }) {
+					auto index = static_cast<usize>(axis);
+					dispatch(DeviceType::Mouse, index, 
+						mouse.state.cur_axes[index], 
+						mouse.state.prev_axes[index]);
+				}
+
+				mouse.update();
+			}
+
+			// Dispatch gamepad state changes
+			for (usize i = 0; i < MAX_GAMEPADS; ++i) {
+				auto pad_type = static_cast<DeviceType>(static_cast<usize>(DeviceType::Pad0) + i);
+				PadDevice& pad = gamepads[i];
+
+				// TODO: Speedup bit checks with simd
+				for (auto btn : Range{ PadBtn::A, PadBtn::DpadLeft }) {
+					auto index = static_cast<usize>(btn);
+					dispatch(pad_type, index, 
+						pad.state.cur_btn.get(index), 
+						pad.state.prev_btn.get(index));
+				}
+
+				for (auto axis : Range{ PadAxis::LeftX, PadAxis::TriggerRight }) {
+					auto index = static_cast<usize>(axis);
+					dispatch(pad_type, index,
+						pad.state.cur_axes[index],
+						pad.state.prev_axes[index]);
+				}
+
+				pad.update();
+			}
+
+			// TODO: Dispatch touch state changes
 			touch.update();
 		}
 
@@ -457,6 +509,18 @@ namespace edge {
 			}
 
 			touch.clear();
+		}
+
+		void dispatch(DeviceType type, usize button, bool cur, bool prev) noexcept {
+			if (cur != prev) {
+				// TODO: Implement dispatch
+			}
+		}
+
+		void dispatch(DeviceType type, usize button, f32 cur, f32 prev) noexcept {
+			if (cur != prev) {
+				// TODO: Implement dispatch
+			}
 		}
 
 		KeyboardDevice* get_keyboard() { return &keyboard; }

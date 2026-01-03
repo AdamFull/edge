@@ -284,8 +284,8 @@ namespace edge {
 			}
 		}
 
-		io.AddMousePosEvent(mouse->state.x, mouse->state.y);
-		io.AddMouseWheelEvent(mouse->state.scroll_x, mouse->state.scroll_y);
+		io.AddMousePosEvent(mouse->get_axis(MouseAxis::PosX), mouse->get_axis(MouseAxis::PosY));
+		io.AddMouseWheelEvent(mouse->get_axis(MouseAxis::ScrollX), mouse->get_axis(MouseAxis::ScrollY));
 
 		for (MouseBtn btn = MouseBtn::Left; btn != MouseBtn::Count; btn = (MouseBtn)((usize)btn + 1)) {
 			ImGuiMouseButton imgui_btn = translate_mouse_code(btn);
@@ -300,7 +300,7 @@ namespace edge {
 			io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
 
 			const PadDevice* pad = input_system->get_gamepad(pad_id);
-			if (!pad->state.connected) {
+			if (!pad->connected) {
 				break;
 			}
 
