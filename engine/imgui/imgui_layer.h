@@ -7,14 +7,17 @@ namespace edge {
 	struct Allocator;
 	struct EventDispatcher;
 	struct IRuntime;
+	struct InputSystem;
 
 	struct ImGuiLayerInitInfo {
 		const Allocator* alloc = nullptr;
 		IRuntime* runtime = nullptr;
+		InputSystem* input_system = nullptr;
 	};
 
 	struct ImGuiLayer {
 		IRuntime* runtime = nullptr;
+		InputSystem* input_system = nullptr;
 
 		bool create(ImGuiLayerInitInfo init_info) noexcept;
 		void destroy(NotNull<const Allocator*> alloc) noexcept;

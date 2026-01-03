@@ -1,4 +1,5 @@
 #include "runtime/runtime.h"
+#include "runtime/input_system.h"
 #include "event_dispatcher.h"
 
 #include "gfx_context.h"
@@ -24,6 +25,7 @@ static Logger logger = {};
 static Scheduler* sched = nullptr;
 
 static EventDispatcher event_dispatcher = {};
+static InputSystem input_system = {};
 
 static IRuntime* runtime = nullptr;
 
@@ -96,6 +98,7 @@ int edge_main(RuntimeLayout* runtime_layout) {
 	RuntimeInitInfo runtime_info = {
 		.alloc = &allocator,
 		.layout = runtime_layout,
+		.input_system = &input_system,
 
 		.title = "Vulkan",
 		.width = 1920,
@@ -110,25 +113,6 @@ int edge_main(RuntimeLayout* runtime_layout) {
 
 	EDGE_LOG_INFO("Context initialization finished.");
 	logger.flush();
-
-	//const WindowCreateInfo window_create_info = {
-	//	.alloc = &allocator,
-	//	.event_dispatcher = &event_dispatcher,
-    //    .platform_context = platform_context,
-	//
-	//	.title = "Window",
-	//	.mode = WindowMode::Default,
-	//	.resizable = true,
-	//	.vsync_mode = WindowVsyncMode::Off,
-	//	.width = 1280,
-	//	.height = 720
-	//};
-	//
-	//window = window_create(window_create_info);
-	//if (!window) {
-	//	edge_cleanup_engine();
-	//	return -1;
-	//}
 
 	const gfx::ContextCreateInfo gfx_cteate_info = {
 		.alloc = &allocator,
@@ -184,7 +168,8 @@ int edge_main(RuntimeLayout* runtime_layout) {
 
 	const ImGuiLayerInitInfo imgui_init_info = {
 		.alloc = &allocator,
-		.runtime = runtime
+		.runtime = runtime,
+		.input_system = &input_system
 	};
 
 	if (!imgui_layer.create(imgui_init_info)) {
@@ -205,6 +190,7 @@ int edge_main(RuntimeLayout* runtime_layout) {
 	// TODO: Remove requested_close and return bool in process_events
     while (!runtime->requested_close()) {
 		runtime->process_events();
+		input_system.update();
 
 		imgui_layer.update(0.1f);
 

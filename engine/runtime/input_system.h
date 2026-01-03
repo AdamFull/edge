@@ -1,0 +1,483 @@
+#ifndef EDGE_INPUT_SYSTEM_H
+#define EDGE_INPUT_SYSTEM_H
+
+#include <array.hpp>
+#include <bitarray.hpp>
+#include <string.hpp>
+
+namespace edge {
+#pragma region Keyboard
+	enum class Key : u16 {
+		Unknown = 0,
+		// Printable keys
+		Space, Apostrophe, Comma, Minus, Period, Slash,
+		_0, _1, _2, _3, _4, _5, _6, _7, _8, _9,
+		Semicolon, Eq,
+		A, B, C, D, E, F, G, H, I, J, K, L, M,
+		N, O, P, Q, R, S, T, U, V, W, X, Y, Z,
+		LeftBracket, Backslash, RightBracket, GraveAccent,
+		// Function keys
+		Esc, Enter, Tab, Backspace, Insert, Del,
+		Right, Left, Down, Up,
+		PageUp, PageDown, Home, End,
+		CapsLock, ScrollLock, NumLock, PrintScreen, Pause,
+		F1, F2, F3, F4, F5, F6, F7, F8, F9, F10, F11, F12,
+		// Keypad
+		Kp0, Kp1, Kp2, Kp3, Kp4, Kp5, Kp6, Kp7, Kp8, Kp9,
+		KpDec, KpDiv, KpMul, KpSub, KpAdd, KpEnter, KpEq,
+		// Modifiers
+		LeftShift, LeftControl, LeftAlt, LeftSuper,
+		RightShift, RightControl, RightAlt, RightSuper,
+		Menu,
+
+		Count
+	};
+
+	struct KeyboardState {
+		BitArray<static_cast<usize>(Key::Count)> cur = {};
+		BitArray<static_cast<usize>(Key::Count)> prev = {};
+	};
+
+	struct KeyboardDevice {
+		KeyboardState state = {};
+
+		void set_key(Key key, bool pressed) noexcept {
+			state.cur.put(static_cast<usize>(key), pressed);
+		}
+
+		bool is_down(Key key) const noexcept {
+			return state.cur.get(static_cast<usize>(key));
+		}
+
+		bool is_up(Key key) const noexcept {
+			return !state.cur.get(static_cast<usize>(key));
+		}
+
+		bool was_pressed(Key key) const noexcept {
+			auto index = static_cast<usize>(key);
+			return state.cur.get(index) && !state.prev.get(index);
+		}
+
+		bool was_released(Key key) const noexcept {
+			auto index = static_cast<usize>(key);
+			return !state.cur.get(index) && state.prev.get(index);
+		}
+
+		bool is_shift_down() const {
+			return state.cur.get(static_cast<usize>(Key::LeftShift)) || state.cur.get(static_cast<usize>(Key::RightShift));
+		}
+
+		bool is_ctrl_down() const {
+			return state.cur.get(static_cast<usize>(Key::LeftControl)) || state.cur.get(static_cast<usize>(Key::RightControl));
+		}
+
+		bool is_alt_down() const {
+			return state.cur.get(static_cast<usize>(Key::LeftAlt)) || state.cur.get(static_cast<usize>(Key::RightAlt));
+		}
+
+		bool is_super_down() const {
+			return state.cur.get(static_cast<usize>(Key::LeftSuper)) || state.cur.get(static_cast<usize>(Key::RightSuper));
+		}
+
+		void update() noexcept {
+			state.prev = state.cur;
+		}
+
+		void clear() noexcept {
+			state.cur.clear_all();
+			state.prev.clear_all();
+		}
+	};
+
+#pragma endregion Keyboard
+
+#pragma region Mouse
+	enum class MouseBtn : u8 {
+		Left, Right, Middle,
+		_4, _5, _6, _7, _8,
+		Count
+	};
+
+	struct MouseState {
+		BitArray<static_cast<usize>(MouseBtn::Count)> cur = {};
+		BitArray<static_cast<usize>(MouseBtn::Count)> prev = {};
+
+		f32 x = 0.0f, y = 0.0f;
+		f32 x_prev = 0.0f, y_prev = 0.0f;
+
+		f32 scroll_x = 0.0f;
+		f32 scroll_y = 0.0f;
+	};
+
+	struct MouseDevice {
+		MouseState state = {};
+
+		void set_button(MouseBtn btn, bool pressed) noexcept {
+			state.cur.put(static_cast<usize>(btn), pressed);
+		}
+
+		void set_position(f32 new_x, f32 new_y) noexcept {
+			state.x = new_x;
+			state.y = new_y;
+		}
+
+		void set_scroll(f32 dx, f32 dy) noexcept {
+			state.scroll_x = dx;
+			state.scroll_y = dy;
+		}
+
+		bool is_down(MouseBtn btn) const noexcept {
+			return state.cur.get(static_cast<usize>(btn));
+		}
+
+		bool is_up(MouseBtn btn) const noexcept {
+			return !state.cur.get(static_cast<usize>(btn));
+		}
+
+		bool was_pressed(MouseBtn btn) const noexcept {
+			auto index = static_cast<usize>(btn);
+			return state.cur.get(index) && !state.prev.get(index);
+		}
+
+		bool was_released(MouseBtn btn) const noexcept {
+			auto index = static_cast<usize>(btn);
+			return !state.cur.get(index) && state.prev.get(index);
+		}
+
+		f32 get_delta_x() const noexcept {
+			return state.x - state.x_prev;
+		}
+
+		f32 get_delta_y() const noexcept {
+			return state.y - state.y_prev;
+		}
+
+		void update() noexcept {
+			state.prev = state.cur;
+
+			state.x_prev = state.x;
+			state.y_prev = state.y;
+			state.scroll_x = 0.0f;
+			state.scroll_y = 0.0f;
+		}
+
+		void clear() noexcept {
+			state.cur.clear_all();
+			state.prev.clear_all();
+			state.x = state.y = state.x_prev = state.y_prev = 0.0f;
+			state.scroll_x = state.scroll_y = 0.0f;
+		}
+	};
+#pragma endregion Mouse
+
+#pragma region Gamepad
+	constexpr usize MAX_GAMEPADS = 8;
+
+	enum class PadBtn : u8 {
+		A = 0, B, X, Y,
+		BumperLeft, BumperRight,
+		TriggerLeft, TriggerRight,
+		Back, Start, Guide,
+		ThumbLeft, ThumbRight,
+		DpadUp, DpadRight, DpadDown, DpadLeft,
+		Count
+	};
+
+	enum class PadAxis : u8 {
+		LeftX = 0, LeftY,
+		RightX, RightY,
+		TriggerLeft, TriggerRight,
+		Count
+	};
+
+	struct PadState {
+		BitArray<static_cast<usize>(PadBtn::Count)> cur_btn = {};
+		BitArray<static_cast<usize>(PadBtn::Count)> prev_btn = {};
+
+		f32 cur_axes[static_cast<usize>(PadAxis::Count)] = {};
+		f32 prev_axes[static_cast<usize>(PadAxis::Count)] = {};
+
+		bool connected = false;
+		char name[128] = {};
+		i32 vendor_id = 0;
+		i32 product_id = 0;
+	};
+
+	struct PadDevice {
+		PadState state = {};
+
+		f32 stick_deadzone = 0.15f;
+		f32 trigger_deadzone = 0.0f;
+
+		void set_button(PadBtn btn, bool pressed) {
+			state.cur_btn.put(static_cast<usize>(btn), pressed);
+		}
+
+		void set_axis(PadAxis axis, f32 value) {
+			state.cur_axes[static_cast<usize>(axis)] = value;
+		}
+
+		bool is_down(PadBtn btn) const noexcept {
+			return state.cur_btn.get(static_cast<usize>(btn));
+		}
+
+		bool is_up(PadBtn btn) const noexcept {
+			return !state.cur_btn.get(static_cast<usize>(btn));
+		}
+
+		bool was_pressed(PadBtn btn) const noexcept {
+			auto index = static_cast<usize>(btn);
+			return state.cur_btn.get(index) && !state.prev_btn.get(index);
+		}
+
+		bool was_released(PadBtn btn) const noexcept {
+			auto index = static_cast<usize>(btn);
+			return !state.cur_btn.get(index) && state.prev_btn.get(index);
+		}
+
+		f32 get_axis(PadAxis axis) const noexcept {
+			return state.cur_axes[static_cast<usize>(axis)];
+		}
+
+		f32 get_axis_delta(PadAxis axis) const noexcept {
+			usize idx = static_cast<usize>(axis);
+			return state.cur_axes[idx] - state.prev_axes[idx];
+		}
+
+		void update() noexcept {
+			state.prev_btn = state.cur_btn;
+			memcpy(state.prev_axes, state.cur_axes, sizeof(f32) * static_cast<usize>(PadAxis::Count));
+		}
+
+		void clear() noexcept {
+			state.cur_btn.clear_all();
+			state.prev_btn.clear_all();
+			for (usize i = 0; i < static_cast<usize>(PadAxis::Count); ++i) {
+				state.cur_axes[i] = 0.0f;
+				state.prev_axes[i] = 0.0f;
+			}
+		}
+	};
+#pragma endregion Gamepad
+
+#pragma region Touch
+	using TouchId = i32;
+	constexpr TouchId INVALID_TOUCH_ID = -1;
+	constexpr usize MAX_TOUCHES = 10;
+
+	enum class TouchPhase : u8 {
+		Began, Moved, Stationary, Ended, Cancelled
+	};
+
+	struct TouchPoint {
+		TouchId id = INVALID_TOUCH_ID;
+		TouchPhase phase = TouchPhase::Ended;
+
+		f32 x = 0.0f, y = 0.0f;
+		f32 x_prev = 0.0f, y_prev = 0.0f;
+		f32 x_start = 0.0f, y_start = 0.0f;
+
+		f32 pressure = 1.0f;
+		f32 radius = 0.0f;
+
+		f64 timestamp = 0.0;
+		f64 last_update = 0.0;
+
+		bool active = false;
+
+		f32 get_delta_x() const noexcept { return x - x_prev; }
+		f32 get_delta_y() const noexcept { return y - y_prev; }
+
+		f32 get_distance_from_start() const noexcept {
+			f32 dx = x - x_start;
+			f32 dy = y - y_start;
+			return sqrt(dx * dx + dy * dy);
+		}
+
+		f32 get_duration() const noexcept {
+			return static_cast<f32>(last_update - timestamp);
+		}
+	};
+
+	struct TouchState {
+		TouchPoint touches[MAX_TOUCHES] = {};
+		bool enabled = true;
+
+		TouchPoint* find_or_create(TouchId id) noexcept {
+			for (usize i = 0; i < MAX_TOUCHES; ++i) {
+				if (touches[i].active && touches[i].id == id) {
+					return &touches[i];
+				}
+			}
+
+			for (usize i = 0; i < MAX_TOUCHES; ++i) {
+				if (!touches[i].active) {
+					touches[i].id = id;
+					touches[i].active = true;
+					return &touches[i];
+				}
+			}
+
+			return nullptr;
+		}
+
+		TouchPoint* find(TouchId id) noexcept {
+			for (usize i = 0; i < MAX_TOUCHES; ++i) {
+				if (touches[i].active && touches[i].id == id) {
+					return &touches[i];
+				}
+			}
+			return nullptr;
+		}
+
+		const TouchPoint* find(TouchId id) const noexcept {
+			for (usize i = 0; i < MAX_TOUCHES; ++i) {
+				if (touches[i].active && touches[i].id == id) {
+					return &touches[i];
+				}
+			}
+			return nullptr;
+		}
+
+		usize get_count() const noexcept {
+			usize count = 0;
+			for (usize i = 0; i < MAX_TOUCHES; ++i) {
+				if (touches[i].active) {
+					count++;
+				}
+			}
+			return count;
+		}
+
+		void update() noexcept {
+			for (usize i = 0; i < MAX_TOUCHES; ++i) {
+				TouchPoint& touch = touches[i];
+				if (touch.active && touch.phase != TouchPhase::Ended &&
+					touch.phase != TouchPhase::Cancelled) {
+					if (touch.x == touch.x_prev && touch.y == touch.y_prev) {
+						touch.phase = TouchPhase::Stationary;
+					}
+				}
+			}
+
+			for (usize i = 0; i < MAX_TOUCHES; ++i) {
+				TouchPoint& touch = touches[i];
+				if (touch.active && (touch.phase == TouchPhase::Ended ||
+					touch.phase == TouchPhase::Cancelled)) {
+					touch.active = false;
+					touch.id = INVALID_TOUCH_ID;
+				}
+			}
+		}
+
+		void clear() noexcept {
+			for (usize i = 0; i < MAX_TOUCHES; ++i) {
+				touches[i].active = false;
+				touches[i].id = INVALID_TOUCH_ID;
+			}
+		}
+	};
+
+	struct TouchDevice {
+		TouchState state;
+
+		void update_touch(TouchId id, TouchPhase phase, f32 x, f32 y,
+			f32 pressure = 1.0f, f32 radius = 0.0f, f64 timestamp = 0.0) noexcept {
+
+			TouchPoint* touch = state.find_or_create(id);
+			if (!touch) {
+				// TODO: Handle this case
+				return;
+			}
+
+			touch->phase = phase;
+			touch->x_prev = touch->x;
+			touch->y_prev = touch->y;
+			touch->x = x;
+			touch->y = y;
+			touch->pressure = pressure;
+			touch->radius = radius;
+			touch->last_update = timestamp;
+
+			if (phase == TouchPhase::Began) {
+				touch->x_start = x;
+				touch->y_start = y;
+				touch->timestamp = timestamp;
+			}
+		}
+
+		const TouchPoint* get_touch(TouchId id) const noexcept {
+			return state.find(id);
+		}
+
+		const TouchPoint* get_touch_at(usize index) const noexcept {
+			if (index >= MAX_TOUCHES) return nullptr;
+			return state.touches[index].active ? &state.touches[index] : nullptr;
+		}
+
+		usize get_touch_count() const noexcept {
+			return state.get_count();
+		}
+
+		void update() noexcept {
+			if (state.enabled) {
+				state.update();
+			}
+		}
+
+		void clear() {
+			state.clear();
+		}
+	};
+#pragma endregion Touch
+
+	struct InputSystem {
+		KeyboardDevice keyboard = {};
+		MouseDevice mouse = {};
+		PadDevice gamepads[MAX_GAMEPADS] = {};
+		TouchDevice touch = {};
+
+		void update(f64 current_time = 0.0) noexcept {
+			keyboard.update();
+			mouse.update();
+
+			for (usize i = 0; i < MAX_GAMEPADS; ++i) {
+				gamepads[i].update();
+			}
+
+			touch.update();
+		}
+
+		void clear() noexcept {
+			keyboard.clear();
+			mouse.clear();
+
+			for (usize i = 0; i < MAX_GAMEPADS; ++i) {
+				gamepads[i].clear();
+			}
+
+			touch.clear();
+		}
+
+		KeyboardDevice* get_keyboard() { return &keyboard; }
+		const KeyboardDevice* get_keyboard() const { return &keyboard; }
+
+		MouseDevice* get_mouse() { return &mouse; }
+		const MouseDevice* get_mouse() const { return &mouse; }
+
+		PadDevice* get_gamepad(usize index) {
+			if (index >= MAX_GAMEPADS) return nullptr;
+			return &gamepads[index];
+		}
+
+		const PadDevice* get_gamepad(usize index) const {
+			if (index >= MAX_GAMEPADS) return nullptr;
+			return &gamepads[index];
+		}
+
+		TouchDevice* get_touch() { return &touch; }
+		const TouchDevice* get_touch() const { return &touch; }
+	};
+}
+
+#endif // EDGE_INPUT_H

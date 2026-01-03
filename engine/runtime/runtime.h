@@ -16,6 +16,7 @@ namespace edge {
 	struct RuntimeInitInfo {
 		const Allocator* alloc = nullptr;
 		RuntimeLayout* layout = nullptr;
+		InputSystem* input_system = nullptr;
 
 		const char* title = nullptr;
 		WindowMode mode = WindowMode::Windowed;
@@ -38,8 +39,6 @@ namespace edge {
 		virtual bool is_focused() const noexcept = 0;
 
 		virtual void set_title(const char* title) noexcept = 0;
-
-		virtual InputSystem* get_input() noexcept = 0;
 	};
 
 	IRuntime* create_runtime(NotNull<const Allocator*> alloc) noexcept;

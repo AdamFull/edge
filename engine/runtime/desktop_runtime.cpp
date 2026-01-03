@@ -1,5 +1,5 @@
 #include "runtime.h"
-#include "input.h"
+#include "input_system.h"
 
 #include <logger.hpp>
 
@@ -38,149 +38,155 @@ namespace edge {
 	};
 
 	namespace {
-		InputKeyboardKey glfw_key_to_engine_key(i32 glfw_key) {
+		Key glfw_key_to_engine_key(i32 glfw_key) {
 			switch (glfw_key) {
-			case GLFW_KEY_SPACE: return InputKeyboardKey::Space;
-			case GLFW_KEY_APOSTROPHE: return InputKeyboardKey::Apostrophe;
-			case GLFW_KEY_COMMA: return InputKeyboardKey::Comma;
-			case GLFW_KEY_MINUS: return InputKeyboardKey::Minus;
-			case GLFW_KEY_PERIOD: return InputKeyboardKey::Period;
-			case GLFW_KEY_SLASH: return InputKeyboardKey::Slash;
-			case GLFW_KEY_0: return InputKeyboardKey::_0;
-			case GLFW_KEY_1: return InputKeyboardKey::_1;
-			case GLFW_KEY_2: return InputKeyboardKey::_2;
-			case GLFW_KEY_3: return InputKeyboardKey::_3;
-			case GLFW_KEY_4: return InputKeyboardKey::_4;
-			case GLFW_KEY_5: return InputKeyboardKey::_5;
-			case GLFW_KEY_6: return InputKeyboardKey::_6;
-			case GLFW_KEY_7: return InputKeyboardKey::_7;
-			case GLFW_KEY_8: return InputKeyboardKey::_8;
-			case GLFW_KEY_9: return InputKeyboardKey::_9;
-			case GLFW_KEY_SEMICOLON: return InputKeyboardKey::Semicolon;
-			case GLFW_KEY_EQUAL: return InputKeyboardKey::Eq;
-			case GLFW_KEY_A: return InputKeyboardKey::A;
-			case GLFW_KEY_B: return InputKeyboardKey::B;
-			case GLFW_KEY_C: return InputKeyboardKey::C;
-			case GLFW_KEY_D: return InputKeyboardKey::D;
-			case GLFW_KEY_E: return InputKeyboardKey::E;
-			case GLFW_KEY_F: return InputKeyboardKey::F;
-			case GLFW_KEY_G: return InputKeyboardKey::G;
-			case GLFW_KEY_H: return InputKeyboardKey::H;
-			case GLFW_KEY_I: return InputKeyboardKey::I;
-			case GLFW_KEY_J: return InputKeyboardKey::J;
-			case GLFW_KEY_K: return InputKeyboardKey::K;
-			case GLFW_KEY_L: return InputKeyboardKey::L;
-			case GLFW_KEY_M: return InputKeyboardKey::M;
-			case GLFW_KEY_N: return InputKeyboardKey::N;
-			case GLFW_KEY_O: return InputKeyboardKey::O;
-			case GLFW_KEY_P: return InputKeyboardKey::P;
-			case GLFW_KEY_Q: return InputKeyboardKey::Q;
-			case GLFW_KEY_R: return InputKeyboardKey::R;
-			case GLFW_KEY_S: return InputKeyboardKey::S;
-			case GLFW_KEY_T: return InputKeyboardKey::T;
-			case GLFW_KEY_U: return InputKeyboardKey::U;
-			case GLFW_KEY_V: return InputKeyboardKey::V;
-			case GLFW_KEY_W: return InputKeyboardKey::W;
-			case GLFW_KEY_X: return InputKeyboardKey::X;
-			case GLFW_KEY_Y: return InputKeyboardKey::Y;
-			case GLFW_KEY_Z: return InputKeyboardKey::Z;
-			case GLFW_KEY_LEFT_BRACKET: return InputKeyboardKey::LeftBracket;
-			case GLFW_KEY_BACKSLASH: return InputKeyboardKey::Backslash;
-			case GLFW_KEY_RIGHT_BRACKET: return InputKeyboardKey::RightBracket;
-			case GLFW_KEY_GRAVE_ACCENT: return InputKeyboardKey::GraveAccent;
-			case GLFW_KEY_ESCAPE: return InputKeyboardKey::Esc;
-			case GLFW_KEY_ENTER: return InputKeyboardKey::Enter;
-			case GLFW_KEY_TAB: return InputKeyboardKey::Tab;
-			case GLFW_KEY_BACKSPACE: return InputKeyboardKey::Backspace;
-			case GLFW_KEY_INSERT: return InputKeyboardKey::Insert;
-			case GLFW_KEY_DELETE: return InputKeyboardKey::Del;
-			case GLFW_KEY_RIGHT: return InputKeyboardKey::Right;
-			case GLFW_KEY_LEFT: return InputKeyboardKey::Left;
-			case GLFW_KEY_DOWN: return InputKeyboardKey::Down;
-			case GLFW_KEY_UP: return InputKeyboardKey::Up;
-			case GLFW_KEY_PAGE_UP: return InputKeyboardKey::PageUp;
-			case GLFW_KEY_PAGE_DOWN: return InputKeyboardKey::PageDown;
-			case GLFW_KEY_HOME: return InputKeyboardKey::Home;
-			case GLFW_KEY_END: return InputKeyboardKey::End;
-			case GLFW_KEY_CAPS_LOCK: return InputKeyboardKey::CapsLock;
-			case GLFW_KEY_SCROLL_LOCK: return InputKeyboardKey::ScrollLock;
-			case GLFW_KEY_NUM_LOCK: return InputKeyboardKey::NumLock;
-			case GLFW_KEY_PRINT_SCREEN: return InputKeyboardKey::PrintScreen;
-			case GLFW_KEY_PAUSE: return InputKeyboardKey::Pause;
-			case GLFW_KEY_F1: return InputKeyboardKey::F1;
-			case GLFW_KEY_F2: return InputKeyboardKey::F2;
-			case GLFW_KEY_F3: return InputKeyboardKey::F3;
-			case GLFW_KEY_F4: return InputKeyboardKey::F4;
-			case GLFW_KEY_F5: return InputKeyboardKey::F5;
-			case GLFW_KEY_F6: return InputKeyboardKey::F6;
-			case GLFW_KEY_F7: return InputKeyboardKey::F7;
-			case GLFW_KEY_F8: return InputKeyboardKey::F8;
-			case GLFW_KEY_F9: return InputKeyboardKey::F9;
-			case GLFW_KEY_F10: return InputKeyboardKey::F10;
-			case GLFW_KEY_F11: return InputKeyboardKey::F11;
-			case GLFW_KEY_F12: return InputKeyboardKey::F12;
-			case GLFW_KEY_KP_0: return InputKeyboardKey::Kp0;
-			case GLFW_KEY_KP_1: return InputKeyboardKey::Kp1;
-			case GLFW_KEY_KP_2: return InputKeyboardKey::Kp2;
-			case GLFW_KEY_KP_3: return InputKeyboardKey::Kp3;
-			case GLFW_KEY_KP_4: return InputKeyboardKey::Kp4;
-			case GLFW_KEY_KP_5: return InputKeyboardKey::Kp5;
-			case GLFW_KEY_KP_6: return InputKeyboardKey::Kp6;
-			case GLFW_KEY_KP_7: return InputKeyboardKey::Kp7;
-			case GLFW_KEY_KP_8: return InputKeyboardKey::Kp8;
-			case GLFW_KEY_KP_9: return InputKeyboardKey::Kp9;
-			case GLFW_KEY_KP_DECIMAL: return InputKeyboardKey::KpDec;
-			case GLFW_KEY_KP_DIVIDE: return InputKeyboardKey::KpDiv;
-			case GLFW_KEY_KP_MULTIPLY: return InputKeyboardKey::KpMul;
-			case GLFW_KEY_KP_SUBTRACT: return InputKeyboardKey::KpSub;
-			case GLFW_KEY_KP_ADD: return InputKeyboardKey::KpAdd;
-			case GLFW_KEY_KP_ENTER: return InputKeyboardKey::KpEnter;
-			case GLFW_KEY_KP_EQUAL: return InputKeyboardKey::KpEq;
-			case GLFW_KEY_LEFT_SHIFT: return InputKeyboardKey::LeftShift;
-			case GLFW_KEY_LEFT_CONTROL: return InputKeyboardKey::LeftControl;
-			case GLFW_KEY_LEFT_ALT: return InputKeyboardKey::LeftAlt;
-			case GLFW_KEY_LEFT_SUPER: return InputKeyboardKey::LeftSuper;
-			case GLFW_KEY_RIGHT_SHIFT: return InputKeyboardKey::RightShift;
-			case GLFW_KEY_RIGHT_CONTROL: return InputKeyboardKey::RightControl;
-			case GLFW_KEY_RIGHT_ALT: return InputKeyboardKey::RightAlt;
-			case GLFW_KEY_RIGHT_SUPER: return InputKeyboardKey::RightSuper;
-			case GLFW_KEY_MENU: return InputKeyboardKey::Menu;
-			default: return InputKeyboardKey::Unknown;
+			case GLFW_KEY_SPACE: return Key::Space;
+			case GLFW_KEY_APOSTROPHE: return Key::Apostrophe;
+			case GLFW_KEY_COMMA: return Key::Comma;
+			case GLFW_KEY_MINUS: return Key::Minus;
+			case GLFW_KEY_PERIOD: return Key::Period;
+			case GLFW_KEY_SLASH: return Key::Slash;
+			case GLFW_KEY_0: return Key::_0;
+			case GLFW_KEY_1: return Key::_1;
+			case GLFW_KEY_2: return Key::_2;
+			case GLFW_KEY_3: return Key::_3;
+			case GLFW_KEY_4: return Key::_4;
+			case GLFW_KEY_5: return Key::_5;
+			case GLFW_KEY_6: return Key::_6;
+			case GLFW_KEY_7: return Key::_7;
+			case GLFW_KEY_8: return Key::_8;
+			case GLFW_KEY_9: return Key::_9;
+			case GLFW_KEY_SEMICOLON: return Key::Semicolon;
+			case GLFW_KEY_EQUAL: return Key::Eq;
+			case GLFW_KEY_A: return Key::A;
+			case GLFW_KEY_B: return Key::B;
+			case GLFW_KEY_C: return Key::C;
+			case GLFW_KEY_D: return Key::D;
+			case GLFW_KEY_E: return Key::E;
+			case GLFW_KEY_F: return Key::F;
+			case GLFW_KEY_G: return Key::G;
+			case GLFW_KEY_H: return Key::H;
+			case GLFW_KEY_I: return Key::I;
+			case GLFW_KEY_J: return Key::J;
+			case GLFW_KEY_K: return Key::K;
+			case GLFW_KEY_L: return Key::L;
+			case GLFW_KEY_M: return Key::M;
+			case GLFW_KEY_N: return Key::N;
+			case GLFW_KEY_O: return Key::O;
+			case GLFW_KEY_P: return Key::P;
+			case GLFW_KEY_Q: return Key::Q;
+			case GLFW_KEY_R: return Key::R;
+			case GLFW_KEY_S: return Key::S;
+			case GLFW_KEY_T: return Key::T;
+			case GLFW_KEY_U: return Key::U;
+			case GLFW_KEY_V: return Key::V;
+			case GLFW_KEY_W: return Key::W;
+			case GLFW_KEY_X: return Key::X;
+			case GLFW_KEY_Y: return Key::Y;
+			case GLFW_KEY_Z: return Key::Z;
+			case GLFW_KEY_LEFT_BRACKET: return Key::LeftBracket;
+			case GLFW_KEY_BACKSLASH: return Key::Backslash;
+			case GLFW_KEY_RIGHT_BRACKET: return Key::RightBracket;
+			case GLFW_KEY_GRAVE_ACCENT: return Key::GraveAccent;
+			case GLFW_KEY_ESCAPE: return Key::Esc;
+			case GLFW_KEY_ENTER: return Key::Enter;
+			case GLFW_KEY_TAB: return Key::Tab;
+			case GLFW_KEY_BACKSPACE: return Key::Backspace;
+			case GLFW_KEY_INSERT: return Key::Insert;
+			case GLFW_KEY_DELETE: return Key::Del;
+			case GLFW_KEY_RIGHT: return Key::Right;
+			case GLFW_KEY_LEFT: return Key::Left;
+			case GLFW_KEY_DOWN: return Key::Down;
+			case GLFW_KEY_UP: return Key::Up;
+			case GLFW_KEY_PAGE_UP: return Key::PageUp;
+			case GLFW_KEY_PAGE_DOWN: return Key::PageDown;
+			case GLFW_KEY_HOME: return Key::Home;
+			case GLFW_KEY_END: return Key::End;
+			case GLFW_KEY_CAPS_LOCK: return Key::CapsLock;
+			case GLFW_KEY_SCROLL_LOCK: return Key::ScrollLock;
+			case GLFW_KEY_NUM_LOCK: return Key::NumLock;
+			case GLFW_KEY_PRINT_SCREEN: return Key::PrintScreen;
+			case GLFW_KEY_PAUSE: return Key::Pause;
+			case GLFW_KEY_F1: return Key::F1;
+			case GLFW_KEY_F2: return Key::F2;
+			case GLFW_KEY_F3: return Key::F3;
+			case GLFW_KEY_F4: return Key::F4;
+			case GLFW_KEY_F5: return Key::F5;
+			case GLFW_KEY_F6: return Key::F6;
+			case GLFW_KEY_F7: return Key::F7;
+			case GLFW_KEY_F8: return Key::F8;
+			case GLFW_KEY_F9: return Key::F9;
+			case GLFW_KEY_F10: return Key::F10;
+			case GLFW_KEY_F11: return Key::F11;
+			case GLFW_KEY_F12: return Key::F12;
+			case GLFW_KEY_KP_0: return Key::Kp0;
+			case GLFW_KEY_KP_1: return Key::Kp1;
+			case GLFW_KEY_KP_2: return Key::Kp2;
+			case GLFW_KEY_KP_3: return Key::Kp3;
+			case GLFW_KEY_KP_4: return Key::Kp4;
+			case GLFW_KEY_KP_5: return Key::Kp5;
+			case GLFW_KEY_KP_6: return Key::Kp6;
+			case GLFW_KEY_KP_7: return Key::Kp7;
+			case GLFW_KEY_KP_8: return Key::Kp8;
+			case GLFW_KEY_KP_9: return Key::Kp9;
+			case GLFW_KEY_KP_DECIMAL: return Key::KpDec;
+			case GLFW_KEY_KP_DIVIDE: return Key::KpDiv;
+			case GLFW_KEY_KP_MULTIPLY: return Key::KpMul;
+			case GLFW_KEY_KP_SUBTRACT: return Key::KpSub;
+			case GLFW_KEY_KP_ADD: return Key::KpAdd;
+			case GLFW_KEY_KP_ENTER: return Key::KpEnter;
+			case GLFW_KEY_KP_EQUAL: return Key::KpEq;
+			case GLFW_KEY_LEFT_SHIFT: return Key::LeftShift;
+			case GLFW_KEY_LEFT_CONTROL: return Key::LeftControl;
+			case GLFW_KEY_LEFT_ALT: return Key::LeftAlt;
+			case GLFW_KEY_LEFT_SUPER: return Key::LeftSuper;
+			case GLFW_KEY_RIGHT_SHIFT: return Key::RightShift;
+			case GLFW_KEY_RIGHT_CONTROL: return Key::RightControl;
+			case GLFW_KEY_RIGHT_ALT: return Key::RightAlt;
+			case GLFW_KEY_RIGHT_SUPER: return Key::RightSuper;
+			case GLFW_KEY_MENU: return Key::Menu;
+			default: return Key::Unknown;
 			}
 		}
 
-		InputMouseBtn glfw_mouse_btn_to_engine_btn(i32 glfw_btn) {
+		MouseBtn glfw_mouse_btn_to_engine_btn(i32 glfw_btn) {
 			switch (glfw_btn) {
-			case GLFW_MOUSE_BUTTON_LEFT: return InputMouseBtn::Left;
-			case GLFW_MOUSE_BUTTON_RIGHT: return InputMouseBtn::Right;
-			case GLFW_MOUSE_BUTTON_MIDDLE: return InputMouseBtn::Middle;
-			case GLFW_MOUSE_BUTTON_4: return InputMouseBtn::_4;
-			case GLFW_MOUSE_BUTTON_5: return InputMouseBtn::_5;
-			case GLFW_MOUSE_BUTTON_6: return InputMouseBtn::_6;
-			case GLFW_MOUSE_BUTTON_7: return InputMouseBtn::_7;
-			case GLFW_MOUSE_BUTTON_8: return InputMouseBtn::_8;
-			default: return InputMouseBtn::Unknown;
+			case GLFW_MOUSE_BUTTON_LEFT: return MouseBtn::Left;
+			case GLFW_MOUSE_BUTTON_RIGHT: return MouseBtn::Right;
+			case GLFW_MOUSE_BUTTON_MIDDLE: return MouseBtn::Middle;
+			case GLFW_MOUSE_BUTTON_4: return MouseBtn::_4;
+			case GLFW_MOUSE_BUTTON_5: return MouseBtn::_5;
+			case GLFW_MOUSE_BUTTON_6: return MouseBtn::_6;
+			case GLFW_MOUSE_BUTTON_7: return MouseBtn::_7;
+			case GLFW_MOUSE_BUTTON_8: return MouseBtn::_8;
+			default: {
+				// TODO: ERROR
+				return MouseBtn::Left;
+			}
 			}
 		}
 
-		InputPadBtn glfw_gamepad_btn_to_engine_btn(i32 glfw_btn) {
+		PadBtn glfw_gamepad_btn_to_engine_btn(i32 glfw_btn) {
 			switch (glfw_btn) {
-			case GLFW_GAMEPAD_BUTTON_A: return InputPadBtn::A;
-			case GLFW_GAMEPAD_BUTTON_B: return InputPadBtn::B;
-			case GLFW_GAMEPAD_BUTTON_X: return InputPadBtn::X;
-			case GLFW_GAMEPAD_BUTTON_Y: return InputPadBtn::Y;
-			case GLFW_GAMEPAD_BUTTON_LEFT_BUMPER: return InputPadBtn::BumperLeft;
-			case GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER: return InputPadBtn::BumperRight;
-			case GLFW_GAMEPAD_BUTTON_BACK: return InputPadBtn::Back;
-			case GLFW_GAMEPAD_BUTTON_START: return InputPadBtn::Start;
-			case GLFW_GAMEPAD_BUTTON_GUIDE: return InputPadBtn::Guide;
-			case GLFW_GAMEPAD_BUTTON_LEFT_THUMB: return InputPadBtn::ThumbLeft;
-			case GLFW_GAMEPAD_BUTTON_RIGHT_THUMB: return InputPadBtn::ThumbRight;
-			case GLFW_GAMEPAD_BUTTON_DPAD_UP: return InputPadBtn::DpadUp;
-			case GLFW_GAMEPAD_BUTTON_DPAD_RIGHT: return InputPadBtn::DpadRight;
-			case GLFW_GAMEPAD_BUTTON_DPAD_DOWN: return InputPadBtn::DpadDown;
-			case GLFW_GAMEPAD_BUTTON_DPAD_LEFT: return InputPadBtn::DpadLeft;
-			default: return InputPadBtn::Unknown;
+			case GLFW_GAMEPAD_BUTTON_A: return PadBtn::A;
+			case GLFW_GAMEPAD_BUTTON_B: return PadBtn::B;
+			case GLFW_GAMEPAD_BUTTON_X: return PadBtn::X;
+			case GLFW_GAMEPAD_BUTTON_Y: return PadBtn::Y;
+			case GLFW_GAMEPAD_BUTTON_LEFT_BUMPER: return PadBtn::BumperLeft;
+			case GLFW_GAMEPAD_BUTTON_RIGHT_BUMPER: return PadBtn::BumperRight;
+			case GLFW_GAMEPAD_BUTTON_BACK: return PadBtn::Back;
+			case GLFW_GAMEPAD_BUTTON_START: return PadBtn::Start;
+			case GLFW_GAMEPAD_BUTTON_GUIDE: return PadBtn::Guide;
+			case GLFW_GAMEPAD_BUTTON_LEFT_THUMB: return PadBtn::ThumbLeft;
+			case GLFW_GAMEPAD_BUTTON_RIGHT_THUMB: return PadBtn::ThumbRight;
+			case GLFW_GAMEPAD_BUTTON_DPAD_UP: return PadBtn::DpadUp;
+			case GLFW_GAMEPAD_BUTTON_DPAD_RIGHT: return PadBtn::DpadRight;
+			case GLFW_GAMEPAD_BUTTON_DPAD_DOWN: return PadBtn::DpadDown;
+			case GLFW_GAMEPAD_BUTTON_DPAD_LEFT: return PadBtn::DpadLeft;
+			default: {
+				// TODO: ERROR
+				return PadBtn::A;
+			}
 			}
 		}
 
@@ -199,6 +205,7 @@ namespace edge {
 	struct DesktopRuntime final : IRuntime {
 		bool init(const RuntimeInitInfo& init_info) noexcept override {
 			layout = init_info.layout;
+			input_system = init_info.input_system;
 
 #if defined(EDGE_PLATFORM_WINDOWS)
 #if EDGE_DEBUG
@@ -228,11 +235,6 @@ namespace edge {
 #elif defined(EDGE_PLATFORM_LINUX)
 #endif
 
-			if (!input_system.create(init_info.alloc)) {
-				EDGE_LOG_ERROR("Failed to create input system.");
-				return false;
-			}
-
 			GLFWallocator glfw_allocator = {
 				.allocate = [](size_t size, void* user) -> void* {
 					return ((Allocator*)user)->malloc(size);
@@ -250,7 +252,6 @@ namespace edge {
 
 			if (!glfwInit()) {
 				EDGE_LOG_ERROR("Failed to init glfw context.");
-				input_system.destroy(init_info.alloc);
 				return false;
 			}
 
@@ -286,7 +287,6 @@ namespace edge {
 			}
 
 			if (!wnd_handle) {
-				input_system.destroy(init_info.alloc);
 				return false;
 			}
 
@@ -300,41 +300,46 @@ namespace edge {
 			glfwSetKeyCallback(wnd_handle, 
 				[](GLFWwindow* window, i32 key, i32 scancode, i32 action, i32 mods) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
-					InputKeyboardKey engine_key = glfw_key_to_engine_key(key);
-					if (engine_key != InputKeyboardKey::Unknown && action != GLFW_REPEAT) {
-						rt->input_system.set_state(engine_key, action == GLFW_PRESS);
+					KeyboardDevice* keyboard = rt->input_system->get_keyboard();
+
+					Key engine_key = glfw_key_to_engine_key(key);
+					if (engine_key != Key::Unknown && action != GLFW_REPEAT) {
+						keyboard->set_key(engine_key, action == GLFW_PRESS);
 					}
 				});
 
 			glfwSetCursorPosCallback(wnd_handle, 
 				[](GLFWwindow* window, double xpos, double ypos) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
-					rt->input_system.current_state.mouse.set_axis(InputMouseAxis::PosX, static_cast<f32>(xpos));
-					rt->input_system.current_state.mouse.set_axis(InputMouseAxis::PosY, static_cast<f32>(ypos));
+					MouseDevice* mouse = rt->input_system->get_mouse();
+					mouse->set_position(static_cast<f32>(xpos), static_cast<f32>(ypos));
 				});
 
 			glfwSetMouseButtonCallback(wnd_handle, 
 				[](GLFWwindow* window, i32 button, i32 action, i32 mods) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
-					InputMouseBtn engine_btn = glfw_mouse_btn_to_engine_btn(button);
-					if (engine_btn != InputMouseBtn::Unknown && action != GLFW_REPEAT) {
-						rt->input_system.set_state(engine_btn, action == GLFW_PRESS);
+					MouseDevice* mouse = rt->input_system->get_mouse();
+
+					MouseBtn engine_btn = glfw_mouse_btn_to_engine_btn(button);
+					if (action != GLFW_REPEAT) {
+						mouse->set_button(engine_btn, action == GLFW_PRESS);
 					}
 				});
 
 			glfwSetScrollCallback(wnd_handle, 
 				[](GLFWwindow* window, double xoffset, double yoffset) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
-					rt->input_system.current_state.mouse.set_axis(InputMouseAxis::ScrollX, static_cast<f32>(xoffset));
-					rt->input_system.current_state.mouse.set_axis(InputMouseAxis::ScrollY, static_cast<f32>(yoffset));
+					MouseDevice* mouse = rt->input_system->get_mouse();
+					mouse->set_scroll(static_cast<f32>(xoffset), static_cast<f32>(yoffset));
 				});
 
 			glfwSetCharCallback(wnd_handle, 
 				[](GLFWwindow* window, u32 codepoint) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
+					// TODO: 
 #if 0
-					if (rt->input_system.current_state.text_input_enabled) {
-						rt->input_system.current_state.text_input.push_back(rt->alloc, static_cast<char32_t>(codepoint));
+					if (rt->input_system->current_state.text_input_enabled) {
+						rt->input_system->current_state.text_input.push_back(rt->alloc, static_cast<char32_t>(codepoint));
 					}
 #endif
 				});
@@ -356,8 +361,6 @@ namespace edge {
 		}
 
 		void deinit(NotNull<const Allocator*> alloc) noexcept override {
-			input_system.destroy(alloc);
-
 			glfwSetWindowShouldClose(wnd_handle, GLFW_TRUE);
 			glfwDestroyWindow(wnd_handle);
 
@@ -374,84 +377,63 @@ namespace edge {
 
 			for (i32 jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid) {
 				usize pad_idx = jid - GLFW_JOYSTICK_1;
-				if (pad_idx >= MAX_PAD_SLOTS) break;
+				if (pad_idx >= MAX_GAMEPADS) {
+					break;
+				}
 
-				InputPadState& pad = input_system.current_state.gamepads[pad_idx];
+				PadDevice* pad = input_system->get_gamepad(pad_idx);
 
 				if (glfwJoystickPresent(jid) && glfwJoystickIsGamepad(jid)) {
-					if (!pad.connected) {
-						pad.connected = true;
+					if (!pad->state.connected) {
+						pad->state.connected = true;
 
 						const char* name = glfwGetGamepadName(jid);
 						if (name) {
-							strncpy(pad.name, name, sizeof(pad.name) - 1);
+							strncpy(pad->state.name, name, sizeof(pad->state.name) - 1);
 						}
 
 						const char* guid = glfwGetJoystickGUID(jid);
 						if (guid) {
-							sscanf(guid, "%04hx%04hx", &pad.vendor_id, &pad.product_id);
+							sscanf(guid, "%04hx%04hx", &pad->state.vendor_id, &pad->state.product_id);
 						}
 					}
 
 					GLFWgamepadstate state;
 					if (glfwGetGamepadState(jid, &state)) {
 						for (i32 btn = 0; btn < GLFW_GAMEPAD_BUTTON_LAST + 1; ++btn) {
-							InputPadBtn engine_btn = glfw_gamepad_btn_to_engine_btn(btn);
-							if (engine_btn != InputPadBtn::Unknown) {
-								usize btn_idx = static_cast<usize>(engine_btn);
-
-								if (state.buttons[btn] == GLFW_PRESS) {
-									pad.btn_states.set(btn_idx);
-								}
-								else {
-									pad.btn_states.clear(btn_idx);
-								}
-							}
+							PadBtn engine_btn = glfw_gamepad_btn_to_engine_btn(btn);
+							pad->set_button(engine_btn, state.buttons[btn] == GLFW_PRESS);
 						}
 
-						f32 left_x = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], pad.stick_deadzone);
-						f32 left_y = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y], pad.stick_deadzone);
-						f32 right_x = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], pad.stick_deadzone);
-						f32 right_y = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y], pad.stick_deadzone);
+						f32 left_x = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_X], pad->stick_deadzone);
+						f32 left_y = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_Y], pad->stick_deadzone);
+						f32 right_x = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_X], pad->stick_deadzone);
+						f32 right_y = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_Y], pad->stick_deadzone);
 
-						f32 trigger_left = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER], pad.trigger_deadzone);
-						f32 trigger_right = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER], pad.trigger_deadzone);
+						f32 trigger_left = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_LEFT_TRIGGER], pad->trigger_deadzone);
+						f32 trigger_right = apply_deadzone(state.axes[GLFW_GAMEPAD_AXIS_RIGHT_TRIGGER], pad->trigger_deadzone);
 
 						// Map to 0-1 range for triggers (GLFW returns -1 to 1)
 						trigger_left = (trigger_left + 1.0f) * 0.5f;
 						trigger_right = (trigger_right + 1.0f) * 0.5f;
 
-						pad.set_axis(InputPadAxis::StickLeftX, left_x);
-						pad.set_axis(InputPadAxis::StickLeftY, left_y);
-						pad.set_axis(InputPadAxis::StickRightX, right_x);
-						pad.set_axis(InputPadAxis::StickRightY, right_y);
-						pad.set_axis(InputPadAxis::TriggerLeft, trigger_left);
-						pad.set_axis(InputPadAxis::TriggerRight, trigger_right);
+						pad->set_axis(PadAxis::LeftX, left_x);
+						pad->set_axis(PadAxis::LeftY, left_y);
+						pad->set_axis(PadAxis::RightX, right_x);
+						pad->set_axis(PadAxis::RightY, right_y);
+						pad->set_axis(PadAxis::TriggerLeft, trigger_left);
+						pad->set_axis(PadAxis::TriggerRight, trigger_right);
 
-						if (trigger_left > 0.5f) {
-							pad.btn_states.set(static_cast<usize>(InputPadBtn::TriggerLeft));
-						}
-						else {
-							pad.btn_states.clear(static_cast<usize>(InputPadBtn::TriggerLeft));
-						}
-
-						if (trigger_right > 0.5f) {
-							pad.btn_states.set(static_cast<usize>(InputPadBtn::TriggerRight));
-						}
-						else {
-							pad.btn_states.clear(static_cast<usize>(InputPadBtn::TriggerRight));
-						}
+						pad->set_button(PadBtn::TriggerLeft, trigger_left > 0.5f);
+						pad->set_button(PadBtn::TriggerRight, trigger_right > 0.5f);
 					}
 				}
 				else {
-					if (pad.connected) {
-						pad.connected = false;
-						memset(&pad, 0, sizeof(InputPadState));
+					if (pad->state.connected) {
+						pad->clear();
 					}
 				}
 			}
-
-			input_system.update();
 		}
 
 		void get_surface(void* surface_info) const noexcept override {
@@ -488,15 +470,11 @@ namespace edge {
 			glfwSetWindowTitle(wnd_handle, title);
 		}
 
-		InputSystem* get_input() noexcept override {
-			return &input_system;
-		}
-
 	private:
 		RuntimeLayout* layout = nullptr;
 		GLFWwindow* wnd_handle = nullptr;
 		bool focused = true;
-		InputSystem input_system = {};
+		InputSystem* input_system = nullptr;
 	};
 
 	IRuntime* create_runtime(NotNull<const Allocator*> alloc) noexcept {
