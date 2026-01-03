@@ -44,6 +44,35 @@ namespace edge {
 	template<typename T>
 	concept FloatingPoint = std::is_floating_point_v<T>;
 
+	template<typename E>
+		requires std::is_enum_v<E>
+	struct Range {
+		struct iterator {
+			using underlying_t = std::underlying_type_t<E>;
+			underlying_t val;
+
+			E operator*() const { return static_cast<E>(val); }
+			iterator& operator++() { ++val; return *this; }
+			bool operator!=(iterator other) const { return val != other.val; }
+		};
+
+		E first, last;
+
+		iterator begin() const noexcept { 
+			return { 
+				.val = static_cast<iterator::underlying_t>(first)
+			}; 
+		}
+
+		iterator end() const noexcept { 
+			auto end_val = static_cast<iterator::underlying_t>(last);
+			++end_val;
+			return { 
+				.val = end_val 
+			};
+		}
+	};
+
 	template<typename T>
 	struct NotNull {
 		static_assert(std::is_pointer_v<T>, "NotNull requires a pointer type");
