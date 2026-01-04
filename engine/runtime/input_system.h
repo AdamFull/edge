@@ -2,6 +2,7 @@
 #define EDGE_INPUT_SYSTEM_H
 
 #include <array.hpp>
+#include <callable.hpp>
 #include <bitarray.hpp>
 #include <string.hpp>
 
@@ -430,98 +431,36 @@ namespace edge {
 		Pad4,
 		Pad5,
 		Pad6,
-		Pad67,
+		Pad7,
 		Touch
 	};
 
 	struct InputSystem {
+		struct IListener {
+			virtual void on_bool_change(DeviceType device, usize button, bool cur, bool prev) noexcept = 0;
+			virtual void on_axis_change(DeviceType device, usize button, f32 cur, f32 prev) noexcept = 0;
+			virtual void on_character(char32_t codepoint) noexcept = 0;
+		};
+
+		Array<std::pair<u64, IListener*>> listeners = {};
+		u64 next_listener_id = 1;
+
 		KeyboardDevice keyboard = {};
 		MouseDevice mouse = {};
 		PadDevice gamepads[MAX_GAMEPADS] = {};
 		TouchDevice touch = {};
 
-		void update(f64 current_time = 0.0) noexcept {
-			// Dispatch keyboard state changes
-			{
-				// TODO: Speedup bit checks with simd
-				for (auto key : Range{ Key::Space, Key::Menu }) {
-					auto index = static_cast<usize>(key);
-					dispatch(DeviceType::Keyboard, index, 
-						keyboard.state.cur.get(index), 
-						keyboard.state.prev.get(index));
-				}
-				keyboard.update();
-			}
+		bool create(NotNull<const Allocator*> alloc) noexcept;
+		void destroy(NotNull<const Allocator*> alloc) noexcept;
 
-			// Dispatch mouse state changes
-			{
-				// TODO: Speedup bit checks with simd
-				for (auto btn : Range{ MouseBtn::Left, MouseBtn::_8 }) {
-					auto index = static_cast<usize>(btn);
-					dispatch(DeviceType::Mouse, index, 
-						mouse.state.cur_btn.get(index), 
-						mouse.state.prev_btn.get(index));
-				}
+		u64 add_listener(NotNull<const Allocator*> alloc, IListener* listener) noexcept;
+		void remove_listener(NotNull<const Allocator*> alloc, u64 listener_id) noexcept;
 
-				for (auto axis : Range{ MouseAxis::PosX, MouseAxis::ScrollY }) {
-					auto index = static_cast<usize>(axis);
-					dispatch(DeviceType::Mouse, index, 
-						mouse.state.cur_axes[index], 
-						mouse.state.prev_axes[index]);
-				}
+		void update(f64 current_time = 0.0) noexcept;
+		void clear() noexcept;
 
-				mouse.update();
-			}
-
-			// Dispatch gamepad state changes
-			for (usize i = 0; i < MAX_GAMEPADS; ++i) {
-				auto pad_type = static_cast<DeviceType>(static_cast<usize>(DeviceType::Pad0) + i);
-				PadDevice& pad = gamepads[i];
-
-				// TODO: Speedup bit checks with simd
-				for (auto btn : Range{ PadBtn::A, PadBtn::DpadLeft }) {
-					auto index = static_cast<usize>(btn);
-					dispatch(pad_type, index, 
-						pad.state.cur_btn.get(index), 
-						pad.state.prev_btn.get(index));
-				}
-
-				for (auto axis : Range{ PadAxis::LeftX, PadAxis::TriggerRight }) {
-					auto index = static_cast<usize>(axis);
-					dispatch(pad_type, index,
-						pad.state.cur_axes[index],
-						pad.state.prev_axes[index]);
-				}
-
-				pad.update();
-			}
-
-			// TODO: Dispatch touch state changes
-			touch.update();
-		}
-
-		void clear() noexcept {
-			keyboard.clear();
-			mouse.clear();
-
-			for (usize i = 0; i < MAX_GAMEPADS; ++i) {
-				gamepads[i].clear();
-			}
-
-			touch.clear();
-		}
-
-		void dispatch(DeviceType type, usize button, bool cur, bool prev) noexcept {
-			if (cur != prev) {
-				// TODO: Implement dispatch
-			}
-		}
-
-		void dispatch(DeviceType type, usize button, f32 cur, f32 prev) noexcept {
-			if (cur != prev) {
-				// TODO: Implement dispatch
-			}
-		}
+		void dispatch(DeviceType type, usize button, bool cur, bool prev) const noexcept;
+		void dispatch(DeviceType type, usize button, f32 cur, f32 prev) const noexcept;
 
 		KeyboardDevice* get_keyboard() { return &keyboard; }
 		const KeyboardDevice* get_keyboard() const { return &keyboard; }

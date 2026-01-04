@@ -54,6 +54,8 @@ static void edge_cleanup_engine(void) {
 		allocator.deallocate(runtime);
 	}
 
+	input_system.destroy(&allocator);
+
 	if (sched) {
 		sched_destroy(sched);
 	}
@@ -91,6 +93,11 @@ int edge_main(RuntimeLayout* runtime_layout) {
 	}
 
 	if (!event_dispatcher.create(&allocator)) {
+		edge_cleanup_engine();
+		return -1;
+	}
+
+	if (!input_system.create(&allocator)) {
 		edge_cleanup_engine();
 		return -1;
 	}

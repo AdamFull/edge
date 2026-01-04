@@ -212,6 +212,99 @@ namespace edge {
 		}
 	}
 
+	struct ImGuiInputListener final : InputSystem::IListener {
+		void on_bool_change(DeviceType device, usize button, bool cur, bool prev) noexcept override {
+			ImGuiIO& io = ImGui::GetIO();
+
+			switch (device)
+			{
+			case edge::DeviceType::Keyboard: {
+				auto key = static_cast<Key>(button);
+				ImGuiKey imgui_key = translate_key_code(key);
+				if (imgui_key != ImGuiKey_None) {
+					io.AddKeyEvent(imgui_key, cur);
+				}
+				break;
+			}
+			case edge::DeviceType::Mouse: {
+				auto btn = static_cast<MouseBtn>(button);
+				ImGuiMouseButton imgui_btn = translate_mouse_code(btn);
+				if (imgui_btn != ImGuiMouseButton_COUNT) {
+					io.AddMouseButtonEvent(imgui_btn, cur);
+				}
+				break;
+			} 
+			case edge::DeviceType::Pad0: {
+				//io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
+
+				auto btn = static_cast<PadBtn>(button);
+				ImGuiKey key = translate_gamepad_button(btn);
+				if (key != ImGuiKey_None) {
+					io.AddKeyEvent(key, cur);
+				}
+
+				//io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
+				break;
+			}
+			case edge::DeviceType::Touch: {
+				break;
+			}
+			default:
+				break;
+			}
+		}
+
+		void on_axis_change(DeviceType device, usize button, f32 cur, f32 prev) noexcept override {
+			ImGuiIO& io = ImGui::GetIO();
+
+			switch (device)
+			{
+			case edge::DeviceType::Mouse: {
+				auto axis = static_cast<MouseAxis>(button);
+				switch (axis)
+				{
+				case edge::MouseAxis::PosX: {
+					ImVec2 pos = io.MousePos;
+					pos.x = cur;
+					io.AddMousePosEvent(pos.x, pos.y);
+					break;
+				}
+				case edge::MouseAxis::PosY: {
+					ImVec2 pos = io.MousePos;
+					pos.y = cur;
+					io.AddMousePosEvent(pos.x, pos.y);
+					break;
+				}
+				case edge::MouseAxis::ScrollX: {
+					io.AddMouseWheelEvent(cur, io.MouseWheel);
+					break;
+				}
+				case edge::MouseAxis::ScrollY: {
+					io.AddMouseWheelEvent(io.MouseWheelH, cur);
+					break;
+				}
+				default: break;
+				}
+				break;
+			}
+			case edge::DeviceType::Pad0: {
+				// TODO: io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, );
+				// TODO: io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, );
+				break;
+			}
+			case edge::DeviceType::Touch: {
+				break;
+			}
+			default: break;
+			}
+		}
+
+		void on_character(char32_t codepoint) noexcept override {
+			ImGuiIO& io = ImGui::GetIO();
+			io.AddInputCharacter(codepoint);
+		}
+	};
+
 	bool ImGuiLayer::create(ImGuiLayerInitInfo init_info) noexcept {
 		runtime = init_info.runtime;
 		input_system = init_info.input_system;
@@ -260,6 +353,12 @@ namespace edge {
 		io.DisplaySize.x = (f32)width;
 		io.DisplaySize.y = (f32)height;
 
+		ImGuiInputListener* listener = init_info.alloc->allocate<ImGuiInputListener>();
+		if (!listener) {
+			return false;
+		}
+		input_listener_id = init_info.input_system->add_listener(init_info.alloc, listener);
+
 		return true;
 	}
 
@@ -273,52 +372,6 @@ namespace edge {
 	void ImGuiLayer::update(f32 dt) noexcept {
 		ImGuiIO& io = ImGui::GetIO();
 		io.DeltaTime = dt;
-
-		const KeyboardDevice* keyboard = input_system->get_keyboard();
-		const MouseDevice* mouse = input_system->get_mouse();
-
-		for (Key key = Key::Space; key != Key::Count; key = (Key)((usize)key + 1)) {
-			ImGuiKey imgui_key = translate_key_code(key);
-			if (imgui_key != ImGuiKey_None) {
-				io.AddKeyEvent(imgui_key, keyboard->is_down(key));
-			}
-		}
-
-		io.AddMousePosEvent(mouse->get_axis(MouseAxis::PosX), mouse->get_axis(MouseAxis::PosY));
-		io.AddMouseWheelEvent(mouse->get_axis(MouseAxis::ScrollX), mouse->get_axis(MouseAxis::ScrollY));
-
-		for (MouseBtn btn = MouseBtn::Left; btn != MouseBtn::Count; btn = (MouseBtn)((usize)btn + 1)) {
-			ImGuiMouseButton imgui_btn = translate_mouse_code(btn);
-			if (imgui_btn != ImGuiMouseButton_COUNT) {
-				io.AddMouseButtonEvent(imgui_btn, mouse->is_down(btn));
-			}
-		}
-
-		// TODO: io.AddInputCharacter(codepoint);
-
-		for (usize pad_id = 0; pad_id < MAX_GAMEPADS; ++pad_id) {
-			io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
-
-			const PadDevice* pad = input_system->get_gamepad(pad_id);
-			if (!pad->connected) {
-				break;
-			}
-
-			// Process only first controller
-			for (PadBtn btn = PadBtn::A; btn != PadBtn::Count; btn = (PadBtn)((usize)btn + 1)) {
-				ImGuiKey key = translate_gamepad_button(btn);
-				if (key != ImGuiKey_None) {
-					io.AddKeyEvent(key, pad->is_down(btn));
-				}
-			}
-
-			// TODO: Analog axis
-			// io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, );
-			// io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, );
-
-			io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
-			break;
-		}
 
 		// Update extent
 		i32 width, height;

@@ -19,6 +19,8 @@ namespace edge {
 		IRuntime* runtime = nullptr;
 		InputSystem* input_system = nullptr;
 
+		u64 input_listener_id = 0;
+
 		bool create(ImGuiLayerInitInfo init_info) noexcept;
 		void destroy(NotNull<const Allocator*> alloc) noexcept;
 		void update(f32 dt) noexcept;
