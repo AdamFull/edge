@@ -6,6 +6,8 @@
 #include <bitarray.hpp>
 #include <string.hpp>
 
+#include <glm/glm.hpp>
+
 namespace edge {
 #pragma region Keyboard
 	enum class Key : u16 {
@@ -46,37 +48,37 @@ namespace edge {
 			state.cur.put(static_cast<usize>(key), pressed);
 		}
 
-		bool is_down(Key key) const noexcept {
+		[[nodiscard]] bool is_down(Key key) const noexcept {
 			return state.cur.get(static_cast<usize>(key));
 		}
 
-		bool is_up(Key key) const noexcept {
+		[[nodiscard]] bool is_up(Key key) const noexcept {
 			return !state.cur.get(static_cast<usize>(key));
 		}
 
-		bool was_pressed(Key key) const noexcept {
+		[[nodiscard]] bool was_pressed(Key key) const noexcept {
 			auto index = static_cast<usize>(key);
 			return state.cur.get(index) && !state.prev.get(index);
 		}
 
-		bool was_released(Key key) const noexcept {
+		[[nodiscard]] bool was_released(Key key) const noexcept {
 			auto index = static_cast<usize>(key);
 			return !state.cur.get(index) && state.prev.get(index);
 		}
 
-		bool is_shift_down() const {
+		[[nodiscard]] bool is_shift_down() const {
 			return state.cur.get(static_cast<usize>(Key::LeftShift)) || state.cur.get(static_cast<usize>(Key::RightShift));
 		}
 
-		bool is_ctrl_down() const {
+		[[nodiscard]] bool is_ctrl_down() const {
 			return state.cur.get(static_cast<usize>(Key::LeftControl)) || state.cur.get(static_cast<usize>(Key::RightControl));
 		}
 
-		bool is_alt_down() const {
+		[[nodiscard]] bool is_alt_down() const {
 			return state.cur.get(static_cast<usize>(Key::LeftAlt)) || state.cur.get(static_cast<usize>(Key::RightAlt));
 		}
 
-		bool is_super_down() const {
+		[[nodiscard]] bool is_super_down() const {
 			return state.cur.get(static_cast<usize>(Key::LeftSuper)) || state.cur.get(static_cast<usize>(Key::RightSuper));
 		}
 
@@ -100,8 +102,8 @@ namespace edge {
 	};
 
 	enum class MouseAxis : u8 {
-		PosX = 0, PosY,
-		ScrollX, ScrollY,
+		Pos = 0,
+		Scroll,
 		Count
 	};
 
@@ -109,8 +111,8 @@ namespace edge {
 		BitArray<static_cast<usize>(MouseBtn::Count)> cur_btn = {};
 		BitArray<static_cast<usize>(MouseBtn::Count)> prev_btn = {};
 
-		f32 cur_axes[static_cast<usize>(MouseAxis::Count)] = {};
-		f32 prev_axes[static_cast<usize>(MouseAxis::Count)] = {};
+		glm::vec3 cur_axes[static_cast<usize>(MouseAxis::Count)] = {};
+		glm::vec3 prev_axes[static_cast<usize>(MouseAxis::Count)] = {};
 	};
 
 	struct MouseDevice {
@@ -120,28 +122,28 @@ namespace edge {
 			state.cur_btn.put(static_cast<usize>(btn), pressed);
 		}
 
-		void set_axis(MouseAxis axis, f32 value) noexcept {
+		void set_axis(MouseAxis axis, glm::vec3 value) noexcept {
 			state.cur_axes[static_cast<usize>(axis)] = value;
 		}
 
-		f32 get_axis(MouseAxis axis) const noexcept {
+		[[nodiscard]] glm::vec3 get_axis(MouseAxis axis) const noexcept {
 			return state.cur_axes[static_cast<usize>(axis)];
 		}
 
-		bool is_down(MouseBtn btn) const noexcept {
+		[[nodiscard]] bool is_down(MouseBtn btn) const noexcept {
 			return state.cur_btn.get(static_cast<usize>(btn));
 		}
 
-		bool is_up(MouseBtn btn) const noexcept {
+		[[nodiscard]] bool is_up(MouseBtn btn) const noexcept {
 			return !state.cur_btn.get(static_cast<usize>(btn));
 		}
 
-		bool was_pressed(MouseBtn btn) const noexcept {
+		[[nodiscard]] bool was_pressed(MouseBtn btn) const noexcept {
 			auto index = static_cast<usize>(btn);
 			return state.cur_btn.get(index) && !state.prev_btn.get(index);
 		}
 
-		bool was_released(MouseBtn btn) const noexcept {
+		[[nodiscard]] bool was_released(MouseBtn btn) const noexcept {
 			auto index = static_cast<usize>(btn);
 			return !state.cur_btn.get(index) && state.prev_btn.get(index);
 		}
@@ -175,9 +177,10 @@ namespace edge {
 	};
 
 	enum class PadAxis : u8 {
-		LeftX = 0, LeftY,
-		RightX, RightY,
-		TriggerLeft, TriggerRight,
+		StickLeft = 0,
+		StickRight,
+		TriggerLeft, 
+		TriggerRight,
 		Count
 	};
 
@@ -185,8 +188,8 @@ namespace edge {
 		BitArray<static_cast<usize>(PadBtn::Count)> cur_btn = {};
 		BitArray<static_cast<usize>(PadBtn::Count)> prev_btn = {};
 
-		f32 cur_axes[static_cast<usize>(PadAxis::Count)] = {};
-		f32 prev_axes[static_cast<usize>(PadAxis::Count)] = {};
+		glm::vec3 cur_axes[static_cast<usize>(PadAxis::Count)] = {};
+		glm::vec3 prev_axes[static_cast<usize>(PadAxis::Count)] = {};
 	};
 
 	struct PadDevice {
@@ -204,35 +207,30 @@ namespace edge {
 			state.cur_btn.put(static_cast<usize>(btn), pressed);
 		}
 
-		void set_axis(PadAxis axis, f32 value) {
+		void set_axis(PadAxis axis, glm::vec3 value) {
 			state.cur_axes[static_cast<usize>(axis)] = value;
 		}
 
-		bool is_down(PadBtn btn) const noexcept {
+		[[nodiscard]] bool is_down(PadBtn btn) const noexcept {
 			return state.cur_btn.get(static_cast<usize>(btn));
 		}
 
-		bool is_up(PadBtn btn) const noexcept {
+		[[nodiscard]] bool is_up(PadBtn btn) const noexcept {
 			return !state.cur_btn.get(static_cast<usize>(btn));
 		}
 
-		bool was_pressed(PadBtn btn) const noexcept {
+		[[nodiscard]] bool was_pressed(PadBtn btn) const noexcept {
 			auto index = static_cast<usize>(btn);
 			return state.cur_btn.get(index) && !state.prev_btn.get(index);
 		}
 
-		bool was_released(PadBtn btn) const noexcept {
+		[[nodiscard]] bool was_released(PadBtn btn) const noexcept {
 			auto index = static_cast<usize>(btn);
 			return !state.cur_btn.get(index) && state.prev_btn.get(index);
 		}
 
-		f32 get_axis(PadAxis axis) const noexcept {
+		[[nodiscard]] glm::vec3 get_axis(PadAxis axis) const noexcept {
 			return state.cur_axes[static_cast<usize>(axis)];
-		}
-
-		f32 get_axis_delta(PadAxis axis) const noexcept {
-			usize idx = static_cast<usize>(axis);
-			return state.cur_axes[idx] - state.prev_axes[idx];
 		}
 
 		void update() noexcept {
@@ -275,16 +273,16 @@ namespace edge {
 
 		bool active = false;
 
-		f32 get_delta_x() const noexcept { return x - x_prev; }
-		f32 get_delta_y() const noexcept { return y - y_prev; }
+		[[nodiscard]] f32 get_delta_x() const noexcept { return x - x_prev; }
+		[[nodiscard]] f32 get_delta_y() const noexcept { return y - y_prev; }
 
-		f32 get_distance_from_start() const noexcept {
+		[[nodiscard]] f32 get_distance_from_start() const noexcept {
 			f32 dx = x - x_start;
 			f32 dy = y - y_start;
 			return sqrt(dx * dx + dy * dy);
 		}
 
-		f32 get_duration() const noexcept {
+		[[nodiscard]] f32 get_duration() const noexcept {
 			return static_cast<f32>(last_update - timestamp);
 		}
 	};
@@ -294,45 +292,45 @@ namespace edge {
 		bool enabled = true;
 
 		TouchPoint* find_or_create(TouchId id) noexcept {
-			for (usize i = 0; i < MAX_TOUCHES; ++i) {
-				if (touches[i].active && touches[i].id == id) {
-					return &touches[i];
+			for (auto & touch : touches) {
+				if (touch.active && touch.id == id) {
+					return &touch;
 				}
 			}
 
-			for (usize i = 0; i < MAX_TOUCHES; ++i) {
-				if (!touches[i].active) {
-					touches[i].id = id;
-					touches[i].active = true;
-					return &touches[i];
+			for (auto & touch : touches) {
+				if (!touch.active) {
+                    touch.id = id;
+                    touch.active = true;
+					return &touch;
 				}
 			}
 
 			return nullptr;
 		}
 
-		TouchPoint* find(TouchId id) noexcept {
-			for (usize i = 0; i < MAX_TOUCHES; ++i) {
-				if (touches[i].active && touches[i].id == id) {
-					return &touches[i];
+        [[nodiscard]] TouchPoint* find(TouchId id) noexcept {
+			for (auto & touch : touches) {
+				if (touch.active && touch.id == id) {
+					return &touch;
 				}
 			}
 			return nullptr;
 		}
 
-		const TouchPoint* find(TouchId id) const noexcept {
-			for (usize i = 0; i < MAX_TOUCHES; ++i) {
-				if (touches[i].active && touches[i].id == id) {
-					return &touches[i];
+		[[nodiscard]] const TouchPoint* find(TouchId id) const noexcept {
+			for (const auto & touch : touches) {
+				if (touch.active && touch.id == id) {
+					return &touch;
 				}
 			}
 			return nullptr;
 		}
 
-		usize get_count() const noexcept {
+		[[nodiscard]] usize get_count() const noexcept {
 			usize count = 0;
-			for (usize i = 0; i < MAX_TOUCHES; ++i) {
-				if (touches[i].active) {
+			for (const auto & touch : touches) {
+				if (touch.active) {
 					count++;
 				}
 			}
@@ -340,9 +338,8 @@ namespace edge {
 		}
 
 		void update() noexcept {
-			for (usize i = 0; i < MAX_TOUCHES; ++i) {
-				TouchPoint& touch = touches[i];
-				if (touch.active && touch.phase != TouchPhase::Ended &&
+			for (auto & touch : touches) {
+					if (touch.active && touch.phase != TouchPhase::Ended &&
 					touch.phase != TouchPhase::Cancelled) {
 					if (touch.x == touch.x_prev && touch.y == touch.y_prev) {
 						touch.phase = TouchPhase::Stationary;
@@ -350,9 +347,8 @@ namespace edge {
 				}
 			}
 
-			for (usize i = 0; i < MAX_TOUCHES; ++i) {
-				TouchPoint& touch = touches[i];
-				if (touch.active && (touch.phase == TouchPhase::Ended ||
+			for (auto & touch : touches) {
+					if (touch.active && (touch.phase == TouchPhase::Ended ||
 					touch.phase == TouchPhase::Cancelled)) {
 					touch.active = false;
 					touch.id = INVALID_TOUCH_ID;
@@ -361,9 +357,9 @@ namespace edge {
 		}
 
 		void clear() noexcept {
-			for (usize i = 0; i < MAX_TOUCHES; ++i) {
-				touches[i].active = false;
-				touches[i].id = INVALID_TOUCH_ID;
+			for (auto & touch : touches) {
+                touch.active = false;
+                touch.id = INVALID_TOUCH_ID;
 			}
 		}
 	};
@@ -396,16 +392,16 @@ namespace edge {
 			}
 		}
 
-		const TouchPoint* get_touch(TouchId id) const noexcept {
+		[[nodiscard]] const TouchPoint* get_touch(TouchId id) const noexcept {
 			return state.find(id);
 		}
 
-		const TouchPoint* get_touch_at(usize index) const noexcept {
+		[[nodiscard]] const TouchPoint* get_touch_at(usize index) const noexcept {
 			if (index >= MAX_TOUCHES) return nullptr;
 			return state.touches[index].active ? &state.touches[index] : nullptr;
 		}
 
-		usize get_touch_count() const noexcept {
+		[[nodiscard]] usize get_touch_count() const noexcept {
 			return state.get_count();
 		}
 
@@ -437,9 +433,11 @@ namespace edge {
 
 	struct InputSystem {
 		struct IListener {
-			virtual void on_bool_change(DeviceType device, usize button, bool cur, bool prev) noexcept = 0;
-			virtual void on_axis_change(DeviceType device, usize button, f32 cur, f32 prev) noexcept = 0;
-			virtual void on_character(char32_t codepoint) noexcept = 0;
+            virtual ~IListener() = default;
+
+			virtual void on_bool_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, bool cur, bool prev) noexcept = 0;
+			virtual void on_axis_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, glm::vec3 cur, glm::vec3 prev) noexcept = 0;
+			virtual void on_character(NotNull<const InputSystem*> input_system, char32_t codepoint) noexcept = 0;
 		};
 
 		Array<std::pair<u64, IListener*>> listeners = {};
@@ -460,27 +458,27 @@ namespace edge {
 		void clear() noexcept;
 
 		void dispatch(DeviceType type, usize button, bool cur, bool prev) const noexcept;
-		void dispatch(DeviceType type, usize button, f32 cur, f32 prev) const noexcept;
+		void dispatch(DeviceType type, usize button, glm::vec3 cur, glm::vec3 prev) const noexcept;
 
 		KeyboardDevice* get_keyboard() { return &keyboard; }
-		const KeyboardDevice* get_keyboard() const { return &keyboard; }
+		[[nodiscard]] const KeyboardDevice* get_keyboard() const { return &keyboard; }
 
 		MouseDevice* get_mouse() { return &mouse; }
-		const MouseDevice* get_mouse() const { return &mouse; }
+		[[nodiscard]] const MouseDevice* get_mouse() const { return &mouse; }
 
 		PadDevice* get_gamepad(usize index) {
 			if (index >= MAX_GAMEPADS) return nullptr;
 			return &gamepads[index];
 		}
 
-		const PadDevice* get_gamepad(usize index) const {
+		[[nodiscard]] const PadDevice* get_gamepad(usize index) const {
 			if (index >= MAX_GAMEPADS) return nullptr;
 			return &gamepads[index];
 		}
 
 		TouchDevice* get_touch() { return &touch; }
-		const TouchDevice* get_touch() const { return &touch; }
+		[[nodiscard]] const TouchDevice* get_touch() const { return &touch; }
 	};
 }
 
-#endif // EDGE_INPUT_H
+#endif // EDGE_INPUT_SYSTEM_H

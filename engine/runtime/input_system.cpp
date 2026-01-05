@@ -64,7 +64,7 @@ namespace edge {
 					mouse.state.prev_btn.get(index));
 			}
 
-			for (auto axis : Range{ MouseAxis::PosX, MouseAxis::ScrollY }) {
+			for (auto axis : Range{ MouseAxis::Pos, MouseAxis::Scroll }) {
 				auto index = static_cast<usize>(axis);
 				dispatch(DeviceType::Mouse, index,
 					mouse.state.cur_axes[index],
@@ -87,7 +87,7 @@ namespace edge {
 					pad.state.prev_btn.get(index));
 			}
 
-			for (auto axis : Range{ PadAxis::LeftX, PadAxis::TriggerRight }) {
+			for (auto axis : Range{ PadAxis::StickLeft, PadAxis::TriggerRight }) {
 				auto index = static_cast<usize>(axis);
 				dispatch(pad_type, index,
 					pad.state.cur_axes[index],
@@ -115,15 +115,15 @@ namespace edge {
 	void InputSystem::dispatch(DeviceType type, usize button, bool cur, bool prev) const noexcept {
 		if (cur != prev) {
 			for (auto& [id, listener] : listeners) {
-				listener->on_bool_change(type, button, cur, prev);
+				listener->on_bool_change(this, type, button, cur, prev);
 			}
 		}
 	}
 
-	void InputSystem::dispatch(DeviceType type, usize button, f32 cur, f32 prev) const noexcept {
+	void InputSystem::dispatch(DeviceType type, usize button, glm::vec3 cur, glm::vec3 prev) const noexcept {
 		if (cur != prev) {
 			for (auto& [id, listener] : listeners) {
-				listener->on_axis_change(type, button, cur, prev);
+				listener->on_axis_change(this, type, button, cur, prev);
 			}
 		}
 	}

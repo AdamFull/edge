@@ -312,8 +312,7 @@ namespace edge {
 				[](GLFWwindow* window, double xpos, double ypos) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
 					MouseDevice* mouse = rt->input_system->get_mouse();
-					mouse->set_axis(MouseAxis::PosX, static_cast<f32>(xpos));
-					mouse->set_axis(MouseAxis::PosY, static_cast<f32>(ypos));
+					mouse->set_axis(MouseAxis::Pos, { static_cast<f32>(xpos), static_cast<f32>(ypos), 0.0f });
 				});
 
 			glfwSetMouseButtonCallback(wnd_handle, 
@@ -331,8 +330,7 @@ namespace edge {
 				[](GLFWwindow* window, double xoffset, double yoffset) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
 					MouseDevice* mouse = rt->input_system->get_mouse();
-					mouse->set_axis(MouseAxis::ScrollX, static_cast<f32>(xoffset));
-					mouse->set_axis(MouseAxis::ScrollY, static_cast<f32>(yoffset));
+					mouse->set_axis(MouseAxis::Scroll, { static_cast<f32>(xoffset), static_cast<f32>(yoffset), 0.0f });
 				});
 
 			glfwSetCharCallback(wnd_handle, 
@@ -419,12 +417,10 @@ namespace edge {
 						trigger_left = (trigger_left + 1.0f) * 0.5f;
 						trigger_right = (trigger_right + 1.0f) * 0.5f;
 
-						pad->set_axis(PadAxis::LeftX, left_x);
-						pad->set_axis(PadAxis::LeftY, left_y);
-						pad->set_axis(PadAxis::RightX, right_x);
-						pad->set_axis(PadAxis::RightY, right_y);
-						pad->set_axis(PadAxis::TriggerLeft, trigger_left);
-						pad->set_axis(PadAxis::TriggerRight, trigger_right);
+						pad->set_axis(PadAxis::StickLeft, { left_x, left_y, 0.0f });
+						pad->set_axis(PadAxis::StickRight, { right_x, right_y, 0.0f });
+						pad->set_axis(PadAxis::TriggerLeft, { trigger_left, 0.0f, 0.0f });
+						pad->set_axis(PadAxis::TriggerRight, { trigger_right, 0.0f, 0.0f });
 
 						pad->set_btn(PadBtn::TriggerLeft, trigger_left > 0.5f);
 						pad->set_btn(PadBtn::TriggerRight, trigger_right > 0.5f);

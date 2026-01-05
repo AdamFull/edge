@@ -288,13 +288,13 @@ namespace edge {
                             f32 x = GameActivityPointerAxes_getX(&pointer);
                             f32 y = GameActivityPointerAxes_getY(&pointer);
 
-                            mouse->set_position(x, y);
+                            mouse->set_axis(MouseAxis::Pos, { x, y, 0.0f });
 
                             // Map touch press/release to left mouse button
                             if (event->action == AMOTION_EVENT_ACTION_DOWN) {
-                                mouse->state.cur.set(static_cast<usize>(MouseBtn::Left));
+                                mouse->state.cur_btn.set(static_cast<usize>(MouseBtn::Left));
                             } else if (event->action == AMOTION_EVENT_ACTION_UP) {
-                                mouse->state.cur.clear(static_cast<usize>(MouseBtn::Left));
+                                mouse->state.cur_btn.clear(static_cast<usize>(MouseBtn::Left));
                             }
                         }
                     }
@@ -335,8 +335,8 @@ namespace edge {
             // Process mouse
             Paddleboat_Mouse_Data mouse_data;
             if (Paddleboat_getMouseData(&mouse_data) == PADDLEBOAT_NO_ERROR) {
-                mouse->set_position(mouse_data.mouseX, mouse_data.mouseY);
-                mouse->set_scroll((f32)mouse_data.mouseScrollDeltaH, (f32)mouse_data.mouseScrollDeltaV);
+                mouse->set_axis(MouseAxis::Pos, { mouse_data.mouseX, mouse_data.mouseY, 0.0f });
+                mouse->set_axis(MouseAxis::Scroll, { (f32)mouse_data.mouseScrollDeltaH, (f32)mouse_data.mouseScrollDeltaV, 0.0f });
 
                 // Process mouse buttons
                 for (i32 button_idx = 0; button_idx < 8; ++button_idx) {
@@ -345,7 +345,7 @@ namespace edge {
 
                     if (engine_btn != MouseBtn::Count) {
                         bool pressed = (mouse_data.buttonsDown & paddle_button) != 0;
-                        mouse->set_button(engine_btn, pressed);
+                        mouse->set_btn(engine_btn, pressed);
                     }
                 }
             }
@@ -360,14 +360,14 @@ namespace edge {
                 PadDevice* pad = input_system->get_gamepad(controller_idx);
 
                 if (status == PADDLEBOAT_CONTROLLER_ACTIVE) {
-                    if (!pad->state.connected) {
+                    if (!pad->connected) {
                         // Newly connected
-                        pad->state.connected = true;
+                        pad->connected = true;
 
                         Paddleboat_Controller_Info info;
                         if (Paddleboat_getControllerInfo(controller_idx, &info) == PADDLEBOAT_NO_ERROR) {
-                            pad->state.vendor_id = info.vendorId;
-                            pad->state.product_id = info.productId;
+                            pad->vendor_id = info.vendorId;
+                            pad->product_id = info.productId;
                         }
                     }
 
@@ -380,7 +380,7 @@ namespace edge {
 
                             if (engine_btn != PadBtn::Count) {
                                 bool pressed = (controller_data.buttonsDown & paddle_button) != 0;
-                                pad->set_button(engine_btn, pressed);
+                                pad->set_btn(engine_btn, pressed);
                             }
                         }
 
@@ -394,16 +394,14 @@ namespace edge {
                         f32 trigger_left = apply_deadzone(controller_data.triggerL2, pad->trigger_deadzone);
                         f32 trigger_right = apply_deadzone(controller_data.triggerR2, pad->trigger_deadzone);
 
-                        pad->set_axis(PadAxis::LeftX, left_x);
-                        pad->set_axis(PadAxis::LeftY, left_y);
-                        pad->set_axis(PadAxis::RightX, right_x);
-                        pad->set_axis(PadAxis::RightY, right_y);
-                        pad->set_axis(PadAxis::TriggerLeft, trigger_left);
-                        pad->set_axis(PadAxis::TriggerRight, trigger_right);
+                        pad->set_axis(PadAxis::StickLeft, { left_x, left_y, 0.0f });
+                        pad->set_axis(PadAxis::StickRight, { right_x, right_y, 0.0f });
+                        pad->set_axis(PadAxis::TriggerLeft, { trigger_left, 0.0f, 0.0f });
+                        pad->set_axis(PadAxis::TriggerRight, { trigger_right, 0.0f, 0.0f });
                     }
                 } else {
                     // Disconnected
-                    if (pad->state.connected) {
+                    if (pad->connected) {
                         pad->clear();
                     }
                 }

@@ -213,7 +213,7 @@ namespace edge {
 	}
 
 	struct ImGuiInputListener final : InputSystem::IListener {
-		void on_bool_change(DeviceType device, usize button, bool cur, bool prev) noexcept override {
+		void on_bool_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, bool cur, bool prev) noexcept override {
 			ImGuiIO& io = ImGui::GetIO();
 
 			switch (device)
@@ -254,33 +254,22 @@ namespace edge {
 			}
 		}
 
-		void on_axis_change(DeviceType device, usize button, f32 cur, f32 prev) noexcept override {
+		void on_axis_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, glm::vec3 cur, glm::vec3 prev) noexcept override {
 			ImGuiIO& io = ImGui::GetIO();
 
 			switch (device)
 			{
 			case edge::DeviceType::Mouse: {
-				auto axis = static_cast<MouseAxis>(button);
-				switch (axis)
+				const MouseDevice* mouse = input_system->get_mouse();
+
+				switch (static_cast<MouseAxis>(button))
 				{
-				case edge::MouseAxis::PosX: {
-					ImVec2 pos = io.MousePos;
-					pos.x = cur;
-					io.AddMousePosEvent(pos.x, pos.y);
+				case edge::MouseAxis::Pos: {
+					io.AddMousePosEvent(cur.x, cur.y);
 					break;
 				}
-				case edge::MouseAxis::PosY: {
-					ImVec2 pos = io.MousePos;
-					pos.y = cur;
-					io.AddMousePosEvent(pos.x, pos.y);
-					break;
-				}
-				case edge::MouseAxis::ScrollX: {
-					io.AddMouseWheelEvent(cur, io.MouseWheel);
-					break;
-				}
-				case edge::MouseAxis::ScrollY: {
-					io.AddMouseWheelEvent(io.MouseWheelH, cur);
+				case edge::MouseAxis::Scroll: {
+					io.AddMouseWheelEvent(cur.x, cur.y);
 					break;
 				}
 				default: break;
@@ -299,7 +288,7 @@ namespace edge {
 			}
 		}
 
-		void on_character(char32_t codepoint) noexcept override {
+		void on_character(NotNull<const InputSystem*> input_system, char32_t codepoint) noexcept override {
 			ImGuiIO& io = ImGui::GetIO();
 			io.AddInputCharacter(codepoint);
 		}
