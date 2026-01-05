@@ -42,7 +42,7 @@ namespace edge::gfx {
 		i32 family_index = -1;
 		i32 queue_index = -1;
 
-		operator bool() const noexcept { return family_index != -1 && queue_index != -1; }
+		explicit operator bool() const noexcept { return family_index != -1 && queue_index != -1; }
 
 		bool request(QueueRequest create_info) noexcept;
 		void release() noexcept;
@@ -70,7 +70,7 @@ namespace edge::gfx {
 	};
 
 	struct DescriptorSetLayout : VulkanHandle<VkDescriptorSetLayout> {
-		u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT];
+		u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT] = {};
 
 		bool create(const DescriptorLayoutBuilder& builder) noexcept;
 		void destroy() noexcept;
@@ -174,7 +174,7 @@ namespace edge::gfx {
 		VkDeviceSize local_offset = 0;
 		VkDeviceSize size = 0;
 
-		operator bool() const noexcept { return buffer && size != 0; }
+		explicit operator bool() const noexcept { return buffer && size != 0; }
 
 		void write(Span<const u8> data, VkDeviceSize offset) noexcept;
 	};
