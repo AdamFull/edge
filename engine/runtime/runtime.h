@@ -26,6 +26,8 @@ namespace edge {
 	};
 
 	struct IRuntime {
+        virtual ~IRuntime() = default;
+
 		virtual bool init(const RuntimeInitInfo& init_info) noexcept = 0;
 		virtual void deinit(NotNull<const Allocator*> alloc) noexcept = 0;
 
