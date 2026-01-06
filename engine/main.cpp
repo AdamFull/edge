@@ -15,7 +15,9 @@
 #include <platform_detect.hpp>
 
 #include <assert.h>
+
 #include <mimalloc.h>
+#include <mimalloc-stats.h>
 
 using namespace edge;
 
@@ -70,7 +72,11 @@ int edge_main(RuntimeLayout* runtime_layout) {
 #if EDGE_DEBUG
 	allocator = Allocator::create_tracking();
 #else
-	allocator = Allocator::create(mi_malloc, mi_free, mi_realloc, mi_calloc, mi_strdup);
+	allocator = Allocator::create(
+		[](usize size, usize alignment, void*) { return mi_aligned_alloc(alignment, size); },
+		[](void* ptr, void*) { mi_free(ptr); },
+		[](void* ptr, usize size, usize alignment, void*) { return mi_aligned_recalloc(ptr, 1, size, alignment); },
+		nullptr);
 #endif
 
 	if (!logger.create(&allocator, LogLevel::Trace)) {
