@@ -5,6 +5,9 @@
 
 #include <math.hpp>
 
+#define LZ4F_STATIC_LINKING_ONLY
+#include <lz4frame.h>
+
 namespace edge {
 	namespace detail {
 		namespace ktx1 {
@@ -14,6 +17,8 @@ namespace edge {
 			constexpr u8 IDENTIFIER[] = {
 				0xAB, 0x4B, 0x54, 0x58, 0x20, 0x31, 0x31, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A
 			};
+
+			static constexpr usize ident_size = sizeof(IDENTIFIER);
 
 			struct Header {
 				u32 endianness;
@@ -39,6 +44,8 @@ namespace edge {
 				0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32, 0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A
 			};
 
+			static constexpr usize ident_size = sizeof(IDENTIFIER);
+
 			// static constexpr usize header_size = sizeof(Header);
 		}
 
@@ -46,6 +53,8 @@ namespace edge {
 			constexpr u8 IDENTIFIER[] = {
 				0x44, 0x44, 0x53, 0x20
 			};
+
+			static constexpr usize ident_size = sizeof(IDENTIFIER);
 
 			constexpr u32 FOURCC_DXT1 = 0x31545844;
 			constexpr u32 FOURCC_DXT2 = 0x32545844;
@@ -128,66 +137,7 @@ namespace edge {
 						case FOURCC_BC5S: return DXGI_FORMAT_BC5_SNORM;
 						case FOURCC_BC6H: return DXGI_FORMAT_BC6H_UF16;
 						case FOURCC_BC7L: return DXGI_FORMAT_BC7_UNORM;
-						case 36: return DXGI_FORMAT_R16G16B16A16_UNORM;
-						case 110: return DXGI_FORMAT_R16G16B16A16_SNORM;
-						case 111: return DXGI_FORMAT_R16_FLOAT;
-						case 112: return DXGI_FORMAT_R16G16_FLOAT;
-						case 113: return DXGI_FORMAT_R16G16B16A16_FLOAT;
-						case 114: return DXGI_FORMAT_R32_FLOAT;
-						case 115: return DXGI_FORMAT_R32G32_FLOAT;
-						case 116: return DXGI_FORMAT_R32G32B32A32_FLOAT;
 						default: return DXGI_FORMAT_UNKNOWN;
-						}
-					}
-					else if (flags & DDS_PIXEL_FORMAT_RGB_FLAG_BIT) {
-						switch (rgb_bit_count) {
-						case 32:
-							if (r_bit_mask == 0x000000ff && g_bit_mask == 0x0000ff00 &&
-								b_bit_mask == 0x00ff0000 && a_bit_mask == 0xff000000) {
-								return DXGI_FORMAT_R8G8B8A8_UNORM;
-							}
-							if (r_bit_mask == 0x00ff0000 && g_bit_mask == 0x0000ff00 &&
-								b_bit_mask == 0x000000ff && a_bit_mask == 0xff000000) {
-								return DXGI_FORMAT_B8G8R8A8_UNORM;
-							}
-							if (r_bit_mask == 0x00ff0000 && g_bit_mask == 0x0000ff00 &&
-								b_bit_mask == 0x000000ff && a_bit_mask == 0x00000000) {
-								return DXGI_FORMAT_B8G8R8X8_UNORM;
-							}
-							if (r_bit_mask == 0x3ff00000 && g_bit_mask == 0x000ffc00 &&
-								b_bit_mask == 0x000003ff && a_bit_mask == 0xc0000000) {
-								return DXGI_FORMAT_R10G10B10A2_UNORM;
-							}
-							break;
-						case 16:
-							if (r_bit_mask == 0xf800 && g_bit_mask == 0x07e0 && b_bit_mask == 0x001f) {
-								return DXGI_FORMAT_B5G6R5_UNORM;
-							}
-							if (r_bit_mask == 0x7c00 && g_bit_mask == 0x03e0 &&
-								b_bit_mask == 0x001f && a_bit_mask == 0x8000) {
-								return DXGI_FORMAT_B5G5R5A1_UNORM;
-							}
-							if (r_bit_mask == 0x0f00 && g_bit_mask == 0x00f0 &&
-								b_bit_mask == 0x000f && a_bit_mask == 0xf000) {
-								return DXGI_FORMAT_B4G4R4A4_UNORM;
-							}
-							break;
-						}
-					}
-					else if (flags & DDS_PIXEL_FORMAT_ALPHA_FLAG_BIT) {
-						return DXGI_FORMAT_A8_UNORM;
-					}
-					else if (flags & DDS_PIXEL_FORMAT_LUMINANCE_FLAG_BIT) {
-						if (rgb_bit_count == 8) {
-							return DXGI_FORMAT_R8_UNORM;
-						}
-						else if (rgb_bit_count == 16) {
-							if (r_bit_mask == 0xffff) {
-								return DXGI_FORMAT_R16_UNORM;
-							}
-							if (r_bit_mask == 0x00ff && a_bit_mask == 0xff00) {
-								return DXGI_FORMAT_R8G8_UNORM;
-							}
 						}
 					}
 
@@ -228,6 +178,36 @@ namespace edge {
 			constexpr u8 IDENTIFIER[] = {
 				0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
 			};
+
+			static constexpr usize ident_size = sizeof(IDENTIFIER);
+		}
+
+		namespace etex {
+			constexpr u8 IDENTIFIER[] = {
+				'E', 'D', 'G', 'E', 'T', 'E', 'X', 0x00, 0x00, 0x01, 0x00, 0x00
+			};
+
+			static constexpr usize ident_size = sizeof(IDENTIFIER);
+
+			enum class ETexCompressionMethod : u32 {
+				None = 0,
+				LZ4 = 1,
+				ZSTD = 2
+			};
+
+			struct Header {
+				u32 vk_format;
+				u32 pixel_width;
+				u32 pixel_height;
+				u32 pixel_depth;
+				u32 number_of_array_elements;
+				u32 number_of_faces;
+				u32 number_of_mipmap_levels;
+				ETexCompressionMethod compression;
+			};
+
+			static constexpr usize header_size = sizeof(Header);
+			static constexpr usize chunk_size = 64 * 1024;
 		}
 
 		constexpr FormatInfo g_format_table[] = {
@@ -457,40 +437,44 @@ namespace edge {
 		}
 	}
 
-	bool TextureSource::from_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+	TextureSource::Result TextureSource::from_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
 		u8 buffer[16];
 		usize bytes_readed = fread(buffer, 1, 16, stream.m_ptr);
 		if (bytes_readed != 16) {
-			return false;
+			return Result::InvalidHeader;
 		}
 
-		if (memcmp(buffer, detail::png::IDENTIFIER, 8) == 0) {
-			fseek(stream.m_ptr, 8, SEEK_SET);
-			return false; // NOT SUPPORTED YET
+		if (memcmp(buffer, detail::png::IDENTIFIER, detail::png::ident_size) == 0) {
+			fseek(stream.m_ptr, detail::png::ident_size, SEEK_SET);
+			return Result::UnsupportedFileFormat;
 		}
-		else if (memcmp(buffer, detail::dds::IDENTIFIER, 4) == 0) {
-			fseek(stream.m_ptr, 4, SEEK_SET);
+		else if (memcmp(buffer, detail::dds::IDENTIFIER, detail::dds::ident_size) == 0) {
+			fseek(stream.m_ptr, detail::dds::ident_size, SEEK_SET);
 			return from_dds_stream(alloc, stream);
 		}
-		else if (memcmp(buffer, detail::ktx1::IDENTIFIER, 12) == 0) {
-			fseek(stream.m_ptr, 12, SEEK_SET);
+		else if (memcmp(buffer, detail::ktx1::IDENTIFIER, detail::ktx1::ident_size) == 0) {
+			fseek(stream.m_ptr, detail::ktx1::ident_size, SEEK_SET);
 			return from_ktx1_stream(alloc, stream);
 		}
-		else if (memcmp(buffer, detail::ktx2::IDENTIFIER, 12) == 0) {
-			fseek(stream.m_ptr, 12, SEEK_SET);
+		else if (memcmp(buffer, detail::ktx2::IDENTIFIER, detail::ktx2::ident_size) == 0) {
+			fseek(stream.m_ptr, detail::ktx2::ident_size, SEEK_SET);
 			return from_ktx2_stream(alloc, stream);
 		}
+		else if (memcmp(buffer, detail::etex::IDENTIFIER, detail::etex::ident_size) == 0) {
+			fseek(stream.m_ptr, detail::etex::ident_size, SEEK_SET);
+			return from_etex_stream(alloc, stream);
+		}
 
-		return false;
+		return Result::UnsupportedFileFormat;
 	}
 
-	bool TextureSource::from_dds_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+	TextureSource::Result TextureSource::from_dds_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
 		using namespace detail::dds;
 
 		Header header;
 		usize bytes_readed = fread(&header, 1, header_size, stream.m_ptr);
 		if (bytes_readed != header_size) {
-			return false; // InvalidHeader or stream end
+			return Result::InvalidHeader;
 		}
 
 		base_width = header.width;
@@ -504,12 +488,12 @@ namespace edge {
 			HeaderDXT10 header_dxt10;
 			bytes_readed = fread(&header_dxt10, 1, header_dxt10_size, stream.m_ptr);
 			if (bytes_readed != header_dxt10_size) {
-				return false; // InvalidHeader or stream end
+				return Result::InvalidHeader;
 			}
 
-			fromat_info = detail::find_format_entry_by_dxgi(header_dxt10.dxgi_format);
-			if (!fromat_info) {
-				return false; // InvalidFormat / UnsupportedFormat
+			format_info = detail::find_format_entry_by_dxgi(header_dxt10.dxgi_format);
+			if (!format_info) {
+				return Result::UnsupportedPixelFormat;
 			}
 
 			array_layers = max(header_dxt10.array_size, 1u);
@@ -520,9 +504,9 @@ namespace edge {
 		else {
 			auto dxgi_format = header.ddspf.get_format();
 
-			fromat_info = detail::find_format_entry_by_dxgi(dxgi_format);
-			if (!fromat_info) {
-				return false; // InvalidFormat / UnsupportedFormat
+			format_info = detail::find_format_entry_by_dxgi(dxgi_format);
+			if (!format_info) {
+				return Result::UnsupportedPixelFormat;
 			}
 
 			bool is_cubemap = header.caps2 & DDS_CAPS2_CUBEMAP_FLAG_BIT;
@@ -540,7 +524,7 @@ namespace edge {
 			u32 mip_height = max(base_height >> mip, 1u);
 			u32 mip_depth = max(base_depth >> mip, 1u);
 
-			usize level_size = fromat_info->calculate_size(mip_width, mip_height, mip_depth);
+			usize level_size = format_info->calculate_size(mip_width, mip_height, mip_depth);
 			level_info.offset = data_size;
 			level_info.size = level_size * array_layers * face_count;
 
@@ -549,7 +533,7 @@ namespace edge {
 
 		image_data = (u8*)alloc->malloc(data_size, 1);
 		if (!image_data) {
-			return false; // OutOfMemory
+			return Result::OutOfMemory;
 		}
 
 		// Load for match ktx-like layout
@@ -560,7 +544,7 @@ namespace edge {
 					u32 mip_height = max(base_height >> mip, 1u);
 					u32 mip_depth = max(base_depth >> mip, 1u);
 
-					usize mip_face_size = fromat_info->calculate_size(mip_width, mip_height, mip_depth);
+					usize mip_face_size = format_info->calculate_size(mip_width, mip_height, mip_depth);
 
 					LevelInfo& level_info = level_infos[mip];
 					usize subresource_offset = (layer * face_count + face) * mip_face_size;
@@ -568,22 +552,22 @@ namespace edge {
 
 					bytes_readed = fread(dest_ptr, 1, mip_face_size, stream.m_ptr);
 					if (bytes_readed != mip_face_size) {
-						return false; // Unexpected eof/eos
+						return Result::UnexpectedEndOfStream;
 					}
 				}
 			}
 		}
 
-		return true;
+		return Result::Success;
 	}
 
-	bool TextureSource::from_ktx1_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+	TextureSource::Result TextureSource::from_ktx1_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
 		using namespace detail::ktx1;
 
 		Header header;
 		usize bytes_readed = fread(&header, 1, header_size, stream.m_ptr);
 		if (bytes_readed != header_size) {
-			return false; // InvalidHeader or stream end
+			return Result::InvalidHeader;
 		}
 
 		bool reversed_endian = header.endianness == KTX_ENDIAN_REF_REV;
@@ -602,9 +586,9 @@ namespace edge {
 			header.bytes_of_key_value_data = detail::swap_u32(header.bytes_of_key_value_data);
 		}
 
-		fromat_info = detail::find_format_entry_by_gl(header.gl_internal_format);
-		if (!fromat_info) {
-			return false; // InvalidFormat / UnsupportedFormat
+		format_info = detail::find_format_entry_by_gl(header.gl_internal_format);
+		if (!format_info) {
+			return Result::UnsupportedPixelFormat;
 		}
 
 		base_width = header.pixel_width;
@@ -621,7 +605,7 @@ namespace edge {
 			u32 mip_height = max(base_height >> mip, 1u);
 			u32 mip_depth = max(base_depth >> mip, 1u);
 		
-			usize level_size = fromat_info->calculate_size(mip_width, mip_height, mip_depth);
+			usize level_size = format_info->calculate_size(mip_width, mip_height, mip_depth);
 			level_info.offset = data_size;
 			level_info.size = level_size * array_layers * face_count;
 		
@@ -630,7 +614,7 @@ namespace edge {
 
 		image_data = (u8*)alloc->malloc(data_size, 1);
 		if (!image_data) {
-			return false; // OutOfMemory
+			return Result::OutOfMemory;
 		}
 
 		// Skip metadata for now
@@ -640,7 +624,7 @@ namespace edge {
 			u32 level_data_size;
 			bytes_readed = fread(&level_data_size, 1, sizeof(u32), stream.m_ptr);
 			if (bytes_readed != sizeof(u32)) {
-				return false; // Unexpected eof
+				return Result::UnexpectedEndOfStream;
 			}
 
 			if (reversed_endian) {
@@ -650,29 +634,349 @@ namespace edge {
 			LevelInfo& level_info = level_infos[mip];
 
 			if (level_data_size != level_info.size) {
-				return false; // InvalidHeader
+				return Result::InvalidHeader;
 			}
 
 			bytes_readed = fread(image_data + level_info.offset, 1, level_data_size, stream.m_ptr);
 			if (bytes_readed != level_data_size) {
-				return false; // Unexpected eof/eos
+				return Result::UnexpectedEndOfStream;
 			}
 
 			usize cur_offset = ftell(stream.m_ptr);
 			fseek(stream.m_ptr, (cur_offset + 3) & ~3, SEEK_SET);
 		}
 
-		return true;
+		return Result::Success;
 	}
 
-	bool TextureSource::from_ktx2_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
-		return false;
+	TextureSource::Result TextureSource::from_ktx2_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+		return Result::UnsupportedFileFormat;
+	}
+
+	static TextureSource::Result decompress_lz4_level(
+		NotNull<const Allocator*> alloc,
+		NotNull<FILE*> stream,
+		LZ4F_dctx* dctx,
+		usize chunk_size,
+		char* in_out_buffer,
+		usize compressed_size,
+		usize original_size,
+		u8* dst_buffer
+		) noexcept {
+
+		usize total_decompressed = 0;
+		usize compressed_remaining = compressed_size;
+		usize ret = 1;
+
+		while (ret != 0 && total_decompressed < original_size && compressed_remaining > 0) {
+			usize to_read = (compressed_remaining < chunk_size) ? compressed_remaining : chunk_size;
+			usize read_size = fread(in_out_buffer, 1, to_read, stream.m_ptr);
+
+			if (read_size == 0 || read_size != to_read) {
+				return TextureSource::Result::UnexpectedEndOfStream;
+			}
+
+			compressed_remaining -= read_size;
+
+			const void* src_ptr = in_out_buffer;
+			const void* src_end = (const char*)in_out_buffer + read_size;
+
+			while (src_ptr < src_end && ret != 0 && total_decompressed < original_size) {
+				usize dst_size = chunk_size;
+				usize src_size = (const char*)src_end - (const char*)src_ptr;
+
+				ret = LZ4F_decompress(dctx, in_out_buffer + chunk_size, &dst_size, src_ptr, &src_size, NULL);
+
+				if (LZ4F_isError(ret)) {
+					return TextureSource::Result::CompressionFailed;
+				}
+
+				if (dst_size > 0) {
+					if (total_decompressed + dst_size > original_size) {
+						return TextureSource::Result::CompressionFailed;
+					}
+
+					memcpy(dst_buffer + total_decompressed, in_out_buffer + chunk_size, dst_size);
+					total_decompressed += dst_size;
+				}
+
+				src_ptr = (const char*)src_ptr + src_size;
+			}
+		}
+
+		if (total_decompressed != original_size) {
+			return TextureSource::Result::CompressionFailed;
+		}
+
+		return TextureSource::Result::Success;
+	}
+
+	TextureSource::Result TextureSource::from_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+		using namespace detail::etex;
+
+		Header header;
+		usize bytes_readed = fread(&header, 1, header_size, stream.m_ptr);
+		if (bytes_readed != header_size) {
+			return Result::InvalidHeader;
+		}
+
+		format_info = detail::find_format_entry_by_vk(header.vk_format);
+		if (!format_info) {
+			return Result::UnsupportedPixelFormat;
+		}
+
+		base_width = header.pixel_width;
+		base_height = max(header.pixel_height, 1u);
+		base_depth = max(header.pixel_depth, 1u);
+		mip_levels = max(header.number_of_mipmap_levels, 1u);
+		array_layers = max(header.number_of_array_elements, 1u);
+		face_count = max(header.number_of_faces, 1u);
+
+		for (u32 mip = 0; mip < mip_levels; ++mip) {
+			LevelInfo& level_info = level_infos[mip];
+
+			u32 mip_width = max(base_width >> mip, 1u);
+			u32 mip_height = max(base_height >> mip, 1u);
+			u32 mip_depth = max(base_depth >> mip, 1u);
+
+			usize level_size = format_info->calculate_size(mip_width, mip_height, mip_depth);
+			level_info.offset = data_size;
+			level_info.size = level_size * array_layers * face_count;
+
+			data_size += level_info.size;
+		}
+
+		image_data = (u8*)alloc->malloc(data_size, 1);
+		if (!image_data) {
+			return Result::OutOfMemory;
+		}
+
+		LZ4F_CustomMem custom_alloc = {
+			.customAlloc = [](void* opaqueState, usize size) -> void* {
+				const Allocator* alloc = (const Allocator*)opaqueState;
+				return alloc->malloc(size, 1);
+			},
+			.customCalloc = nullptr,
+			.customFree = [](void* opaqueState, void* address) -> void {
+				const Allocator* alloc = (const Allocator*)opaqueState;
+				alloc->free(address);
+			},
+			.opaqueState = (void*)alloc.m_ptr
+		};
+
+		LZ4F_dctx* lz4dctx = LZ4F_createDecompressionContext_advanced(custom_alloc, LZ4F_VERSION);
+		if (!lz4dctx) {
+			return TextureSource::Result::OutOfMemory;
+		}
+
+		char* in_out_buffer = (char*)alloc->malloc(chunk_size * 2, 1);
+		if (!in_out_buffer) {
+			LZ4F_freeDecompressionContext(lz4dctx);
+			return TextureSource::Result::OutOfMemory;
+		}
+
+		for (u32 mip = 0; mip < mip_levels; ++mip) {
+			u32 frame_size;
+			bytes_readed = fread(&frame_size, 1, sizeof(u32), stream.m_ptr);
+			if (bytes_readed != sizeof(u32)) {
+				alloc->free(in_out_buffer);
+				LZ4F_freeDecompressionContext(lz4dctx);
+				return Result::UnexpectedEndOfStream;
+			}
+
+			LevelInfo& level_info = level_infos[mip];
+
+			Result decompression_result = decompress_lz4_level(alloc, stream, lz4dctx, chunk_size, in_out_buffer, frame_size, level_info.size, image_data + level_info.offset);
+			if (decompression_result != Result::Success) {
+				alloc->free(in_out_buffer);
+				LZ4F_freeDecompressionContext(lz4dctx);
+				return decompression_result;
+			}
+
+			usize cur_offset = ftell(stream.m_ptr);
+			fseek(stream.m_ptr, (cur_offset + 3) & ~3, SEEK_SET);
+		}
+
+		alloc->free(in_out_buffer);
+		LZ4F_freeDecompressionContext(lz4dctx);
+
+		return Result::Success;
 	}
 
 	void TextureSource::destroy(NotNull<const Allocator*> alloc) noexcept {
 		if (image_data) {
 			alloc->free(image_data);
 		}
+	}
+
+	static TextureSource::Result compress_lz4_level(
+		NotNull<const Allocator*> alloc, 
+		NotNull<FILE*> stream, 
+		LZ4F_cctx* cctx,
+		usize chunk_size,
+		const u8* src_buffer, usize src_size,
+		u32& total_compressed) noexcept {
+		static const LZ4F_preferences_t lz4_prefs = {
+			.frameInfo = {
+				.blockSizeID = LZ4F_max256KB,
+				.blockMode = LZ4F_blockLinked,
+				.contentChecksumFlag = LZ4F_noContentChecksum,
+				.frameType = LZ4F_frame,
+				.contentSize = 0,
+				.dictID = 0,
+				.blockChecksumFlag = LZ4F_noBlockChecksum
+			},
+			.compressionLevel = 0,
+			.autoFlush = 0,
+			.favorDecSpeed = 0
+		};
+
+		i32 out_capacity = LZ4F_compressBound(chunk_size, &lz4_prefs);
+
+		char* write_buffer = (char*)alloc->malloc(out_capacity, 1);
+		if (!write_buffer) {
+			LZ4F_freeCompressionContext(cctx);
+			return TextureSource::Result::OutOfMemory;
+		}
+
+		total_compressed = 0;
+		usize bytes_remaining = src_size;
+
+		usize header_size = LZ4F_compressBegin(cctx, write_buffer, out_capacity, &lz4_prefs);
+		if (LZ4F_isError(header_size)) {
+			alloc->free(write_buffer);
+			return TextureSource::Result::CompressionFailed;
+		}
+
+		usize bytes_written = fwrite(write_buffer, 1, header_size, stream.m_ptr);
+		if (bytes_written != header_size) {
+			alloc->free(write_buffer);
+			return TextureSource::Result::BadStream;
+		}
+		total_compressed += bytes_written;
+
+		while (bytes_remaining > 0) {
+			usize bytes_to_compress = (bytes_remaining < chunk_size) ? bytes_remaining : chunk_size;
+			usize src_offset = src_size - bytes_remaining;
+			usize compressed_size = LZ4F_compressUpdate(cctx, write_buffer, out_capacity, src_buffer + src_offset, bytes_to_compress, NULL);
+
+			if (LZ4F_isError(compressed_size)) {
+				alloc->free(write_buffer);
+				return TextureSource::Result::CompressionFailed;
+			}
+
+			bytes_written = fwrite(write_buffer, 1, compressed_size, stream.m_ptr);
+			if (bytes_written != compressed_size) {
+				alloc->free(write_buffer);
+				return TextureSource::Result::BadStream;
+			}
+
+			total_compressed += bytes_written;
+			bytes_remaining -= bytes_to_compress;
+		}
+
+		usize end_size = LZ4F_compressEnd(cctx, write_buffer, out_capacity, NULL);
+		if (LZ4F_isError(end_size)) {
+			alloc->free(write_buffer);
+			return TextureSource::Result::CompressionFailed;
+		}
+
+		bytes_written = fwrite(write_buffer, 1, end_size, stream.m_ptr);
+		if (bytes_written != end_size) {
+			alloc->free(write_buffer);
+			return TextureSource::Result::BadStream;
+		}
+		total_compressed += end_size;
+
+		alloc->free(write_buffer);
+
+		return TextureSource::Result::Success;
+	}
+
+	TextureSource::Result TextureSource::write_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+		using namespace detail::etex;
+
+		usize bytes_written = fwrite(IDENTIFIER, 1, ident_size, stream.m_ptr);
+		if (bytes_written != ident_size) {
+			return Result::BadStream;
+		}
+
+		Header header = {
+			.vk_format = format_info->vk_format,
+			.pixel_width = base_width,
+			.pixel_height = base_height,
+			.pixel_depth = base_depth,
+			.number_of_array_elements = array_layers,
+			.number_of_faces = face_count,
+			.number_of_mipmap_levels = mip_levels,
+			.compression = ETexCompressionMethod::LZ4
+		};
+
+		bytes_written = fwrite(&header, 1, header_size, stream.m_ptr);
+		if (bytes_written != header_size) {
+			return Result::BadStream;
+		}
+
+		LZ4F_CustomMem custom_alloc = {
+			.customAlloc = [](void* opaqueState, usize size) -> void* {
+				const Allocator* alloc = (const Allocator*)opaqueState;
+				return alloc->malloc(size, 1);
+			},
+			.customCalloc = nullptr,
+			.customFree = [](void* opaqueState, void* address) -> void {
+				const Allocator* alloc = (const Allocator*)opaqueState;
+				alloc->free(address);
+			},
+			.opaqueState = (void*)alloc.m_ptr
+		};
+
+		LZ4F_cctx* lz4cctx = LZ4F_createCompressionContext_advanced(custom_alloc, LZ4F_VERSION);
+		if (!lz4cctx) {
+			return TextureSource::Result::OutOfMemory;
+		}
+
+		for (usize mip = 0; mip < mip_levels; ++mip) {
+			LevelInfo& level_info = level_infos[mip];
+
+			usize frame_start_offset = ftell(stream.m_ptr);
+			fseek(stream.m_ptr, frame_start_offset + sizeof(u32), SEEK_SET);
+
+			u32 compressed_size;
+			Result compression_result = compress_lz4_level(alloc, stream, lz4cctx, chunk_size, image_data + level_info.offset, level_info.size, compressed_size);
+			if (compression_result != Result::Success) {
+				LZ4F_freeCompressionContext(lz4cctx);
+				return compression_result;
+			}
+
+			usize frame_end_offset = ftell(stream.m_ptr);
+			frame_end_offset = (frame_end_offset + 3) & ~3;
+
+			fseek(stream.m_ptr, frame_start_offset, SEEK_SET);
+
+			bytes_written = fwrite(&compressed_size, 1, sizeof(u32), stream.m_ptr);
+			if (bytes_written != sizeof(u32)) {
+				LZ4F_freeCompressionContext(lz4cctx);
+				return Result::BadStream;
+			}
+
+			fseek(stream.m_ptr, frame_end_offset, SEEK_SET);
+		}
+
+		LZ4F_freeCompressionContext(lz4cctx);
+
+		return Result::Success;
+	}
+
+	TextureSource::SubresourceInfo TextureSource::get_mip(u32 level) noexcept {
+		if (level >= mip_levels) {
+			return {};
+		}
+
+		LevelInfo& level_info = level_infos[level];
+		return {
+			.data = image_data + level_info.offset,
+			.size = level_info.size
+		};
 	}
 
 	TextureSource::SubresourceInfo TextureSource::get_subresource_data_ptr(u32 level, u32 layer, u32 face) noexcept {

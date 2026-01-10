@@ -33,6 +33,17 @@ namespace edge {
 	}
 
 	struct TextureSource {
+		enum class Result : u32 {
+			Success = 0,
+			InvalidHeader,
+			UnsupportedFileFormat,
+			UnsupportedPixelFormat,
+			OutOfMemory,
+			UnexpectedEndOfStream,
+			BadStream,
+			CompressionFailed
+		};
+
 		struct LevelInfo {
 			usize size;
 			usize offset;
@@ -43,7 +54,7 @@ namespace edge {
 			usize size;
 		};
 
-		const detail::FormatInfo* fromat_info = nullptr;
+		const detail::FormatInfo* format_info = nullptr;
 
 		u32 base_width = 1;
 		u32 base_height = 1;
@@ -57,13 +68,17 @@ namespace edge {
 
 		LevelInfo level_infos[16] = {};
 
-		bool from_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
-		bool from_dds_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
-		bool from_ktx1_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
-		bool from_ktx2_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
+		Result from_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
+		Result from_dds_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
+		Result from_ktx1_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
+		Result from_ktx2_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
+		Result from_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
 
 		void destroy(NotNull<const Allocator*> alloc) noexcept;
 
+		Result write_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
+
+		SubresourceInfo get_mip(u32 level) noexcept;
 		SubresourceInfo get_subresource_data_ptr(u32 level, u32 layer = 0u, u32 face = 0u) noexcept;
 	};
 }
