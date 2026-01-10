@@ -9,9 +9,6 @@
 [submodule "edge/core/gfx/vulkan/external/vma"]
 	path = external/vma
 	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
-[submodule "external/KTX-Software"]
-	path = external/KTX-Software
-	url = https://github.com/KhronosGroup/KTX-Software
 [submodule "external/glm"]
 	path = external/glm
 	url = https://github.com/g-truc/glm.git
