@@ -17,21 +17,34 @@ endif()
 find_package(zstd QUIET)
 
 if(NOT zstd_FOUND)
+    FetchContent_Declare(
+        zstd
+        GIT_REPOSITORY https://github.com/facebook/zstd.git
+        GIT_TAG        v1.5.6
+        SOURCE_SUBDIR  build/cmake
+    )
+    
+    set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
+    set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
+    
+    FetchContent_MakeAvailable(zstd)
+    
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    target_compile_options(libzstd_static PRIVATE -mbmi2 -mlzcnt)
+    endif()
+endif()
+
+find_package(lz4 QUIET)
+
+if(NOT lz4_FOUND)
   FetchContent_Declare(
-    zstd
-    GIT_REPOSITORY https://github.com/facebook/zstd.git
-    GIT_TAG        v1.5.6
-    SOURCE_SUBDIR  build/cmake
+      lz4
+      GIT_REPOSITORY https://github.com/lz4/lz4.git
+      GIT_TAG        v1.10.0
+      SOURCE_SUBDIR  build/cmake
   )
 
-  set(ZSTD_BUILD_STATIC ON CACHE BOOL "" FORCE)
-  set(ZSTD_BUILD_SHARED OFF CACHE BOOL "" FORCE)
-  
-  FetchContent_MakeAvailable(zstd)
-
-  if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-    target_compile_options(libzstd_static PRIVATE -mbmi2 -mlzcnt)
-  endif()
+  FetchContent_MakeAvailable(lz4)
 endif()
 
 # vulkan
@@ -223,6 +236,8 @@ target_link_libraries(${PROJECT_NAME}
     INTERFACE
 
     mimalloc-static
+
+    lz4_static
 
     stb
 
