@@ -80,10 +80,11 @@ namespace edge::gfx {
 
 	struct ImageSubresourceData {
 		Span<const u8> data = {};
-		uint32_t mip_level = 0;
-		uint32_t array_layer = 0;
 		VkOffset3D offset = {};
 		VkExtent3D extent = {};
+		u32 mip_level = 0;
+		u32 array_layer = 0;
+		u32 layer_count = 1;
 	};
 
 	struct ImageUpdateInfo {

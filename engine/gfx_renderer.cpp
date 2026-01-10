@@ -179,7 +179,7 @@ namespace edge::gfx {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.mipLevel = subresource_info.mip_level,
 				.baseArrayLayer = subresource_info.array_layer,
-				.layerCount = 1u
+				.layerCount = subresource_info.layer_count
 				},
 			.imageOffset = subresource_info.offset,
 			.imageExtent = subresource_info.extent
