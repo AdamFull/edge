@@ -394,7 +394,7 @@ namespace edge {
 
 						const char* guid = glfwGetJoystickGUID(jid);
 						if (guid) {
-							sscanf(guid, "%04hx%04hx", &pad->vendor_id, &pad->product_id);
+							sscanf(guid, "%4x%4x", &pad->vendor_id, &pad->product_id);
 						}
 					}
 
