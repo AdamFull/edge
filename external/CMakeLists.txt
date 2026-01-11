@@ -238,6 +238,7 @@ target_link_libraries(${PROJECT_NAME}
     mimalloc-static
 
     lz4_static
+    libzstd_static
 
     stb
 
