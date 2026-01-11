@@ -8,6 +8,8 @@
 #define LZ4F_STATIC_LINKING_ONLY
 #include <lz4frame.h>
 
+#include <zstd.h>
+
 namespace edge {
 	namespace detail {
 		namespace ktx1 {
@@ -56,20 +58,23 @@ namespace edge {
 
 			static constexpr usize ident_size = sizeof(IDENTIFIER);
 
-			constexpr u32 FOURCC_DXT1 = 0x31545844;
-			constexpr u32 FOURCC_DXT2 = 0x32545844;
-			constexpr u32 FOURCC_DXT3 = 0x33545844;
-			constexpr u32 FOURCC_DXT4 = 0x34545844;
-			constexpr u32 FOURCC_DXT5 = 0x35545844;
-			constexpr u32 FOURCC_ATI1 = 0x31495441;
-			constexpr u32 FOURCC_BC4U = 0x55344342;
-			constexpr u32 FOURCC_BC4S = 0x53344342;
-			constexpr u32 FOURCC_ATI2 = 0x32495441;
-			constexpr u32 FOURCC_BC5U = 0x55354342;
-			constexpr u32 FOURCC_BC5S = 0x53354342;
-			constexpr u32 FOURCC_BC6H = 0x48364342;
-			constexpr u32 FOURCC_BC7L = 0x4C374342;
-			constexpr u32 FOURCC_DX10 = 0x30315844;
+#define MAKE_FOURCC(a, b, c, d) ((u32)(a) | ((u32)(b) << 8) | ((u32)(c) << 16) | ((u32)(d) << 24))
+
+			constexpr u32 FOURCC_DXT1 = MAKE_FOURCC('D', 'X', 'T', '1');
+			constexpr u32 FOURCC_DXT2 = MAKE_FOURCC('D', 'X', 'T', '2');
+			constexpr u32 FOURCC_DXT3 = MAKE_FOURCC('D', 'X', 'T', '3');
+			constexpr u32 FOURCC_DXT4 = MAKE_FOURCC('D', 'X', 'T', '4');
+			constexpr u32 FOURCC_DXT5 = MAKE_FOURCC('D', 'X', 'T', '5');
+			constexpr u32 FOURCC_BC4U = MAKE_FOURCC('B', 'C', '4', 'U');
+			constexpr u32 FOURCC_BC4S = MAKE_FOURCC('B', 'C', '4', 'S');
+			constexpr u32 FOURCC_ATI2 = MAKE_FOURCC('A', 'T', 'I', '2');
+			constexpr u32 FOURCC_BC5U = MAKE_FOURCC('B', 'C', '5', 'U');
+			constexpr u32 FOURCC_BC5S = MAKE_FOURCC('B', 'C', '5', 'S');
+			constexpr u32 FOURCC_RGBG = MAKE_FOURCC('R', 'G', 'B', 'G');
+			constexpr u32 FOURCC_GRGB = MAKE_FOURCC('G', 'R', 'G', 'B');
+			constexpr u32 FOURCC_DX10 = MAKE_FOURCC('D', 'X', '1', '0');
+
+#undef MAKE_FOURCC
 
 			enum PixelFormatFlagBits : u32 {
 				DDS_PIXEL_FORMAT_ALPHA_PIXELS_FLAG_BIT = 0x1,
@@ -129,14 +134,21 @@ namespace edge {
 						case FOURCC_DXT3: return DXGI_FORMAT_BC2_UNORM;
 						case FOURCC_DXT4:
 						case FOURCC_DXT5: return DXGI_FORMAT_BC3_UNORM;
-						case FOURCC_ATI1:
 						case FOURCC_BC4U: return DXGI_FORMAT_BC4_UNORM;
 						case FOURCC_BC4S: return DXGI_FORMAT_BC4_SNORM;
 						case FOURCC_ATI2:
 						case FOURCC_BC5U: return DXGI_FORMAT_BC5_UNORM;
 						case FOURCC_BC5S: return DXGI_FORMAT_BC5_SNORM;
-						case FOURCC_BC6H: return DXGI_FORMAT_BC6H_UF16;
-						case FOURCC_BC7L: return DXGI_FORMAT_BC7_UNORM;
+						case FOURCC_RGBG: return DXGI_FORMAT_R8G8_B8G8_UNORM;
+						case FOURCC_GRGB: return DXGI_FORMAT_G8R8_G8B8_UNORM;
+						case 36: return DXGI_FORMAT_R16G16B16A16_UNORM;
+						case 110: return DXGI_FORMAT_R16G16B16A16_SNORM;
+						case 111: return DXGI_FORMAT_R16_FLOAT;
+						case 112: return DXGI_FORMAT_R16G16_FLOAT;
+						case 113: return DXGI_FORMAT_R16G16B16A16_FLOAT;
+						case 114: return DXGI_FORMAT_R32_FLOAT;
+						case 115: return DXGI_FORMAT_R32G32_FLOAT;
+						case 116: return DXGI_FORMAT_R32G32B32A32_FLOAT;
 						default: return DXGI_FORMAT_UNKNOWN;
 						}
 					}
