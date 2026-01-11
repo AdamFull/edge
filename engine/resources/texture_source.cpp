@@ -153,6 +153,88 @@ namespace edge {
 						}
 					}
 
+					if (flags & DDS_PIXEL_FORMAT_RGB_FLAG_BIT) {
+						switch (rgb_bit_count) {
+						case 32:
+							// D3DFMT_A8B8G8R8
+							if (r_bit_mask == 0x000000FF && g_bit_mask == 0x0000FF00 &&
+								b_bit_mask == 0x00FF0000 && a_bit_mask == 0xFF000000) {
+								return DXGI_FORMAT_R8G8B8A8_UNORM;
+							}
+							// D3DFMT_G16R16
+							if (r_bit_mask == 0x0000FFFF && g_bit_mask == 0xFFFF0000 && b_bit_mask == 0x00000000) {
+								return DXGI_FORMAT_R16G16_UNORM;
+							}
+							// D3DFMT_A2B10G10R10
+							if (r_bit_mask == 0x000003FF && g_bit_mask == 0x000FFC00 &&
+								b_bit_mask == 0x3FF00000 && a_bit_mask == 0xC0000000) {
+								return DXGI_FORMAT_R10G10B10A2_UNORM;
+							}
+							// D3DFMT_A8R8G8B8
+							if (r_bit_mask == 0x00FF0000 && g_bit_mask == 0x0000FF00 &&
+								b_bit_mask == 0x000000FF && a_bit_mask == 0xFF000000) {
+								return DXGI_FORMAT_B8G8R8A8_UNORM;
+							}
+							// D3DFMT_X8R8G8B8
+							if (r_bit_mask == 0x00FF0000 && g_bit_mask == 0x0000FF00 &&
+								b_bit_mask == 0x000000FF && a_bit_mask == 0x00000000) {
+								return DXGI_FORMAT_B8G8R8X8_UNORM;
+							}
+							break;
+						case 24:
+							// D3DFMT_R8G8B8
+							if (r_bit_mask == 0xFF0000 && g_bit_mask == 0x00FF00 && b_bit_mask == 0x0000FF) {
+								// TODO: N\A in DXGI
+								return DXGI_FORMAT_UNKNOWN;
+							}
+							break;
+						case 16:
+							// D3DFMT_A1R5G5B5
+							if (r_bit_mask == 0x7C00 && g_bit_mask == 0x03E0 &&
+								b_bit_mask == 0x001F && a_bit_mask == 0x8000) {
+								return DXGI_FORMAT_B5G5R5A1_UNORM;
+							}
+							// D3FMT_R5G6B5
+							if (r_bit_mask == 0xF800 && g_bit_mask == 0x07E0 &&
+								b_bit_mask == 0x001F && a_bit_mask == 0x0000) {
+								return DXGI_FORMAT_B5G6R5_UNORM;
+							}
+							break;
+						case 8:
+							// D3DFMT_A8
+							if (flags & DDS_PIXEL_FORMAT_ALPHA_FLAG_BIT && a_bit_mask == 0xFF) {
+								return DXGI_FORMAT_A8_UNORM;
+							}
+							break;
+						}
+					}
+
+					if (flags & DDS_PIXEL_FORMAT_LUMINANCE_FLAG_BIT) {
+						switch (rgb_bit_count) {
+						case 16:
+							// D3DFMT_A8L8
+							if (r_bit_mask == 0x00FF && a_bit_mask == 0xFF00) {
+								// TODO: N\A in DXGI
+								return DXGI_FORMAT_UNKNOWN;
+							}
+							// D3DFMT_L16
+							if (r_bit_mask == 0xFFFF) {
+								return DXGI_FORMAT_R16_UNORM;
+							}
+							break;
+						case 8:
+							// D3DFMT_L8
+							if (r_bit_mask == 0xFF) {
+								return DXGI_FORMAT_R8_UNORM;
+							}
+							// D3DFMT_A4L4
+							if (r_bit_mask == 0xF && a_bit_mask == 0xF0) {
+								// TODO: N\A in DXGI
+								return DXGI_FORMAT_UNKNOWN;
+							}
+						}
+					}
+
 					return DXGI_FORMAT_UNKNOWN;
 				}
 			};
