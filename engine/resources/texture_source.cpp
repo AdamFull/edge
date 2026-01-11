@@ -8,8 +8,6 @@
 #define LZ4F_STATIC_LINKING_ONLY
 #include <lz4frame.h>
 
-#include <zstd.h>
-
 namespace edge {
 	namespace detail {
 		namespace ktx1 {
