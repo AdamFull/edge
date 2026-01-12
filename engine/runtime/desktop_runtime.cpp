@@ -336,12 +336,7 @@ namespace edge {
 			glfwSetCharCallback(wnd_handle, 
 				[](GLFWwindow* window, u32 codepoint) -> void {
 					auto* rt = (DesktopRuntime*)glfwGetWindowUserPointer(window);
-					// TODO: 
-#if 0
-					if (rt->input_system->current_state.text_input_enabled) {
-						rt->input_system->current_state.text_input.push_back(rt->alloc, static_cast<char32_t>(codepoint));
-					}
-#endif
+					rt->input_system->input_text.add_character(codepoint);
 				});
 
 			glfwSetJoystickCallback(

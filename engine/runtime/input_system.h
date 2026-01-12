@@ -418,6 +418,21 @@ namespace edge {
 	};
 #pragma endregion Touch
 
+	struct InputTextDevice {
+		char32_t buffer[32] = {};
+		usize position = 0;
+
+		void add_character(char32_t codepoint) noexcept {
+			assert(position < 32);
+			buffer[position++] = codepoint;
+		}
+
+		void clear() noexcept {
+			buffer[0] = U'\0';
+			position = 0;
+		}
+	};
+
 	enum class DeviceType {
 		Keyboard,
 		Mouse,
@@ -448,6 +463,7 @@ namespace edge {
 		MouseDevice mouse = {};
 		PadDevice gamepads[MAX_GAMEPADS] = {};
 		TouchDevice touch = {};
+		InputTextDevice input_text = {};
 
 		bool create(NotNull<const Allocator*> alloc) noexcept;
 		void destroy(NotNull<const Allocator*> alloc) noexcept;

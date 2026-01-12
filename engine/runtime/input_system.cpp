@@ -97,6 +97,13 @@ namespace edge {
 			pad.update();
 		}
 
+		for (usize i = 0; i < input_text.position; ++i) {
+			for (auto& [id, listener] : listeners) {
+				listener->on_character(this, input_text.buffer[i]);
+			}
+		}
+		input_text.clear();
+
 		// TODO: Dispatch touch state changes
 		touch.update();
 	}
