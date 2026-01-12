@@ -19,6 +19,26 @@
 #include <mimalloc.h>
 #include <mimalloc-stats.h>
 
+#include <math.hpp>
+
+using duration_t = std::chrono::high_resolution_clock::duration;
+using timepoint_t = std::chrono::high_resolution_clock::time_point;
+
+static duration_t target_frame_time = {};
+timepoint_t last_frame_time = {};
+timepoint_t prev_time = {};
+bool first_frame = true;
+
+static f64 welford_estimate = 5e-3;
+static f64 welford_mean = 5e-3;
+static f64 welford_m2 = 0.0;
+static i64 welford_count = 1;
+
+static f32 frame_time_accumulator = 0.0f;
+static u32 frame_counter = 0;
+static u32 mean_fps = 0;
+static f32 mean_frame_time = 0.0f;
+
 using namespace edge;
 
 static Allocator allocator = {};
@@ -39,6 +59,60 @@ static gfx::Renderer renderer = {};
 static ImGuiLayer imgui_layer = {};
 static gfx::ImGuiRenderer imgui_renderer = {};
 
+static void accurate_sleep(f64 seconds) {
+	// Adaptive algorithm (same across all platforms)
+	while (seconds - welford_estimate > 1e-7) {
+		f64 to_wait = seconds - welford_estimate;
+
+		auto start = std::chrono::high_resolution_clock::now();
+
+#if EDGE_PLATFORM_ANDROID
+		// Android nanosleep implementation
+		// Use nanosleep for better precision on mobile devices
+		struct timespec req, rem;
+		req.tv_sec = static_cast<time_t>(to_wait);
+		req.tv_nsec = static_cast<long>((to_wait - req.tv_sec) * 1e9);
+
+		// Handle potential interruptions
+		while (nanosleep(&req, &rem) == -1) {
+			req = rem;
+		}
+#elif EDGE_PLATFORM_WINDOWS
+		HANDLE waitable_timer = CreateWaitableTimer(NULL, FALSE, NULL);
+
+		LARGE_INTEGER due;
+		due.QuadPart = -i64(to_wait * 1e7);  // Convert to 100ns units
+		SetWaitableTimerEx(waitable_timer, &due, 0, NULL, NULL, NULL, 0);
+		WaitForSingleObject(waitable_timer, INFINITE);
+
+		CloseHandle(waitable_timer);
+#else
+		// TODO: Linux
+		std::this_thread::sleep_for(std::chrono::duration<f64>(to_wait));
+#endif
+		auto end = std::chrono::high_resolution_clock::now();
+
+		f64 observed = std::chrono::duration<f64>(end - start).count();
+		seconds -= observed;
+
+		// Update statistics using Welford's online algorithm
+		++welford_count;
+		f64 error = observed - to_wait;
+		f64 delta = error - welford_mean;
+		welford_mean += delta / welford_count;
+		welford_m2 += delta * (error - welford_mean);
+		f64 stddev = welford_count > 1 ? sqrt(welford_m2 / (welford_count - 1)) : 0.0;
+		welford_estimate = welford_mean + stddev;
+	}
+
+	// Spin lock for remaining time (cross-platform)
+	auto start = std::chrono::high_resolution_clock::now();
+	auto spin_duration = std::chrono::duration<f64>(seconds);
+	while (std::chrono::high_resolution_clock::now() - start < spin_duration) {
+		// Tight spin loop for maximum precision
+	}
+}
+
 static void edge_cleanup_engine(void) {
 	main_queue.wait_idle();
 
@@ -46,7 +120,7 @@ static void edge_cleanup_engine(void) {
 	imgui_renderer.destroy(&allocator);
 	renderer.destroy(&allocator);
 	main_queue.release();
-	
+
 	gfx::context_shutdown();
 
 	event_dispatcher.destroy(&allocator);
@@ -200,19 +274,127 @@ int edge_main(RuntimeLayout* runtime_layout) {
 		return -1;
 	}
 
+	// TODO: Move frame limiter somewhere 
+	target_frame_time = std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(std::chrono::duration<f64>(1.0 / static_cast<f64>(60)));
+	last_frame_time = std::chrono::high_resolution_clock::now();
+
 	// TODO: Remove requested_close and return bool in process_events
-    while (!runtime->requested_close()) {
+	while (!runtime->requested_close()) {
+		auto target_time = last_frame_time + target_frame_time;
+		auto current_time = std::chrono::high_resolution_clock::now();
+
+		f32 delta_time = std::chrono::duration<f32>(current_time - prev_time).count();
+
+		if (frame_time_accumulator > 1.0f) {
+			mean_fps = frame_counter;
+			mean_frame_time = frame_time_accumulator / static_cast<f32>(frame_counter);
+
+			frame_time_accumulator = 0.0f;
+			frame_counter = 0;
+		}
+		else {
+			frame_time_accumulator += delta_time;
+			frame_counter += 1;
+		}
+
 		runtime->process_events();
 		input_system.update();
 
-		imgui_layer.update(0.1f);
+		imgui_layer.update(delta_time);
 
 		if (renderer.frame_begin()) {
+#if 0
+			[&]() {
+				if (!texture_uploaded) {
+					gfx::ImageCreateInfo create_info = {
+					.extent = {
+							.width = tex_source.base_width,
+							.height = tex_source.base_height,
+							.depth = tex_source.base_depth
+						},
+						.level_count = tex_source.mip_levels,
+						.layer_count = tex_source.array_layers,
+						.face_count = tex_source.face_count,
+					.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+					.format = static_cast<VkFormat>(tex_source.format_info->vk_format)
+					};
+
+					gfx::Image image = {};
+					if (!image.create(create_info)) {
+						EDGE_LOG_ERROR("Failed to create font image.");
+						texture_uploaded = true;
+						tex_source.destroy(&allocator);
+						return;
+					}
+
+					gfx::CmdBuf cmd = renderer.active_frame->cmd;
+
+					gfx::PipelineBarrierBuilder barrier_builder = {};
+
+					barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
+						.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+						.baseMipLevel = 0,
+						.levelCount = tex_source.mip_levels,
+						.baseArrayLayer = 0,
+						.layerCount = tex_source.array_layers * tex_source.face_count
+						});
+					cmd.pipeline_barrier(barrier_builder);
+					image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+					gfx::ImageUpdateInfo update_info = {
+						.dst_image = image,
+						.buffer_view = renderer.active_frame->try_allocate_staging_memory(&allocator, tex_source.data_size, 1)
+					};
+
+					for (usize level = 0; level < tex_source.mip_levels; ++level) {
+						u32 mip_width = max(tex_source.base_width >> level, 1u);
+						u32 mip_height = max(tex_source.base_height >> level, 1u);
+						u32 mip_depth = max(tex_source.base_depth >> level, 1u);
+
+						auto subresource_info = tex_source.get_mip(level);
+
+						update_info.write(&allocator, {
+									.data = { subresource_info.data, subresource_info.size },
+									.extent = {
+									.width = mip_width,
+									.height = mip_height,
+									.depth = mip_depth
+									},
+									.mip_level = (u32)level,
+									.array_layer = 0,
+									.layer_count = tex_source.array_layers * tex_source.face_count
+							});
+					}
+
+					renderer.image_update_end(&allocator, update_info);
+					renderer.setup_resource(&allocator, tex_handle, image);
+
+					tex_source.destroy(&allocator);
+					texture_uploaded = true;
+				}
+				}();
+#endif
+
 			imgui_renderer.execute(&allocator);
-			
+
 			renderer.frame_end();
+
+			if (first_frame) {
+				prev_time = last_frame_time = std::chrono::high_resolution_clock::now();
+				first_frame = false;
+				continue;
+			}
+
+			if (current_time < target_time) {
+				auto remaining_duration = target_time - current_time;
+				f64 remaining_seconds = std::chrono::duration<f64>(remaining_duration).count();
+				accurate_sleep(remaining_seconds);
+			}
+
+			last_frame_time = target_time;
+			prev_time = current_time;
 		}
-    }
+	}
 
 	edge_cleanup_engine();
 	return 0;
