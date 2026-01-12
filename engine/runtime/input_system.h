@@ -151,6 +151,7 @@ namespace edge {
 		void update() noexcept {
 			state.prev_btn = state.cur_btn;
 			memcpy(state.prev_axes, state.cur_axes, sizeof(state.cur_axes));
+			set_axis(MouseAxis::Scroll, {});
 		}
 
 		void clear() noexcept {
