@@ -1,6 +1,6 @@
 #include "imgui_layer.h"
-#include "../runtime/input_system.h"
-#include "../runtime/runtime.h"
+#include "runtime/input_system.h"
+#include "runtime/runtime.h"
 
 #include <allocator.hpp>
 #include <math.hpp>
@@ -212,6 +212,12 @@ namespace edge {
 		}
 	}
 
+	static void SetupImGuiStyle()
+	{
+		ImGui::StyleColorsDark();
+		// TODO: Make style
+	}
+
 	struct ImGuiInputListener final : InputSystem::IListener {
 		void on_bool_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, bool cur, bool prev) noexcept override {
 			ImGuiIO& io = ImGui::GetIO();
@@ -328,6 +334,8 @@ namespace edge {
 		io.ConfigFlags |= ImGuiConfigFlags_IsTouchScreen;
 #endif
 		io.ConfigDpiScaleFonts = true;
+
+		SetupImGuiStyle();
 
 		f32 scale_factor = init_info.runtime->get_surface_scale_factor();
 

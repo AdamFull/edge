@@ -2,12 +2,12 @@
 #include "runtime/input_system.h"
 #include "event_dispatcher.h"
 
-#include "gfx_context.h"
-#include "gfx_renderer.h"
-#include "gfx_uploader.h"
+#include "graphics/gfx_context.h"
+#include "graphics/gfx_renderer.h"
+#include "graphics/gfx_uploader.h"
 
-#include "imgui/imgui_layer.h"
-#include "imgui/imgui_renderer.h"
+#include "imgui_layer.h"
+#include "graphics/renderers/imgui_renderer.h"
 
 #include <allocator.hpp>
 #include <logger.hpp>
