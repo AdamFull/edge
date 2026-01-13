@@ -47,6 +47,17 @@ if(NOT lz4_FOUND)
   FetchContent_MakeAvailable(lz4)
 endif()
 
+FetchContent_Declare(
+    flecs
+    GIT_REPOSITORY https://github.com/SanderMertens/flecs.git
+    GIT_TAG v4.1.4
+)
+
+set(FLECS_STATIC ON CACHE BOOL "" FORCE)
+set(FLECS_SHARED OFF CACHE BOOL "" FORCE)
+
+FetchContent_MakeAvailable(flecs)
+
 # vulkan
 add_library(vulkan INTERFACE)
 set(VULKAN_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/vulkan/include)
@@ -249,4 +260,6 @@ target_link_libraries(${PROJECT_NAME}
     GPUOpen::VulkanMemoryAllocator
 
     imgui
+
+    flecs::flecs_static
 )
