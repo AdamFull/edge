@@ -505,8 +505,6 @@ namespace edge::gfx {
 
 		bool is_attachment = (image_source.usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) || (image_source.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
 		if (!is_attachment && image_source.layout != VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR) {
-			PipelineBarrierBuilder builder = {};
-
 			VkImageSubresourceRange subresource_range = {
 				.aspectMask = image_aspect,
 				.baseMipLevel = 0u,
@@ -517,7 +515,7 @@ namespace edge::gfx {
 
 			// TODO: Make batching updates
 			barrier_builder.add_image(image_source, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
-			active_frame->cmd.pipeline_barrier(builder);
+			active_frame->cmd.pipeline_barrier(barrier_builder);
 
 			image_source.layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
 		}
@@ -791,7 +789,7 @@ namespace edge::gfx {
 			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
 			.srcBuffer = update_info.buffer_view.buffer.handle,
 			.dstImage = update_info.dst_image.handle,
-			.dstImageLayout = update_info.dst_image.layout,
+			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			.regionCount = (u32)update_info.copy_regions.size(),
 			.pRegions = update_info.copy_regions.data()
 		};
