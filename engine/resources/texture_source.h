@@ -68,6 +68,10 @@ namespace edge {
 
 		LevelInfo level_infos[16] = {};
 
+		static bool is_ok(Result result) noexcept {
+			return result == Result::Success;
+		}
+
 		Result from_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
 		Result from_dds_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
 		Result from_ktx1_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
