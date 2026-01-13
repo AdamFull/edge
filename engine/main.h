@@ -99,6 +99,8 @@ namespace edge {
 
 		FrameTimeController frame_time_controller = {};
 
+		Handle test_tex = HANDLE_INVALID;
+
 		bool create(NotNull<const Allocator*> alloc, NotNull<RuntimeLayout*> runtime_layout) noexcept;
 		void destroy(NotNull<const Allocator*> alloc) noexcept;
 

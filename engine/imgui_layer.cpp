@@ -366,7 +366,7 @@ namespace edge {
 		ImGui::DestroyContext();
 	}
 
-	void ImGuiLayer::update(f32 dt) noexcept {
+	void ImGuiLayer::on_frame_begin(f32 dt) noexcept {
 		ImGuiIO& io = ImGui::GetIO();
 		io.DeltaTime = dt;
 
@@ -380,55 +380,9 @@ namespace edge {
 		io.AddFocusEvent(runtime->is_focused());
 
 		ImGui::NewFrame();
-		ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport());
+	}
 
-		if (ImGui::BeginMainMenuBar()) {
-			if (ImGui::BeginMenu("File"))
-			{
-				if (ImGui::MenuItem("New")) {
-
-				}
-				if (ImGui::MenuItem("Open", "Ctrl+O")) {
-
-				}
-				if (ImGui::BeginMenu("Open Recent")) {
-					ImGui::EndMenu();
-				}
-				if (ImGui::MenuItem("Save", "Ctrl+S")) {
-
-				}
-				if (ImGui::MenuItem("Save As..")) {
-
-				}
-
-				ImGui::EndMenu();
-			}
-			if (ImGui::BeginMenu("Edit"))
-			{
-				if (ImGui::MenuItem("Undo", "CTRL+Z")) {
-
-				}
-				if (ImGui::MenuItem("Redo", "CTRL+Y", false, false)) {
-
-				}
-				ImGui::Separator();
-				if (ImGui::MenuItem("Cut", "CTRL+X")) {
-
-				}
-				if (ImGui::MenuItem("Copy", "CTRL+C")) {
-
-				}
-				if (ImGui::MenuItem("Paste", "CTRL+V")) {
-
-				}
-				ImGui::EndMenu();
-			}
-
-			ImGui::EndMainMenuBar();
-		}
-
-		ImGui::ShowDemoWindow();
-
+	void ImGuiLayer::on_frame_end() noexcept {
 		ImGui::Render();
 	}
 }

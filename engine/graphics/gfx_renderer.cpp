@@ -1,6 +1,8 @@
 #include "gfx_renderer.h"
 #include "gfx_context.h"
 
+#include "../resources/texture_source.h"
+
 #include <array.hpp>
 #include <math.hpp>
 #include <logger.hpp>
@@ -141,10 +143,10 @@ namespace edge::gfx {
 			return BufferView{ .buffer = new_buffer, .local_offset = 0, .size = aligned_requested_size };
 		}
 
-		return BufferView{ 
-			.buffer = staging_memory, 
+		return BufferView{
+			.buffer = staging_memory,
 			.local_offset = std::exchange(staging_offset, staging_offset + aligned_requested_size),
-			.size = aligned_requested_size 
+			.size = aligned_requested_size
 		};
 	}
 
@@ -516,6 +518,7 @@ namespace edge::gfx {
 			// TODO: Make batching updates
 			barrier_builder.add_image(image_source, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
 			active_frame->cmd.pipeline_barrier(barrier_builder);
+			barrier_builder.reset();
 
 			image_source.layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
 		}
@@ -614,6 +617,29 @@ namespace edge::gfx {
 		}
 	}
 
+	Handle Renderer::add_image_from_disk(NotNull<const Allocator*> alloc, const char* path) noexcept {
+		FILE* stream = fopen(path, "rb");
+		if (!stream) {
+			return HANDLE_INVALID;
+		}
+
+		TextureSource tex_source = {};
+		auto result = tex_source.from_stream(alloc, stream);
+		if (!TextureSource::is_ok(result)) {
+			tex_source.destroy(alloc);
+			return HANDLE_INVALID;
+		}
+
+		Handle new_handle = add_resource();
+
+		texture_uploads.push_back(alloc, {
+			.handle = new_handle,
+			.texture_source = tex_source
+			});
+
+		return new_handle;
+	}
+
 	bool Renderer::frame_begin() noexcept {
 		bool surface_updated = false;
 		if (swapchain.is_outdated()) {
@@ -692,16 +718,74 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool Renderer::frame_end() noexcept {
+	bool Renderer::frame_end(NotNull<const Allocator*> alloc) noexcept {
 		if (!active_frame || !active_frame->is_recording) {
 			return false;
 		}
 
+		CmdBuf cmd = active_frame->cmd;
+
+		for (auto& texture_upload : texture_uploads) {
+			TextureSource& tex_src = texture_upload.texture_source;
+
+			const ImageCreateInfo image_create_info = {
+				.extent = { tex_src.base_width, tex_src.base_height, tex_src.base_depth },
+				.level_count = tex_src.mip_levels,
+				.layer_count = tex_src.array_layers,
+				.face_count = tex_src.face_count,
+				.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				.format = static_cast<VkFormat>(tex_src.format_info->vk_format)
+			};
+
+			Image image = {};
+			if (!image.create(image_create_info)) {
+				EDGE_LOG_ERROR("Failed to create image.");
+				tex_src.destroy(alloc);
+				continue;
+			}
+
+			barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = tex_src.mip_levels,
+				.baseArrayLayer = 0,
+				.layerCount = tex_src.array_layers * tex_src.face_count
+				});
+			cmd.pipeline_barrier(barrier_builder);
+			barrier_builder.reset();
+
+			image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+			ImageUpdateInfo update_info = {
+				.dst_image = image,
+				.buffer_view = active_frame->try_allocate_staging_memory(alloc, tex_src.data_size, 1)
+			};
+
+			for (usize level = 0; level < tex_src.mip_levels; ++level) {
+				u32 mip_width = max(tex_src.base_width >> level, 1u);
+				u32 mip_height = max(tex_src.base_height >> level, 1u);
+				u32 mip_depth = max(tex_src.base_depth >> level, 1u);
+
+				auto subresource_info = tex_src.get_mip(level);
+
+				update_info.write(alloc, {
+						.data = { subresource_info.data, subresource_info.size },
+						.extent = { mip_width, mip_height, mip_depth },
+						.mip_level = (u32)level,
+						.array_layer = 0,
+						.layer_count = tex_src.array_layers * tex_src.face_count
+					});
+			}
+
+			image_update_end(alloc, update_info);
+			setup_resource(alloc, texture_upload.handle, image);
+			tex_src.destroy(alloc);
+		}
+		texture_uploads.clear();
+
 		Resource* backbuffer_resource = resource_handle_pool.get(backbuffer_handle);
 		if (backbuffer_resource) {
 			if (backbuffer_resource->image.layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
-				PipelineBarrierBuilder barrier_builder = {};
-
 				VkImageSubresourceRange subresource_range = {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.baseMipLevel = 0u,
@@ -711,7 +795,8 @@ namespace edge::gfx {
 				};
 
 				barrier_builder.add_image(backbuffer_resource->image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
-				active_frame->cmd.pipeline_barrier(barrier_builder);
+				cmd.pipeline_barrier(barrier_builder);
+				barrier_builder.reset();
 
 				backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 			}
@@ -725,8 +810,8 @@ namespace edge::gfx {
 			buffer_descriptors.clear();
 		}
 
-		active_frame->cmd.write_timestamp(frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 1u);
-		active_frame->cmd.end();
+		cmd.write_timestamp(frame_timestamp, VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT, 1u);
+		cmd.end();
 
 		VkSemaphoreSubmitInfo wait_semaphores[2] = {};
 		wait_semaphores[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -742,7 +827,7 @@ namespace edge::gfx {
 		VkCommandBufferSubmitInfo cmd_buffer_submit_infos[6];
 		cmd_buffer_submit_infos[cmd_buffer_count++] = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = active_frame->cmd.handle
+			.commandBuffer = cmd.handle
 		};
 
 		const VkSubmitInfo2KHR submit_info = {
@@ -793,7 +878,7 @@ namespace edge::gfx {
 			.regionCount = (u32)update_info.copy_regions.size(),
 			.pRegions = update_info.copy_regions.data()
 		};
-		
+
 		vkCmdCopyBufferToImage2KHR(active_frame->cmd.handle, &copy_image_info);
 		update_info.copy_regions.destroy(alloc);
 	}

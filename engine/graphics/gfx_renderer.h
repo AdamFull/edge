@@ -2,6 +2,7 @@
 #define GFX_RENDERER_H
 
 #include "gfx_context.h"
+#include "../resources/texture_source.h"
 #include <handle_pool.hpp>
 #include <free_index_list.hpp>
 
@@ -96,6 +97,11 @@ namespace edge::gfx {
 		bool write(NotNull<const Allocator*> alloc, const ImageSubresourceData& subresource_info) noexcept;
 	};
 
+	struct TextureUpload {
+		Handle handle = HANDLE_INVALID;
+		TextureSource texture_source = {};
+	};
+
 	struct Renderer {
 		Queue direct_queue = {};
 
@@ -136,6 +142,8 @@ namespace edge::gfx {
 
 		Sampler default_sampler = {};
 
+		Array<TextureUpload> texture_uploads = {};
+
 		bool create(RendererCreateInfo create_info) noexcept;
 		void destroy(NotNull<const Allocator*> alloc) noexcept;
 
@@ -147,8 +155,10 @@ namespace edge::gfx {
 		Resource* get_resource(Handle handle) noexcept;
 		void free_resource(NotNull<const Allocator*> alloc, Handle handle) noexcept;
 
+		Handle add_image_from_disk(NotNull<const Allocator*> alloc, const char* path) noexcept;
+
 		bool frame_begin() noexcept;
-		bool frame_end() noexcept;
+		bool frame_end(NotNull<const Allocator*> alloc) noexcept;
 
 		void image_update_end(NotNull<const Allocator*> alloc, ImageUpdateInfo& update_info) noexcept;
 		void buffer_update_end(NotNull<const Allocator*> alloc, BufferUpdateInfo& update_info);

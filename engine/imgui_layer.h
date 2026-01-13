@@ -23,7 +23,9 @@ namespace edge {
 
 		bool create(ImGuiLayerInitInfo init_info) noexcept;
 		void destroy(NotNull<const Allocator*> alloc) noexcept;
-		void update(f32 dt) noexcept;
+
+		void on_frame_begin(f32 dt) noexcept;
+		void on_frame_end() noexcept;
 	};
 
 	ImGuiLayer* imgui_layer_create(ImGuiLayerInitInfo init_info);

@@ -12,6 +12,8 @@
 
 #include <math.hpp>
 
+#include <imgui.h>
+
 static edge::Allocator allocator = {};
 
 static edge::Logger logger = {};
@@ -194,6 +196,8 @@ namespace edge {
 			return false;
 		}
 
+		test_tex = renderer.add_image_from_disk(&allocator, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds");
+
 		return true;
 	}
 
@@ -245,84 +249,18 @@ namespace edge {
 		runtime->process_events();
 		input_system.update();
 
-		imgui_layer.update(delta_time);
+		imgui_layer.on_frame_begin(delta_time);
+
+		ImGui::Image((ImTextureRef)test_tex, { 512, 512 });
+
+		ImGui::ShowDemoWindow();
+
+		imgui_layer.on_frame_end();
 
 		if (renderer.frame_begin()) {
-#if 0
-			[&]() {
-				if (!texture_uploaded) {
-					gfx::ImageCreateInfo create_info = {
-					.extent = {
-							.width = tex_source.base_width,
-							.height = tex_source.base_height,
-							.depth = tex_source.base_depth
-						},
-						.level_count = tex_source.mip_levels,
-						.layer_count = tex_source.array_layers,
-						.face_count = tex_source.face_count,
-					.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-					.format = static_cast<VkFormat>(tex_source.format_info->vk_format)
-					};
-
-					gfx::Image image = {};
-					if (!image.create(create_info)) {
-						EDGE_LOG_ERROR("Failed to create font image.");
-						texture_uploaded = true;
-						tex_source.destroy(&allocator);
-						return;
-					}
-
-					gfx::CmdBuf cmd = renderer.active_frame->cmd;
-
-					gfx::PipelineBarrierBuilder barrier_builder = {};
-
-					barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
-						.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-						.baseMipLevel = 0,
-						.levelCount = tex_source.mip_levels,
-						.baseArrayLayer = 0,
-						.layerCount = tex_source.array_layers * tex_source.face_count
-						});
-					cmd.pipeline_barrier(barrier_builder);
-					image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-
-					gfx::ImageUpdateInfo update_info = {
-						.dst_image = image,
-						.buffer_view = renderer.active_frame->try_allocate_staging_memory(&allocator, tex_source.data_size, 1)
-					};
-
-					for (usize level = 0; level < tex_source.mip_levels; ++level) {
-						u32 mip_width = max(tex_source.base_width >> level, 1u);
-						u32 mip_height = max(tex_source.base_height >> level, 1u);
-						u32 mip_depth = max(tex_source.base_depth >> level, 1u);
-
-						auto subresource_info = tex_source.get_mip(level);
-
-						update_info.write(&allocator, {
-									.data = { subresource_info.data, subresource_info.size },
-									.extent = {
-									.width = mip_width,
-									.height = mip_height,
-									.depth = mip_depth
-									},
-									.mip_level = (u32)level,
-									.array_layer = 0,
-									.layer_count = tex_source.array_layers * tex_source.face_count
-							});
-					}
-
-					renderer.image_update_end(&allocator, update_info);
-					renderer.setup_resource(&allocator, tex_handle, image);
-
-					tex_source.destroy(&allocator);
-					texture_uploaded = true;
-				}
-				}();
-#endif
-
 			imgui_renderer.execute(&allocator);
 
-			renderer.frame_end();
+			renderer.frame_end(&allocator);
 		}
 	}
 }
