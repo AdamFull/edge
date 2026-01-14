@@ -644,6 +644,16 @@ namespace edge {
 			return dest.from_utf8(alloc, m_data, m_length);
 		}
 
+		constexpr const_reference front() const noexcept {
+			assert(m_length > 0 && "front() called on empty String");
+			return m_data[0];
+		}
+
+		constexpr const_reference back() const noexcept {
+			assert(m_length > 0 && "back() called on empty String");
+			return m_data[m_length - 1];
+		}
+
 		iterator begin() noexcept {
 			return m_data;
 		}
