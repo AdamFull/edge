@@ -41,8 +41,7 @@ namespace edge {
 		void* alloc_stack_ptr() noexcept;
 		void free_stack_ptr(NotNull<const Allocator*> alloc, void* ptr) noexcept;
 
-		void yield() noexcept;
-		void await(Job* child_job, void* promise) noexcept;
+		void switch_to_job(Job* target) noexcept;
 	};
 
 	static thread_local SchedulerThreadContext thread_context = { };
@@ -92,20 +91,15 @@ namespace edge {
 				continue;
 			}
 
-		process_job:
-			bool claimed = job->update_state(JobState::Suspended, JobState::Running);
-			if (!claimed) {
-				scheduler->jobs_failed.fetch_add(1, std::memory_order_relaxed);
+			if (!job->update_state(JobState::Suspended, JobState::Running)) {
 				continue;
 			}
 
 			Job* caller = thread_context.current_job;
 			job->caller = caller;
 
-			caller->state = JobState::Suspended;
-
-			Job* volatile target_job = job;
-			thread_context.current_job = target_job;
+			caller->state.store(JobState::Suspended, std::memory_order_release);
+			thread_context.current_job = job;
 
 			fiber_context_switch(caller->context, job->context);
 
@@ -114,25 +108,14 @@ namespace edge {
 			// which switched us to the sub-job context.
 			job = thread_context.current_job;
 			thread_context.current_job = caller;
-			caller->state = JobState::Running;
-
-			JobState job_state = job->state;
-			if (job_state == JobState::Completed) {
-				Job* awaiter = job->continuation;
-
-				Job::destroy(allocator, job);
-
-				scheduler->jobs_completed.fetch_add(1, std::memory_order_relaxed);
-
-				if (awaiter) {
-					job = awaiter;
-					goto process_job;
-				}
-
-				scheduler->active_jobs.fetch_sub(1, std::memory_order_acq_rel);
-			}
-			else if (job_state == JobState::Suspended) {
+			caller->state.store(JobState::Running, std::memory_order_release);
+			
+			JobState job_state = job->state.load(std::memory_order_acquire);
+			if (job_state == JobState::Suspended) {
 				scheduler->enqueue_job(job);
+			}
+			else {
+				scheduler->complete_job(allocator, job, job_state);
 			}
 		}
 
@@ -147,7 +130,7 @@ namespace edge {
 		main_job.context = main_context;
 		current_job = &main_job;
 
-		main_job.state = JobState::Running;
+		main_job.state.store(JobState::Running, std::memory_order_release);
 
 		if (!protected_arena.create()) {
 			return false;
@@ -181,53 +164,34 @@ namespace edge {
 		free_stacks.push_back(alloc, ptr);
 	}
 
-	void SchedulerThreadContext::yield() noexcept {
-		JobState job_state = current_job->state;
-		if (!current_job || current_job == &main_job || job_state == JobState::Completed) {
-			return;
-		}
+	void SchedulerThreadContext::switch_to_job(Job* target) noexcept {
+		Job* previous = current_job;
+		current_job = target;
 
-		Job* caller = current_job->caller;
-		if (!caller) {
-			return;
-		}
-
-		current_job->state = JobState::Suspended;
-		caller->state = JobState::Running;
-
-		fiber_context_switch(current_job->context, caller->context);
-
-		current_job->state = JobState::Running;
-	}
-
-	void SchedulerThreadContext::await(Job* child_job, void* promise) noexcept {
-		Job* parent_job = current_job;
-
-		child_job->caller = parent_job->caller;
-		child_job->continuation = parent_job;
-		child_job->promise = promise;
-
-		parent_job->state = JobState::Suspended;
-		child_job->state = JobState::Running;
-
-		current_job = child_job;
-
-		fiber_context_switch(parent_job->context, child_job->context);
-
-		// TODO: There is a problem. If this child process is terminated, it will never be deleted. When it is suspended, it should return to the worker's thread, but the worker will think that the main process is suspended, not the child process. Something needs to be done about this as well.
+		target->caller = previous;
+		fiber_context_switch(previous->context, target->context);
+		current_job = previous;
 	}
 
 	extern "C" void job_main(void) {
 		Job* job = thread_context.current_job;
 
-		if (job && job->func.is_valid()) {
-			job->state = JobState::Running;
-			job->func.invoke();
-			job->state = JobState::Completed;
+		if (!job || !job->func.is_valid()) {
+			assert(false && "Invalid job in fiber_main");
+			return;
+		}
 
-			if (job->caller) {
-				fiber_context_switch(job->context, job->caller->context);
-			}
+		job->state.store(JobState::Running, std::memory_order_release);
+		job->func.invoke();
+		job->state.store(JobState::Completed, std::memory_order_release);
+
+		if (job->promise) {
+			auto* promise = static_cast<JobPromise<void, void>*>(job->promise);
+			promise->status.store(JobState::Completed, std::memory_order_release);
+		}
+
+		if (job->caller) {
+			fiber_context_switch(job->context, job->caller->context);
 		}
 
 		assert(0 && "Job returned without caller");
@@ -254,7 +218,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		job->state = JobState::Suspended;
+		job->state.store(JobState::Suspended, std::memory_order_release);
 		job->caller = nullptr;
 		job->func = std::move(func);
 		job->priority = prio;
@@ -280,11 +244,7 @@ namespace edge {
 	}
 
 	bool Job::update_state(JobState expected_state, JobState new_state) noexcept {
-		if (state == expected_state) {
-			state = new_state;
-			return true;
-		}
-		return false;
+		return state.compare_exchange_strong(expected_state, new_state, std::memory_order_acquire, std::memory_order_relaxed);
 	}
 
 	Scheduler* Scheduler::create(NotNull<const Allocator*> alloc) noexcept {
@@ -365,7 +325,8 @@ namespace edge {
 	}
 
 	void Scheduler::destroy(NotNull<const Allocator*> alloc, Scheduler* self) noexcept {
-		// TODO: Can be called only from main thread
+		assert(self->main_thread->thread_id == thread_context.worker->thread_id && "Destroy can be called only from main thread.");
+
 		thread_context.shutdown();
 
 		if (self->main_thread) {
@@ -408,7 +369,8 @@ namespace edge {
 	}
 
 	void Scheduler::run() noexcept {
-		// TODO: Can be called only in main thread
+		assert(main_thread->thread_id == thread_context.worker->thread_id && "Run can be called only from main thread.");
+
 		while (
 			active_jobs.load(std::memory_order_acquire) > 0 &&
 			!shutdown.load(std::memory_order_acquire)) {
@@ -442,6 +404,26 @@ namespace edge {
 		queued_jobs.fetch_add(1, std::memory_order_relaxed);
 	}
 
+	void Scheduler::complete_job(NotNull<const Allocator*> alloc, Job* job, JobState final_status) noexcept {
+		if (final_status == JobState::Completed) {
+			jobs_completed.fetch_add(1, std::memory_order_relaxed);
+		}
+		else if (final_status == JobState::Failed) {
+			jobs_failed.fetch_add(1, std::memory_order_relaxed);
+		}
+
+		Job* continuation = job->continuation;
+		if (continuation) {
+			job->continuation = nullptr;
+			enqueue_job(continuation);
+		}
+		else {
+			active_jobs.fetch_sub(1, std::memory_order_release);
+		}
+
+		Job::destroy(alloc, job);
+	}
+
 	Scheduler* sched_current() noexcept {
 		return thread_context.worker->scheduler;
 	}
@@ -455,10 +437,29 @@ namespace edge {
 	}
 
 	void job_yield() noexcept {
-		thread_context.yield();
+		Job* job = thread_context.current_job;
+		if (!job || job == &thread_context.main_job) {
+			return;
+		}
+
+		job->state.store(JobState::Suspended, std::memory_order_release);
+		fiber_context_switch(job->context, job->caller->context);
+		job->state.store(JobState::Running, std::memory_order_release);
 	}
 
 	void job_await(Job* child_job, void* promise) noexcept {
-		thread_context.await(child_job, promise);
+		Job* parent_job = thread_context.current_job;
+		thread_context.current_job = child_job;
+
+		child_job->caller = parent_job->caller;
+		child_job->continuation = parent_job;
+		child_job->promise = promise;
+
+		parent_job->state.store(JobState::Suspended, std::memory_order_release);
+		fiber_context_switch(parent_job->context, child_job->context);
+
+		// TODO: There is a problem. If this child process is terminated, it will never be deleted. 
+		// When it is suspended, it should return to the worker's thread, but the worker will think that the 
+		// main process is suspended, not the child process. Something needs to be done about this as well.
 	}
 }

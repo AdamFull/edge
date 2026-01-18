@@ -15,9 +15,8 @@ namespace edge {
 	struct WorkerThread;
 
 	enum class JobState {
-		Pending,
-		Running,
 		Suspended,
+		Running,
 		Completed,
 		Failed
 	};
@@ -27,7 +26,7 @@ namespace edge {
 
 	template<typename T, typename E>
 	struct JobPromise {
-		std::atomic<JobState> status = JobState::Pending;
+		std::atomic<JobState> status = JobState::Running;
 
 		union {
 			T value = {};
@@ -52,7 +51,7 @@ namespace edge {
 
 	template<typename E>
 	struct JobPromise<void, E> {
-		std::atomic<JobState> status = JobState::Pending;
+		std::atomic<JobState> status = JobState::Running;
 		E error = {};
 
 		bool is_done() const noexcept {
@@ -68,7 +67,7 @@ namespace edge {
 
 	template<typename T>
 	struct JobPromise<T, void> {
-		std::atomic<JobState> status = JobState::Pending;
+		std::atomic<JobState> status = JobState::Running;
 		T value = {};
 
 		T get_value() noexcept {
@@ -79,7 +78,7 @@ namespace edge {
 
 	template<>
 	struct JobPromise<void, void> {
-		std::atomic<JobState> status{ JobState::Pending };
+		std::atomic<JobState> status = JobState::Running;
 
 		bool is_done() const noexcept {
 			JobState s = status.load(std::memory_order_acquire);
@@ -104,9 +103,8 @@ namespace edge {
 		Job* caller = nullptr;
 		Job* continuation = nullptr;
 		void* promise = nullptr;
-		// NOTE: When we awaiting, we saving awaiter and changing context to this job, but what to do with caller? Swap callers?
 
-		std::atomic<JobState> state = JobState::Pending;
+		std::atomic<JobState> state = JobState::Running;
 		SchedulerPriority priority = SchedulerPriority::Normal;
 
 		template<typename F>
@@ -141,7 +139,6 @@ namespace edge {
 		static Scheduler* create(NotNull<const Allocator*> alloc) noexcept;
 		static void destroy(NotNull<const Allocator*> alloc, Scheduler* self) noexcept;
 
-		// TODO: May be return some kind of completion token?
 		void schedule(Job* job) noexcept;
 
 		void run() noexcept;
@@ -149,6 +146,7 @@ namespace edge {
 	private:
 		Job* pick_job() noexcept;
 		void enqueue_job(Job* job) noexcept;
+		void complete_job(NotNull<const Allocator*> alloc, Job* job, JobState final_status) noexcept;
 	};
 
 	Scheduler* sched_current() noexcept;
@@ -158,7 +156,6 @@ namespace edge {
 	void job_yield() noexcept;
 	void job_await(Job* child_job, void* promise = nullptr) noexcept;
 
-	// TODO: Needed variant without promise
 	template<typename T, typename E>
 		requires (!std::same_as<JobPromise<T, E>*, void*>)
 	void job_await(Job* child_job, JobPromise<T, E>* promise) noexcept {
