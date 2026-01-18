@@ -14,33 +14,77 @@
 namespace edge {
 	struct WorkerThread;
 
-	enum class JobStatus {
+	enum class JobState {
+		Pending,
 		Running,
-		Done,
-		Error
+		Suspended,
+		Completed,
+		Failed
 	};
 
 	template<typename T, typename E>
+	struct JobPromise;
+
+	template<typename T, typename E>
 	struct JobPromise {
-		std::atomic<JobStatus> has_result = {};
+		std::atomic<JobState> status = JobState::Pending;
+
 		union {
 			T value = {};
 			E error;
 		};
+
+		bool is_done() const noexcept {
+			JobState s = status.load(std::memory_order_acquire);
+			return s == JobState::Completed || s == JobState::Failed;
+		}
+
+		T get_value() noexcept {
+			assert(status.load(std::memory_order_acquire) == JobState::Completed);
+			return value;
+		}
+
+		E get_error() noexcept {
+			assert(status.load(std::memory_order_acquire) == JobState::Failed);
+			return error;
+		}
 	};
 
 	template<typename E>
 	struct JobPromise<void, E> {
-		std::atomic<JobStatus> has_result = {};
-		union {
-			E error;
-		};
+		std::atomic<JobState> status = JobState::Pending;
+		E error = {};
+
+		bool is_done() const noexcept {
+			JobState s = status.load(std::memory_order_acquire);
+			return s == JobState::Completed || s == JobState::Failed;
+		}
+
+		E get_error() noexcept {
+			assert(status.load(std::memory_order_acquire) == JobState::Failed);
+			return error;
+		}
 	};
 
-	enum class JobState {
-		Running = 1,
-		Suspended = 2,
-		Finished = 3
+	template<typename T>
+	struct JobPromise<T, void> {
+		std::atomic<JobState> status = JobState::Pending;
+		T value = {};
+
+		T get_value() noexcept {
+			assert(status.load(std::memory_order_acquire) == JobState::Completed);
+			return value;
+		}
+	};
+
+	template<>
+	struct JobPromise<void, void> {
+		std::atomic<JobState> status{ JobState::Pending };
+
+		bool is_done() const noexcept {
+			JobState s = status.load(std::memory_order_acquire);
+			return s == JobState::Completed || s == JobState::Failed;
+		}
 	};
 
 	enum class SchedulerPriority {
@@ -56,13 +100,14 @@ namespace edge {
 	struct Job {
 		JobFn func = {};
 		FiberContext* context = nullptr;
+
 		Job* caller = nullptr;
-		Job* awaiter = nullptr;
+		Job* continuation = nullptr;
 		void* promise = nullptr;
 		// NOTE: When we awaiting, we saving awaiter and changing context to this job, but what to do with caller? Swap callers?
 
-		JobState state = {};
-		SchedulerPriority priority = {};
+		std::atomic<JobState> state = JobState::Pending;
+		SchedulerPriority priority = SchedulerPriority::Normal;
 
 		template<typename F>
 		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn, SchedulerPriority prio = SchedulerPriority::Normal) noexcept {
@@ -120,25 +165,28 @@ namespace edge {
 		job_await(child_job, static_cast<void*>(promise));
 	}
 
-	template<typename T, typename E>
-	void job_return(auto value) noexcept {
-		static_assert(std::is_same_v<decltype(value), T> || std::is_same_v<decltype(value), E>,
-			"Value must be either T or E");
-
+	template<typename T>
+	void job_return(T&& value) noexcept {
 		Job* job = job_current();
 		if (!job || !job->promise) {
 			return;
 		}
 
-		auto* promise = static_cast<JobPromise<T, E>*>(job->promise);
-		if constexpr (std::is_same_v<decltype(value), T>) {
-			promise->has_result = JobStatus::Done;
-			promise->value = value;
+		auto* promise = static_cast<JobPromise<std::decay_t<T>, void>*>(job->promise);
+		promise->value = std::forward<T>(value);
+		promise->status.store(JobState::Completed, std::memory_order_release);
+	}
+
+	template<typename E>
+	void job_failed(E&& error) noexcept {
+		Job* job = job_current();
+		if (!job || !job->promise) {
+			return;
 		}
-		else if constexpr (std::is_same_v<decltype(value), E>) {
-			promise->has_result = JobStatus::Error;
-			promise->error = value;
-		}
+
+		auto* promise = static_cast<JobPromise<void, std::decay_t<E>>*>(job->promise);
+		promise->error = std::forward<E>(error);
+		promise->status.store(JobState::Failed, std::memory_order_release);
 	}
 }
 

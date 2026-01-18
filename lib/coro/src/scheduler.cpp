@@ -117,8 +117,8 @@ namespace edge {
 			caller->state = JobState::Running;
 
 			JobState job_state = job->state;
-			if (job_state == JobState::Finished) {
-				Job* awaiter = job->awaiter;
+			if (job_state == JobState::Completed) {
+				Job* awaiter = job->continuation;
 
 				Job::destroy(allocator, job);
 
@@ -183,7 +183,7 @@ namespace edge {
 
 	void SchedulerThreadContext::yield() noexcept {
 		JobState job_state = current_job->state;
-		if (!current_job || current_job == &main_job || job_state == JobState::Finished) {
+		if (!current_job || current_job == &main_job || job_state == JobState::Completed) {
 			return;
 		}
 
@@ -204,7 +204,7 @@ namespace edge {
 		Job* parent_job = current_job;
 
 		child_job->caller = parent_job->caller;
-		child_job->awaiter = parent_job;
+		child_job->continuation = parent_job;
 		child_job->promise = promise;
 
 		parent_job->state = JobState::Suspended;
@@ -223,7 +223,7 @@ namespace edge {
 		if (job && job->func.is_valid()) {
 			job->state = JobState::Running;
 			job->func.invoke();
-			job->state = JobState::Finished;
+			job->state = JobState::Completed;
 
 			if (job->caller) {
 				fiber_context_switch(job->context, job->caller->context);

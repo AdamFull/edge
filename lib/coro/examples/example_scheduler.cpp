@@ -5,53 +5,6 @@
 
 static edge::Allocator allocator = {};
 
-#if 0
-static void job_b(void* payload) {
-    int thread_id = edge::sched_current_thread_id();
-    printf("[Thread %d] Job B Online\n", thread_id);
-
-    for (int i = 0; i < 100; ++i) {
-        printf("[Thread %d] [Job B] Preparing request: %d%%\n", thread_id, i);
-        edge::sched_yield();
-        thread_id = edge::sched_current_thread_id();
-    }
-
-    thread_id = edge::sched_current_thread_id();
-
-    edge::SchedulerEvent* completion_event = edge::sched_event_create();
-
-    edge::Scheduler* sched = edge::sched_current_instance();
-    edge::Job* new_job = edge::sched_create_job(sched, edge::callable_create_from_lambda(
-        edge::sched_get_allocator(sched), [completion_event]() {
-            int thread_id = edge::sched_current_thread_id();
-            printf("[Thread %d] [Job A] Downloading began.\n", thread_id);
-
-            for (int i = 0; i < 100; ++i) {
-                printf("[Thread %d] [Job A] Progress: %d%%\n", thread_id, i);
-                edge::sched_yield();
-            }
-
-            edge::sched_event_signal(completion_event);
-        }), edge::SchedulerPriority::Critical);
-    edge::sched_schedule_job(sched, new_job);
-
-    printf("[Thread %d] [Job B] waiting subtask completion\n", thread_id);
-    edge::sched_event_wait(completion_event);
-    printf("[Thread %d] [Job B] subtask completed\n", thread_id);
-
-    edge::sched_event_destroy(completion_event);
-
-    for (int i = 0; i < 100; i += 2) {
-        printf("[Thread %d] [Job B] Processing downloaded data: %d%%\n", thread_id, i);
-        edge::sched_yield();
-        thread_id = edge::sched_current_thread_id();
-    }
-
-    thread_id = edge::sched_current_thread_id();
-    printf("[Thread %d] [Job B] Shutdown\n", thread_id);
-}
-#endif
-
 enum class IOError {
     UnknownError,
     FileNotFound,
@@ -70,7 +23,7 @@ static void job_b(i32 mult) {
         thread_id = edge::job_thread_id();
     }
 
-    edge::job_return<i32, IOError>(sum);
+    edge::job_return(sum);
 }
 
 static void job_a() {
@@ -97,15 +50,6 @@ int main(void) {
     if (!sched) {
         return -1;
     }
-
-#if 0
-    edge::Job* new_job = edge::sched_create_job(sched,
-        edge::callable_create_from_lambda(
-            &allocator, []() -> void {
-                job_b(nullptr);
-            }), edge::SchedulerPriority::Critical);
-
-#endif
 
     edge::Job* new_job = edge::Job::from_lambda(&allocator,
         []() -> void { job_a(); }, edge::SchedulerPriority::Critical);
