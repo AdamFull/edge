@@ -1,12 +1,18 @@
 #ifndef EDGE_SCHEDULER_HPP
 #define EDGE_SCHEDULER_HPP
 
+#include <arena.hpp>
+#include <array.hpp>
 #include <callable.hpp>
+#include <mpmc_queue.hpp>
+#include <threads.hpp>
+
+#include "fiber.hpp"
+
+#include <atomic>
 
 namespace edge {
-	struct Job;
-	struct Scheduler;
-	struct SchedulerEvent;
+	struct WorkerThread;
 
 	enum class JobState {
 		Running = 1,
@@ -24,24 +30,66 @@ namespace edge {
 
 	using JobFn = Callable<void()>;
 
-	SchedulerEvent* sched_event_create(void);
-	void sched_event_destroy(SchedulerEvent* event);
-	void sched_event_wait(SchedulerEvent* event);
-	void sched_event_signal(SchedulerEvent* event);
-	bool sched_event_signalled(SchedulerEvent* event);
+	struct Job {
+		FiberContext* context = nullptr;
+		JobFn func = {};
+		JobState state = {};
+		Job* caller = nullptr;
+		Job* awaiter = nullptr;
+		// NOTE: When we awaiting, we saving awaiter and changing context to this job, but what to do with caller? Swap callers?
 
-	Scheduler* sched_create(const Allocator* allocator);
-	void sched_destroy(Scheduler* sched);
+		SchedulerPriority priority = {};
 
-	void sched_schedule_job(Scheduler* sched, JobFn func, SchedulerPriority priority);
+		template<typename F>
+		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn, SchedulerPriority prio = SchedulerPriority::Normal) noexcept {
+			return create(alloc, callable_create_from_lambda(alloc, std::forward<F>(fn)), prio);
+		}
 
-	Job* sched_current_job(void);
-	i32 sched_current_thread_id(void);
-	Scheduler* sched_current_instance(void);
-	const Allocator* sched_get_allocator(Scheduler* sched);
+		static Job* create(NotNull<const Allocator*> alloc, JobFn&& func, SchedulerPriority prio = SchedulerPriority::Normal) noexcept;
+		static void destroy(NotNull<const Allocator*> alloc, Job* self) noexcept;
 
-	void sched_run(Scheduler* sched);
-	void sched_yield(void);
+		bool update_state(JobState expected_state, JobState new_state) noexcept;
+	};
+
+	struct Scheduler {
+		friend struct WorkerThread;
+
+		const Allocator* allocator = nullptr;
+
+		MPMCQueue<Job*> queues[static_cast<usize>(SchedulerPriority::Count)] = {};
+
+		WorkerThread* main_thread = nullptr;
+		Array<WorkerThread*> worker_threads = {};
+
+		std::atomic<usize> active_jobs = 0;
+		std::atomic<usize> queued_jobs = 0;
+		std::atomic<bool> shutdown = false;
+
+		std::atomic<usize> jobs_completed = 0;
+		std::atomic<usize> jobs_failed = 0;
+
+		std::atomic<u32> worker_futex = 0;
+		std::atomic<u32> sleeping_workers = 0;
+
+		static Scheduler* create(NotNull<const Allocator*> alloc) noexcept;
+		static void destroy(NotNull<const Allocator*> alloc, Scheduler* self) noexcept;
+
+		// TODO: May be return some kind of completion token?
+		void schedule(Job* job) noexcept;
+
+		void run() noexcept;
+
+	private:
+		Job* pick_job() noexcept;
+		void enqueue_job(Job* job) noexcept;
+	};
+
+	Scheduler* sched_current() noexcept;
+
+	Job* job_current() noexcept;
+	i32 job_thread_id() noexcept;
+	void job_yield() noexcept;
+	void job_await(Job* child_job) noexcept;
 }
 
 #endif
