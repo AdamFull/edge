@@ -6,10 +6,15 @@
 
 namespace edge {
 	struct WorkerThread {
+		const Allocator* allocator = nullptr;
+
 		Thread thread = {};
 		Scheduler* scheduler = nullptr;
 		usize thread_id = 0;
 		std::atomic<bool> should_exit = false;
+
+		static WorkerThread* create(NotNull<const Allocator*> alloc) noexcept;
+		static void destroy(NotNull<const Allocator*> alloc, WorkerThread* self) noexcept;
 
 		static i32 worker_entry(void* arg) noexcept {
 			WorkerThread* worker = static_cast<WorkerThread*>(arg);
@@ -30,98 +35,39 @@ namespace edge {
 		Job main_job = {};
 		FiberContext* main_context = nullptr;
 
-		bool create(WorkerThread* worker) noexcept {
-			this->worker = worker;
-			main_context = fiber_context_create(worker->scheduler->allocator, nullptr, nullptr, 0);
-			main_job.context = main_context;
-			current_job = &main_job;
+		bool create(WorkerThread* worker) noexcept;
+		void shutdown() noexcept;
 
-			main_job.state = JobState::Running;
+		void* alloc_stack_ptr() noexcept;
+		void free_stack_ptr(NotNull<const Allocator*> alloc, void* ptr) noexcept;
 
-			if (!protected_arena.create()) {
-				return false;
-			}
-
-			if (!free_stacks.reserve(worker->scheduler->allocator, 16)) {
-				return false;
-			}
-
-			return true;
-		}
-
-		void shutdown() noexcept {
-			if (main_context) {
-				fiber_context_destroy(worker->scheduler->allocator, main_context);
-			}
-
-			free_stacks.destroy(worker->scheduler->allocator);
-			protected_arena.destroy();
-		}
-
-		void* alloc_stack_ptr() noexcept {
-			void* stack = nullptr;
-			if (!free_stacks.pop_back(&stack)) {
-				return protected_arena.alloc_ex(EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
-			}
-			return stack;
-		}
-
-		void free_stack_ptr(NotNull<const Allocator*> alloc, void* ptr) noexcept {
-			free_stacks.push_back(alloc, ptr);
-		}
-
-		void yield() noexcept {
-			JobState job_state = current_job->state;
-			if (!current_job || current_job == &main_job || job_state == JobState::Finished) {
-				return;
-			}
-
-			Job* caller = current_job->caller;
-			if (!caller) {
-				return;
-			}
-
-			current_job->state = JobState::Suspended;
-			caller->state = JobState::Running;
-
-			fiber_context_switch(current_job->context, caller->context);
-
-			current_job->state = JobState::Running;
-		}
-
-		void await(Job* child_job) noexcept {
-			Job* parent_job = current_job;
-
-			child_job->caller = parent_job->caller;
-			child_job->awaiter = parent_job;
-
-			parent_job->state = JobState::Suspended;
-			child_job->state = JobState::Running;
-
-			current_job = child_job;
-
-			fiber_context_switch(parent_job->context, child_job->context);
-
-			// TODO: There is a problem. If this child process is terminated, it will never be deleted. When it is suspended, it should return to the worker's thread, but the worker will think that the main process is suspended, not the child process. Something needs to be done about this as well.
-		}
+		void yield() noexcept;
+		void await(Job* child_job, void* promise) noexcept;
 	};
 
 	static thread_local SchedulerThreadContext thread_context = { };
 
-	extern "C" void job_main(void) {
-		Job* job = thread_context.current_job;
-
-		if (job && job->func.is_valid()) {
-			job->state = JobState::Running;
-			job->func.invoke();
-			job->state = JobState::Finished;
-
-			if (job->caller) {
-				fiber_context_switch(job->context, job->caller->context);
-			}
+	WorkerThread* WorkerThread::create(NotNull<const Allocator*> alloc) noexcept {
+		WorkerThread* worker = alloc->allocate<WorkerThread>();
+		if (!worker) {
+			return nullptr;
 		}
 
-		assert(0 && "Job returned without caller");
+		worker->allocator = alloc.m_ptr;
+		worker->should_exit.store(false, std::memory_order_relaxed);
+
+		if (thread_create(&worker->thread, WorkerThread::worker_entry, worker) != ThreadResult::Success) {
+			alloc->deallocate(worker);
+			return nullptr;
+		}
+
+		return worker;
+	}
+
+	void WorkerThread::destroy(NotNull<const Allocator*> alloc, WorkerThread* self) noexcept {
+		self->should_exit.store(true, std::memory_order_release);
+		thread_join(self->thread, nullptr);
+		alloc->deallocate(self);
 	}
 
 	i32 WorkerThread::loop() noexcept {
@@ -174,7 +120,7 @@ namespace edge {
 			if (job_state == JobState::Finished) {
 				Job* awaiter = job->awaiter;
 
-				Job::destroy(scheduler->allocator, job);
+				Job::destroy(allocator, job);
 
 				scheduler->jobs_completed.fetch_add(1, std::memory_order_relaxed);
 
@@ -193,6 +139,98 @@ namespace edge {
 		thread_context.shutdown();
 
 		return 0;
+	}
+
+	bool SchedulerThreadContext::create(WorkerThread* worker) noexcept {
+		this->worker = worker;
+		main_context = fiber_context_create(worker->allocator, nullptr, nullptr, 0);
+		main_job.context = main_context;
+		current_job = &main_job;
+
+		main_job.state = JobState::Running;
+
+		if (!protected_arena.create()) {
+			return false;
+		}
+
+		if (!free_stacks.reserve(worker->allocator, 16)) {
+			return false;
+		}
+
+		return true;
+	}
+
+	void SchedulerThreadContext::shutdown() noexcept {
+		if (main_context) {
+			fiber_context_destroy(worker->allocator, main_context);
+		}
+
+		free_stacks.destroy(worker->allocator);
+		protected_arena.destroy();
+	}
+
+	void* SchedulerThreadContext::alloc_stack_ptr() noexcept {
+		void* stack = nullptr;
+		if (!free_stacks.pop_back(&stack)) {
+			return protected_arena.alloc_ex(EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
+		}
+		return stack;
+	}
+
+	void SchedulerThreadContext::free_stack_ptr(NotNull<const Allocator*> alloc, void* ptr) noexcept {
+		free_stacks.push_back(alloc, ptr);
+	}
+
+	void SchedulerThreadContext::yield() noexcept {
+		JobState job_state = current_job->state;
+		if (!current_job || current_job == &main_job || job_state == JobState::Finished) {
+			return;
+		}
+
+		Job* caller = current_job->caller;
+		if (!caller) {
+			return;
+		}
+
+		current_job->state = JobState::Suspended;
+		caller->state = JobState::Running;
+
+		fiber_context_switch(current_job->context, caller->context);
+
+		current_job->state = JobState::Running;
+	}
+
+	void SchedulerThreadContext::await(Job* child_job, void* promise) noexcept {
+		Job* parent_job = current_job;
+
+		child_job->caller = parent_job->caller;
+		child_job->awaiter = parent_job;
+		child_job->promise = promise;
+
+		parent_job->state = JobState::Suspended;
+		child_job->state = JobState::Running;
+
+		current_job = child_job;
+
+		fiber_context_switch(parent_job->context, child_job->context);
+
+		// TODO: There is a problem. If this child process is terminated, it will never be deleted. When it is suspended, it should return to the worker's thread, but the worker will think that the main process is suspended, not the child process. Something needs to be done about this as well.
+	}
+
+	extern "C" void job_main(void) {
+		Job* job = thread_context.current_job;
+
+		if (job && job->func.is_valid()) {
+			job->state = JobState::Running;
+			job->func.invoke();
+			job->state = JobState::Finished;
+
+			if (job->caller) {
+				fiber_context_switch(job->context, job->caller->context);
+			}
+		}
+
+		assert(0 && "Job returned without caller");
 	}
 
 	Job* Job::create(NotNull<const Allocator*> alloc, JobFn&& func, SchedulerPriority prio) noexcept {
@@ -255,8 +293,6 @@ namespace edge {
 			return nullptr;
 		}
 
-		sched->allocator = alloc.m_ptr;
-
 		for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
 			if (!sched->queues[i].create(alloc, 1024)) {
 				Scheduler::destroy(alloc, sched);
@@ -287,7 +323,7 @@ namespace edge {
 		sched->sleeping_workers.store(0, std::memory_order_relaxed);
 
 		for (i32 i = 0; i < num_cores; ++i) {
-			WorkerThread* worker = alloc->allocate<WorkerThread>();
+			WorkerThread* worker = WorkerThread::create(alloc);
 			if (!worker) {
 				Scheduler::destroy(alloc, sched);
 				return nullptr;
@@ -295,17 +331,8 @@ namespace edge {
 
 			worker->scheduler = sched;
 			worker->thread_id = i;
-			worker->should_exit.store(false, std::memory_order_relaxed);
-
-			if (thread_create(&worker->thread, WorkerThread::worker_entry, worker) != ThreadResult::Success) {
-				alloc->deallocate(worker);
-				Scheduler::destroy(alloc, sched);
-				return nullptr;
-			}
 
 			if (!sched->worker_threads.push_back(alloc, worker)) {
-				thread_join(worker->thread, nullptr);
-				alloc->deallocate(worker);
 				Scheduler::destroy(alloc, sched);
 				return nullptr;
 			}
@@ -323,6 +350,7 @@ namespace edge {
 			return nullptr;
 		}
 
+		sched->main_thread->allocator = alloc.m_ptr;
 		sched->main_thread->thread = thread_current();
 		sched->main_thread->thread_id = thread_current_id();
 		sched->main_thread->scheduler = sched;
@@ -352,9 +380,7 @@ namespace edge {
 		if (!self->worker_threads.empty()) {
 			for (WorkerThread* worker_thread : self->worker_threads) {
 				if (worker_thread) {
-					worker_thread->should_exit.store(true, std::memory_order_release);
-					thread_join(worker_thread->thread, nullptr);
-					alloc->deallocate(worker_thread);
+					WorkerThread::destroy(alloc, worker_thread);
 				}
 			}
 
@@ -432,7 +458,7 @@ namespace edge {
 		thread_context.yield();
 	}
 
-	void job_await(Job* child_job) noexcept {
-		thread_context.await(child_job);
+	void job_await(Job* child_job, void* promise) noexcept {
+		thread_context.await(child_job, promise);
 	}
 }

@@ -14,6 +14,29 @@
 namespace edge {
 	struct WorkerThread;
 
+	enum class JobStatus {
+		Running,
+		Done,
+		Error
+	};
+
+	template<typename T, typename E>
+	struct JobPromise {
+		std::atomic<JobStatus> has_result = {};
+		union {
+			T value = {};
+			E error;
+		};
+	};
+
+	template<typename E>
+	struct JobPromise<void, E> {
+		std::atomic<JobStatus> has_result = {};
+		union {
+			E error;
+		};
+	};
+
 	enum class JobState {
 		Running = 1,
 		Suspended = 2,
@@ -31,13 +54,14 @@ namespace edge {
 	using JobFn = Callable<void()>;
 
 	struct Job {
-		FiberContext* context = nullptr;
 		JobFn func = {};
-		JobState state = {};
+		FiberContext* context = nullptr;
 		Job* caller = nullptr;
 		Job* awaiter = nullptr;
+		void* promise = nullptr;
 		// NOTE: When we awaiting, we saving awaiter and changing context to this job, but what to do with caller? Swap callers?
 
+		JobState state = {};
 		SchedulerPriority priority = {};
 
 		template<typename F>
@@ -53,8 +77,6 @@ namespace edge {
 
 	struct Scheduler {
 		friend struct WorkerThread;
-
-		const Allocator* allocator = nullptr;
 
 		MPMCQueue<Job*> queues[static_cast<usize>(SchedulerPriority::Count)] = {};
 
@@ -89,7 +111,35 @@ namespace edge {
 	Job* job_current() noexcept;
 	i32 job_thread_id() noexcept;
 	void job_yield() noexcept;
-	void job_await(Job* child_job) noexcept;
+	void job_await(Job* child_job, void* promise = nullptr) noexcept;
+
+	// TODO: Needed variant without promise
+	template<typename T, typename E>
+		requires (!std::same_as<JobPromise<T, E>*, void*>)
+	void job_await(Job* child_job, JobPromise<T, E>* promise) noexcept {
+		job_await(child_job, static_cast<void*>(promise));
+	}
+
+	template<typename T, typename E>
+	void job_return(auto value) noexcept {
+		static_assert(std::is_same_v<decltype(value), T> || std::is_same_v<decltype(value), E>,
+			"Value must be either T or E");
+
+		Job* job = job_current();
+		if (!job || !job->promise) {
+			return;
+		}
+
+		auto* promise = static_cast<JobPromise<T, E>*>(job->promise);
+		if constexpr (std::is_same_v<decltype(value), T>) {
+			promise->has_result = JobStatus::Done;
+			promise->value = value;
+		}
+		else if constexpr (std::is_same_v<decltype(value), E>) {
+			promise->has_result = JobStatus::Error;
+			promise->error = value;
+		}
+	}
 }
 
 #endif
