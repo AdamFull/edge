@@ -90,7 +90,6 @@ namespace edge {
 		Low = 0,
 		Normal = 1,
 		High = 2,
-		Critical = 3,
 		Count
 	};
 
@@ -119,7 +118,11 @@ namespace edge {
 	};
 
 	struct Scheduler {
+		friend struct Job;
 		friend struct WorkerThread;
+
+		Arena stack_arena = {};
+		MPMCQueue<void*> free_stacks = {};
 
 		MPMCQueue<Job*> queues[static_cast<usize>(SchedulerPriority::Count)] = {};
 
@@ -144,6 +147,9 @@ namespace edge {
 		void run() noexcept;
 
 	private:
+		void* alloc_stack() noexcept;
+		void free_stack(void* stack_ptr) noexcept;
+
 		Job* pick_job() noexcept;
 		void enqueue_job(Job* job) noexcept;
 		void complete_job(NotNull<const Allocator*> alloc, Job* job, JobState final_status) noexcept;

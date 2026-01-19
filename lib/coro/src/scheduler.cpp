@@ -28,18 +28,12 @@ namespace edge {
 	struct SchedulerThreadContext {
 		WorkerThread* worker = nullptr;
 
-		Arena protected_arena = {};
-		Array<void*> free_stacks = {};
-
 		Job* current_job = nullptr;
 		Job main_job = {};
 		FiberContext* main_context = nullptr;
 
 		bool create(WorkerThread* worker) noexcept;
 		void shutdown() noexcept;
-
-		void* alloc_stack_ptr() noexcept;
-		void free_stack_ptr(NotNull<const Allocator*> alloc, void* ptr) noexcept;
 
 		void switch_to_job(Job* target) noexcept;
 	};
@@ -83,7 +77,7 @@ namespace edge {
 				}
 
 				scheduler->sleeping_workers.fetch_add(1, std::memory_order_relaxed);
-
+				std::atomic_thread_fence(std::memory_order_seq_cst);
 				u32 futex_val = scheduler->worker_futex.load(std::memory_order_acquire);
 				futex_wait(&scheduler->worker_futex, futex_val, std::chrono::nanoseconds::max());
 
@@ -132,14 +126,6 @@ namespace edge {
 
 		main_job.state.store(JobState::Running, std::memory_order_release);
 
-		if (!protected_arena.create()) {
-			return false;
-		}
-
-		if (!free_stacks.reserve(worker->allocator, 16)) {
-			return false;
-		}
-
 		return true;
 	}
 
@@ -147,21 +133,6 @@ namespace edge {
 		if (main_context) {
 			fiber_context_destroy(worker->allocator, main_context);
 		}
-
-		free_stacks.destroy(worker->allocator);
-		protected_arena.destroy();
-	}
-
-	void* SchedulerThreadContext::alloc_stack_ptr() noexcept {
-		void* stack = nullptr;
-		if (!free_stacks.pop_back(&stack)) {
-			return protected_arena.alloc_ex(EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
-		}
-		return stack;
-	}
-
-	void SchedulerThreadContext::free_stack_ptr(NotNull<const Allocator*> alloc, void* ptr) noexcept {
-		free_stacks.push_back(alloc, ptr);
 	}
 
 	void SchedulerThreadContext::switch_to_job(Job* target) noexcept {
@@ -207,14 +178,14 @@ namespace edge {
 			return nullptr;
 		}
 
-		void* stack_ptr = thread_context.alloc_stack_ptr();
+		void* stack_ptr = thread_context.worker->scheduler->alloc_stack();
 		if (!stack_ptr) {
 			return nullptr;
 		}
 
 		job->context = fiber_context_create(alloc, job_main, stack_ptr, EDGE_FIBER_STACK_SIZE);
 		if (!job->context) {
-			thread_context.free_stack_ptr(alloc, stack_ptr);
+			thread_context.worker->scheduler->free_stack(stack_ptr);
 			return nullptr;
 		}
 
@@ -234,7 +205,7 @@ namespace edge {
 		if (self->context) {
 			void* stack_ptr = fiber_get_stack_ptr(self->context);
 			if (stack_ptr) {
-				thread_context.free_stack_ptr(alloc, stack_ptr);
+				thread_context.worker->scheduler->free_stack(stack_ptr);
 			}
 
 			fiber_context_destroy(alloc, self->context);
@@ -251,6 +222,14 @@ namespace edge {
 		Scheduler* sched = alloc->allocate<Scheduler>();
 		if (!sched) {
 			return nullptr;
+		}
+
+		if (!sched->stack_arena.create()) {
+			return false;
+		}
+
+		if (!sched->free_stacks.create(alloc, 512)) {
+			return false;
 		}
 
 		for (i32 i = 0; i < static_cast<i32>(SchedulerPriority::Count); ++i) {
@@ -360,6 +339,9 @@ namespace edge {
 			self->queues[i].destroy(alloc);
 		}
 
+		self->free_stacks.destroy(alloc);
+		self->stack_arena.destroy();
+
 		alloc->deallocate(self);
 	}
 
@@ -376,6 +358,18 @@ namespace edge {
 			!shutdown.load(std::memory_order_acquire)) {
 			thread_yield();
 		}
+	}
+
+	void* Scheduler::alloc_stack() noexcept {
+		void* stack = nullptr;
+		if (!free_stacks.dequeue(&stack)) {
+			return stack_arena.alloc_ex(EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
+		}
+		return stack;
+	}
+
+	void Scheduler::free_stack(void* stack_ptr) noexcept {
+		free_stacks.enqueue(stack_ptr);
 	}
 
 	Job* Scheduler::pick_job() noexcept {
