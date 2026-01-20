@@ -22,6 +22,29 @@ namespace edge {
 		alignas(64) std::atomic<usize> m_enqueue_pos = 0ull;
 		alignas(64) std::atomic<usize> m_dequeue_pos = 0ull;
 
+		struct Iterator {
+			MPMCQueue<T>* queue;
+			usize index;
+			usize end_index;
+
+			Iterator(MPMCQueue<T>* q, usize idx, usize end)
+				: queue(q), index(idx), end_index(end) {
+			}
+
+			T& operator*() {
+				return queue->m_buffer[index & queue->m_mask].data;
+			}
+
+			Iterator& operator++() {
+				++index;
+				return *this;
+			}
+
+			bool operator!=(const Iterator& other) const {
+				return index != other.index;
+			}
+		};
+
 		bool create(NotNull<const Allocator*> alloc, usize capacity) {
 			if (capacity == 0) {
 				return false;
@@ -223,6 +246,17 @@ namespace edge {
 
 		bool full_approx() const noexcept {
 			return size_approx() >= m_capacity;
+		}
+
+		Iterator begin() noexcept {
+			usize dequeue = m_dequeue_pos.load(std::memory_order_relaxed);
+			usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
+			return { this, dequeue, enqueue };
+		}
+
+		Iterator end() noexcept {
+			usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
+			return { this, enqueue, enqueue };
 		}
 	};
 }
