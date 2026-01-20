@@ -47,29 +47,48 @@ namespace edge {
 	template<typename E>
 		requires std::is_enum_v<E>
 	struct Range {
-		struct iterator {
-			using underlying_t = std::underlying_type_t<E>;
+		using underlying_t = std::underlying_type_t<E>;
+
+		struct iterator {	
 			underlying_t val;
 
 			E operator*() const { return static_cast<E>(val); }
+			operator underlying_t() const { return val; }
+
 			iterator& operator++() { ++val; return *this; }
 			bool operator!=(iterator other) const { return val != other.val; }
+		};
+
+		struct reverse_iterator {
+			underlying_t val;
+
+			E operator*() const { return static_cast<E>(val); }
+			operator underlying_t() const { return val; }
+
+			reverse_iterator& operator++() { --val; return *this; }
+			bool operator!=(reverse_iterator other) const { return val != other.val; }
 		};
 
 		E first, last;
 
 		iterator begin() const noexcept { 
-			return { 
-				.val = static_cast<iterator::underlying_t>(first)
-			}; 
+			return { .val = static_cast<underlying_t>(first) }; 
 		}
 
 		iterator end() const noexcept { 
-			auto end_val = static_cast<iterator::underlying_t>(last);
+			auto end_val = static_cast<underlying_t>(last);
 			++end_val;
-			return { 
-				.val = end_val 
-			};
+			return {  .val = end_val };
+		}
+
+		reverse_iterator rbegin() const noexcept {
+			return { .val = static_cast<underlying_t>(last) };
+		}
+
+		reverse_iterator rend() const noexcept {
+			auto end_val = static_cast<underlying_t>(first);
+			--end_val;
+			return { .val = end_val };
 		}
 	};
 
