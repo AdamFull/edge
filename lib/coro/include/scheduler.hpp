@@ -12,90 +12,47 @@
 #include <atomic>
 
 namespace edge {
-	struct WorkerThread;
-
-	enum class JobState {
-		Suspended,
-		Running,
-		Completed,
-		Failed
-	};
-
-	template<typename T, typename E>
-	struct JobPromise;
-
-	template<typename T, typename E>
-	struct JobPromise {
-		std::atomic<JobState> status = JobState::Running;
-
-		union {
-			T value = {};
-			E error;
+	struct Job {
+		enum class State {
+			Suspended,
+			Running,
+			Completed,
+			Failed
 		};
 
-		bool is_done() const noexcept {
-			JobState s = status.load(std::memory_order_acquire);
-			return s == JobState::Completed || s == JobState::Failed;
-		}
+		enum class Priority {
+			Low = 0,
+			Normal = 1,
+			High = 2,
+			Count
+		};
 
-		T get_value() noexcept {
-			assert(status.load(std::memory_order_acquire) == JobState::Completed);
-			return value;
-		}
+		template<typename T, typename E>
+		struct Promise {
+			std::atomic<State> status = State::Running;
 
-		E get_error() noexcept {
-			assert(status.load(std::memory_order_acquire) == JobState::Failed);
-			return error;
-		}
-	};
+			union {
+				std::conditional_t<std::is_void_v<T>, std::monostate, T> value = {};
+				std::conditional_t<std::is_void_v<E>, std::monostate, E> error;
+			};
 
-	template<typename E>
-	struct JobPromise<void, E> {
-		std::atomic<JobState> status = JobState::Running;
-		E error = {};
+			bool is_done() const noexcept {
+				State s = status.load(std::memory_order_acquire);
+				return s == State::Completed || s == State::Failed;
+			}
 
-		bool is_done() const noexcept {
-			JobState s = status.load(std::memory_order_acquire);
-			return s == JobState::Completed || s == JobState::Failed;
-		}
+			decltype(auto) get_value() noexcept requires (!std::is_void_v<T>) {
+				assert(status.load(std::memory_order_acquire) == State::Completed);
+				return value;
+			}
 
-		E get_error() noexcept {
-			assert(status.load(std::memory_order_acquire) == JobState::Failed);
-			return error;
-		}
-	};
+			decltype(auto) get_error() noexcept requires (!std::is_void_v<E>) {
+				assert(status.load(std::memory_order_acquire) == State::Failed);
+				return error;
+			}
+		};
 
-	template<typename T>
-	struct JobPromise<T, void> {
-		std::atomic<JobState> status = JobState::Running;
-		T value = {};
-
-		T get_value() noexcept {
-			assert(status.load(std::memory_order_acquire) == JobState::Completed);
-			return value;
-		}
-	};
-
-	template<>
-	struct JobPromise<void, void> {
-		std::atomic<JobState> status = JobState::Running;
-
-		bool is_done() const noexcept {
-			JobState s = status.load(std::memory_order_acquire);
-			return s == JobState::Completed || s == JobState::Failed;
-		}
-	};
-
-	enum class SchedulerPriority {
-		Low = 0,
-		Normal = 1,
-		High = 2,
-		Count
-	};
-
-	using JobFn = Callable<void()>;
-
-	struct Job {
+		using JobFn = Callable<void()>;
 		JobFn func = {};
 		FiberContext* context = nullptr;
 
@@ -103,38 +60,42 @@ namespace edge {
 		Job* continuation = nullptr;
 		void* promise = nullptr;
 
-		std::atomic<JobState> state = JobState::Running;
-		SchedulerPriority priority = SchedulerPriority::Normal;
+		std::atomic<State> state = State::Running;
 
 		template<typename F>
-		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn, SchedulerPriority prio = SchedulerPriority::Normal) noexcept {
-			return create(alloc, callable_create_from_lambda(alloc, std::forward<F>(fn)), prio);
+		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn) noexcept {
+			return create(alloc, callable_create_from_lambda(alloc, std::forward<F>(fn)));
 		}
 
-		static Job* create(NotNull<const Allocator*> alloc, JobFn&& func, SchedulerPriority prio = SchedulerPriority::Normal) noexcept;
+		static Job* create(NotNull<const Allocator*> alloc, JobFn&& func) noexcept;
 		static void destroy(NotNull<const Allocator*> alloc, Job* self) noexcept;
 
-		bool update_state(JobState expected_state, JobState new_state) noexcept;
+		template<typename T, typename E>
+		void set_promise(Promise<T, E>* promise_ptr) noexcept {
+			promise = promise_ptr;
+		}
 	};
 
 	struct Scheduler {
+		struct Worker;
+
 		friend struct Job;
-		friend struct WorkerThread;
+		friend struct Worker;
 
 		Arena stack_arena = {};
+		// NOTE: To reuse allocated stacks.
 		MPMCQueue<void*> free_stacks = {};
 
-		MPMCQueue<Job*> queues[static_cast<usize>(SchedulerPriority::Count)] = {};
+		// NOTE: To reuse allocated jobs.
+		MPMCQueue<Job*> free_jobs = {};
 
-		WorkerThread* main_thread = nullptr;
-		Array<WorkerThread*> worker_threads = {};
+		MPMCQueue<Job*> queues[static_cast<usize>(Job::Priority::Count)] = {};
 
-		std::atomic<usize> active_jobs = 0;
-		std::atomic<usize> queued_jobs = 0;
+		Worker* main_thread = nullptr;
+		Array<Worker*> scheduler_threads = {};
+
+		std::atomic<u32> active_jobs = 0;
 		std::atomic<bool> shutdown = false;
-
-		std::atomic<usize> jobs_completed = 0;
-		std::atomic<usize> jobs_failed = 0;
 
 		std::atomic<u32> worker_futex = 0;
 		std::atomic<u32> sleeping_workers = 0;
@@ -142,7 +103,8 @@ namespace edge {
 		static Scheduler* create(NotNull<const Allocator*> alloc) noexcept;
 		static void destroy(NotNull<const Allocator*> alloc, Scheduler* self) noexcept;
 
-		void schedule(Job* job) noexcept;
+		void schedule(Job* job, Job::Priority prio = Job::Priority::Normal) noexcept;
+		void tick(f32 delta_time) noexcept;
 
 		void run() noexcept;
 
@@ -150,9 +112,8 @@ namespace edge {
 		void* alloc_stack() noexcept;
 		void free_stack(void* stack_ptr) noexcept;
 
-		Job* pick_job() noexcept;
-		void enqueue_job(Job* job) noexcept;
-		void complete_job(NotNull<const Allocator*> alloc, Job* job, JobState final_status) noexcept;
+		std::pair<Job*, Job::Priority> pick_job() noexcept;
+		void complete_job(NotNull<const Allocator*> alloc, Job* job, Job::Priority priority, Job::State final_status) noexcept;
 	};
 
 	Scheduler* sched_current() noexcept;
@@ -160,13 +121,14 @@ namespace edge {
 	Job* job_current() noexcept;
 	i32 job_thread_id() noexcept;
 	void job_yield() noexcept;
-	void job_await(Job* child_job, void* promise = nullptr) noexcept;
+	void job_await(Job* child_job) noexcept;
 
-	template<typename T, typename E>
-		requires (!std::same_as<JobPromise<T, E>*, void*>)
-	void job_await(Job* child_job, JobPromise<T, E>* promise) noexcept {
-		job_await(child_job, static_cast<void*>(promise));
-	}
+	bool is_running_in_job() noexcept;
+	bool is_running_on_main() noexcept;
+
+	// NOTE: Yields job and runs it on main/background threads
+	void job_switch_to_main() noexcept;
+	void job_switch_to_background() noexcept;
 
 	template<typename T>
 	void job_return(T&& value) noexcept {
@@ -175,9 +137,9 @@ namespace edge {
 			return;
 		}
 
-		auto* promise = static_cast<JobPromise<std::decay_t<T>, void>*>(job->promise);
+		auto* promise = static_cast<Job::Promise<std::decay_t<T>, void>*>(job->promise);
 		promise->value = std::forward<T>(value);
-		promise->status.store(JobState::Completed, std::memory_order_release);
+		promise->status.store(Job::State::Completed, std::memory_order_release);
 	}
 
 	template<typename E>
@@ -187,9 +149,9 @@ namespace edge {
 			return;
 		}
 
-		auto* promise = static_cast<JobPromise<void, std::decay_t<E>>*>(job->promise);
+		auto* promise = static_cast<Job::Promise<void, std::decay_t<E>>*>(job->promise);
 		promise->error = std::forward<E>(error);
-		promise->status.store(JobState::Failed, std::memory_order_release);
+		promise->status.store(Job::State::Failed, std::memory_order_release);
 	}
 }
 
