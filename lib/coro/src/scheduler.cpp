@@ -560,6 +560,14 @@ namespace edge {
 		return thread_context.worker->thread_id;
 	}
 
+	bool is_running_in_job() noexcept {
+		return thread_context.current_job != &thread_context.main_job;
+	}
+
+	bool is_running_on_main() noexcept {
+		return thread_context.worker->wg == Scheduler::Workgroup::Main;
+	}
+
 	static void job_yield_base() noexcept {
 		Job* job = thread_context.current_job;
 		if (!job || job == &thread_context.main_job) {
@@ -582,14 +590,6 @@ namespace edge {
 		thread_context.flow_info.type = FlowReturnType::Awaited;
 		thread_context.flow_info.job = child_job;
 		job_yield_base();
-	}
-
-	bool is_running_in_job() noexcept {
-		return thread_context.current_job != &thread_context.main_job;
-	}
-
-	bool is_running_on_main() noexcept {
-		return thread_context.worker->wg == Scheduler::Workgroup::Main;
 	}
 
 	void job_switch_to_main() noexcept {

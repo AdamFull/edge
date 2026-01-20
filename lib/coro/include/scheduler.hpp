@@ -130,11 +130,12 @@ namespace edge {
 
 	Job* job_current() noexcept;
 	i32 job_thread_id() noexcept;
-	void job_yield() noexcept;
-	void job_await(Job* child_job) noexcept;
 
 	bool is_running_in_job() noexcept;
 	bool is_running_on_main() noexcept;
+
+	void job_yield() noexcept;
+	void job_await(Job* child_job) noexcept;
 
 	// NOTE: Yields job and runs it on main/background/io threads
 	void job_switch_to_main() noexcept;
