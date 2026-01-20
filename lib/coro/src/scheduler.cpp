@@ -5,8 +5,15 @@
 #include <ctime>
 
 namespace edge {
+	constexpr usize STACK_POOL_SIZE = 512;
+	constexpr usize JOB_POOL_SIZE = 512;
+	constexpr usize MAIN_QUEUE_SIZE = 64;
+	constexpr usize IO_QUEUE_SIZE = 64;
+	constexpr usize BACKGROUND_QUEUE_SIZE = 64;
+
 	struct Scheduler::Worker {
 		const Allocator* allocator = nullptr;
+		Workgroup wg = Workgroup::Main;
 
 		Thread thread_handle = {};
 		Scheduler* scheduler = nullptr;
@@ -21,8 +28,27 @@ namespace edge {
 			return worker->loop();
 		}
 
-	private:
 		i32 loop() noexcept;
+		bool tick() noexcept;
+	};
+
+	enum class FlowReturnType {
+		None,
+		Done,
+		Yielded,
+		Awaited,
+		SwitchTo
+	};
+
+	struct FlowInfo {
+		FlowReturnType type = FlowReturnType::None;
+		Job* job = nullptr;
+		Scheduler::Workgroup wg = Scheduler::Workgroup::Background;
+
+		void clear() noexcept {
+			type = FlowReturnType::None;
+			job = nullptr;
+		}
 	};
 
 	struct SchedulerThreadContext {
@@ -31,6 +57,8 @@ namespace edge {
 		Job* current_job = nullptr;
 		Job main_job = {};
 		FiberContext* main_context = nullptr;
+
+		FlowInfo flow_info = {};
 
 		bool create(Scheduler::Worker* worker) noexcept;
 		void shutdown() noexcept;
@@ -68,55 +96,93 @@ namespace edge {
 		}
 
 		while (!should_exit.load(std::memory_order_acquire)) {
-			auto [job, priority] = scheduler->pick_job();
-			if (!job) {
-				if (scheduler->shutdown.load(std::memory_order_acquire)) {
-					break;
-				}
-
-				scheduler->sleeping_workers.fetch_add(1, std::memory_order_relaxed);
-				std::atomic_thread_fence(std::memory_order_seq_cst);
-				u32 futex_val = scheduler->worker_futex.load(std::memory_order_acquire);
-				futex_wait(&scheduler->worker_futex, futex_val, std::chrono::nanoseconds::max());
-				scheduler->sleeping_workers.fetch_sub(1, std::memory_order_relaxed);
-				continue;
-			}
-
-			Job::State expected = Job::State::Suspended;
-			if (!job->state.compare_exchange_strong(expected, Job::State::Running, std::memory_order_acquire, std::memory_order_relaxed)) {
-				// TODO: I think there is a bug here, and I might lose the job at this point.
-				continue;
-			}
-
-			Job* caller = thread_context.current_job;
-			job->caller = caller;
-
-			caller->state.store(Job::State::Suspended, std::memory_order_release);
-			thread_context.current_job = job;
-
-			// Switch to job context
-			fiber_context_switch(caller->context, job->context);
-
-			// NOTE: I think this is a bad solution.
-			// While we were doing the work, we could call await,
-			// which would switch us to a sub-job context.
-			job = thread_context.current_job;
-			thread_context.current_job = caller;
-			caller->state.store(Job::State::Running, std::memory_order_release);
-			
-			// NOTE: I'm not sure whether i can receive Job::State::Running here.
-			Job::State job_state = job->state.load(std::memory_order_acquire);
-			if (job_state == Job::State::Suspended) {
-				scheduler->schedule(job, priority);
-			}
-			else {
-				scheduler->complete_job(allocator, job, priority, job_state);
+			if (!tick()) {
+				break;
 			}
 		}
 
 		thread_context.shutdown();
 
 		return 0;
+	}
+
+	bool Scheduler::Worker::tick() noexcept {
+		auto [job, priority] = scheduler->pick_job(wg);
+		if (!job) {
+			if (scheduler->shutdown.load(std::memory_order_acquire)) {
+				return false;
+			}
+
+			// NOTE: The main worker does not need to sleep when there is no work.
+			if (wg == Workgroup::Main) {
+				return true;
+			}
+
+			scheduler->sleeping_workers.fetch_add(1, std::memory_order_relaxed);
+			std::atomic_thread_fence(std::memory_order_seq_cst);
+			u32 futex_val = scheduler->worker_futex.load(std::memory_order_acquire);
+			futex_wait(&scheduler->worker_futex, futex_val, std::chrono::nanoseconds::max());
+			scheduler->sleeping_workers.fetch_sub(1, std::memory_order_relaxed);
+			return true;
+		}
+
+		Job::State expected = Job::State::Suspended;
+		if (!job->state.compare_exchange_strong(expected, Job::State::Running, std::memory_order_acquire, std::memory_order_relaxed)) {
+			// TODO: I think there is a bug here, and I might lose the job at this point.
+			return true;
+		}
+
+		Job* caller = thread_context.current_job;
+		job->caller = caller;
+
+		caller->state.store(Job::State::Suspended, std::memory_order_release);
+		thread_context.current_job = job;
+
+		// Switch to job context
+		fiber_context_switch(caller->context, job->context);
+
+		thread_context.current_job = caller;
+		caller->state.store(Job::State::Running, std::memory_order_release);
+
+		Job::State job_state = job->state.load(std::memory_order_acquire);
+		switch (thread_context.flow_info.type)
+		{
+		case FlowReturnType::Done: {
+			thread_context.flow_info.clear();
+
+			scheduler->active_jobs.fetch_sub(1, std::memory_order_release);
+
+			if (job->continuation) {
+				scheduler->enqueue_job(job->continuation, priority, wg);
+				job->continuation = nullptr;
+			}
+			Job::destroy(allocator, job);
+
+			return true;
+		}
+		case FlowReturnType::Yielded: {
+			thread_context.flow_info.clear();
+			// TODO: If it's not in suspended state, it means that soemthingis going very wrong.
+			if (job_state == Job::State::Suspended) {
+				scheduler->enqueue_job(job, priority, wg);
+				return true;
+			}
+			return false;
+		}
+		case FlowReturnType::Awaited: {
+			scheduler->active_jobs.fetch_add(1, std::memory_order_release);
+			scheduler->enqueue_job(thread_context.flow_info.job, priority, wg);
+			thread_context.flow_info.clear();
+			return true;
+		}
+		case FlowReturnType::SwitchTo: {
+			scheduler->enqueue_job(job, priority, thread_context.flow_info.wg);
+			thread_context.flow_info.clear();
+			return true;
+		}
+		default:
+			return false;
+		}
 	}
 
 	bool SchedulerThreadContext::create(Scheduler::Worker* worker) noexcept {
@@ -154,6 +220,8 @@ namespace edge {
 			// TODO: Need to check was promise value already set 
 			promise->status.store(Job::State::Completed, std::memory_order_release);
 		}
+
+		thread_context.flow_info.type = FlowReturnType::Done;
 
 		if (job->caller) {
 			fiber_context_switch(job->context, job->caller->context);
@@ -218,7 +286,9 @@ namespace edge {
 
 		Scheduler* sched = thread_context.worker->scheduler;
 		if (sched) {
-			sched->free_jobs.enqueue(self);
+			if (!sched->free_jobs.enqueue(self)) {
+				alloc->deallocate(self);
+			}
 		}
 	}
 
@@ -233,16 +303,27 @@ namespace edge {
 			return nullptr;
 		}
 
-		if (!sched->free_stacks.create(alloc, 512)) {
+		if (!sched->free_stacks.create(alloc, STACK_POOL_SIZE)) {
 			return nullptr;
 		}
 
-		if (!sched->free_jobs.create(alloc, 512)) {
+		if (!sched->free_jobs.create(alloc, JOB_POOL_SIZE)) {
 			return nullptr;
 		}
 
-		for (i32 i = 0; i < static_cast<i32>(Job::Priority::Count); ++i) {
-			if (!sched->queues[i].create(alloc, 1024)) {
+		if (!sched->main_queue.create(alloc, MAIN_QUEUE_SIZE)) {
+			destroy(alloc, sched);
+			return nullptr;
+		}
+
+		if (!sched->io_queue.create(alloc, IO_QUEUE_SIZE)) {
+			destroy(alloc, sched);
+			return nullptr;
+		}
+
+		Range<Job::Priority> range(Job::Priority::Low, Job::Priority::High);
+		for (auto it = range.begin(); it != range.end(); ++it) {
+			if (!sched->background_queues[it].create(alloc, BACKGROUND_QUEUE_SIZE)) {
 				destroy(alloc, sched);
 				return nullptr;
 			}
@@ -257,7 +338,7 @@ namespace edge {
 		}
 
 		// TODO: Use fixed runtime array
-		if (!sched->scheduler_threads.reserve(alloc, num_cores)) {
+		if (!sched->background_threads.reserve(alloc, num_cores)) {
 			destroy(alloc, sched);
 			return nullptr;
 		}
@@ -274,10 +355,11 @@ namespace edge {
 				return nullptr;
 			}
 
+			worker->wg = Workgroup::Background;
 			worker->scheduler = sched;
 			worker->thread_id = i;
 
-			if (!sched->scheduler_threads.push_back(alloc, worker)) {
+			if (!sched->background_threads.push_back(alloc, worker)) {
 				destroy(alloc, sched);
 				return nullptr;
 			}
@@ -296,6 +378,7 @@ namespace edge {
 			return nullptr;
 		}
 
+		sched->main_thread->wg = Workgroup::Main;
 		sched->main_thread->allocator = alloc.m_ptr;
 		sched->main_thread->thread_handle = thread_current();
 		sched->main_thread->thread_id = thread_current_id();
@@ -324,26 +407,42 @@ namespace edge {
 		self->worker_futex.fetch_add(1, std::memory_order_release);
 		futex_wake_all(&self->worker_futex);
 
-		if (!self->scheduler_threads.empty()) {
-			for (Worker* worker_thread : self->scheduler_threads) {
+		if (!self->background_threads.empty()) {
+			for (Worker* worker_thread : self->background_threads) {
 				if (worker_thread) {
 					Worker::destroy(alloc, worker_thread);
 				}
 			}
 
-			self->scheduler_threads.destroy(alloc);
+			self->background_threads.destroy(alloc);
 		}
 
-		for (i32 i = 0; i < static_cast<i32>(Job::Priority::Count); ++i) {
-			while (true) {
-				Job* job;
-				if (!self->queues[i].dequeue(&job)) {
-					break;
-				}
+		{
+			Job* job = nullptr;
+			while (self->main_queue.dequeue(&job)) {
+				Job::destroy(alloc, job);
+			}
+			self->main_queue.destroy(alloc);
+		}
+
+		{
+			Job* job = nullptr;
+			while (self->io_queue.dequeue(&job)) {
+				Job::destroy(alloc, job);
+			}
+			self->io_queue.destroy(alloc);
+		}
+
+		Range<Job::Priority> range(Job::Priority::Low, Job::Priority::High);
+		for (auto it = range.begin(); it != range.end(); ++it) {
+			MPMCQueue<Job*>& queue = self->background_queues[it];
+
+			Job* job = nullptr;
+			while (queue.dequeue(&job)) {
 				Job::destroy(alloc, job);
 			}
 
-			self->queues[i].destroy(alloc);
+			queue.destroy(alloc);
 		}
 
 		for (auto& job : self->free_jobs) {
@@ -357,24 +456,15 @@ namespace edge {
 		alloc->deallocate(self);
 	}
 
-	void Scheduler::schedule(Job* job, Job::Priority prio) noexcept {
+	void Scheduler::schedule(Job* job, Job::Priority prio, Workgroup wg) noexcept {
 		active_jobs.fetch_add(1, std::memory_order_release);
-
-		i32 priority_index = static_cast<i32>(prio);
-		if (!queues[priority_index].enqueue(job)) {
-			return;
-		}
-
-		// Wake workers
-		if (sleeping_workers.load(std::memory_order_acquire) > 0) {
-			worker_futex.fetch_add(1, std::memory_order_release);
-			futex_wake_all(&worker_futex);
-		}
+		enqueue_job(job, prio, wg);
 	}
 
 	void Scheduler::tick(f32 delta_time) noexcept {
 		// NOTE: Called from the main engine loop.
 		// TODO: Schedule jobs that must be executed on the main thread.
+		main_thread->tick();
 	}
 
 	void Scheduler::run() noexcept {
@@ -383,6 +473,7 @@ namespace edge {
 		while (
 			active_jobs.load(std::memory_order_acquire) > 0 &&
 			!shutdown.load(std::memory_order_acquire)) {
+			main_thread->tick();
 			thread_yield();
 		}
 	}
@@ -399,30 +490,62 @@ namespace edge {
 		free_stacks.enqueue(stack_ptr);
 	}
 
-	std::pair<Job*, Job::Priority> Scheduler::pick_job() noexcept {
-		for (i32 i = static_cast<i32>(Job::Priority::Count) - 1; i >= 0; i--) {
+	std::pair<Job*, Job::Priority> Scheduler::pick_job(Workgroup wg) noexcept {
+		switch (wg)
+		{
+		case edge::Scheduler::Main: {
 			Job* job;
-			if (queues[i].dequeue(&job)) {
-				return std::make_pair(job, static_cast<Job::Priority>(i));
+			if (main_queue.dequeue(&job)) {
+				return std::make_pair(job, Job::Priority::Count);
 			}
+			break;
+		}
+		case edge::Scheduler::IO: {
+			Job* job;
+			if (io_queue.dequeue(&job)) {
+				return std::make_pair(job, Job::Priority::Count);
+			}
+			break;
+		}
+		case edge::Scheduler::Background: {
+			Range<Job::Priority> range(Job::Priority::Low, Job::Priority::High);
+			for (auto it = range.rbegin(); it != range.rend(); ++it) {
+				Job* job;
+				if (background_queues[it].dequeue(&job)) {
+					return std::make_pair(job, *it);
+				}
+			}
+			break;
+		}
 		}
 
 		return std::make_pair(nullptr, Job::Priority::Count);
 	}
 
-	void Scheduler::complete_job(NotNull<const Allocator*> alloc, Job* job, Job::Priority priority, Job::State final_status) noexcept {
-		// TODO: Check that job is completed or failed
+	void Scheduler::enqueue_job(Job* job, Job::Priority prio, Workgroup wg) noexcept {
 
-		Job* continuation = job->continuation;
-		if (continuation) {
-			job->continuation = nullptr;
-			schedule(continuation, priority);
+		switch (wg)
+		{
+		case edge::Scheduler::Main:
+			main_queue.enqueue(job);
+			break;
+		case edge::Scheduler::IO:
+			io_queue.enqueue(job);
+			break;
+		case edge::Scheduler::Background: {
+			i32 priority_index = static_cast<i32>(prio);
+			if (!background_queues[priority_index].enqueue(job)) {
+				return;
+			}
+			break;
 		}
-		else {
-			active_jobs.fetch_sub(1, std::memory_order_release);
 		}
 
-		Job::destroy(alloc, job);
+		// Wake workers
+		if (sleeping_workers.load(std::memory_order_acquire) > 0) {
+			worker_futex.fetch_add(1, std::memory_order_release);
+			futex_wake_all(&worker_futex);
+		}
 	}
 
 	Scheduler* sched_current() noexcept {
@@ -437,7 +560,7 @@ namespace edge {
 		return thread_context.worker->thread_id;
 	}
 
-	void job_yield() noexcept {
+	static void job_yield_base() noexcept {
 		Job* job = thread_context.current_job;
 		if (!job || job == &thread_context.main_job) {
 			return;
@@ -448,18 +571,17 @@ namespace edge {
 		job->state.store(Job::State::Running, std::memory_order_release);
 	}
 
+	void job_yield() noexcept {
+		thread_context.flow_info.type = FlowReturnType::Yielded;
+		job_yield_base();
+	}
+
 	void job_await(Job* child_job) noexcept {
-		Job* parent_job = thread_context.current_job;
-		thread_context.current_job = child_job;
+		child_job->continuation = thread_context.current_job;
 
-		child_job->caller = parent_job->caller;
-		child_job->continuation = parent_job;
-
-		parent_job->state.store(Job::State::Suspended, std::memory_order_release);
-		// NOTE: Switches to the child job, not back to the caller, like a yield.
-		// This is somewhat hacky, but for now i'm not sure how to do it properly.
-		// Also inherits parent's priority.
-		fiber_context_switch(parent_job->context, child_job->context);
+		thread_context.flow_info.type = FlowReturnType::Awaited;
+		thread_context.flow_info.job = child_job;
+		job_yield_base();
 	}
 
 	bool is_running_in_job() noexcept {
@@ -467,26 +589,36 @@ namespace edge {
 	}
 
 	bool is_running_on_main() noexcept {
-		Scheduler* sched = thread_context.worker->scheduler;
-		return sched->main_thread == thread_context.worker;
+		return thread_context.worker->wg == Scheduler::Workgroup::Main;
 	}
 
 	void job_switch_to_main() noexcept {
-		if (is_running_on_main()) {
-			// Already in main
+		if (thread_context.worker->wg == Scheduler::Workgroup::Main) {
 			return;
 		}
 
-		// NOTE: Should reschedule job on main thread
-		// TODO: Not implemented
+		thread_context.flow_info.type = FlowReturnType::SwitchTo;
+		thread_context.flow_info.wg = Scheduler::Workgroup::Main;
+		job_yield_base();
 	}
 
 	void job_switch_to_background() noexcept {
-		if (!is_running_on_main()) {
-			// Already on one of 
+		if (thread_context.worker->wg == Scheduler::Workgroup::Background) {
 			return;
 		}
 
-		// TODO: Not implemented
+		thread_context.flow_info.type = FlowReturnType::SwitchTo;
+		thread_context.flow_info.wg = Scheduler::Workgroup::Background;
+		job_yield_base();
+	}
+
+	void job_switch_to_io() noexcept {
+		if (thread_context.worker->wg == Scheduler::Workgroup::IO) {
+			return;
+		}
+
+		thread_context.flow_info.type = FlowReturnType::SwitchTo;
+		thread_context.flow_info.wg = Scheduler::Workgroup::IO;
+		job_yield_base();
 	}
 }

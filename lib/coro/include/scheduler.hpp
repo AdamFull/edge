@@ -22,8 +22,7 @@ namespace edge {
 
 		enum class Priority {
 			Low = 0,
-			Normal = 1,
-			High = 2,
+			High = 1,
 			Count
 		};
 
@@ -82,6 +81,12 @@ namespace edge {
 		friend struct Job;
 		friend struct Worker;
 
+		enum Workgroup {
+			Main,
+			IO,
+			Background
+		};
+
 		Arena stack_arena = {};
 		// NOTE: To reuse allocated stacks.
 		MPMCQueue<void*> free_stacks = {};
@@ -89,10 +94,15 @@ namespace edge {
 		// NOTE: To reuse allocated jobs.
 		MPMCQueue<Job*> free_jobs = {};
 
-		MPMCQueue<Job*> queues[static_cast<usize>(Job::Priority::Count)] = {};
-
+		MPMCQueue<Job*> main_queue = {};
 		Worker* main_thread = nullptr;
-		Array<Worker*> scheduler_threads = {};
+
+		// TODO: Implement io
+		MPMCQueue<Job*> io_queue = {};
+		Array<Worker*> io_threads = {};
+
+		MPMCQueue<Job*> background_queues[static_cast<usize>(Job::Priority::Count)] = {};
+		Array<Worker*> background_threads = {};
 
 		std::atomic<u32> active_jobs = 0;
 		std::atomic<bool> shutdown = false;
@@ -103,7 +113,7 @@ namespace edge {
 		static Scheduler* create(NotNull<const Allocator*> alloc) noexcept;
 		static void destroy(NotNull<const Allocator*> alloc, Scheduler* self) noexcept;
 
-		void schedule(Job* job, Job::Priority prio = Job::Priority::Normal) noexcept;
+		void schedule(Job* job, Job::Priority prio = Job::Priority::High, Workgroup wg = Workgroup::Background) noexcept;
 		void tick(f32 delta_time) noexcept;
 
 		void run() noexcept;
@@ -112,8 +122,8 @@ namespace edge {
 		void* alloc_stack() noexcept;
 		void free_stack(void* stack_ptr) noexcept;
 
-		std::pair<Job*, Job::Priority> pick_job() noexcept;
-		void complete_job(NotNull<const Allocator*> alloc, Job* job, Job::Priority priority, Job::State final_status) noexcept;
+		std::pair<Job*, Job::Priority> pick_job(Workgroup wg) noexcept;
+		void enqueue_job(Job* job, Job::Priority prio, Workgroup wg) noexcept;
 	};
 
 	Scheduler* sched_current() noexcept;
@@ -126,9 +136,10 @@ namespace edge {
 	bool is_running_in_job() noexcept;
 	bool is_running_on_main() noexcept;
 
-	// NOTE: Yields job and runs it on main/background threads
+	// NOTE: Yields job and runs it on main/background/io threads
 	void job_switch_to_main() noexcept;
 	void job_switch_to_background() noexcept;
+	void job_switch_to_io() noexcept;
 
 	template<typename T>
 	void job_return(T&& value) noexcept {
