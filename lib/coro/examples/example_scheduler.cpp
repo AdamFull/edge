@@ -34,10 +34,11 @@ static void job_a() {
         printf("[Thread %d] [Job A] Preparing request: %d%%\n", thread_id, i);
 
         edge::Job* subjob = edge::Job::from_lambda(&allocator,
-            [&i]() -> void { job_b(i); }, edge::SchedulerPriority::Critical);
+            [&i]() -> void { job_b(i); });
 
-        edge::JobPromise<i32, IOError> result = {};
-        edge::job_await(subjob, &result);
+        edge::Job::Promise<i32, IOError> result = {};
+        subjob->set_promise(&result);
+        edge::job_await(subjob);
 
         thread_id = edge::job_thread_id();
     }
@@ -52,9 +53,9 @@ int main(void) {
     }
 
     edge::Job* new_job = edge::Job::from_lambda(&allocator,
-        []() -> void { job_a(); }, edge::SchedulerPriority::Critical);
+        []() -> void { job_a(); });
 
-    sched->schedule(new_job);
+    sched->schedule(new_job, edge::Job::Priority::High);
     sched->run();
     edge::Scheduler::destroy(&allocator, sched);
 
