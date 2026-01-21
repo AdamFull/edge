@@ -20,16 +20,16 @@ namespace edge {
 		usize thread_id = 0;
 		std::atomic<bool> should_exit = false;
 
-		static Worker* create(NotNull<const Allocator*> alloc) noexcept;
-		static void destroy(NotNull<const Allocator*> alloc, Worker* self) noexcept;
+		static Worker* create(NotNull<const Allocator*> alloc);
+		static void destroy(NotNull<const Allocator*> alloc, Worker* self);
 
-		static i32 entry(void* arg) noexcept {
+		static i32 entry(void* arg) {
 			Worker* worker = static_cast<Worker*>(arg);
 			return worker->loop();
 		}
 
-		i32 loop() noexcept;
-		bool tick() noexcept;
+		i32 loop();
+		bool tick();
 	};
 
 	enum class FlowReturnType {
@@ -45,7 +45,7 @@ namespace edge {
 		Job* job = nullptr;
 		Scheduler::Workgroup wg = Scheduler::Workgroup::Background;
 
-		void clear() noexcept {
+		void clear() {
 			type = FlowReturnType::None;
 			job = nullptr;
 		}
@@ -60,13 +60,13 @@ namespace edge {
 
 		FlowInfo flow_info = {};
 
-		bool create(Scheduler::Worker* worker) noexcept;
-		void shutdown() noexcept;
+		bool create(Scheduler::Worker* worker);
+		void shutdown();
 	};
 
 	static thread_local SchedulerThreadContext thread_context = { };
 
-	Scheduler::Worker* Scheduler::Worker::create(NotNull<const Allocator*> alloc) noexcept {
+	Scheduler::Worker* Scheduler::Worker::create(NotNull<const Allocator*> alloc) {
 		Scheduler::Worker* worker = alloc->allocate<Scheduler::Worker>();
 		if (!worker) {
 			return nullptr;
@@ -83,13 +83,13 @@ namespace edge {
 		return worker;
 	}
 
-	void Scheduler::Worker::destroy(NotNull<const Allocator*> alloc, Scheduler::Worker* self) noexcept {
+	void Scheduler::Worker::destroy(NotNull<const Allocator*> alloc, Scheduler::Worker* self) {
 		self->should_exit.store(true, std::memory_order_release);
 		thread_join(self->thread_handle, nullptr);
 		alloc->deallocate(self);
 	}
 
-	i32 Scheduler::Worker::loop() noexcept {
+	i32 Scheduler::Worker::loop() {
 		if (!thread_context.create(this)) {
 			// TODO: LOG ERROR
 			return -1;
@@ -106,7 +106,7 @@ namespace edge {
 		return 0;
 	}
 
-	bool Scheduler::Worker::tick() noexcept {
+	bool Scheduler::Worker::tick() {
 		auto job = scheduler->pick_job(wg);
 		if (!job) {
 			if (scheduler->shutdown.load(std::memory_order_acquire)) {
@@ -189,7 +189,7 @@ namespace edge {
 		}
 	}
 
-	bool SchedulerThreadContext::create(Scheduler::Worker* worker) noexcept {
+	bool SchedulerThreadContext::create(Scheduler::Worker* worker) {
 		this->worker = worker;
 		main_context = fiber_context_create(worker->allocator, nullptr, nullptr, 0);
 		main_job.context = main_context;
@@ -200,7 +200,7 @@ namespace edge {
 		return true;
 	}
 
-	void SchedulerThreadContext::shutdown() noexcept {
+	void SchedulerThreadContext::shutdown() {
 		if (main_context) {
 			fiber_context_destroy(worker->allocator, main_context);
 		}
@@ -234,7 +234,7 @@ namespace edge {
 		assert(0 && "Job returned without caller");
 	}
 
-	Job* Job::create(NotNull<const Allocator*> alloc, JobFn&& func) noexcept {
+	Job* Job::create(NotNull<const Allocator*> alloc, JobFn&& func) {
 		if (!func.is_valid()) {
 			return nullptr;
 		}
@@ -273,7 +273,7 @@ namespace edge {
 		return job;
 	}
 
-	void Job::destroy(NotNull<const Allocator*> alloc, Job* self) noexcept {
+	void Job::destroy(NotNull<const Allocator*> alloc, Job* self) {
 		if (self->func.is_valid()) {
 			self->func.destroy(alloc);
 		}
@@ -296,7 +296,7 @@ namespace edge {
 		}
 	}
 
-	Scheduler* Scheduler::create(NotNull<const Allocator*> alloc) noexcept {
+	Scheduler* Scheduler::create(NotNull<const Allocator*> alloc) {
 		// NOTE: Should be created only on main thread, or on thread that i consider to be the main one.
 		Scheduler* sched = alloc->allocate<Scheduler>();
 		if (!sched) {
@@ -426,7 +426,7 @@ namespace edge {
 		return sched;
 	}
 
-	void Scheduler::destroy(NotNull<const Allocator*> alloc, Scheduler* self) noexcept {
+	void Scheduler::destroy(NotNull<const Allocator*> alloc, Scheduler* self) {
 		assert(self->main_thread->thread_id == thread_context.worker->thread_id && "Destroy can be called only from main thread.");
 
 		thread_context.shutdown();
@@ -499,19 +499,19 @@ namespace edge {
 		alloc->deallocate(self);
 	}
 
-	void Scheduler::schedule(Job* job, Job::Priority prio, Workgroup wg) noexcept {
+	void Scheduler::schedule(Job* job, Job::Priority prio, Workgroup wg) {
 		active_jobs.fetch_add(1, std::memory_order_release);
 		job->priority = prio;
 		enqueue_job(job, prio, wg);
 	}
 
-	void Scheduler::tick(f32 delta_time) noexcept {
+	void Scheduler::tick(f32 delta_time) {
 		// NOTE: Called from the main engine loop.
 		// TODO: Schedule jobs that must be executed on the main thread.
 		main_thread->tick();
 	}
 
-	void Scheduler::run() noexcept {
+	void Scheduler::run() {
 		assert(main_thread->thread_id == thread_context.worker->thread_id && "Run can be called only from main thread.");
 
 		while (
@@ -522,7 +522,7 @@ namespace edge {
 		}
 	}
 
-	void* Scheduler::alloc_stack() noexcept {
+	void* Scheduler::alloc_stack() {
 		void* stack = nullptr;
 		if (!free_stacks.dequeue(&stack)) {
 			return stack_arena.alloc_ex(EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
@@ -530,11 +530,11 @@ namespace edge {
 		return stack;
 	}
 
-	void Scheduler::free_stack(void* stack_ptr) noexcept {
+	void Scheduler::free_stack(void* stack_ptr) {
 		free_stacks.enqueue(stack_ptr);
 	}
 
-	Job* Scheduler::pick_job(Workgroup wg) noexcept {
+	Job* Scheduler::pick_job(Workgroup wg) {
 		Job* job = nullptr;
 		switch (wg)
 		{
@@ -564,7 +564,7 @@ namespace edge {
 		return job;
 	}
 
-	void Scheduler::enqueue_job(Job* job, Job::Priority prio, Workgroup wg) noexcept {
+	void Scheduler::enqueue_job(Job* job, Job::Priority prio, Workgroup wg) {
 		switch (wg)
 		{
 		case edge::Scheduler::Main:
@@ -589,27 +589,27 @@ namespace edge {
 		}
 	}
 
-	Scheduler* sched_current() noexcept {
+	Scheduler* sched_current() {
 		return thread_context.worker->scheduler;
 	}
 
-	Job* job_current() noexcept {
+	Job* job_current() {
 		return thread_context.current_job;
 	}
 
-	i32 job_thread_id() noexcept {
+	i32 job_thread_id() {
 		return thread_context.worker->thread_id;
 	}
 
-	bool is_running_in_job() noexcept {
+	bool is_running_in_job() {
 		return thread_context.current_job != &thread_context.main_job;
 	}
 
-	bool is_running_on_main() noexcept {
+	bool is_running_on_main() {
 		return thread_context.worker->wg == Scheduler::Workgroup::Main;
 	}
 
-	static void job_yield_base() noexcept {
+	static void job_yield_base() {
 		Job* job = thread_context.current_job;
 		if (!job || job == &thread_context.main_job) {
 			return;
@@ -620,12 +620,12 @@ namespace edge {
 		job->state.store(Job::State::Running, std::memory_order_release);
 	}
 
-	void job_yield() noexcept {
+	void job_yield() {
 		thread_context.flow_info.type = FlowReturnType::Yielded;
 		job_yield_base();
 	}
 
-	void job_await(Job* child_job) noexcept {
+	void job_await(Job* child_job) {
 		child_job->continuation = thread_context.current_job;
 
 		thread_context.flow_info.type = FlowReturnType::Awaited;
@@ -633,7 +633,7 @@ namespace edge {
 		job_yield_base();
 	}
 
-	void job_continue_on_main() noexcept {
+	void job_continue_on_main() {
 		if (thread_context.worker->wg == Scheduler::Workgroup::Main) {
 			return;
 		}
@@ -643,7 +643,7 @@ namespace edge {
 		job_yield_base();
 	}
 
-	void job_continue_on_background() noexcept {
+	void job_continue_on_background() {
 		if (thread_context.worker->wg == Scheduler::Workgroup::Background) {
 			return;
 		}
@@ -653,7 +653,7 @@ namespace edge {
 		job_yield_base();
 	}
 
-	void job_continue_on_io() noexcept {
+	void job_continue_on_io() {
 		if (thread_context.worker->wg == Scheduler::Workgroup::IO) {
 			return;
 		}

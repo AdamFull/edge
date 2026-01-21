@@ -36,17 +36,17 @@ namespace edge {
 				std::conditional_t<std::is_void_v<E>, std::monostate, E> error;
 			};
 
-			bool is_done() const noexcept {
+			bool is_done() const {
 				State s = status.load(std::memory_order_acquire);
 				return s == State::Completed || s == State::Failed;
 			}
 
-			decltype(auto) get_value() noexcept requires (!std::is_void_v<T>) {
+			decltype(auto) get_value() requires (!std::is_void_v<T>) {
 				assert(status.load(std::memory_order_acquire) == State::Completed);
 				return value;
 			}
 
-			decltype(auto) get_error() noexcept requires (!std::is_void_v<E>) {
+			decltype(auto) get_error() requires (!std::is_void_v<E>) {
 				assert(status.load(std::memory_order_acquire) == State::Failed);
 				return error;
 			}
@@ -64,15 +64,15 @@ namespace edge {
 		Priority priority = Priority::Low;
 
 		template<typename F>
-		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn) noexcept {
+		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn) {
 			return create(alloc, callable_create_from_lambda(alloc, std::forward<F>(fn)));
 		}
 
-		static Job* create(NotNull<const Allocator*> alloc, JobFn&& func) noexcept;
-		static void destroy(NotNull<const Allocator*> alloc, Job* self) noexcept;
+		static Job* create(NotNull<const Allocator*> alloc, JobFn&& func);
+		static void destroy(NotNull<const Allocator*> alloc, Job* self);
 
 		template<typename T, typename E>
-		void set_promise(Promise<T, E>* promise_ptr) noexcept {
+		void set_promise(Promise<T, E>* promise_ptr) {
 			promise = promise_ptr;
 		}
 	};
@@ -112,40 +112,40 @@ namespace edge {
 		std::atomic<u32> worker_futex = 0;
 		std::atomic<u32> sleeping_workers = 0;
 
-		static Scheduler* create(NotNull<const Allocator*> alloc) noexcept;
-		static void destroy(NotNull<const Allocator*> alloc, Scheduler* self) noexcept;
+		static Scheduler* create(NotNull<const Allocator*> alloc);
+		static void destroy(NotNull<const Allocator*> alloc, Scheduler* self);
 
-		void schedule(Job* job, Job::Priority prio = Job::Priority::High, Workgroup wg = Workgroup::Background) noexcept;
-		void tick(f32 delta_time) noexcept;
+		void schedule(Job* job, Job::Priority prio = Job::Priority::High, Workgroup wg = Workgroup::Background);
+		void tick(f32 delta_time);
 
-		void run() noexcept;
+		void run();
 
 	private:
-		void* alloc_stack() noexcept;
-		void free_stack(void* stack_ptr) noexcept;
+		void* alloc_stack();
+		void free_stack(void* stack_ptr);
 
-		Job* pick_job(Workgroup wg) noexcept;
-		void enqueue_job(Job* job, Job::Priority prio, Workgroup wg) noexcept;
+		Job* pick_job(Workgroup wg);
+		void enqueue_job(Job* job, Job::Priority prio, Workgroup wg);
 	};
 
-	Scheduler* sched_current() noexcept;
+	Scheduler* sched_current();
 
-	Job* job_current() noexcept;
-	i32 job_thread_id() noexcept;
+	Job* job_current();
+	i32 job_thread_id();
 
-	bool is_running_in_job() noexcept;
-	bool is_running_on_main() noexcept;
+	bool is_running_in_job();
+	bool is_running_on_main();
 
-	void job_yield() noexcept;
-	void job_await(Job* child_job) noexcept;
+	void job_yield();
+	void job_await(Job* child_job);
 
 	// NOTE: Yields job and runs it on main/background/io threads
-	void job_continue_on_main() noexcept;
-	void job_continue_on_background() noexcept;
-	void job_continue_on_io() noexcept;
+	void job_continue_on_main();
+	void job_continue_on_background();
+	void job_continue_on_io();
 
 	template<typename T>
-	void job_return(T&& value) noexcept {
+	void job_return(T&& value) {
 		Job* job = job_current();
 		if (!job || !job->promise) {
 			return;
@@ -157,7 +157,7 @@ namespace edge {
 	}
 
 	template<typename E>
-	void job_failed(E&& error) noexcept {
+	void job_failed(E&& error) {
 		Job* job = job_current();
 		if (!job || !job->promise) {
 			return;
