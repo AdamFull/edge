@@ -219,7 +219,7 @@ namespace edge {
 	}
 
 	struct ImGuiInputListener final : InputSystem::IListener {
-		void on_bool_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, bool cur, bool prev) noexcept override {
+		void on_bool_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, bool cur, bool prev) override {
 			ImGuiIO& io = ImGui::GetIO();
 
 			switch (device)
@@ -260,14 +260,12 @@ namespace edge {
 			}
 		}
 
-		void on_axis_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, glm::vec3 cur, glm::vec3 prev) noexcept override {
+		void on_axis_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, glm::vec3 cur, glm::vec3 prev) override {
 			ImGuiIO& io = ImGui::GetIO();
 
 			switch (device)
 			{
 			case edge::DeviceType::Mouse: {
-				const MouseDevice* mouse = input_system->get_mouse();
-
 				switch (static_cast<MouseAxis>(button))
 				{
 				case edge::MouseAxis::Pos: {
@@ -294,13 +292,13 @@ namespace edge {
 			}
 		}
 
-		void on_character(NotNull<const InputSystem*> input_system, char32_t codepoint) noexcept override {
+		void on_character(NotNull<const InputSystem*> input_system, char32_t codepoint) override {
 			ImGuiIO& io = ImGui::GetIO();
 			io.AddInputCharacter(codepoint);
 		}
 	};
 
-	bool ImGuiLayer::create(ImGuiLayerInitInfo init_info) noexcept {
+	bool ImGuiLayer::create(ImGuiLayerInitInfo init_info) {
 		runtime = init_info.runtime;
 		input_system = init_info.input_system;
 
@@ -359,14 +357,14 @@ namespace edge {
 		return true;
 	}
 
-	void ImGuiLayer::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void ImGuiLayer::destroy(NotNull<const Allocator*> alloc) {
 		ImGui::EndFrame();
 		ImGuiIO& io = ImGui::GetIO();
 		io.BackendRendererUserData = nullptr;
 		ImGui::DestroyContext();
 	}
 
-	void ImGuiLayer::on_frame_begin(f32 dt) noexcept {
+	void ImGuiLayer::on_frame_begin(f32 dt) {
 		ImGuiIO& io = ImGui::GetIO();
 		io.DeltaTime = dt;
 
@@ -382,7 +380,7 @@ namespace edge {
 		ImGui::NewFrame();
 	}
 
-	void ImGuiLayer::on_frame_end() noexcept {
+	void ImGuiLayer::on_frame_end() {
 		ImGui::Render();
 	}
 }

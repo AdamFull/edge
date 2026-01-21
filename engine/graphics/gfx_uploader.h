@@ -26,13 +26,13 @@ namespace edge::gfx {
 		CmdBuf cmd = {};
 		bool recording = false;
 
-		bool create(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) noexcept;
-		void destroy(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) noexcept;
+		bool create(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader);
+		void destroy(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader);
 
-		bool begin() noexcept;
-		bool end() noexcept;
+		bool begin();
+		bool end();
 
-		BufferView try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) noexcept;
+		BufferView try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment);
 	};
 
 	struct Uploader {

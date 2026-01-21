@@ -14,16 +14,16 @@
 #include <volk.h>
 
 namespace edge::gfx {
-	static bool is_depth_format(VkFormat format) {
+	[[maybe_unused]] static bool is_depth_format(VkFormat format) {
 		return format == VK_FORMAT_D16_UNORM || format == VK_FORMAT_D32_SFLOAT;
 	}
 
-	static bool is_depth_stencil_format(VkFormat format) {
+	[[maybe_unused]] static bool is_depth_stencil_format(VkFormat format) {
 		return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D16_UNORM_S8_UINT ||
 			format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
-	bool RendererFrame::create(NotNull<const Allocator*> alloc, CmdPool cmd_pool) noexcept {
+	bool RendererFrame::create(NotNull<const Allocator*> alloc, CmdPool cmd_pool) {
 		BufferCreateInfo buffer_create_info = {
 				.size = RENDERER_UPDATE_STAGING_ARENA_SIZE,
 				.alignment = 1,
@@ -59,7 +59,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void RendererFrame::destroy(NotNull<const Allocator*> alloc, NotNull<Renderer*> renderer) noexcept {
+	void RendererFrame::destroy(NotNull<const Allocator*> alloc, NotNull<Renderer*> renderer) {
 		staging_memory.destroy();
 
 		for (auto& buffer : temp_staging_memory) {
@@ -76,7 +76,7 @@ namespace edge::gfx {
 		image_available.destroy();
 	}
 
-	void RendererFrame::release_resources(NotNull<Renderer*> renderer) noexcept {
+	void RendererFrame::release_resources(NotNull<Renderer*> renderer) {
 		for (auto& resource : free_resources) {
 			if (resource.type == ResourceType::Image) {
 				resource.srv.destroy();
@@ -97,7 +97,7 @@ namespace edge::gfx {
 		free_resources.clear();
 	}
 
-	bool RendererFrame::begin(NotNull<Renderer*> renderer) noexcept {
+	bool RendererFrame::begin(NotNull<Renderer*> renderer) {
 		if (is_recording) {
 			return false;
 		}
@@ -120,7 +120,7 @@ namespace edge::gfx {
 		return is_recording;
 	}
 
-	BufferView RendererFrame::try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) noexcept {
+	BufferView RendererFrame::try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) {
 		if (!is_recording) {
 			return {};
 		}
@@ -150,7 +150,7 @@ namespace edge::gfx {
 		};
 	}
 
-	bool BufferUpdateInfo::write(NotNull<const Allocator*> alloc, Span<const u8> data, VkDeviceSize dst_offset) noexcept {
+	bool BufferUpdateInfo::write(NotNull<const Allocator*> alloc, Span<const u8> data, VkDeviceSize dst_offset) {
 		VkDeviceSize available_size = buffer_view.size - offset;
 		if (data.size() > available_size) {
 			return false;
@@ -167,7 +167,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool ImageUpdateInfo::write(NotNull<const Allocator*> alloc, const ImageSubresourceData& subresource_info) noexcept {
+	bool ImageUpdateInfo::write(NotNull<const Allocator*> alloc, const ImageSubresourceData& subresource_info) {
 		VkDeviceSize available_size = buffer_view.size - offset;
 		if (subresource_info.data.size() > available_size) {
 			return false;
@@ -190,7 +190,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool Renderer::create(RendererCreateInfo create_info) noexcept {
+	bool Renderer::create(RendererCreateInfo create_info) {
 		if (!create_info.alloc || !create_info.main_queue) {
 			return false;
 		}
@@ -373,7 +373,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Renderer::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void Renderer::destroy(NotNull<const Allocator*> alloc) {
 		direct_queue.wait_idle();
 		default_sampler.destroy();
 
@@ -428,14 +428,14 @@ namespace edge::gfx {
 		cmd_pool.destroy();
 	}
 
-	Handle Renderer::add_resource() noexcept {
+	Handle Renderer::add_resource() {
 		if (resource_handle_pool.is_full()) {
 			return HANDLE_INVALID;
 		}
 		return resource_handle_pool.allocate();
 	}
 
-	bool Renderer::setup_resource(NotNull<const Allocator*> alloc, Handle handle, Image image) noexcept {
+	bool Renderer::setup_resource(NotNull<const Allocator*> alloc, Handle handle, Image image) {
 		Resource* resource = resource_handle_pool.get(handle);
 		resource->type = ResourceType::Image;
 		resource->image = image;
@@ -563,14 +563,14 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool Renderer::setup_resource(Handle handle, Buffer buffer) noexcept {
+	bool Renderer::setup_resource(Handle handle, Buffer buffer) {
 		Resource* resource = resource_handle_pool.get(handle);
 		resource->type = ResourceType::Buffer;
 		resource->buffer = buffer;
 		return true;
 	}
 
-	void Renderer::update_resource(NotNull<const Allocator*> alloc, Handle handle, Image image) noexcept {
+	void Renderer::update_resource(NotNull<const Allocator*> alloc, Handle handle, Image image) {
 		if (!resource_handle_pool.is_valid(handle)) {
 			return;
 		}
@@ -585,7 +585,7 @@ namespace edge::gfx {
 		setup_resource(alloc, handle, image);
 	}
 
-	void Renderer::update_resource(NotNull<const Allocator*> alloc, Handle handle, Buffer buffer) noexcept {
+	void Renderer::update_resource(NotNull<const Allocator*> alloc, Handle handle, Buffer buffer) {
 		if (!resource_handle_pool.is_valid(handle)) {
 			return;
 		}
@@ -600,11 +600,11 @@ namespace edge::gfx {
 		setup_resource(handle, buffer);
 	}
 
-	Resource* Renderer::get_resource(Handle handle) noexcept {
+	Resource* Renderer::get_resource(Handle handle) {
 		return resource_handle_pool.get(handle);
 	}
 
-	void Renderer::free_resource(NotNull<const Allocator*> alloc, Handle handle) noexcept {
+	void Renderer::free_resource(NotNull<const Allocator*> alloc, Handle handle) {
 		if (resource_handle_pool.is_valid(handle)) {
 			if (active_frame) {
 				Resource* resource = resource_handle_pool.get(handle);
@@ -617,7 +617,7 @@ namespace edge::gfx {
 		}
 	}
 
-	Handle Renderer::add_image_from_disk(NotNull<const Allocator*> alloc, const char* path) noexcept {
+	Handle Renderer::add_image_from_disk(NotNull<const Allocator*> alloc, const char* path) {
 		FILE* stream = fopen(path, "rb");
 		if (!stream) {
 			return HANDLE_INVALID;
@@ -640,8 +640,7 @@ namespace edge::gfx {
 		return new_handle;
 	}
 
-	bool Renderer::frame_begin() noexcept {
-		bool surface_updated = false;
+	bool Renderer::frame_begin() {
 		if (swapchain.is_outdated()) {
 
 			if (direct_queue) {
@@ -676,7 +675,6 @@ namespace edge::gfx {
 
 			active_frame = nullptr;
 			active_image_index = 0;
-			surface_updated = true;
 		}
 
 		RendererFrame& current_frame = frames[frame_number % RENDERER_FRAME_OVERLAP];
@@ -718,7 +716,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool Renderer::frame_end(NotNull<const Allocator*> alloc) noexcept {
+	bool Renderer::frame_end(NotNull<const Allocator*> alloc) {
 		if (!active_frame || !active_frame->is_recording) {
 			return false;
 		}
@@ -869,7 +867,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Renderer::image_update_end(NotNull<const Allocator*> alloc, ImageUpdateInfo& update_info) noexcept {
+	void Renderer::image_update_end(NotNull<const Allocator*> alloc, ImageUpdateInfo& update_info) {
 		const VkCopyBufferToImageInfo2KHR copy_image_info = {
 			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
 			.srcBuffer = update_info.buffer_view.buffer.handle,

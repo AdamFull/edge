@@ -186,7 +186,7 @@ namespace edge {
     }
 
     struct AndroidRuntime final : IRuntime {
-        bool init(const RuntimeInitInfo& init_info) noexcept override {
+        bool init(const RuntimeInitInfo& init_info) override {
             layout = init_info.layout;
             input_system = init_info.input_system;
 
@@ -223,7 +223,7 @@ namespace edge {
             return true;
         }
 
-        void deinit(NotNull<const Allocator*> alloc) noexcept override {
+        void deinit(NotNull<const Allocator*> alloc) override {
             if (Paddleboat_isInitialized()) {
                 Paddleboat_setControllerStatusCallback(nullptr, nullptr);
                 Paddleboat_setMouseStatusCallback(nullptr, nullptr);
@@ -238,11 +238,11 @@ namespace edge {
             should_close = true;
         }
 
-        bool requested_close() const noexcept override {
+        bool requested_close() const override {
             return should_close;
         }
 
-        void process_events() noexcept override {
+        void process_events() override {
             struct android_app* app = layout->app;
             struct android_poll_source* source;
             i32 ident, events;
@@ -408,28 +408,28 @@ namespace edge {
             }
         }
 
-        void get_surface(void* surface_info) const noexcept override {
+        void get_surface(void* surface_info) const override {
             *(VkAndroidSurfaceCreateInfoKHR*)surface_info = {
                 .sType = VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR,
                 .window = layout->app->window
             };
         }
 
-        void get_surface_extent(i32& width, i32& height) const noexcept override {
+        void get_surface_extent(i32& width, i32& height) const override {
             struct android_app* app = layout->app;
             width = app->contentRect.right - app->contentRect.left;
             height = app->contentRect.bottom - app->contentRect.top;
         }
 
-        [[nodiscard]] f32 get_surface_scale_factor() const noexcept override {
+        [[nodiscard]] f32 get_surface_scale_factor() const override {
             return (f32)AConfiguration_getDensity(layout->app->config) / (f32)ACONFIGURATION_DENSITY_MEDIUM;
         }
 
-        [[nodiscard]] bool is_focused() const noexcept override {
+        [[nodiscard]] bool is_focused() const override {
             return focused;
         }
 
-        void set_title(const char* title) noexcept override {
+        void set_title(const char* title) override {
 
         }
 
@@ -507,7 +507,7 @@ namespace edge {
         }
     }
 
-    IRuntime* create_runtime(NotNull<const Allocator*> alloc) noexcept {
+    IRuntime* create_runtime(NotNull<const Allocator*> alloc) {
         return alloc->allocate<AndroidRuntime>();
     }
 }

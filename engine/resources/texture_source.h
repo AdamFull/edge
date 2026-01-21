@@ -20,7 +20,7 @@ namespace edge {
 			u32 vk_format;
 			u32 dxgi_format;
 
-			usize calculate_size(u32 width, u32 height, u32 depth) const noexcept {
+			usize calculate_size(u32 width, u32 height, u32 depth) const {
 				if (compressed) {
 					u32 blocks_x = (width + block_width - 1) / block_width;
 					u32 blocks_y = (height + block_height - 1) / block_height;
@@ -68,22 +68,22 @@ namespace edge {
 
 		LevelInfo level_infos[16] = {};
 
-		static bool is_ok(Result result) noexcept {
+		static bool is_ok(Result result) {
 			return result == Result::Success;
 		}
 
-		Result from_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
-		Result from_dds_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
-		Result from_ktx1_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
-		Result from_ktx2_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
-		Result from_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
+		Result from_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream);
+		Result from_dds_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream);
+		Result from_ktx1_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream);
+		Result from_ktx2_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream);
+		Result from_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream);
 
-		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		void destroy(NotNull<const Allocator*> alloc);
 
-		Result write_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept;
+		Result write_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream);
 
-		SubresourceInfo get_mip(u32 level) noexcept;
-		SubresourceInfo get_subresource_data_ptr(u32 level, u32 layer = 0u, u32 face = 0u) noexcept;
+		SubresourceInfo get_mip(u32 level);
+		SubresourceInfo get_subresource_data_ptr(u32 level, u32 layer = 0u, u32 face = 0u);
 	};
 }
 

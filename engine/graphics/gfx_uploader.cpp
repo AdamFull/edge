@@ -6,7 +6,7 @@
 #include <scheduler.hpp>
 
 namespace edge::gfx {
-	bool ResourceSet::create(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) noexcept {
+	bool ResourceSet::create(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) {
 		BufferCreateInfo buffer_create_info = {
 				.size = 32 * 1024 * 1024,
 				.alignment = 1,
@@ -30,7 +30,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void ResourceSet::destroy(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) noexcept {
+	void ResourceSet::destroy(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) {
 		cmd.destroy();
 		semaphore.destroy();
 		staging_memory.destroy();
@@ -41,7 +41,7 @@ namespace edge::gfx {
 		temp_staging_memory.destroy(alloc);
 	}
 
-	bool ResourceSet::begin() noexcept {
+	bool ResourceSet::begin() {
 		if (!recording) {
 			staging_offset = 0;
 
@@ -57,9 +57,10 @@ namespace edge::gfx {
 			cmd.begin_marker("update", 0xFFFFFFFF);
 			recording = true;
 		}
+		return true;
 	}
 
-	bool ResourceSet::end() noexcept {
+	bool ResourceSet::end() {
 		if (recording) {
 			cmd.end_marker();
 			cmd.end();
@@ -69,7 +70,7 @@ namespace edge::gfx {
 		return false;
 	}
 
-	BufferView ResourceSet::try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) noexcept {
+	BufferView ResourceSet::try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) {
 		if (!begin()) {
 			return {};
 		}

@@ -44,24 +44,24 @@ namespace edge {
 	struct KeyboardDevice {
 		KeyboardState state = {};
 
-		void set_key(Key key, bool pressed) noexcept {
+		void set_key(Key key, bool pressed) {
 			state.cur.put(static_cast<usize>(key), pressed);
 		}
 
-		[[nodiscard]] bool is_down(Key key) const noexcept {
+		[[nodiscard]] bool is_down(Key key) const {
 			return state.cur.get(static_cast<usize>(key));
 		}
 
-		[[nodiscard]] bool is_up(Key key) const noexcept {
+		[[nodiscard]] bool is_up(Key key) const {
 			return !state.cur.get(static_cast<usize>(key));
 		}
 
-		[[nodiscard]] bool was_pressed(Key key) const noexcept {
+		[[nodiscard]] bool was_pressed(Key key) const {
 			auto index = static_cast<usize>(key);
 			return state.cur.get(index) && !state.prev.get(index);
 		}
 
-		[[nodiscard]] bool was_released(Key key) const noexcept {
+		[[nodiscard]] bool was_released(Key key) const {
 			auto index = static_cast<usize>(key);
 			return !state.cur.get(index) && state.prev.get(index);
 		}
@@ -82,11 +82,11 @@ namespace edge {
 			return state.cur.get(static_cast<usize>(Key::LeftSuper)) || state.cur.get(static_cast<usize>(Key::RightSuper));
 		}
 
-		void update() noexcept {
+		void update() {
 			state.prev = state.cur;
 		}
 
-		void clear() noexcept {
+		void clear() {
 			state.cur.clear_all();
 			state.prev.clear_all();
 		}
@@ -118,43 +118,43 @@ namespace edge {
 	struct MouseDevice {
 		MouseState state = {};
 
-		void set_btn(MouseBtn btn, bool pressed) noexcept {
+		void set_btn(MouseBtn btn, bool pressed) {
 			state.cur_btn.put(static_cast<usize>(btn), pressed);
 		}
 
-		void set_axis(MouseAxis axis, glm::vec3 value) noexcept {
+		void set_axis(MouseAxis axis, glm::vec3 value) {
 			state.cur_axes[static_cast<usize>(axis)] = value;
 		}
 
-		[[nodiscard]] glm::vec3 get_axis(MouseAxis axis) const noexcept {
+		[[nodiscard]] glm::vec3 get_axis(MouseAxis axis) const {
 			return state.cur_axes[static_cast<usize>(axis)];
 		}
 
-		[[nodiscard]] bool is_down(MouseBtn btn) const noexcept {
+		[[nodiscard]] bool is_down(MouseBtn btn) const {
 			return state.cur_btn.get(static_cast<usize>(btn));
 		}
 
-		[[nodiscard]] bool is_up(MouseBtn btn) const noexcept {
+		[[nodiscard]] bool is_up(MouseBtn btn) const {
 			return !state.cur_btn.get(static_cast<usize>(btn));
 		}
 
-		[[nodiscard]] bool was_pressed(MouseBtn btn) const noexcept {
+		[[nodiscard]] bool was_pressed(MouseBtn btn) const {
 			auto index = static_cast<usize>(btn);
 			return state.cur_btn.get(index) && !state.prev_btn.get(index);
 		}
 
-		[[nodiscard]] bool was_released(MouseBtn btn) const noexcept {
+		[[nodiscard]] bool was_released(MouseBtn btn) const {
 			auto index = static_cast<usize>(btn);
 			return !state.cur_btn.get(index) && state.prev_btn.get(index);
 		}
 
-		void update() noexcept {
+		void update() {
 			state.prev_btn = state.cur_btn;
 			memcpy(state.prev_axes, state.cur_axes, sizeof(state.cur_axes));
 			set_axis(MouseAxis::Scroll, {});
 		}
 
-		void clear() noexcept {
+		void clear() {
 			state.cur_btn.clear_all();
 			state.prev_btn.clear_all();
 
@@ -212,34 +212,34 @@ namespace edge {
 			state.cur_axes[static_cast<usize>(axis)] = value;
 		}
 
-		[[nodiscard]] bool is_down(PadBtn btn) const noexcept {
+		[[nodiscard]] bool is_down(PadBtn btn) const {
 			return state.cur_btn.get(static_cast<usize>(btn));
 		}
 
-		[[nodiscard]] bool is_up(PadBtn btn) const noexcept {
+		[[nodiscard]] bool is_up(PadBtn btn) const {
 			return !state.cur_btn.get(static_cast<usize>(btn));
 		}
 
-		[[nodiscard]] bool was_pressed(PadBtn btn) const noexcept {
+		[[nodiscard]] bool was_pressed(PadBtn btn) const {
 			auto index = static_cast<usize>(btn);
 			return state.cur_btn.get(index) && !state.prev_btn.get(index);
 		}
 
-		[[nodiscard]] bool was_released(PadBtn btn) const noexcept {
+		[[nodiscard]] bool was_released(PadBtn btn) const {
 			auto index = static_cast<usize>(btn);
 			return !state.cur_btn.get(index) && state.prev_btn.get(index);
 		}
 
-		[[nodiscard]] glm::vec3 get_axis(PadAxis axis) const noexcept {
+		[[nodiscard]] glm::vec3 get_axis(PadAxis axis) const {
 			return state.cur_axes[static_cast<usize>(axis)];
 		}
 
-		void update() noexcept {
+		void update() {
 			state.prev_btn = state.cur_btn;
 			memcpy(state.prev_axes, state.cur_axes, sizeof(state.cur_axes));
 		}
 
-		void clear() noexcept {
+		void clear() {
 			state.cur_btn.clear_all();
 			state.prev_btn.clear_all();
 
@@ -274,16 +274,16 @@ namespace edge {
 
 		bool active = false;
 
-		[[nodiscard]] f32 get_delta_x() const noexcept { return x - x_prev; }
-		[[nodiscard]] f32 get_delta_y() const noexcept { return y - y_prev; }
+		[[nodiscard]] f32 get_delta_x() const { return x - x_prev; }
+		[[nodiscard]] f32 get_delta_y() const { return y - y_prev; }
 
-		[[nodiscard]] f32 get_distance_from_start() const noexcept {
+		[[nodiscard]] f32 get_distance_from_start() const {
 			f32 dx = x - x_start;
 			f32 dy = y - y_start;
 			return sqrt(dx * dx + dy * dy);
 		}
 
-		[[nodiscard]] f32 get_duration() const noexcept {
+		[[nodiscard]] f32 get_duration() const {
 			return static_cast<f32>(last_update - timestamp);
 		}
 	};
@@ -292,7 +292,7 @@ namespace edge {
 		TouchPoint touches[MAX_TOUCHES] = {};
 		bool enabled = true;
 
-		TouchPoint* find_or_create(TouchId id) noexcept {
+		TouchPoint* find_or_create(TouchId id) {
 			for (auto & touch : touches) {
 				if (touch.active && touch.id == id) {
 					return &touch;
@@ -310,7 +310,7 @@ namespace edge {
 			return nullptr;
 		}
 
-        [[nodiscard]] TouchPoint* find(TouchId id) noexcept {
+        [[nodiscard]] TouchPoint* find(TouchId id) {
 			for (auto & touch : touches) {
 				if (touch.active && touch.id == id) {
 					return &touch;
@@ -319,7 +319,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		[[nodiscard]] const TouchPoint* find(TouchId id) const noexcept {
+		[[nodiscard]] const TouchPoint* find(TouchId id) const {
 			for (const auto & touch : touches) {
 				if (touch.active && touch.id == id) {
 					return &touch;
@@ -328,7 +328,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		[[nodiscard]] usize get_count() const noexcept {
+		[[nodiscard]] usize get_count() const {
 			usize count = 0;
 			for (const auto & touch : touches) {
 				if (touch.active) {
@@ -338,7 +338,7 @@ namespace edge {
 			return count;
 		}
 
-		void update() noexcept {
+		void update() {
 			for (auto & touch : touches) {
 					if (touch.active && touch.phase != TouchPhase::Ended &&
 					touch.phase != TouchPhase::Cancelled) {
@@ -357,7 +357,7 @@ namespace edge {
 			}
 		}
 
-		void clear() noexcept {
+		void clear() {
 			for (auto & touch : touches) {
                 touch.active = false;
                 touch.id = INVALID_TOUCH_ID;
@@ -369,7 +369,7 @@ namespace edge {
 		TouchState state;
 
 		void update_touch(TouchId id, TouchPhase phase, f32 x, f32 y,
-			f32 pressure = 1.0f, f32 radius = 0.0f, f64 timestamp = 0.0) noexcept {
+			f32 pressure = 1.0f, f32 radius = 0.0f, f64 timestamp = 0.0) {
 
 			TouchPoint* touch = state.find_or_create(id);
 			if (!touch) {
@@ -393,20 +393,20 @@ namespace edge {
 			}
 		}
 
-		[[nodiscard]] const TouchPoint* get_touch(TouchId id) const noexcept {
+		[[nodiscard]] const TouchPoint* get_touch(TouchId id) const {
 			return state.find(id);
 		}
 
-		[[nodiscard]] const TouchPoint* get_touch_at(usize index) const noexcept {
+		[[nodiscard]] const TouchPoint* get_touch_at(usize index) const {
 			if (index >= MAX_TOUCHES) return nullptr;
 			return state.touches[index].active ? &state.touches[index] : nullptr;
 		}
 
-		[[nodiscard]] usize get_touch_count() const noexcept {
+		[[nodiscard]] usize get_touch_count() const {
 			return state.get_count();
 		}
 
-		void update() noexcept {
+		void update() {
 			if (state.enabled) {
 				state.update();
 			}
@@ -422,12 +422,12 @@ namespace edge {
 		char32_t buffer[32] = {};
 		usize position = 0;
 
-		void add_character(char32_t codepoint) noexcept {
+		void add_character(char32_t codepoint) {
 			assert(position < 32);
 			buffer[position++] = codepoint;
 		}
 
-		void clear() noexcept {
+		void clear() {
 			buffer[0] = U'\0';
 			position = 0;
 		}
@@ -451,9 +451,9 @@ namespace edge {
 		struct IListener {
             virtual ~IListener() = default;
 
-			virtual void on_bool_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, bool cur, bool prev) noexcept = 0;
-			virtual void on_axis_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, glm::vec3 cur, glm::vec3 prev) noexcept = 0;
-			virtual void on_character(NotNull<const InputSystem*> input_system, char32_t codepoint) noexcept = 0;
+			virtual void on_bool_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, bool cur, bool prev) = 0;
+			virtual void on_axis_change(NotNull<const InputSystem*> input_system, DeviceType device, usize button, glm::vec3 cur, glm::vec3 prev) = 0;
+			virtual void on_character(NotNull<const InputSystem*> input_system, char32_t codepoint) = 0;
 		};
 
 		Array<std::pair<u64, IListener*>> listeners = {};
@@ -465,17 +465,17 @@ namespace edge {
 		TouchDevice touch = {};
 		InputTextDevice input_text = {};
 
-		bool create(NotNull<const Allocator*> alloc) noexcept;
-		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		bool create(NotNull<const Allocator*> alloc);
+		void destroy(NotNull<const Allocator*> alloc);
 
-		u64 add_listener(NotNull<const Allocator*> alloc, IListener* listener) noexcept;
-		void remove_listener(NotNull<const Allocator*> alloc, u64 listener_id) noexcept;
+		u64 add_listener(NotNull<const Allocator*> alloc, IListener* listener);
+		void remove_listener(NotNull<const Allocator*> alloc, u64 listener_id);
 
-		void update(f64 current_time = 0.0) noexcept;
-		void clear() noexcept;
+		void update(f64 current_time = 0.0);
+		void clear();
 
-		void dispatch(DeviceType type, usize button, bool cur, bool prev) const noexcept;
-		void dispatch(DeviceType type, usize button, glm::vec3 cur, glm::vec3 prev) const noexcept;
+		void dispatch(DeviceType type, usize button, bool cur, bool prev) const;
+		void dispatch(DeviceType type, usize button, glm::vec3 cur, glm::vec3 prev) const;
 
 		KeyboardDevice* get_keyboard() { return &keyboard; }
 		[[nodiscard]] const KeyboardDevice* get_keyboard() const { return &keyboard; }

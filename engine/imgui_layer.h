@@ -21,11 +21,11 @@ namespace edge {
 
 		u64 input_listener_id = 0;
 
-		bool create(ImGuiLayerInitInfo init_info) noexcept;
-		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		bool create(ImGuiLayerInitInfo init_info);
+		void destroy(NotNull<const Allocator*> alloc);
 
-		void on_frame_begin(f32 dt) noexcept;
-		void on_frame_end() noexcept;
+		void on_frame_begin(f32 dt);
+		void on_frame_end();
 	};
 
 	ImGuiLayer* imgui_layer_create(ImGuiLayerInitInfo init_info);

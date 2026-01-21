@@ -203,7 +203,7 @@ namespace edge {
 	}
 
 	struct DesktopRuntime final : IRuntime {
-		bool init(const RuntimeInitInfo& init_info) noexcept override {
+		bool init(const RuntimeInitInfo& init_info) override {
 			layout = init_info.layout;
 			input_system = init_info.input_system;
 
@@ -355,7 +355,7 @@ namespace edge {
 			return true;
 		}
 
-		void deinit(NotNull<const Allocator*> alloc) noexcept override {
+		void deinit(NotNull<const Allocator*> alloc) override {
 			glfwSetWindowShouldClose(wnd_handle, GLFW_TRUE);
 			glfwDestroyWindow(wnd_handle);
 
@@ -363,11 +363,11 @@ namespace edge {
 			glfwSetErrorCallback(nullptr);
 		}
 
-		bool requested_close() const noexcept override {
+		bool requested_close() const override {
 			return glfwWindowShouldClose(wnd_handle) == GLFW_TRUE;
 		}
 
-		void process_events() noexcept override {
+		void process_events() override {
 			glfwPollEvents();
 
 			for (i32 jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid) {
@@ -429,7 +429,7 @@ namespace edge {
 			}
 		}
 
-		void get_surface(void* surface_info) const noexcept override {
+		void get_surface(void* surface_info) const override {
 			if (!surface_info) {
 				return;
 			}
@@ -445,21 +445,21 @@ namespace edge {
 #endif
 		}
 
-		void get_surface_extent(i32& width, i32& height) const noexcept override {
+		void get_surface_extent(i32& width, i32& height) const override {
 			glfwGetWindowSize(wnd_handle, &width, &height);
 		}
 
-		f32 get_surface_scale_factor() const noexcept override {
+		f32 get_surface_scale_factor() const override {
 			f32 xscale, yscale;
 			glfwGetWindowContentScale(wnd_handle, &xscale, &yscale);
 			return xscale;
 		}
 
-		bool is_focused() const noexcept override {
+		bool is_focused() const override {
 			return focused;
 		}
 
-		void set_title(const char* title) noexcept override {
+		void set_title(const char* title) override {
 			glfwSetWindowTitle(wnd_handle, title);
 		}
 
@@ -470,7 +470,7 @@ namespace edge {
 		InputSystem* input_system = nullptr;
 	};
 
-	IRuntime* create_runtime(NotNull<const Allocator*> alloc) noexcept {
+	IRuntime* create_runtime(NotNull<const Allocator*> alloc) {
 		return alloc->allocate<DesktopRuntime>();
 	}
 }

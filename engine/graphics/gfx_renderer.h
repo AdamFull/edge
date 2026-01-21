@@ -61,13 +61,13 @@ namespace edge::gfx {
 
 		Array<Resource> free_resources = {};
 
-		bool create(NotNull<const Allocator*> alloc, CmdPool cmd_pool) noexcept;
-		void destroy(NotNull<const Allocator*> alloc, NotNull<Renderer*> renderer) noexcept;
-		void release_resources(NotNull<Renderer*> renderer) noexcept;
+		bool create(NotNull<const Allocator*> alloc, CmdPool cmd_pool);
+		void destroy(NotNull<const Allocator*> alloc, NotNull<Renderer*> renderer);
+		void release_resources(NotNull<Renderer*> renderer);
 
-		bool begin(NotNull<Renderer*> renderer) noexcept;
+		bool begin(NotNull<Renderer*> renderer);
 
-		BufferView try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment) noexcept;
+		BufferView try_allocate_staging_memory(NotNull<const Allocator*> alloc, VkDeviceSize required_memory, VkDeviceSize required_alignment);
 	};
 
 	struct BufferUpdateInfo {
@@ -76,7 +76,7 @@ namespace edge::gfx {
 		Array<VkBufferCopy2KHR> copy_regions = {};
 		VkDeviceSize offset = 0;
 
-		bool write(NotNull<const Allocator*> alloc, Span<const u8> data, VkDeviceSize dst_offset) noexcept;
+		bool write(NotNull<const Allocator*> alloc, Span<const u8> data, VkDeviceSize dst_offset);
 	};
 
 	struct ImageSubresourceData {
@@ -94,7 +94,7 @@ namespace edge::gfx {
 		Array<VkBufferImageCopy2KHR> copy_regions = {};
 		VkDeviceSize offset = 0;
 
-		bool write(NotNull<const Allocator*> alloc, const ImageSubresourceData& subresource_info) noexcept;
+		bool write(NotNull<const Allocator*> alloc, const ImageSubresourceData& subresource_info);
 	};
 
 	struct TextureUpload {
@@ -144,23 +144,23 @@ namespace edge::gfx {
 
 		Array<TextureUpload> texture_uploads = {};
 
-		bool create(RendererCreateInfo create_info) noexcept;
-		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		bool create(RendererCreateInfo create_info);
+		void destroy(NotNull<const Allocator*> alloc);
 
-		Handle add_resource() noexcept;
-		bool setup_resource(NotNull<const Allocator*> alloc, Handle handle, Image image) noexcept; // TODO: Maybe attach_resource sounds better
-		bool setup_resource(Handle handle, Buffer buffer) noexcept; // TODO: Maybe attach_resource sounds better
-		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Image image) noexcept;
-		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Buffer buffer) noexcept;
-		Resource* get_resource(Handle handle) noexcept;
-		void free_resource(NotNull<const Allocator*> alloc, Handle handle) noexcept;
+		Handle add_resource();
+		bool setup_resource(NotNull<const Allocator*> alloc, Handle handle, Image image); // TODO: Maybe attach_resource sounds better
+		bool setup_resource(Handle handle, Buffer buffer); // TODO: Maybe attach_resource sounds better
+		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Image image);
+		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Buffer buffer);
+		Resource* get_resource(Handle handle);
+		void free_resource(NotNull<const Allocator*> alloc, Handle handle);
 
-		Handle add_image_from_disk(NotNull<const Allocator*> alloc, const char* path) noexcept;
+		Handle add_image_from_disk(NotNull<const Allocator*> alloc, const char* path);
 
-		bool frame_begin() noexcept;
-		bool frame_end(NotNull<const Allocator*> alloc) noexcept;
+		bool frame_begin();
+		bool frame_end(NotNull<const Allocator*> alloc);
 
-		void image_update_end(NotNull<const Allocator*> alloc, ImageUpdateInfo& update_info) noexcept;
+		void image_update_end(NotNull<const Allocator*> alloc, ImageUpdateInfo& update_info);
 		void buffer_update_end(NotNull<const Allocator*> alloc, BufferUpdateInfo& update_info);
 
 		template<typename T>

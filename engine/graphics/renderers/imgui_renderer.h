@@ -34,14 +34,14 @@ namespace edge::gfx {
 		u64 index_buffer_capacity = 0;
 		bool index_need_to_grow = true;
 
-		bool create(ImGuiRendererCreateInfo create_info) noexcept;
-		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		bool create(ImGuiRendererCreateInfo create_info);
+		void destroy(NotNull<const Allocator*> alloc);
 
-		void execute(NotNull<const Allocator*> alloc) noexcept;
+		void execute(NotNull<const Allocator*> alloc);
 	private:
-		void update_buffers(NotNull<const Allocator*> alloc) noexcept;
-		void update_texture(NotNull<const Allocator*> alloc, NotNull<ImTextureData*> tex) noexcept;
-		void update_geometry(NotNull<const Allocator*> alloc, NotNull<ImDrawData*> draw_data) noexcept;
+		void update_buffers(NotNull<const Allocator*> alloc);
+		void update_texture(NotNull<const Allocator*> alloc, NotNull<ImTextureData*> tex);
+		void update_geometry(NotNull<const Allocator*> alloc, NotNull<ImDrawData*> draw_data);
 	};
 }
 

@@ -26,23 +26,23 @@ namespace edge {
 		EventListenerFn listener_fn = {};
 
 		template<typename F>
-		bool create(NotNull<const Allocator*> alloc, F&& fn) noexcept {
+		bool create(NotNull<const Allocator*> alloc, F&& fn) {
 			listener_fn = callable_create_from_lambda(alloc, std::forward<F>(fn));
 			return listener_fn.is_valid();
 		}
 
-		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		void destroy(NotNull<const Allocator*> alloc);
 	};
 
 	struct EventDispatcher {
 		Array<EventListener> listeners = {};
 		u64 next_listener_id = 1;
 
-		bool create(NotNull<const Allocator*> alloc) noexcept;
-		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		bool create(NotNull<const Allocator*> alloc);
+		void destroy(NotNull<const Allocator*> alloc);
 
 		template<typename F>
-		u64 add_listener(NotNull<const Allocator*> alloc, u64 categories, F&& fn) noexcept {
+		u64 add_listener(NotNull<const Allocator*> alloc, u64 categories, F&& fn) {
 			EventListener listener = {};
 			if (!listener.create(alloc, std::forward<F>(fn))) {
 				return 0;
@@ -58,8 +58,8 @@ namespace edge {
 			return listener.id;
 		}
 
-		void remove_listener(NotNull<const Allocator*> alloc, u64 listener_id) noexcept;
-		void dispatch(EventHeader* event) const noexcept;
+		void remove_listener(NotNull<const Allocator*> alloc, u64 listener_id);
+		void dispatch(EventHeader* event) const;
 	};
 }
 

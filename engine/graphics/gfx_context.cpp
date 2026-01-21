@@ -991,7 +991,7 @@ namespace edge::gfx {
 		volkFinalize();
 	}
 
-	void context_set_object_name(const char* name, VkObjectType type, u64 handle) noexcept {
+	void context_set_object_name(const char* name, VkObjectType type, u64 handle) {
 		VkDebugUtilsObjectNameInfoEXT name_info = { 
 			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
 			.objectType = type,
@@ -1090,7 +1090,7 @@ namespace edge::gfx {
 		return score;
 	}
 
-	bool Queue::request(QueueRequest create_info) noexcept {
+	bool Queue::request(QueueRequest create_info) {
 		queue_index = 0; // TODO: Select specific index
 
 		i32 best_score = -1;
@@ -1110,11 +1110,11 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Queue::release() noexcept {
+	void Queue::release() {
 		// TODO: release indices
 	}
 
-	VkQueue Queue::get_handle() noexcept {
+	VkQueue Queue::get_handle() {
 		if (family_index == -1) {
 			return VK_NULL_HANDLE;
 		}
@@ -1125,7 +1125,7 @@ namespace edge::gfx {
 		return handle;
 	}
 
-	bool Queue::submit(Fence fence, const VkSubmitInfo2KHR* submit_info) noexcept {
+	bool Queue::submit(Fence fence, const VkSubmitInfo2KHR* submit_info) {
 		if (!submit_info) {
 			return false;
 		}
@@ -1138,7 +1138,7 @@ namespace edge::gfx {
 		return vkQueueSubmit2KHR(queue_, 1, submit_info, fence ? fence.handle : VK_NULL_HANDLE) == VK_SUCCESS;
 	}
 
-	bool Queue::present(const VkPresentInfoKHR* present_info) noexcept {
+	bool Queue::present(const VkPresentInfoKHR* present_info) {
 		if (!present_info) {
 			return false;
 		}
@@ -1151,7 +1151,7 @@ namespace edge::gfx {
 		return vkQueuePresentKHR(queue_, present_info) == VK_SUCCESS;
 	}
 
-	void Queue::wait_idle() noexcept {
+	void Queue::wait_idle() {
 		if (family_index == -1) {
 			return;
 		}
@@ -1164,7 +1164,7 @@ namespace edge::gfx {
 		vkQueueWaitIdle(queue_);
 	}
 
-	bool CmdPool::create(Queue queue) noexcept {
+	bool CmdPool::create(Queue queue) {
 		if (!queue) {
 			return false;
 		}
@@ -1183,7 +1183,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void CmdPool::destroy() noexcept {
+	void CmdPool::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1191,7 +1191,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool CmdBuf::create(CmdPool cmd_pool) noexcept {
+	bool CmdBuf::create(CmdPool cmd_pool) {
 		if (!cmd_pool) {
 			return false;
 		}
@@ -1212,7 +1212,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void CmdBuf::destroy() noexcept {
+	void CmdBuf::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1220,7 +1220,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool CmdBuf::begin() noexcept {
+	bool CmdBuf::begin() {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		const VkCommandBufferBeginInfo begin_info = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
@@ -1230,7 +1230,7 @@ namespace edge::gfx {
 		return vkBeginCommandBuffer(handle, &begin_info) == VK_SUCCESS;
 	}
 
-	bool CmdBuf::end() noexcept {
+	bool CmdBuf::end() {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		return vkEndCommandBuffer(handle) == VK_SUCCESS;
 	}
@@ -1242,7 +1242,7 @@ namespace edge::gfx {
 		out_color[3] = (color & 0xFF) / 255.0f;
 	}
 
-	void CmdBuf::begin_marker(const char* name, u32 color) noexcept {
+	void CmdBuf::begin_marker(const char* name, u32 color) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
 		VkDebugMarkerMarkerInfoEXT marker_info = {
@@ -1254,34 +1254,34 @@ namespace edge::gfx {
 		vkCmdDebugMarkerBeginEXT(handle, &marker_info);
 	}
 
-	void CmdBuf::end_marker() noexcept {
+	void CmdBuf::end_marker() {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		vkCmdDebugMarkerEndEXT(handle);
 	}
 
-	bool CmdBuf::reset() noexcept {
+	bool CmdBuf::reset() {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		return vkResetCommandBuffer(handle, VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) == VK_SUCCESS;
 	}
 
-	void CmdBuf::reset_query(QueryPool query, u32 first_query, u32 query_count) noexcept {
+	void CmdBuf::reset_query(QueryPool query, u32 first_query, u32 query_count) {
 
 	}
 
-	void CmdBuf::write_timestamp(QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index) noexcept {
+	void CmdBuf::write_timestamp(QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(query && "QueryPool handle is null");
 		vkCmdWriteTimestamp2KHR(handle, stage, query.handle, query_index);
 	}
 
-	void CmdBuf::bind_descriptor(PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point) noexcept {
+	void CmdBuf::bind_descriptor(PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(layout && "PipelineLayout handle is null");
 		assert(descriptor && "DescriptorSet handle is null");
 		vkCmdBindDescriptorSets(handle, bind_point, layout.handle, 0u, 1u, &descriptor.handle, 0u, NULL);
 	}
 
-	void CmdBuf::pipeline_barrier(const PipelineBarrierBuilder& builder) noexcept {
+	void CmdBuf::pipeline_barrier(const PipelineBarrierBuilder& builder) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
 		const VkDependencyInfoKHR dependency_info = {
@@ -1297,34 +1297,34 @@ namespace edge::gfx {
 		vkCmdPipelineBarrier2KHR(handle, &dependency_info);
 	}
 
-	void CmdBuf::begin_rendering(const VkRenderingInfoKHR& rendering_info) noexcept {
+	void CmdBuf::begin_rendering(const VkRenderingInfoKHR& rendering_info) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		vkCmdBeginRenderingKHR(handle, &rendering_info);
 	}
 
-	void CmdBuf::end_rendering() noexcept {
+	void CmdBuf::end_rendering() {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		vkCmdEndRenderingKHR(handle);
 	}
 
-	void CmdBuf::bind_index_buffer(Buffer buffer, VkIndexType type) noexcept {
+	void CmdBuf::bind_index_buffer(Buffer buffer, VkIndexType type) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(buffer && "Buffer handle is null");
 		vkCmdBindIndexBuffer(handle, buffer.handle, 0, type);
 	}
 
-	void CmdBuf::bind_pipeline(Pipeline pipeline) noexcept {
+	void CmdBuf::bind_pipeline(Pipeline pipeline) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(pipeline && "Pipeline handle is null");
 		vkCmdBindPipeline(handle, pipeline.bind_point, pipeline.handle);
 	}
 
-	void CmdBuf::set_viewport(VkViewport viewport) noexcept {
+	void CmdBuf::set_viewport(VkViewport viewport) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		vkCmdSetViewport(handle, 0u, 1u, &viewport);
 	}
 
-	void CmdBuf::set_viewport(f32 x, f32 y, f32 width, f32 height, f32 depth_min, f32 depth_max) noexcept {
+	void CmdBuf::set_viewport(f32 x, f32 y, f32 width, f32 height, f32 depth_min, f32 depth_max) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
 		VkViewport viewport = {
@@ -1338,12 +1338,12 @@ namespace edge::gfx {
 		vkCmdSetViewport(handle, 0u, 1u, &viewport);
 	}
 
-	void CmdBuf::set_scissor(VkRect2D rect) noexcept {
+	void CmdBuf::set_scissor(VkRect2D rect) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		vkCmdSetScissor(handle, 0u, 1u, &rect);
 	}
 
-	void CmdBuf::set_scissor(i32 off_x, i32 off_y, u32 width, u32 height) noexcept {
+	void CmdBuf::set_scissor(i32 off_x, i32 off_y, u32 width, u32 height) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		VkRect2D rect = {
 			.offset = {.x = off_x, .y = off_y },
@@ -1352,13 +1352,13 @@ namespace edge::gfx {
 		vkCmdSetScissor(handle, 0u, 1u, &rect);
 	}
 
-	void CmdBuf::push_constants(PipelineLayout layout, VkShaderStageFlags flags, u32 offset, u32 size, const void* data) noexcept {
+	void CmdBuf::push_constants(PipelineLayout layout, VkShaderStageFlags flags, u32 offset, u32 size, const void* data) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(layout && "PipelineLayout handle is null");
 		vkCmdPushConstants(handle, layout.handle, flags, offset, size, data);
 	}
 
-	void CmdBuf::draw_indexed(u32 idx_cnt, u32 inst_cnt, u32 first_idx, i32 vtx_offset, u32 first_inst) noexcept {
+	void CmdBuf::draw_indexed(u32 idx_cnt, u32 inst_cnt, u32 first_idx, i32 vtx_offset, u32 first_inst) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		vkCmdDrawIndexed(handle, idx_cnt, inst_cnt, first_idx, vtx_offset, first_inst);
 	}
@@ -1367,7 +1367,7 @@ namespace edge::gfx {
 		vkUpdateDescriptorSets(g_ctx.dev, count, writes, 0u, NULL);
 	}
 
-	bool QueryPool::create(VkQueryType type, u32 count) noexcept {
+	bool QueryPool::create(VkQueryType type, u32 count) {
 		const VkQueryPoolCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
 			.queryType = type,
@@ -1386,7 +1386,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void QueryPool::destroy() noexcept {
+	void QueryPool::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1394,12 +1394,12 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	void QueryPool::reset() noexcept {
+	void QueryPool::reset() {
 		assert(handle != VK_NULL_HANDLE && "QueryPool handle is null");
 		vkResetQueryPoolEXT(g_ctx.dev, handle, 0, max_query);
 	}
 
-	bool QueryPool::get_data(u32 first_query, void* out_data) noexcept {
+	bool QueryPool::get_data(u32 first_query, void* out_data) {
 		assert(handle != VK_NULL_HANDLE && "QueryPool handle is null");
 
 		VkResult result = VK_SUCCESS;
@@ -1420,13 +1420,13 @@ namespace edge::gfx {
 		return result == VK_SUCCESS;
 	}
 
-	void DescriptorLayoutBuilder::add_binding(VkDescriptorSetLayoutBinding binding, VkDescriptorBindingFlags flags) noexcept {
+	void DescriptorLayoutBuilder::add_binding(VkDescriptorSetLayoutBinding binding, VkDescriptorBindingFlags flags) {
 		u32 index = binding_count++;
 		bindings[index] = binding;
 		binding_flags[index] = flags;
 	}
 
-	bool DescriptorSetLayout::create(const DescriptorLayoutBuilder& builder) noexcept {
+	bool DescriptorSetLayout::create(const DescriptorLayoutBuilder& builder) {
 		const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT binding_flags_create_info = {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO,
 			.bindingCount = builder.binding_count,
@@ -1454,7 +1454,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void DescriptorSetLayout::destroy() noexcept {
+	void DescriptorSetLayout::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1462,7 +1462,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool DescriptorPool::create(u32* descriptor_sizes) noexcept {
+	bool DescriptorPool::create(u32* descriptor_sizes) {
 		if (!descriptor_sizes) {
 			return false;
 		}
@@ -1492,7 +1492,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void DescriptorPool::destroy() noexcept {
+	void DescriptorPool::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1500,7 +1500,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool DescriptorSet::create(DescriptorPool pool, const DescriptorSetLayout* layouts) noexcept {
+	bool DescriptorSet::create(DescriptorPool pool, const DescriptorSetLayout* layouts) {
 		if (!pool || !layouts) {
 			return false;
 		}
@@ -1521,7 +1521,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void DescriptorSet::destroy() noexcept {
+	void DescriptorSet::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1529,7 +1529,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	void PipelineLayoutBuilder::add_range(VkShaderStageFlags stage_flags, u32 offset, u32 size) noexcept {
+	void PipelineLayoutBuilder::add_range(VkShaderStageFlags stage_flags, u32 offset, u32 size) {
 		VkPushConstantRange constant_range = {
 			.stageFlags = stage_flags,
 			.offset = offset,
@@ -1539,7 +1539,7 @@ namespace edge::gfx {
 		constant_ranges[constant_range_count++] = constant_range;
 	}
 
-	void PipelineLayoutBuilder::add_layout(DescriptorSetLayout layout) noexcept {
+	void PipelineLayoutBuilder::add_layout(DescriptorSetLayout layout) {
 		if (!layout) {
 			return;
 		}
@@ -1547,7 +1547,7 @@ namespace edge::gfx {
 		descriptor_layouts[descriptor_layout_count++] = layout.handle;
 	}
 
-	bool PipelineLayout::create(const PipelineLayoutBuilder& builder) noexcept {
+	bool PipelineLayout::create(const PipelineLayoutBuilder& builder) {
 		const VkPipelineLayoutCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
 			.setLayoutCount = builder.descriptor_layout_count,
@@ -1564,7 +1564,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void PipelineLayout::destroy() noexcept {
+	void PipelineLayout::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1572,7 +1572,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool PipelineCache::create(const u8* data, usize data_size) noexcept {
+	bool PipelineCache::create(const u8* data, usize data_size) {
 		const VkPipelineCacheCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
 			.initialDataSize = data_size,
@@ -1582,7 +1582,7 @@ namespace edge::gfx {
 		return vkCreatePipelineCache(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle) == VK_SUCCESS;
 	}
 
-	void PipelineCache::destroy() noexcept {
+	void PipelineCache::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1590,7 +1590,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool ShaderModule::create(const u32* code, usize size) noexcept {
+	bool ShaderModule::create(const u32* code, usize size) {
 		const VkShaderModuleCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
 			.codeSize = size,
@@ -1600,7 +1600,7 @@ namespace edge::gfx {
 		return vkCreateShaderModule(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle) == VK_SUCCESS;
 	}
 
-	void ShaderModule::destroy() noexcept {
+	void ShaderModule::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1608,7 +1608,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool Pipeline::create(const VkGraphicsPipelineCreateInfo* create_info) noexcept {
+	bool Pipeline::create(const VkGraphicsPipelineCreateInfo* create_info) {
 		if (!create_info) {
 			return false;
 		}
@@ -1622,7 +1622,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool Pipeline::create(ComputePipelineCreateInfo create_info) noexcept {
+	bool Pipeline::create(ComputePipelineCreateInfo create_info) {
 		const VkComputePipelineCreateInfo pipeline_create_info = {
 			.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
 			.stage = {
@@ -1642,7 +1642,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Pipeline::destroy() noexcept {
+	void Pipeline::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1650,7 +1650,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool Swapchain::create(SwapchainCreateInfo create_info) noexcept {
+	bool Swapchain::create(SwapchainCreateInfo create_info) {
 		VkPresentModeKHR present_mode = create_info.vsync_enable ? VK_PRESENT_MODE_FIFO_KHR : VK_PRESENT_MODE_IMMEDIATE_KHR;
 		VkPresentModeKHR present_mode_priority_list[3] = {
 	#ifdef VK_USE_PLATFORM_ANDROID_KHR
@@ -1711,7 +1711,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Swapchain::destroy() noexcept {
+	void Swapchain::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1719,7 +1719,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool Swapchain::update() noexcept {
+	bool Swapchain::update() {
 		assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 
 		VkSurfaceCapabilitiesKHR surf_caps;
@@ -1760,7 +1760,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool Swapchain::is_outdated() noexcept {
+	bool Swapchain::is_outdated() {
 		assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 
 		VkSurfaceCapabilitiesKHR surf_caps;
@@ -1776,7 +1776,7 @@ namespace edge::gfx {
 		return extent.width != surf_caps.currentExtent.width || extent.height != surf_caps.currentExtent.height;
 	}
 
-	bool Swapchain::get_images(Image* image_out) noexcept {
+	bool Swapchain::get_images(Image* image_out) {
 		assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 
 		VkImage images[GFX_SWAPCHAIN_IMAGES_MAX];
@@ -1804,14 +1804,14 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool Swapchain::acquire_next_image(u64 timeout, Semaphore semaphore, u32* next_image_idx) noexcept {
+	bool Swapchain::acquire_next_image(u64 timeout, Semaphore semaphore, u32* next_image_idx) {
 		assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 		assert(semaphore && "Semaphore handle is null");
 		assert(next_image_idx && "next_image_ids is null");
 		return vkAcquireNextImageKHR(g_ctx.dev, handle, timeout, semaphore.handle, VK_NULL_HANDLE, next_image_idx) == VK_SUCCESS;
 	}
 
-	void DeviceMemory::setup() noexcept {
+	void DeviceMemory::setup() {
 		VkMemoryPropertyFlags memory_properties;
 		vmaGetAllocationMemoryProperties(g_ctx.vma, handle, &memory_properties);
 
@@ -1819,11 +1819,11 @@ namespace edge::gfx {
 		persistent = mapped != nullptr;
 	}
 
-	bool DeviceMemory::is_mapped() noexcept {
+	bool DeviceMemory::is_mapped() {
 		return mapped != nullptr;
 	}
 
-	void* DeviceMemory::map() noexcept {
+	void* DeviceMemory::map() {
 		if (!persistent && !mapped) {
 			void* mappedMemory;
 			VkResult result = vmaMapMemory(g_ctx.vma, handle, &mappedMemory);
@@ -1836,21 +1836,21 @@ namespace edge::gfx {
 		return mapped;
 	}
 
-	void DeviceMemory::unmap() noexcept {
+	void DeviceMemory::unmap() {
 		if (!persistent && mapped != nullptr) {
 			vmaUnmapMemory(g_ctx.vma, handle);
 			mapped = nullptr;
 		}
 	}
 
-	void DeviceMemory::flush(VkDeviceSize offset, VkDeviceSize size) noexcept {
+	void DeviceMemory::flush(VkDeviceSize offset, VkDeviceSize size) {
 		if (!coherent) {
 			VkResult result = vmaFlushAllocation(g_ctx.vma, handle, offset, size);
 			// TODO: fatal error
 		}
 	}
 
-	void DeviceMemory::update(const void* data, VkDeviceSize size, VkDeviceSize offset) noexcept {
+	void DeviceMemory::update(const void* data, VkDeviceSize size, VkDeviceSize offset) {
 		if (persistent) {
 			memcpy((i8*)mapped + offset, data, size);
 			flush(offset, size);
@@ -1865,7 +1865,7 @@ namespace edge::gfx {
 		}
 	}
 
-	bool Image::create(ImageCreateInfo create_info) noexcept {
+	bool Image::create(ImageCreateInfo create_info) {
 		u32 max_dimension = (create_info.extent.width > create_info.extent.height) ? create_info.extent.width : create_info.extent.height;
 		u32 max_mip_levels = compute_max_mip_level(max_dimension);
 
@@ -1922,7 +1922,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Image::destroy() noexcept {
+	void Image::destroy() {
 		if (handle == VK_NULL_HANDLE || memory.handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1931,7 +1931,7 @@ namespace edge::gfx {
 		memory.handle = VK_NULL_HANDLE;
 	}
 
-	bool ImageView::create(Image image, VkImageViewType type, VkImageSubresourceRange subresource_range) noexcept {
+	bool ImageView::create(Image image, VkImageViewType type, VkImageSubresourceRange subresource_range) {
 		assert(image && "Image handle is null");
 
 		const VkImageViewCreateInfo create_info = {
@@ -1958,7 +1958,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void ImageView::destroy() noexcept {
+	void ImageView::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -1966,7 +1966,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool Buffer::create(BufferCreateInfo create_info) noexcept {
+	bool Buffer::create(BufferCreateInfo create_info) {
 		u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
 		for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
 			queue_family_indices[i] = i;
@@ -2057,7 +2057,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Buffer::destroy() noexcept {
+	void Buffer::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -2066,7 +2066,7 @@ namespace edge::gfx {
 		memory.handle = VK_NULL_HANDLE;
 	}
 
-	void BufferView::write(Span<const u8> data, VkDeviceSize offset) noexcept {
+	void BufferView::write(Span<const u8> data, VkDeviceSize offset) {
 		if (offset + data.size() > size) {
 			return;
 		}
@@ -2074,7 +2074,7 @@ namespace edge::gfx {
 		memcpy((u8*)buffer.memory.map() + local_offset + offset, data.data(), data.size());
 	}
 
-	bool Semaphore::create(VkSemaphoreType type, u64 value) noexcept {
+	bool Semaphore::create(VkSemaphoreType type, u64 value) {
 		const VkSemaphoreTypeCreateInfo type_create_info = {
 			.sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
 			.semaphoreType = type,
@@ -2097,7 +2097,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Semaphore::destroy() noexcept {
+	void Semaphore::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -2105,7 +2105,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool Fence::create(VkFenceCreateFlags flags) noexcept {
+	bool Fence::create(VkFenceCreateFlags flags) {
 		const VkFenceCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
 			.flags = flags
@@ -2119,7 +2119,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Fence::destroy() noexcept {
+	void Fence::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
@@ -2127,7 +2127,7 @@ namespace edge::gfx {
 		handle = VK_NULL_HANDLE;
 	}
 
-	bool Fence::wait(u64 timeout) noexcept {
+	bool Fence::wait(u64 timeout) {
 		assert(handle != VK_NULL_HANDLE && "Fence handle is null");
 
 		VkResult result = vkWaitForFences(g_ctx.dev, 1, &handle, VK_TRUE, timeout);
@@ -2138,13 +2138,13 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void Fence::reset() noexcept {
+	void Fence::reset() {
 		assert(handle != VK_NULL_HANDLE && "Fence handle is null");
 		vkResetFences(g_ctx.dev, 1, &handle);
 	}
 
 	bool PipelineBarrierBuilder::add_memory(VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
-		VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask) noexcept {
+		VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask) {
 		if (memory_barrier_count >= MEMORY_BARRIERS_MAX) {
 			return false;
 		}
@@ -2236,7 +2236,7 @@ namespace edge::gfx {
 		}
 	}
 
-	bool PipelineBarrierBuilder::add_buffer(Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size) noexcept {
+	bool PipelineBarrierBuilder::add_buffer(Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size) {
 		if (buffer_barrier_count >= BUFFER_BARRIERS_MAX || !buffer) {
 			return false;
 		}
@@ -2301,7 +2301,7 @@ namespace edge::gfx {
 		}
 	}
 
-	bool PipelineBarrierBuilder::add_image(Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range) noexcept {
+	bool PipelineBarrierBuilder::add_image(Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range) {
 		if (image_barrier_count >= IMAGE_BARRIERS_MAX || !image) {
 			return false;
 		}
@@ -2325,18 +2325,18 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void PipelineBarrierBuilder::reset() noexcept {
+	void PipelineBarrierBuilder::reset() {
 		memory_barrier_count = 0;
 		buffer_barrier_count = 0;
 		image_barrier_count = 0;
 		dependency_flags = 0;
 	}
 
-	bool Sampler::create(const VkSamplerCreateInfo& create_info) noexcept {
+	bool Sampler::create(const VkSamplerCreateInfo& create_info) {
 		return vkCreateSampler(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle) == VK_SUCCESS;
 	}
 
-	void Sampler::destroy() noexcept {
+	void Sampler::destroy() {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}

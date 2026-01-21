@@ -11,7 +11,7 @@
 namespace edge {
 	namespace detail {
 		namespace ktx1 {
-			constexpr u32 KTX_ENDIAN_REF = 0x04030201;
+			[[maybe_unused]] constexpr u32 KTX_ENDIAN_REF = 0x04030201;
 			constexpr u32 KTX_ENDIAN_REF_REV = 0x01020304;
 
 			constexpr u8 IDENTIFIER[] = {
@@ -123,7 +123,7 @@ namespace edge {
 				u32 b_bit_mask;
 				u32 a_bit_mask;
 
-				DXGI_FORMAT get_format() const noexcept {
+				DXGI_FORMAT get_format() const {
 					if (flags & DDS_PIXEL_FORMAT_FOUR_CC_FLAG_BIT) {
 						switch (fourcc)
 						{
@@ -529,7 +529,7 @@ namespace edge {
 		}
 	}
 
-	TextureSource::Result TextureSource::from_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+	TextureSource::Result TextureSource::from_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) {
 		u8 buffer[16];
 		usize bytes_readed = fread(buffer, 1, 16, stream.m_ptr);
 		if (bytes_readed != 16) {
@@ -560,7 +560,7 @@ namespace edge {
 		return Result::UnsupportedFileFormat;
 	}
 
-	TextureSource::Result TextureSource::from_dds_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+	TextureSource::Result TextureSource::from_dds_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) {
 		using namespace detail::dds;
 
 		Header header;
@@ -653,7 +653,7 @@ namespace edge {
 		return Result::Success;
 	}
 
-	TextureSource::Result TextureSource::from_ktx1_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+	TextureSource::Result TextureSource::from_ktx1_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) {
 		using namespace detail::ktx1;
 
 		Header header;
@@ -741,7 +741,7 @@ namespace edge {
 		return Result::Success;
 	}
 
-	TextureSource::Result TextureSource::from_ktx2_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+	TextureSource::Result TextureSource::from_ktx2_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) {
 		return Result::UnsupportedFileFormat;
 	}
 
@@ -754,7 +754,7 @@ namespace edge {
 		usize compressed_size,
 		usize original_size,
 		u8* dst_buffer
-		) noexcept {
+		) {
 
 		usize total_decompressed = 0;
 		usize compressed_remaining = compressed_size;
@@ -803,7 +803,7 @@ namespace edge {
 		return TextureSource::Result::Success;
 	}
 
-	TextureSource::Result TextureSource::from_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+	TextureSource::Result TextureSource::from_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) {
 		using namespace detail::etex;
 
 		Header header;
@@ -895,7 +895,7 @@ namespace edge {
 		return Result::Success;
 	}
 
-	void TextureSource::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void TextureSource::destroy(NotNull<const Allocator*> alloc) {
 		if (image_data) {
 			alloc->free(image_data);
 		}
@@ -907,7 +907,7 @@ namespace edge {
 		LZ4F_cctx* cctx,
 		usize chunk_size,
 		const u8* src_buffer, usize src_size,
-		u32& total_compressed) noexcept {
+		u32& total_compressed) {
 		static const LZ4F_preferences_t lz4_prefs = {
 			.frameInfo = {
 				.blockSizeID = LZ4F_max256KB,
@@ -985,7 +985,7 @@ namespace edge {
 		return TextureSource::Result::Success;
 	}
 
-	TextureSource::Result TextureSource::write_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) noexcept {
+	TextureSource::Result TextureSource::write_etex_stream(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) {
 		using namespace detail::etex;
 
 		usize bytes_written = fwrite(IDENTIFIER, 1, ident_size, stream.m_ptr);
@@ -1059,7 +1059,7 @@ namespace edge {
 		return Result::Success;
 	}
 
-	TextureSource::SubresourceInfo TextureSource::get_mip(u32 level) noexcept {
+	TextureSource::SubresourceInfo TextureSource::get_mip(u32 level) {
 		if (level >= mip_levels) {
 			return {};
 		}
@@ -1071,7 +1071,7 @@ namespace edge {
 		};
 	}
 
-	TextureSource::SubresourceInfo TextureSource::get_subresource_data_ptr(u32 level, u32 layer, u32 face) noexcept {
+	TextureSource::SubresourceInfo TextureSource::get_subresource_data_ptr(u32 level, u32 layer, u32 face) {
 		if (level >= mip_levels || layer >= array_layers || face >= face_count) {
 			return {};
 		}

@@ -3,25 +3,25 @@
 #include <array.hpp>
 
 namespace edge {
-	void EventListener::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void EventListener::destroy(NotNull<const Allocator*> alloc) {
 		listener_fn.destroy(alloc);
 	}
 
-	bool EventDispatcher::create(NotNull<const Allocator*> alloc) noexcept {
+	bool EventDispatcher::create(NotNull<const Allocator*> alloc) {
 		if (!listeners.reserve(alloc, 16)) {
 			return false;
 		}
 		return true;
 	}
 
-	void EventDispatcher::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void EventDispatcher::destroy(NotNull<const Allocator*> alloc) {
 		for (EventListener& listener : listeners) {
 			listener.destroy(alloc);
 		}
 		listeners.destroy(alloc);
 	}
 
-	void EventDispatcher::remove_listener(NotNull<const Allocator*> alloc, u64 listener_id) noexcept {
+	void EventDispatcher::remove_listener(NotNull<const Allocator*> alloc, u64 listener_id) {
 		assert(listener_id != 0 && "Listener is invalid.");
 
 		for (usize i = 0; i < listeners.size(); i++) {
@@ -35,7 +35,7 @@ namespace edge {
 		}
 	}
 
-	void EventDispatcher::dispatch(EventHeader* event) const noexcept {
+	void EventDispatcher::dispatch(EventHeader* event) const {
 		assert(event && "Event should be valid pointer.");
 
 		for (auto& listener : listeners) {

@@ -26,7 +26,7 @@ namespace edge::gfx {
 		return result;
 	}
 
-	bool ImGuiRenderer::create(ImGuiRendererCreateInfo create_info) noexcept {
+	bool ImGuiRenderer::create(ImGuiRendererCreateInfo create_info) {
 		renderer = create_info.renderer;
 
 		if (!vertex_shader.create(imgui_vs, imgui_vs_size)) {
@@ -172,7 +172,7 @@ namespace edge::gfx {
 		return true;
 	}
 
-	void ImGuiRenderer::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void ImGuiRenderer::destroy(NotNull<const Allocator*> alloc) {
 		pipeline.destroy();
 
 		fragment_shader.destroy();
@@ -182,7 +182,7 @@ namespace edge::gfx {
 		//renderer->free_resource(alloc, vertex_buffer);
 	}
 
-	void ImGuiRenderer::execute(NotNull<const Allocator*> alloc) noexcept {
+	void ImGuiRenderer::execute(NotNull<const Allocator*> alloc) {
 		if (!ImGui::GetCurrentContext()) {
 			return;
 		}
@@ -308,7 +308,7 @@ namespace edge::gfx {
 		cmd.end_rendering();
 	}
 
-	void ImGuiRenderer::update_buffers(NotNull<const Allocator*> alloc) noexcept {
+	void ImGuiRenderer::update_buffers(NotNull<const Allocator*> alloc) {
 		if (vertex_need_to_grow) {
 			BufferCreateInfo create_info = {
 			.size = vertex_buffer_capacity * sizeof(ImDrawVert),
@@ -338,7 +338,7 @@ namespace edge::gfx {
 		}
 	}
 
-	void ImGuiRenderer::update_texture(NotNull<const Allocator*> alloc, NotNull<ImTextureData*> tex) noexcept {
+	void ImGuiRenderer::update_texture(NotNull<const Allocator*> alloc, NotNull<ImTextureData*> tex) {
 		if (tex->Status == ImTextureStatus_OK) {
 			return;
 		}
@@ -478,7 +478,7 @@ namespace edge::gfx {
 		}
 	}
 
-	void ImGuiRenderer::update_geometry(NotNull<const Allocator*> alloc, NotNull<ImDrawData*> draw_data) noexcept {
+	void ImGuiRenderer::update_geometry(NotNull<const Allocator*> alloc, NotNull<ImDrawData*> draw_data) {
 		if (draw_data->TotalVtxCount > vertex_buffer_capacity) {
 			vertex_buffer_capacity = grow(vertex_buffer_capacity, draw_data->TotalVtxCount);
 			vertex_need_to_grow = true;

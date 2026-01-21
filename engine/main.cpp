@@ -20,7 +20,7 @@ static edge::Logger logger = {};
 static edge::Scheduler* sched = nullptr;
 
 namespace edge {
-	bool FrameTimeController::create() noexcept {
+	bool FrameTimeController::create() {
 #if EDGE_PLATFORM_WINDOWS
 		waitable_timer = CreateWaitableTimer(NULL, FALSE, NULL);
 		if (waitable_timer) {
@@ -36,12 +36,12 @@ namespace edge {
 #endif
 	}
 
-	void FrameTimeController::set_limit(f64 target_frame_rate) noexcept {
+	void FrameTimeController::set_limit(f64 target_frame_rate) {
 		target_frame_time = std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(std::chrono::duration<f64>(1.0 / target_frame_rate));
 		last_frame_time = std::chrono::high_resolution_clock::now();
 	}
 
-	void FrameTimeController::accurate_sleep(f64 seconds) noexcept {
+	void FrameTimeController::accurate_sleep(f64 seconds) {
 		// Adaptive algorithm (same across all platforms)
 		while (seconds - welford_estimate > 1e-7) {
 			f64 to_wait = seconds - welford_estimate;
@@ -92,7 +92,7 @@ namespace edge {
 	}
 
 
-	bool EngineContext::create(NotNull<const Allocator*> alloc, NotNull<RuntimeLayout*> runtime_layout) noexcept {
+	bool EngineContext::create(NotNull<const Allocator*> alloc, NotNull<RuntimeLayout*> runtime_layout) {
 		if (!event_dispatcher.create(alloc)) {
 			EDGE_LOG_FATAL("Failed to initialize EventDispatcher.");
 			return false;
@@ -201,7 +201,7 @@ namespace edge {
 		return true;
 	}
 
-	void EngineContext::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void EngineContext::destroy(NotNull<const Allocator*> alloc) {
 		// Wait for all work done
 		if (main_queue) {
 			main_queue.wait_idle();
@@ -237,7 +237,7 @@ namespace edge {
 		event_dispatcher.destroy(alloc);
 	}
 
-	bool EngineContext::run() noexcept {
+	bool EngineContext::run() {
 		while (!runtime->requested_close()) {
 			frame_time_controller.process([this](f32 delta_time) -> void { tick(delta_time); });
 		}
@@ -245,7 +245,7 @@ namespace edge {
 		return true;
 	}
 
-	void EngineContext::tick(f32 delta_time) noexcept {
+	void EngineContext::tick(f32 delta_time) {
 		runtime->process_events();
 		input_system.update();
 
@@ -293,7 +293,7 @@ int edge_main(RuntimeLayout* runtime_layout) {
 	ILoggerOutput* file_output = logger_create_file_output(&allocator, LogFormat_Default, "log.log", false);
 	logger.add_output(&allocator, file_output);
 
-	sched = sched_create(&allocator);
+	sched = Scheduler::create(&allocator);
 	if (!sched) {
 		EDGE_LOG_FATAL("Failed to initialize Scheduler.");
 		return_value = -1;
@@ -310,7 +310,7 @@ int edge_main(RuntimeLayout* runtime_layout) {
 
 cleanup:
 	if (sched) {
-		sched_destroy(sched);
+		Scheduler::destroy(&allocator, sched);
 	}
 
 	logger.destroy(&allocator);

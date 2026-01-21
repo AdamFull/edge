@@ -1,7 +1,7 @@
 #include "input_system.h"
 
 namespace edge {
-	bool InputSystem::create(NotNull<const Allocator*> alloc) noexcept {
+	bool InputSystem::create(NotNull<const Allocator*> alloc) {
 		if (!listeners.empty()) {
 			return true;
 		}
@@ -9,14 +9,14 @@ namespace edge {
 		return listeners.reserve(alloc, 8);
 	}
 
-	void InputSystem::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void InputSystem::destroy(NotNull<const Allocator*> alloc) {
 		for (auto& [id, listener] : listeners) {
 			alloc->deallocate(listener);
 		}
 		listeners.destroy(alloc);
 	}
 
-	u64 InputSystem::add_listener(NotNull<const Allocator*> alloc, IListener* listener) noexcept {
+	u64 InputSystem::add_listener(NotNull<const Allocator*> alloc, IListener* listener) {
 		auto id = next_listener_id++;
 
 		if (!listeners.push_back(alloc, std::make_pair(id, listener))) {
@@ -27,7 +27,7 @@ namespace edge {
 		return id;
 	}
 
-	void InputSystem::remove_listener(NotNull<const Allocator*> alloc, u64 listener_id) noexcept {
+	void InputSystem::remove_listener(NotNull<const Allocator*> alloc, u64 listener_id) {
 		assert(listener_id != 0 && "Listener is invalid.");
 
 		for (usize i = 0; i < listeners.size(); i++) {
@@ -41,7 +41,7 @@ namespace edge {
 		}
 	}
 
-	void InputSystem::update(f64 current_time) noexcept {
+	void InputSystem::update(f64 current_time) {
 		// Dispatch keyboard state changes
 		{
 			// TODO: Speedup bit checks with simd
@@ -108,7 +108,7 @@ namespace edge {
 		touch.update();
 	}
 
-	void InputSystem::clear() noexcept {
+	void InputSystem::clear() {
 		keyboard.clear();
 		mouse.clear();
 
@@ -119,7 +119,7 @@ namespace edge {
 		touch.clear();
 	}
 
-	void InputSystem::dispatch(DeviceType type, usize button, bool cur, bool prev) const noexcept {
+	void InputSystem::dispatch(DeviceType type, usize button, bool cur, bool prev) const {
 		if (cur != prev) {
 			for (auto& [id, listener] : listeners) {
 				listener->on_bool_change(this, type, button, cur, prev);
@@ -127,7 +127,7 @@ namespace edge {
 		}
 	}
 
-	void InputSystem::dispatch(DeviceType type, usize button, glm::vec3 cur, glm::vec3 prev) const noexcept {
+	void InputSystem::dispatch(DeviceType type, usize button, glm::vec3 cur, glm::vec3 prev) const {
 		if (cur != prev) {
 			for (auto& [id, listener] : listeners) {
 				listener->on_axis_change(this, type, button, cur, prev);

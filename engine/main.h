@@ -34,13 +34,13 @@ namespace edge {
 		u32 mean_fps = 0;
 		f32 mean_frame_time = 0.0f;
 
-		bool create() noexcept;
+		bool create();
 		void destroy();
 
-		void set_limit(f64 target_frame_rate) noexcept;
+		void set_limit(f64 target_frame_rate);
 
 		template<typename F>
-		void process(F&& fn) noexcept {
+		void process(F&& fn) {
 			timepoint_t target_time = last_frame_time + target_frame_time;
 			timepoint_t current_time = std::chrono::high_resolution_clock::now();
 
@@ -77,7 +77,7 @@ namespace edge {
 		}
 
 	private:
-		void accurate_sleep(f64 seconds) noexcept;
+		void accurate_sleep(f64 seconds);
 
 #if EDGE_PLATFORM_WINDOWS
 		HANDLE waitable_timer = INVALID_HANDLE_VALUE;
@@ -101,12 +101,12 @@ namespace edge {
 
 		Handle test_tex = HANDLE_INVALID;
 
-		bool create(NotNull<const Allocator*> alloc, NotNull<RuntimeLayout*> runtime_layout) noexcept;
-		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		bool create(NotNull<const Allocator*> alloc, NotNull<RuntimeLayout*> runtime_layout);
+		void destroy(NotNull<const Allocator*> alloc);
 
-		bool run() noexcept;
+		bool run();
 	private:
-		void tick(f32 delta_time) noexcept;
+		void tick(f32 delta_time);
 	};
 }
 
