@@ -77,12 +77,12 @@ namespace edge {
 		return pos;
 	}
 
-	bool Logger::create(NotNull<const Allocator*> alloc, LogLevel min_level) noexcept {
-		min_level = min_level;
+	bool Logger::create(NotNull<const Allocator*> alloc, LogLevel min_level) {
+		this->min_level = min_level;
 		return outputs.reserve(alloc, 4);
 	}
 
-	void Logger::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void Logger::destroy(NotNull<const Allocator*> alloc) {
 		for (ILoggerOutput* output : outputs) {
 			if (output) {
 				output->destroy();
@@ -92,18 +92,18 @@ namespace edge {
 		outputs.destroy(alloc);
 	}
 
-	bool Logger::add_output(NotNull<const Allocator*> alloc, ILoggerOutput* output) noexcept {
+	bool Logger::add_output(NotNull<const Allocator*> alloc, ILoggerOutput* output) {
 		if (!output) {
 			return false;
 		}
 		return outputs.push_back(alloc, output);
 	}
 
-	void Logger::set_level(LogLevel level) noexcept {
+	void Logger::set_level(LogLevel level) {
 		min_level = level;
 	}
 
-	void Logger::flush() noexcept {
+	void Logger::flush() {
 		for (ILoggerOutput* output : outputs) {
 			if (output) {
 				output->flush();

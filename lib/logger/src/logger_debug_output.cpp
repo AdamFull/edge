@@ -12,7 +12,7 @@ namespace edge {
 	struct LoggerOutputDebugConsole final : ILoggerOutput {
 		i32 format_flags = 0;
 
-		void write(const LogEntry* entry) noexcept override {
+		void write(const LogEntry* entry) override {
 			char buffer[EDGE_LOGGER_BUFFER_SIZE];
 
 			// debug console does not have color support
@@ -22,10 +22,10 @@ namespace edge {
 			OutputDebugStringA("\n");
 		}
 
-		void flush() noexcept override {
+		void flush() override {
 		}
 
-		void destroy() noexcept override {
+		void destroy() override {
 		}
 	};
 

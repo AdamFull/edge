@@ -43,21 +43,23 @@ namespace edge {
     };
 
     struct ILoggerOutput {
-        virtual void write(const LogEntry* entry) noexcept = 0;
-        virtual void flush() noexcept = 0;
-        virtual void destroy() noexcept = 0;
+        virtual ~ILoggerOutput() = default;
+
+        virtual void write(const LogEntry* entry) = 0;
+        virtual void flush() = 0;
+        virtual void destroy() = 0;
     };
 
     struct Logger {
         LogLevel min_level = LogLevel::Trace;
         Array<ILoggerOutput*> outputs = {};
 
-        bool create(NotNull<const Allocator*> alloc, LogLevel min_level = LogLevel::Trace) noexcept;
-        void destroy(NotNull<const Allocator*> alloc) noexcept;
+        bool create(NotNull<const Allocator*> alloc, LogLevel min_level = LogLevel::Trace);
+        void destroy(NotNull<const Allocator*> alloc);
 
-        bool add_output(NotNull<const Allocator*> alloc, ILoggerOutput* output) noexcept;
-        void set_level(LogLevel level) noexcept;
-        void flush() noexcept;
+        bool add_output(NotNull<const Allocator*> alloc, ILoggerOutput* output);
+        void set_level(LogLevel level);
+        void flush();
     };
 
     /**

@@ -28,7 +28,7 @@ namespace edge {
 	struct LoggerOutputLogcat final : ILoggerOutput {
 		i32 format_flags = 0;
 
-		void write(const LogEntry* entry) noexcept override {
+		void write(const LogEntry* entry) override {
 			char buffer[EDGE_LOGGER_BUFFER_SIZE];
 			/* Strip color codes for Android logcat */
 			logger_format_entry(buffer, sizeof(buffer), entry, format_flags & ~LogFormat_Color);
@@ -37,10 +37,10 @@ namespace edge {
 			__android_log_print(priority, "EdgeLogger", "%s", buffer);
 		}
 
-		void flush() noexcept override {
+		void flush() override {
 		}
 
-		void destroy() noexcept override {
+		void destroy() override {
 		}
 	};
 

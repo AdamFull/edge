@@ -8,17 +8,17 @@ namespace edge {
 	struct LoggerOutputStdout final : ILoggerOutput {
 		i32 format_flags = 0;
 
-		void write(const LogEntry* entry) noexcept override {
+		void write(const LogEntry* entry) override {
 			char buffer[EDGE_LOGGER_BUFFER_SIZE];
 			logger_format_entry(buffer, sizeof(buffer), entry, format_flags);
 			printf("%s\n", buffer);
 		}
 
-		void flush() noexcept override {
+		void flush() override {
 			fflush(stdout);
 		}
 
-		void destroy() noexcept override {
+		void destroy() override {
 		}
 	};
 

@@ -11,7 +11,7 @@ namespace edge {
 		FILE* file = nullptr;
 		bool auto_flush = false;
 
-		void write(const LogEntry* entry) noexcept override {
+		void write(const LogEntry* entry) override {
 			char buffer[EDGE_LOGGER_BUFFER_SIZE];
 			/* Strip color codes for file output */
 			logger_format_entry(buffer, sizeof(buffer), entry, format_flags & ~LogFormat_Color);
@@ -23,13 +23,13 @@ namespace edge {
 			}
 		}
 
-		void flush() noexcept override {
+		void flush() override {
 			if (file) {
 				fflush(file);
 			}
 		}
 
-		void destroy() noexcept override {
+		void destroy() override {
 			if (file) {
 				fclose(file);
 			}
