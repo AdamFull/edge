@@ -107,7 +107,7 @@ namespace edge {
 	}
 
 	bool Scheduler::Worker::tick() noexcept {
-		auto [job, priority] = scheduler->pick_job(wg);
+		auto job = scheduler->pick_job(wg);
 		if (!job) {
 			if (scheduler->shutdown.load(std::memory_order_acquire)) {
 				return false;
@@ -152,9 +152,10 @@ namespace edge {
 
 			scheduler->active_jobs.fetch_sub(1, std::memory_order_release);
 
-			if (job->continuation) {
-				scheduler->enqueue_job(job->continuation, priority, wg);
+			Job* next_job = job->continuation;
+			if (next_job) {
 				job->continuation = nullptr;
+				scheduler->enqueue_job(next_job, next_job->priority, wg);
 			}
 			Job::destroy(allocator, job);
 
@@ -164,19 +165,22 @@ namespace edge {
 			thread_context.flow_info.clear();
 			// TODO: If it's not in suspended state, it means that soemthingis going very wrong.
 			if (job_state == Job::State::Suspended) {
-				scheduler->enqueue_job(job, priority, wg);
+				scheduler->enqueue_job(job, job->priority, wg);
 				return true;
 			}
 			return false;
 		}
 		case FlowReturnType::Awaited: {
+			Job* awaiter = thread_context.flow_info.job;
+			awaiter->priority = job->priority;
+
 			scheduler->active_jobs.fetch_add(1, std::memory_order_release);
-			scheduler->enqueue_job(thread_context.flow_info.job, priority, wg);
+			scheduler->enqueue_job(awaiter, awaiter->priority, wg);
 			thread_context.flow_info.clear();
 			return true;
 		}
 		case FlowReturnType::SwitchTo: {
-			scheduler->enqueue_job(job, priority, thread_context.flow_info.wg);
+			scheduler->enqueue_job(job, job->priority, thread_context.flow_info.wg);
 			thread_context.flow_info.clear();
 			return true;
 		}
@@ -332,12 +336,16 @@ namespace edge {
 		CpuInfo cpu_info[128];
 		i32 cpu_count = thread_get_cpu_topology(cpu_info, 128);
 
-		i32 num_cores = thread_get_logical_core_count(cpu_info, cpu_count);
+		i32 num_cores = thread_get_physical_core_count(cpu_info, cpu_count);
 		if (num_cores <= 0) {
 			num_cores = 4;
 		}
 
-		// TODO: Use fixed runtime array
+		if (!sched->io_threads.reserve(alloc, num_cores)) {
+			destroy(alloc, sched);
+			return nullptr;
+		}
+
 		if (!sched->background_threads.reserve(alloc, num_cores)) {
 			destroy(alloc, sched);
 			return nullptr;
@@ -347,29 +355,6 @@ namespace edge {
 		sched->active_jobs.store(0, std::memory_order_relaxed);
 		sched->worker_futex.store(0, std::memory_order_relaxed);
 		sched->sleeping_workers.store(0, std::memory_order_relaxed);
-
-		for (i32 i = 0; i < num_cores; ++i) {
-			Worker* worker = Worker::create(alloc);
-			if (!worker) {
-				destroy(alloc, sched);
-				return nullptr;
-			}
-
-			worker->wg = Workgroup::Background;
-			worker->scheduler = sched;
-			worker->thread_id = i;
-
-			if (!sched->background_threads.push_back(alloc, worker)) {
-				destroy(alloc, sched);
-				return nullptr;
-			}
-
-			thread_set_affinity_ex(worker->thread_handle, cpu_info, cpu_count, i, false);
-
-			char buffer[32] = { 0 };
-			snprintf(buffer, sizeof(buffer), "worker-%d", i);
-			thread_set_name(worker->thread_handle, buffer);
-		}
 
 		// NOTE: Does not create a real thread
 		sched->main_thread = alloc->allocate<Worker>();
@@ -390,6 +375,54 @@ namespace edge {
 			return nullptr;
 		}
 
+		for (i32 i = 0; i < num_cores; ++i) {
+			char buffer[32] = { 0 };
+
+			{
+				Worker* worker = Worker::create(alloc);
+				if (!worker) {
+					destroy(alloc, sched);
+					return nullptr;
+				}
+
+				worker->wg = Workgroup::IO;
+				worker->scheduler = sched;
+				worker->thread_id = i;
+
+				if (!sched->io_threads.push_back(alloc, worker)) {
+					destroy(alloc, sched);
+					return nullptr;
+				}
+
+				thread_set_affinity_ex(worker->thread_handle, cpu_info, cpu_count, i, false);
+
+				snprintf(buffer, sizeof(buffer), "io-%d", i);
+				thread_set_name(worker->thread_handle, buffer);
+			}
+
+			{
+				Worker* worker = Worker::create(alloc);
+				if (!worker) {
+					destroy(alloc, sched);
+					return nullptr;
+				}
+
+				worker->wg = Workgroup::Background;
+				worker->scheduler = sched;
+				worker->thread_id = i;
+
+				if (!sched->background_threads.push_back(alloc, worker)) {
+					destroy(alloc, sched);
+					return nullptr;
+				}
+
+				thread_set_affinity_ex(worker->thread_handle, cpu_info, cpu_count, i, false);
+
+				snprintf(buffer, sizeof(buffer), "background-%d", i);
+				thread_set_name(worker->thread_handle, buffer);
+			}
+		}
+
 		return sched;
 	}
 
@@ -406,6 +439,16 @@ namespace edge {
 
 		self->worker_futex.fetch_add(1, std::memory_order_release);
 		futex_wake_all(&self->worker_futex);
+
+		if (!self->io_threads.empty()) {
+			for (Worker* worker_thread : self->io_threads) {
+				if (worker_thread) {
+					Worker::destroy(alloc, worker_thread);
+				}
+			}
+
+			self->io_threads.destroy(alloc);
+		}
 
 		if (!self->background_threads.empty()) {
 			for (Worker* worker_thread : self->background_threads) {
@@ -458,6 +501,7 @@ namespace edge {
 
 	void Scheduler::schedule(Job* job, Job::Priority prio, Workgroup wg) noexcept {
 		active_jobs.fetch_add(1, std::memory_order_release);
+		job->priority = prio;
 		enqueue_job(job, prio, wg);
 	}
 
@@ -490,40 +534,37 @@ namespace edge {
 		free_stacks.enqueue(stack_ptr);
 	}
 
-	std::pair<Job*, Job::Priority> Scheduler::pick_job(Workgroup wg) noexcept {
+	Job* Scheduler::pick_job(Workgroup wg) noexcept {
+		Job* job = nullptr;
 		switch (wg)
 		{
 		case edge::Scheduler::Main: {
-			Job* job;
 			if (main_queue.dequeue(&job)) {
-				return std::make_pair(job, Job::Priority::Count);
+				return job;
 			}
 			break;
 		}
 		case edge::Scheduler::IO: {
-			Job* job;
 			if (io_queue.dequeue(&job)) {
-				return std::make_pair(job, Job::Priority::Count);
+				return job;
 			}
 			break;
 		}
 		case edge::Scheduler::Background: {
 			Range<Job::Priority> range(Job::Priority::Low, Job::Priority::High);
 			for (auto it = range.rbegin(); it != range.rend(); ++it) {
-				Job* job;
 				if (background_queues[it].dequeue(&job)) {
-					return std::make_pair(job, *it);
+					return job;
 				}
 			}
 			break;
 		}
 		}
 
-		return std::make_pair(nullptr, Job::Priority::Count);
+		return job;
 	}
 
 	void Scheduler::enqueue_job(Job* job, Job::Priority prio, Workgroup wg) noexcept {
-
 		switch (wg)
 		{
 		case edge::Scheduler::Main:

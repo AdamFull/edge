@@ -12,6 +12,8 @@
 #include <atomic>
 
 namespace edge {
+	static constexpr usize BACKGROUND_QUEUE_COUNT = 2;
+
 	struct Job {
 		enum class State {
 			Suspended,
@@ -22,8 +24,7 @@ namespace edge {
 
 		enum class Priority {
 			Low = 0,
-			High = 1,
-			Count
+			High = 1
 		};
 
 		template<typename T, typename E>
@@ -60,6 +61,7 @@ namespace edge {
 		void* promise = nullptr;
 
 		std::atomic<State> state = State::Running;
+		Priority priority = Priority::Low;
 
 		template<typename F>
 		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn) noexcept {
@@ -101,7 +103,7 @@ namespace edge {
 		MPMCQueue<Job*> io_queue = {};
 		Array<Worker*> io_threads = {};
 
-		MPMCQueue<Job*> background_queues[static_cast<usize>(Job::Priority::Count)] = {};
+		MPMCQueue<Job*> background_queues[BACKGROUND_QUEUE_COUNT] = {};
 		Array<Worker*> background_threads = {};
 
 		std::atomic<u32> active_jobs = 0;
@@ -122,7 +124,7 @@ namespace edge {
 		void* alloc_stack() noexcept;
 		void free_stack(void* stack_ptr) noexcept;
 
-		std::pair<Job*, Job::Priority> pick_job(Workgroup wg) noexcept;
+		Job* pick_job(Workgroup wg) noexcept;
 		void enqueue_job(Job* job, Job::Priority prio, Workgroup wg) noexcept;
 	};
 
