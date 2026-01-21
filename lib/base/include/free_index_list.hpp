@@ -37,7 +37,7 @@ namespace edge {
 			}
 		}
 
-		bool allocate(u32* out_index) noexcept {
+		bool allocate(u32* out_index) {
 			if (!out_index || m_count == 0) {
 				return false;
 			}
@@ -46,7 +46,7 @@ namespace edge {
 			return true;
 		}
 
-		bool free(u32 index) noexcept {
+		bool free(u32 index) {
 			if (m_count >= m_capacity) {
 				return false;
 			}
@@ -59,19 +59,19 @@ namespace edge {
 			return true;
 		}
 
-		bool has_available() const noexcept {
+		bool has_available() const {
 			return m_count > 0;
 		}
 
-		bool full() const noexcept {
+		bool full() const {
 			return m_count == m_capacity;
 		}
 
-		bool empty() const noexcept {
+		bool empty() const {
 			return m_count == 0;
 		}
 
-		void reset() noexcept {
+		void reset() {
 			m_count = m_capacity;
 
 			for (u32 i = 0; i < m_capacity; i++) {
@@ -79,7 +79,7 @@ namespace edge {
 			}
 		}
 
-		void clear() noexcept {
+		void clear() {
 			m_count = 0;
 		}
 	};

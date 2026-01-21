@@ -71,21 +71,21 @@ namespace edge {
 
 		E first, last;
 
-		iterator begin() const noexcept { 
+		iterator begin() const { 
 			return { .val = static_cast<underlying_t>(first) }; 
 		}
 
-		iterator end() const noexcept { 
+		iterator end() const { 
 			auto end_val = static_cast<underlying_t>(last);
 			++end_val;
 			return {  .val = end_val };
 		}
 
-		reverse_iterator rbegin() const noexcept {
+		reverse_iterator rbegin() const {
 			return { .val = static_cast<underlying_t>(last) };
 		}
 
-		reverse_iterator rend() const noexcept {
+		reverse_iterator rend() const {
 			auto end_val = static_cast<underlying_t>(first);
 			--end_val;
 			return { .val = end_val };
@@ -104,10 +104,10 @@ namespace edge {
 		}
 
 		constexpr NotNull(const NotNull& other) = default;
-		constexpr NotNull(NotNull&& other) noexcept = default;
+		constexpr NotNull(NotNull&& other) = default;
 
 		constexpr NotNull& operator=(const NotNull& other) = default;
-		constexpr NotNull& operator=(NotNull&& other) noexcept = default;
+		constexpr NotNull& operator=(NotNull&& other) = default;
 
 		constexpr NotNull& operator=(T ptr) {
 			m_ptr = ptr;
@@ -121,7 +121,7 @@ namespace edge {
 			return *m_ptr;
 		}
 
-		constexpr T operator->() const noexcept {
+		constexpr T operator->() const {
 			return m_ptr;
 		}
 
@@ -130,34 +130,34 @@ namespace edge {
 
 	template<typename V, typename E>
 	struct Result {
-		Result(V value) noexcept 
+		Result(V value) 
 			: m_has_value(true), m_value(value) {
 		}
 
-		Result(E error) noexcept
+		Result(E error)
 			: m_has_value(false), m_error(error) {
 		}
 
-		explicit operator bool() const noexcept {
+		explicit operator bool() const {
 			return m_has_value;
 		}
 
-		V* operator->() noexcept {
+		V* operator->() {
 			assert(m_has_value && "operator->() called on error state");
 			return &m_value;
 		}
 
-		V& operator*() noexcept {
+		V& operator*() {
 			assert(m_has_value && "operator*() called on error state");
 			return m_value;
 		}
 
-		V value() const noexcept {
+		V value() const {
 			assert(m_has_value && "Result::value() called on error state");
 			return m_value;
 		}
 
-		E error() const noexcept {
+		E error() const {
 			assert(!m_has_value && "Result::error() called on value state");
 			return m_error;
 		}
@@ -175,7 +175,7 @@ namespace edge {
 	}
 
 	template<typename T, usize N>
-	constexpr usize array_size(const T(&)[N]) noexcept {
+	constexpr usize array_size(const T(&)[N]) {
 		return N;
 	}
 }

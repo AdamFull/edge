@@ -9,31 +9,31 @@
 namespace edge {
 	template<TrivialType T>
 	struct Span {
-		constexpr Span() noexcept = default;
+		constexpr Span() = default;
 
-		constexpr Span(T* data, usize size) noexcept
+		constexpr Span(T* data, usize size)
 			: m_data(data), m_size(size) {
 		}
 
-		constexpr Span(T* begin, T* end) noexcept
+		constexpr Span(T* begin, T* end)
 			: m_data(begin), m_size(static_cast<usize>(end - begin)) {
 			assert(end >= begin);
 		}
 
 		template<usize N>
-		constexpr Span(T(&arr)[N]) noexcept
+		constexpr Span(T(&arr)[N])
 			: m_data(arr), m_size(N) {
 		}
 
-		constexpr usize size() const noexcept {
+		constexpr usize size() const {
 			return m_size;
 		}
 
-		constexpr usize size_bytes() const noexcept {
+		constexpr usize size_bytes() const {
 			return m_size * sizeof(T);
 		}
 
-		constexpr bool empty() const noexcept {
+		constexpr bool empty() const {
 			return m_size == 0;
 		}
 
@@ -75,27 +75,27 @@ namespace edge {
 			return &m_data[m_size - 1];
 		}
 
-		T* data() noexcept {
+		T* data() {
 			return m_data;
 		}
 
-		const T* data() const noexcept {
+		const T* data() const {
 			return m_data;
 		}
 
-		T* begin() noexcept {
+		T* begin() {
 			return m_data;
 		}
 
-		T* end() noexcept {
+		T* end() {
 			return m_data + m_size;
 		}
 
-		const T* begin() const noexcept {
+		const T* begin() const {
 			return m_data;
 		}
 
-		const T* end() const noexcept {
+		const T* end() const {
 			return m_data + m_size;
 		}
 

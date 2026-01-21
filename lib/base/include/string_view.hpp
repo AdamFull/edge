@@ -16,75 +16,75 @@ namespace edge {
 		using size_type = usize;
 		using difference_type = isize;
 
-		constexpr StringView() noexcept
+		constexpr StringView()
 			: m_data{ nullptr }
 			, m_length{ 0 } {
 		}
 
-		constexpr StringView(const StringView&) noexcept = default;
-		constexpr StringView& operator=(const StringView&) noexcept = default;
+		constexpr StringView(const StringView&) = default;
+		constexpr StringView& operator=(const StringView&) = default;
 
-		constexpr StringView(const CharT* str, usize count) noexcept
+		constexpr StringView(const CharT* str, usize count)
 			: m_data{ str }
 			, m_length{ count } {
 
 		}
 
-		constexpr StringView(const CharT* str) noexcept
+		constexpr StringView(const CharT* str)
 			: m_data{ str }
 			, m_length{ str ? Traits::length(str) : 0 } {
 
 		}
 
 		template<usize N>
-		constexpr StringView(const CharT(&str)[N]) noexcept
+		constexpr StringView(const CharT(&str)[N])
 			: m_data{ str }
 			, m_length{ N - 1 } {
 		}
 
-		constexpr const_pointer data() const noexcept {
+		constexpr const_pointer data() const {
 			return m_data;
 		}
 
-		constexpr size_type size() const noexcept {
+		constexpr size_type size() const {
 			return m_length;
 		}
 
-		constexpr size_type length() const noexcept {
+		constexpr size_type length() const {
 			return m_length;
 		}
 
-		constexpr bool empty() const noexcept {
+		constexpr bool empty() const {
 			return m_length == 0;
 		}
 
-		constexpr const_reference operator[](size_type index) const noexcept {
+		constexpr const_reference operator[](size_type index) const {
 			assert(index < m_length);
 			return m_data[index];
 		}
 
-		constexpr const_reference front() const noexcept {
+		constexpr const_reference front() const {
 			assert(m_length > 0 && "front() called on empty StringView");
 			return m_data[0];
 		}
 
-		constexpr const_reference back() const noexcept {
+		constexpr const_reference back() const {
 			assert(m_length > 0 && "back() called on empty StringView");
 			return m_data[m_length - 1];
 		}
 
-		constexpr void remove_prefix(size_type count) noexcept {
+		constexpr void remove_prefix(size_type count) {
 			assert(m_length >= count && "cannot remove_prefix() larger than StringView size");
 			m_data += count;
 			m_length -= count;
 		}
 
-		constexpr void remove_suffix(size_type count) noexcept {
+		constexpr void remove_suffix(size_type count) {
 			assert(m_length >= count && "cannot remove_suffix() larger than StringView size");
 			m_length -= count;
 		}
 
-		constexpr StringView substr(size_type offset = 0, size_type count = UINT64_MAX) const noexcept {
+		constexpr StringView substr(size_type offset = 0, size_type count = UINT64_MAX) const {
 			assert(offset < m_length && "offset in substr() is too big");
 
 			size_type  actual_count = count;
@@ -95,7 +95,7 @@ namespace edge {
 			return StringView(m_data + offset, actual_count);
 		}
 
-		constexpr i32 compare(StringView other) const noexcept {
+		constexpr i32 compare(StringView other) const {
 			size_type min_len = m_length < other.m_length ? m_length : other.m_length;
 
 			if (m_data == other.m_data && m_length == other.m_length) {
@@ -124,37 +124,37 @@ namespace edge {
 			return 0;
 		}
 
-		constexpr bool starts_with(StringView prefix) const noexcept {
+		constexpr bool starts_with(StringView prefix) const {
 			if (prefix.m_length > m_length) {
 				return false;
 			}
 			return Traits::compare(m_data, prefix.m_data, prefix.m_length) == 0;
 		}
 
-		constexpr bool starts_with(CharT c) const noexcept {
+		constexpr bool starts_with(CharT c) const {
 			return !empty() && Traits::eq(m_data[0], c);
 		}
 
-		constexpr bool ends_with(StringView suffix) const noexcept {
+		constexpr bool ends_with(StringView suffix) const {
 			if (suffix.m_length > m_length) {
 				return false;
 			}
 			return Traits::compare(m_data + (m_length - suffix.m_length), suffix.m_data, suffix.m_length) == 0;
 		}
 
-		constexpr bool ends_with(CharT c) const noexcept {
+		constexpr bool ends_with(CharT c) const {
 			return !empty() && Traits::eq(m_data[m_length - 1], c);
 		}
 
-		constexpr bool contains(StringView needle) const noexcept {
+		constexpr bool contains(StringView needle) const {
 			return find(needle) != SIZE_MAX;
 		}
 
-		constexpr bool contains(CharT c) const noexcept {
+		constexpr bool contains(CharT c) const {
 			return find(c) != SIZE_MAX;
 		}
 
-		constexpr size_type find(StringView needle, size_type pos = 0) const noexcept {
+		constexpr size_type find(StringView needle, size_type pos = 0) const {
 			if (needle.m_length == 0) {
 				return pos <= m_length ? pos : SIZE_MAX;
 			}
@@ -172,7 +172,7 @@ namespace edge {
 			return SIZE_MAX;
 		}
 
-		constexpr size_type find(CharT c, size_type pos = 0) const noexcept {
+		constexpr size_type find(CharT c, size_type pos = 0) const {
 			if (pos >= m_length) {
 				return SIZE_MAX;
 			}
@@ -181,7 +181,7 @@ namespace edge {
 			return result ? static_cast<size_type>(result - m_data) : SIZE_MAX;
 		}
 
-		constexpr size_type rfind(StringView needle, size_type pos = SIZE_MAX) const noexcept {
+		constexpr size_type rfind(StringView needle, size_type pos = SIZE_MAX) const {
 			if (needle.m_length == 0) {
 				return m_length < pos ? m_length : pos;
 			}
@@ -205,7 +205,7 @@ namespace edge {
 			return SIZE_MAX;
 		}
 
-		constexpr size_type rfind(CharT c, size_type pos = SIZE_MAX) const noexcept {
+		constexpr size_type rfind(CharT c, size_type pos = SIZE_MAX) const {
 			if (m_length == 0) {
 				return SIZE_MAX;
 			}
@@ -223,11 +223,11 @@ namespace edge {
 			return SIZE_MAX;
 		}
 
-		constexpr const_iterator begin() const noexcept {
+		constexpr const_iterator begin() const {
 			return m_data;
 		}
 
-		constexpr const_iterator end() const noexcept {
+		constexpr const_iterator end() const {
 			return m_data + m_length;
 		}
 
@@ -236,13 +236,13 @@ namespace edge {
 	};
 
 	template<Character CharT, typename Traits>
-	constexpr bool operator==(StringView<CharT, Traits> lhs, StringView<CharT, Traits> rhs) noexcept {
+	constexpr bool operator==(StringView<CharT, Traits> lhs, StringView<CharT, Traits> rhs) {
 		return lhs.compare(rhs) == 0;
 	}
 
 	template<Character CharT, typename Traits>
 	struct Hash<StringView<CharT, Traits>> {
-		EDGE_FORCE_INLINE usize operator()(const StringView<CharT, Traits>& sv) const noexcept {
+		EDGE_FORCE_INLINE usize operator()(const StringView<CharT, Traits>& sv) const {
 #if EDGE_HAS_SSE4_2
 			return hash_crc32(sv.data(), sv.length() * sizeof(CharT));
 #else

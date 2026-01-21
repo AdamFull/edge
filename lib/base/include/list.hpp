@@ -237,21 +237,21 @@ namespace edge {
 			return true;
 		}
 
-		T* front() noexcept {
+		T* front() {
 			if (!m_head) {
 				return nullptr;
 			}
 			return &m_head->data;
 		}
 
-		T* back() noexcept {
+		T* back() {
 			if (!m_tail) {
 				return nullptr;
 			}
 			return &m_tail->data;
 		}
 
-		T* get(usize index) const noexcept {
+		T* get(usize index) const {
 			if (index >= m_size) {
 				return nullptr;
 			}
@@ -337,15 +337,15 @@ namespace edge {
 			return true;
 		}
 
-		bool empty() const noexcept {
+		bool empty() const {
 			return m_size == 0;
 		}
 
-		usize size() const noexcept {
+		usize size() const {
 			return m_size;
 		}
 
-		ListNode<T>* find(const T& element) noexcept {
+		ListNode<T>* find(const T& element) {
 			ListNode<T>* current = m_head;
 			while (current) {
 				if (current->data == element) {
@@ -358,7 +358,7 @@ namespace edge {
 		}
 
 		template<typename Predicate>
-		ListNode<T>* find_if(Predicate pred) noexcept {
+		ListNode<T>* find_if(Predicate pred) {
 			ListNode<T>* current = m_head;
 			while (current) {
 				if (pred(current->data)) {
@@ -391,7 +391,7 @@ namespace edge {
 		}
 
 		template<typename Comparator>
-		void sort(Comparator&& compare) noexcept {
+		void sort(Comparator&& compare) {
 			if (m_size < 2) {
 				return;
 			}

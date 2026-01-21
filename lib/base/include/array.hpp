@@ -75,15 +75,15 @@ namespace edge {
 			return true;
 		}
 
-		usize size() const noexcept {
+		usize size() const {
 			return m_size;
 		}
 
-		usize capacity() const noexcept {
+		usize capacity() const {
 			return m_capacity;
 		}
 
-		bool empty() const noexcept {
+		bool empty() const {
 			return m_size == 0;
 		}
 
@@ -173,27 +173,27 @@ namespace edge {
 			return true;
 		}
 
-		T* data() noexcept {
+		T* data() {
 			return m_data;
 		}
 
-		const T* data() const noexcept {
+		const T* data() const {
 			return m_data;
 		}
 
-		T* begin() noexcept {
+		T* begin() {
 			return m_data;
 		}
 
-		T* end() noexcept {
+		T* end() {
 			return m_data + m_size;
 		}
 
-		const T* begin() const noexcept {
+		const T* begin() const {
 			return m_data;
 		}
 
-		const T* end()  const noexcept {
+		const T* end()  const {
 			return m_data + m_size;
 		}
 

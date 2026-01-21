@@ -9,12 +9,12 @@ namespace edge {
 		usize line_pos = 0;
 		usize line = 0;
 
-		Result<JsonValue, JsonErrorDesc> parse(NotNull<const Allocator*> alloc) noexcept {
+		Result<JsonValue, JsonErrorDesc> parse(NotNull<const Allocator*> alloc) {
 			skip_whitespaces();
 			return parse_value(alloc);
 		}
 
-		Result<JsonValue, JsonErrorDesc> parse_value(NotNull<const Allocator*> alloc) noexcept {
+		Result<JsonValue, JsonErrorDesc> parse_value(NotNull<const Allocator*> alloc) {
 			skip_whitespaces();
 
 			if (pos >= content.size()) {
@@ -50,7 +50,7 @@ namespace edge {
 			}
 		}
 
-		Result<JsonValue, JsonErrorDesc> parse_null() noexcept {
+		Result<JsonValue, JsonErrorDesc> parse_null() {
 			if (match(u8"null")) {
 				pos += 4;
 				return JsonValue{};
@@ -63,7 +63,7 @@ namespace edge {
 			};
 		}
 
-		Result<JsonValue, JsonErrorDesc> parse_boolean() noexcept {
+		Result<JsonValue, JsonErrorDesc> parse_boolean() {
 			if (match(u8"true")) {
 				pos += 4;
 				return JsonValue::create(true);
@@ -80,7 +80,7 @@ namespace edge {
 			};
 		}
 
-		Result<JsonValue, JsonErrorDesc> parse_number() noexcept {
+		Result<JsonValue, JsonErrorDesc> parse_number() {
 			auto subspan = content.substr(pos, content.size());
 			char8_t* parse_end = nullptr;
 
@@ -106,7 +106,7 @@ namespace edge {
 			return JsonValue::create(value);
 		}
 
-		JsonError parse_unicode_escape(char32_t& codepoint) noexcept {
+		JsonError parse_unicode_escape(char32_t& codepoint) {
 			for (i32 i = 0; i < 4; ++i) {
 				if (pos >= content.size()) {
 					return JsonError::InvalidEscape;
@@ -135,7 +135,7 @@ namespace edge {
 			return JsonError::None;
 		}
 
-		JsonError parse_string_content(NotNull<const Allocator*> alloc, String& str) noexcept {
+		JsonError parse_string_content(NotNull<const Allocator*> alloc, String& str) {
 			while (pos < content.size()) {
 				char c = peek();
 
@@ -213,7 +213,7 @@ namespace edge {
 			return JsonError::None;
 		}
 
-		Result<JsonValue, JsonErrorDesc> parse_string(NotNull<const Allocator*> alloc) noexcept {
+		Result<JsonValue, JsonErrorDesc> parse_string(NotNull<const Allocator*> alloc) {
 			if (!consume(u8'"')) {
 				return JsonErrorDesc{
 				.error = JsonError::UnexpectedToken,
@@ -245,7 +245,7 @@ namespace edge {
 			return JsonValue::create(string);
 		}
 
-		Result<JsonValue, JsonErrorDesc> parse_array(NotNull<const Allocator*> alloc) noexcept {
+		Result<JsonValue, JsonErrorDesc> parse_array(NotNull<const Allocator*> alloc) {
 			if (!consume(u8'[')) {
 				return JsonErrorDesc{
 				.error = JsonError::UnexpectedToken,
@@ -316,7 +316,7 @@ namespace edge {
 			return JsonValue::create(array);
 		}
 
-		Result<JsonValue, JsonErrorDesc> parse_object(NotNull<const Allocator*> alloc) noexcept {
+		Result<JsonValue, JsonErrorDesc> parse_object(NotNull<const Allocator*> alloc) {
 			if (!consume(u8'{')) {
 				return JsonErrorDesc{
 					.error = JsonError::UnexpectedToken,
@@ -427,7 +427,7 @@ namespace edge {
 			return JsonValue::create(object);
 		}
 
-		void skip_whitespaces() noexcept {
+		void skip_whitespaces() {
 			while (pos < content.size()) {
 				switch (content[pos])
 				{
@@ -447,21 +447,21 @@ namespace edge {
 			}
 		}
 
-		char8_t peek() const noexcept {
+		char8_t peek() const {
 			if (pos < content.size()) {
 				return content[pos];
 			}
 			return u8'\0';
 		}
 
-		char8_t peek_at(usize offset) const noexcept {
+		char8_t peek_at(usize offset) const {
 			if (pos + offset < content.size()) {
 				return content[pos + offset];
 			}
 			return u8'\0';
 		}
 
-		bool consume(char8_t expected) noexcept {
+		bool consume(char8_t expected) {
 			if (peek() == expected) {
 				pos++;
 				return true;
@@ -469,7 +469,7 @@ namespace edge {
 			return false;
 		}
 
-		bool match(StringView<char8_t> str) noexcept {
+		bool match(StringView<char8_t> str) {
 			if (pos + str.size() > content.size()) {
 				return false;
 			}
@@ -478,7 +478,7 @@ namespace edge {
 		}
 	};
 
-	void JsonValue::destroy(NotNull<const Allocator*> alloc) noexcept {
+	void JsonValue::destroy(NotNull<const Allocator*> alloc) {
 		switch (type)
 		{
 		case JsonValueType::String: {
@@ -522,7 +522,7 @@ namespace edge {
 		String output = {};
 		bool pretty = true;
 
-		bool append_indent(NotNull<const Allocator*> alloc, i32 indent) noexcept {
+		bool append_indent(NotNull<const Allocator*> alloc, i32 indent) {
 			for (i32 i = 0; i < indent; ++i) {
 				if (!output.append(alloc, u8"  ")) {
 					return false;
@@ -532,7 +532,7 @@ namespace edge {
 		}
 
 		// TODO: Return error instead of bool
-		bool serialize(NotNull<const Allocator*> alloc, JsonValue value, i32 indent = 1) noexcept {
+		bool serialize(NotNull<const Allocator*> alloc, JsonValue value, i32 indent = 1) {
 			switch (value.type)
 			{
 			case JsonValueType::Null:

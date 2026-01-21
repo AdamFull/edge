@@ -6,15 +6,15 @@
 namespace edge::filesystem {
 	using Path = String;
 
-	inline constexpr bool is_alpha(char8_t c) noexcept {
+	inline constexpr bool is_alpha(char8_t c) {
 		return (c >= u8'A' && c <= u8'Z') || (c >= u8'a' && c <= u8'z');
 	}
 
-	inline constexpr bool is_separator(char8_t c) noexcept {
+	inline constexpr bool is_separator(char8_t c) {
 		return c == u8'\\' || c == u8'/';
 	}
 
-	inline constexpr usize find_last_separator(StringView<char8_t> path) noexcept {
+	inline constexpr usize find_last_separator(StringView<char8_t> path) {
 		for (usize i = path.size(); i > 0; --i) {
 			if (is_separator(path[i - 1])) {
 				return i - 1;
@@ -23,7 +23,7 @@ namespace edge::filesystem {
 		return SIZE_MAX;
 	}
 
-	inline constexpr usize find_first_separator(StringView<char8_t> path) noexcept {
+	inline constexpr usize find_first_separator(StringView<char8_t> path) {
 		for (usize i = 0; i < path.size(); ++i) {
 			if (is_separator(path[i])) {
 				return i;
@@ -32,7 +32,7 @@ namespace edge::filesystem {
 		return SIZE_MAX;
 	}
 
-	inline constexpr bool is_absolute(StringView<char8_t> path) noexcept {
+	inline constexpr bool is_absolute(StringView<char8_t> path) {
 		if (path.empty()) {
 			return false;
 		}
@@ -48,7 +48,7 @@ namespace edge::filesystem {
 		return false;
 	}
 
-	inline constexpr StringView<char8_t> filename(StringView<char8_t> path) noexcept {
+	inline constexpr StringView<char8_t> filename(StringView<char8_t> path) {
 		if (path.empty()) {
 			return path;
 		}
@@ -69,7 +69,7 @@ namespace edge::filesystem {
 		return path.substr(pos + 1);
 	}
 
-	inline constexpr StringView<char8_t> extension(StringView<char8_t> path) noexcept {
+	inline constexpr StringView<char8_t> extension(StringView<char8_t> path) {
 		StringView<char8_t> fname = filename(path);
 		if (fname.empty() || 
 			fname == StringView<char8_t>{ u8"." } || 
@@ -85,7 +85,7 @@ namespace edge::filesystem {
 		return fname.substr(pos);
 	}
 
-	inline constexpr StringView<char8_t> stem(StringView<char8_t> path) noexcept {
+	inline constexpr StringView<char8_t> stem(StringView<char8_t> path) {
 		StringView<char8_t> fname = filename(path);
 		if (fname.empty() || 
 			fname == StringView<char8_t>{ u8"." } ||
@@ -101,7 +101,7 @@ namespace edge::filesystem {
 		return fname.substr(0, pos);
 	}
 
-	inline constexpr StringView<char8_t> parent_path(StringView<char8_t> path) noexcept {
+	inline constexpr StringView<char8_t> parent_path(StringView<char8_t> path) {
 		if (path.empty()) {
 			return path;
 		}
@@ -130,7 +130,7 @@ namespace edge::filesystem {
 		return path.substr(0, pos);
 	}
 
-	inline Path append(NotNull<const Allocator*> alloc, StringView<char8_t> base, StringView<char8_t> component, char8_t separator = u8'/') noexcept {
+	inline Path append(NotNull<const Allocator*> alloc, StringView<char8_t> base, StringView<char8_t> component, char8_t separator = u8'/') {
 		Path result = {};
 
 		if (base.empty()) {

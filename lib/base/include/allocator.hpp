@@ -202,7 +202,7 @@ namespace edge {
 			);
 		}
 
-		usize get_net() const noexcept {
+		usize get_net() const {
 			detail::AllocatorStats* stats = (detail::AllocatorStats*)user_data;
 			if (!stats) {
 				return ~0ull;
@@ -211,28 +211,28 @@ namespace edge {
 			return stats->alloc_bytes.load() - stats->free_bytes.load();
 		}
 
-		void* malloc(usize size, usize alignment = alignof(max_align_t)) const noexcept {
+		void* malloc(usize size, usize alignment = alignof(max_align_t)) const {
 			if (!m_malloc) {
 				return nullptr;
 			}
 			return m_malloc(size, alignment, user_data);
 		}
 
-		void free(void* ptr) const noexcept {
+		void free(void* ptr) const {
 			if (!m_free) {
 				return;
 			}
 			return m_free(ptr, user_data);
 		}
 
-		void* realloc(void* ptr, usize size, usize alignment = alignof(max_align_t)) const noexcept {
+		void* realloc(void* ptr, usize size, usize alignment = alignof(max_align_t)) const {
 			if (!m_realloc) {
 				return nullptr;
 			}
 			return m_realloc(ptr, size, alignment, user_data);
 		}
 
-		char* strdup(const char* str) const noexcept {
+		char* strdup(const char* str) const {
 			if (!str) {
 				return nullptr;
 			}
@@ -245,7 +245,7 @@ namespace edge {
 			return copy;
 		}
 
-		char* strndup(const char* str, usize n) const noexcept {
+		char* strndup(const char* str, usize n) const {
 			if (!str) {
 				return nullptr;
 			}
@@ -262,7 +262,7 @@ namespace edge {
 		}
 
 		template<typename T, typename... Args>
-		T* allocate(Args&&... args) const noexcept {
+		T* allocate(Args&&... args) const {
 			T* ptr = (T*)malloc(sizeof(T), alignof(T));
 			if (!ptr) {
 				return nullptr;
@@ -276,7 +276,7 @@ namespace edge {
 		}
 
 		template<typename T>
-		T* allocate_array(usize count, usize alignment = alignof(T)) const noexcept {
+		T* allocate_array(usize count, usize alignment = alignof(T)) const {
 			if (count == 0) {
 				return nullptr;
 			}
@@ -296,7 +296,7 @@ namespace edge {
 		}
 
 		template<typename T>
-		void deallocate(T* ptr) const noexcept {
+		void deallocate(T* ptr) const {
 			if (!ptr) {
 				return;
 			}
@@ -309,7 +309,7 @@ namespace edge {
 		}
 
 		template<typename T>
-		void deallocate_array(T* ptr, usize count) const noexcept {
+		void deallocate_array(T* ptr, usize count) const {
 			if (!ptr) {
 				return;
 			}

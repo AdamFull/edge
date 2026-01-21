@@ -179,7 +179,7 @@ namespace edge {
             }
         }
 
-        Handle allocate() noexcept {
+        Handle allocate() {
             if (m_free_indices.empty()) {
                 return HANDLE_INVALID;
             }
@@ -197,7 +197,7 @@ namespace edge {
             return handle_make(index, version);
         }
 
-        Handle allocate_with_data(const T& element) noexcept {
+        Handle allocate_with_data(const T& element) {
             if (m_free_indices.empty()) {
                 return HANDLE_INVALID;
             }
@@ -243,7 +243,7 @@ namespace edge {
             return true;
         }
 
-        T* get(Handle handle) noexcept {
+        T* get(Handle handle) {
             if (handle == HANDLE_INVALID) {
                 return nullptr;
             }
@@ -262,7 +262,7 @@ namespace edge {
             return &m_data[index];
         }
 
-        const T* get(Handle handle) const noexcept {
+        const T* get(Handle handle) const {
             if (handle == HANDLE_INVALID) {
                 return nullptr;
             }
@@ -281,7 +281,7 @@ namespace edge {
             return &m_data[index];
         }
 
-        bool set(Handle handle, const T& element) noexcept {
+        bool set(Handle handle, const T& element) {
             if (handle == HANDLE_INVALID) {
                 return false;
             }
@@ -301,7 +301,7 @@ namespace edge {
             return true;
         }
 
-        bool is_valid(Handle handle) const noexcept {
+        bool is_valid(Handle handle) const {
             if (handle == HANDLE_INVALID) {
                 return false;
             }
@@ -316,15 +316,15 @@ namespace edge {
             return m_versions[index] == version;
         }
 
-        bool is_full() const noexcept {
+        bool is_full() const {
             return m_free_indices.empty();
         }
 
-        bool is_empty() const noexcept {
+        bool is_empty() const {
             return m_count == 0;
         }
 
-        void clear(NotNull<const Allocator*> alloc) noexcept {
+        void clear(NotNull<const Allocator*> alloc) {
             m_free_indices.clear();
 
             // Re-initialize free indices and increment versions

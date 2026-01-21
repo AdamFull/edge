@@ -9,7 +9,7 @@ namespace edge {
 		T* m_data = nullptr;
 		usize m_capacity = 0;
 
-		bool create(NotNull<const Allocator*> alloc, usize capacity) noexcept {
+		bool create(NotNull<const Allocator*> alloc, usize capacity) {
 			if (capacity > 0) {
 				m_data = alloc->allocate_array<T>(capacity);
 				if (!m_data) {
@@ -20,15 +20,15 @@ namespace edge {
 			return true;
 		}
 
-		void destroy(NotNull<const Allocator*> alloc) noexcept {
+		void destroy(NotNull<const Allocator*> alloc) {
 			if (m_data) {
 				alloc->deallocate_array(m_data, m_capacity);
 			}
 		}
 
-		T* data() noexcept { return m_data; }
-		const T* data() const noexcept { return m_data; }
-		usize capacity() const noexcept { return m_capacity; }
+		T* data() { return m_data; }
+		const T* data() const { return m_data; }
+		usize capacity() const { return m_capacity; }
 
 		T& operator[](usize index) {
 			assert(index < m_capacity);
@@ -68,9 +68,9 @@ namespace edge {
 
 		T m_data[N];
 
-		T* data() noexcept { return m_data; }
-		const T* data() const noexcept { return m_data; }
-		constexpr usize capacity() const noexcept { return N; }
+		T* data() { return m_data; }
+		const T* data() const { return m_data; }
+		constexpr usize capacity() const { return N; }
 
 		T& operator[](usize index) {
 			assert(index < N);
@@ -109,9 +109,9 @@ namespace edge {
 		T* m_data = nullptr;
 		usize m_capacity = 0;
 
-		T* data() noexcept { return m_data; }
-		const T* data() const noexcept { return m_data; }
-		usize capacity() const noexcept { return m_capacity; }
+		T* data() { return m_data; }
+		const T* data() const { return m_data; }
+		usize capacity() const { return m_capacity; }
 
 		void attach(T* data, usize capacity) {
 			m_data = data;
@@ -162,45 +162,45 @@ namespace edge {
 
 		template<typename S = StorageProvider>
 			requires std::is_same_v<S, HeapStorage<T>>
-		bool create(NotNull<const Allocator*> alloc, usize capacity) noexcept {
+		bool create(NotNull<const Allocator*> alloc, usize capacity) {
 			return m_storage.create(alloc, capacity);
 		}
 
 		template<typename S = StorageProvider>
 			requires std::is_same_v<S, HeapStorage<T>>
-		void destroy(NotNull<const Allocator*> alloc) noexcept {
+		void destroy(NotNull<const Allocator*> alloc) {
 			m_storage.destroy(alloc);
 		}
 
 		template<typename S = StorageProvider>
 			requires std::is_same_v<S, ExternalStorage<T>>
-		void attach(T* data, usize capacity) noexcept {
+		void attach(T* data, usize capacity) {
 			m_storage.attach(data, capacity);
 		}
 
 		template<typename S = StorageProvider>
 			requires std::is_same_v<S, ExternalStorage<T>>
-		void detach() noexcept {
+		void detach() {
 			m_storage.detach();
 		}
 
-		usize size() const noexcept {
+		usize size() const {
 			return m_size;
 		}
 
-		usize capacity() const noexcept {
+		usize capacity() const {
 			return m_storage.capacity();
 		}
 
-		bool empty() const noexcept {
+		bool empty() const {
 			return m_size == 0;
 		}
 
-		T* data() noexcept {
+		T* data() {
 			return m_storage.data();
 		}
 
-		const T* data() const noexcept {
+		const T* data() const {
 			return m_storage.data();
 		}
 

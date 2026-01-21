@@ -6,31 +6,31 @@
 namespace edge {
 	template<usize BitCount>
 	struct BitArray {
-		constexpr usize bit_count() noexcept {
+		constexpr usize bit_count() {
 			return BitCount;
 		}
 
-		constexpr usize byte_count() noexcept {
+		constexpr usize byte_count() {
 			return BitCount / 8;
 		}
 
-		constexpr void set(usize index) noexcept {
+		constexpr void set(usize index) {
 			m_data[index / 8] |= (1 << (index % 8));
 		}
 
-		constexpr void clear(usize index) noexcept {
+		constexpr void clear(usize index) {
 			m_data[index / 8] &= ~(1 << (index % 8));
 		}
 
-		constexpr void toggle(usize index) noexcept {
+		constexpr void toggle(usize index) {
 			m_data[index / 8] ^= (1 << (index % 8));
 		}
 
-		constexpr bool get(usize index) const noexcept {
+		constexpr bool get(usize index) const {
 			return (m_data[index / 8] & (1 << (index % 8))) != 0;
 		}
 
-		constexpr void put(usize index, bool value) noexcept {
+		constexpr void put(usize index, bool value) {
 			value ? set(index) : clear(index);
 			if (value) {
 				set(index);
@@ -40,15 +40,15 @@ namespace edge {
 			}
 		}
 
-		constexpr void clear_all() noexcept {
+		constexpr void clear_all() {
 			memset(m_data, 0, sizeof(m_data));
 		}
 
-		constexpr void set_all() noexcept {
+		constexpr void set_all() {
 			memset(m_data, 0xFF, sizeof(m_data));
 		}
 
-		constexpr i32 count_set() const noexcept {
+		constexpr i32 count_set() const {
 			i32 count = 0;
 
 			for (i32 i = 0; i < sizeof(m_data); i++) {
@@ -62,7 +62,7 @@ namespace edge {
 			return count;
 		}
 
-		constexpr i32 find_first_set() const noexcept {
+		constexpr i32 find_first_set() const {
 			for (i32 i = 0; i < sizeof(m_data); i++) {
 				if (m_data[i] != 0) {
 					for (i32 bit = 0; bit < 8; bit++) {
@@ -80,7 +80,7 @@ namespace edge {
 			return -1;
 		}
 
-		constexpr bool any_set() const noexcept {
+		constexpr bool any_set() const {
 			for (i32 i = 0; i < sizeof(m_data); i++) {
 				if (m_data[i] != 0) {
 					return true;
@@ -89,7 +89,7 @@ namespace edge {
 			return false;
 		}
 
-		constexpr bool all_clear() const noexcept {
+		constexpr bool all_clear() const {
 			return !any_set();
 		}
 

@@ -45,7 +45,7 @@ namespace edge {
 		}
 	}
 
-	UUID uuid_v4_parse(const char* str) noexcept {
+	UUID uuid_v4_parse(const char* str) {
 		if (!str) {
 			return {};
 		}
@@ -95,7 +95,7 @@ namespace edge {
 		return result;
 	}
 
-	usize uuid_to_string(const UUID& uuid, char* buffer, usize buffer_size) noexcept {
+	usize uuid_to_string(const UUID& uuid, char* buffer, usize buffer_size) {
 		if (!buffer || buffer_size < 37) {
 			return 0;
 		}
@@ -135,7 +135,7 @@ namespace edge {
 		return pos;
 	}
 
-	usize uuid_to_compact_string(const UUID& uuid, char* buffer, usize buffer_size) noexcept {
+	usize uuid_to_compact_string(const UUID& uuid, char* buffer, usize buffer_size) {
 		if (!buffer || buffer_size < 33) {
 			return 0;
 		}

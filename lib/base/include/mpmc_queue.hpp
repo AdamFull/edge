@@ -82,7 +82,7 @@ namespace edge {
 			}
 		}
 
-		bool enqueue(const T& element) noexcept {
+		bool enqueue(const T& element) {
 			usize pos;
 			MPMCNode<T>* node;
 			usize seq;
@@ -112,7 +112,7 @@ namespace edge {
 			return true;
 		}
 
-		bool dequeue(T* out_element) noexcept {
+		bool dequeue(T* out_element) {
 			usize pos;
 			MPMCNode<T>* node;
 			usize seq;
@@ -145,7 +145,7 @@ namespace edge {
 			return true;
 		}
 
-		bool try_enqueue(const T& element, usize max_retries) noexcept {
+		bool try_enqueue(const T& element, usize max_retries) {
 			usize pos;
 			MPMCNode<T>* node;
 			usize seq;
@@ -184,7 +184,7 @@ namespace edge {
 			return true;
 		}
 
-		bool try_dequeue(T* out_element, usize max_retries) noexcept {
+		bool try_dequeue(T* out_element, usize max_retries) {
 			usize pos;
 			MPMCNode<T>* node;
 			usize seq;
@@ -226,7 +226,7 @@ namespace edge {
 			return true;
 		}
 
-		usize size_approx() const noexcept {
+		usize size_approx() const {
 			usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
 			usize dequeue = m_dequeue_pos.load(std::memory_order_relaxed);
 
@@ -236,25 +236,25 @@ namespace edge {
 			return (SIZE_MAX - dequeue) + enqueue + 1;
 		}
 
-		usize capacity() const noexcept {
+		usize capacity() const {
 			return m_capacity;
 		}
 
-		bool empty_approx() const noexcept {
+		bool empty_approx() const {
 			return size_approx() == 0;
 		}
 
-		bool full_approx() const noexcept {
+		bool full_approx() const {
 			return size_approx() >= m_capacity;
 		}
 
-		Iterator begin() noexcept {
+		Iterator begin() {
 			usize dequeue = m_dequeue_pos.load(std::memory_order_relaxed);
 			usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
 			return { this, dequeue, enqueue };
 		}
 
-		Iterator end() noexcept {
+		Iterator end() {
 			usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
 			return { this, enqueue, enqueue };
 		}

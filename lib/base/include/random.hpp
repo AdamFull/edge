@@ -13,7 +13,7 @@ namespace edge {
 		u64 state = 0;
 		u64 inc = 0;
 
-		constexpr void seed(u64 seed_val) noexcept {
+		constexpr void seed(u64 seed_val) {
 			state = 0;
 			inc = (seed_val << 1) | 1;
 			state = state * 6364136223846793005ULL + inc;
@@ -21,7 +21,7 @@ namespace edge {
 			state = state * 6364136223846793005ULL + inc;
 		}
 
-		constexpr u32 next() noexcept {
+		constexpr u32 next() {
 			u64 oldstate = state;
 			state = oldstate * 6364136223846793005ULL + inc;
 			u32 xorshifted = (u32)(((oldstate >> 18u) ^ oldstate) >> 27u);
@@ -37,7 +37,7 @@ namespace edge {
 			0xa9582618e03fc9aaULL, 0x39abdc4529b1661cULL
 		};
 
-		constexpr void seed(u64 seed_val) noexcept {
+		constexpr void seed(u64 seed_val) {
 			u64 z = seed_val;
 			for (i32 i = 0; i < 4; i++) {
 				z += 0x9e3779b97f4a7c15ULL;
@@ -48,7 +48,7 @@ namespace edge {
 			}
 		}
 
-		constexpr u64 next() noexcept {
+		constexpr u64 next() {
 			u64 result = std::rotl(s[1] * 5, 7) * 9;
 			u64 t = s[1] << 17;
 
@@ -62,7 +62,7 @@ namespace edge {
 			return result;
 		}
 
-		constexpr void jump() noexcept {
+		constexpr void jump() {
 			u64 s0 = 0, s1 = 0, s2 = 0, s3 = 0;
 			for (i32 i = 0; i < 4; i++) {
 				for (i32 b = 0; b < 64; b++) {
@@ -85,11 +85,11 @@ namespace edge {
 	struct RngSplitMix64 {
 		u64 state = 0;
 
-		constexpr void seed(u64 seed_val) noexcept {
+		constexpr void seed(u64 seed_val) {
 			state = seed_val;
 		}
 
-		constexpr u64 next() noexcept {
+		constexpr u64 next() {
 			u64 z = (state += 0x9e3779b97f4a7c15ULL);
 			z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
 			z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
@@ -109,11 +109,11 @@ namespace edge {
 
 		Algorithm m_state = {};
 
-		constexpr void set_seed(u64 seed) noexcept {
+		constexpr void set_seed(u64 seed) {
 			m_state.seed(seed);
 		}
 
-		constexpr u32 gen_u32() noexcept {
+		constexpr u32 gen_u32() {
 			if constexpr (std::is_same_v<Algorithm, RngPCG>) {
 				return m_state.next();
 			}
@@ -122,7 +122,7 @@ namespace edge {
 			}
 		}
 
-		constexpr u64 gen_u64() noexcept {
+		constexpr u64 gen_u64() {
 			if constexpr (std::is_same_v<Algorithm, RngPCG>) {
 				return (static_cast<u64>(m_state.next()) << 32) | m_state.next();
 			}
@@ -131,7 +131,7 @@ namespace edge {
 			}
 		}
 
-		constexpr u32 gen_u32_bounded(u32 bound) noexcept {
+		constexpr u32 gen_u32_bounded(u32 bound) {
 			if (bound == 0) {
 				return 0;
 			}
@@ -147,14 +147,14 @@ namespace edge {
 			}
 		}
 
-		constexpr u64 gen_u64_bounded(u64 bound) noexcept {
+		constexpr u64 gen_u64_bounded(u64 bound) {
 			if (bound == 0) {
 				return 0;
 			}
 			return gen_u64() % bound;
 		}
 
-		constexpr i32 gen_i32_range(i32 min_val, i32 max_val) noexcept {
+		constexpr i32 gen_i32_range(i32 min_val, i32 max_val) {
 			if (min_val > max_val) {
 				i32 temp = min_val;
 				min_val = max_val;
@@ -164,7 +164,7 @@ namespace edge {
 			return static_cast<i32>(gen_u32_bounded(range)) + min_val;
 		}
 
-		constexpr i64 gen_i64_range(i64 min_val, i64 max_val) noexcept {
+		constexpr i64 gen_i64_range(i64 min_val, i64 max_val) {
 			if (min_val > max_val) {
 				i64 temp = min_val;
 				min_val = max_val;
@@ -174,29 +174,29 @@ namespace edge {
 			return static_cast<i64>(gen_u64_bounded(range)) + min_val;
 		}
 
-		constexpr f32 gen_f32() noexcept {
+		constexpr f32 gen_f32() {
 			u32 r = gen_u32() >> 8;
 			return static_cast<f32>(r) * (1.0f / 16777216.0f);
 		}
 
-		constexpr f32 gen_f32_range(f32 min_val, f32 max_val) noexcept {
+		constexpr f32 gen_f32_range(f32 min_val, f32 max_val) {
 			return min_val + gen_f32() * (max_val - min_val);
 		}
 
-		constexpr f64 gen_f64() noexcept {
+		constexpr f64 gen_f64() {
 			u64 r = gen_u64() >> 11;
 			return static_cast<f64>(r) * (1.0 / 9007199254740992.0);
 		}
 
-		constexpr f64 gen_f64_range(f64 min_val, f64 max_val) noexcept {
+		constexpr f64 gen_f64_range(f64 min_val, f64 max_val) {
 			return min_val + gen_f64() * (max_val - min_val);
 		}
 
-		constexpr bool gen_bool(f32 probability = 0.5f) noexcept {
+		constexpr bool gen_bool(f32 probability = 0.5f) {
 			return gen_f32() < probability;
 		}
 
-		f32 gen_normal_f32(f32 mean = 0.0f, f32 stddev = 1.0f) noexcept {
+		f32 gen_normal_f32(f32 mean = 0.0f, f32 stddev = 1.0f) {
 			static thread_local bool has_spare = false;
 			static thread_local f32 spare;
 
@@ -219,7 +219,7 @@ namespace edge {
 			return mean + stddev * u * s;
 		}
 
-		f64 gen_normal_f64(f64 mean = 0.0, f64 stddev = 1.0) noexcept {
+		f64 gen_normal_f64(f64 mean = 0.0, f64 stddev = 1.0) {
 			static thread_local bool has_spare = false;
 			static thread_local f64 spare;
 
@@ -242,14 +242,14 @@ namespace edge {
 			return mean + stddev * u * s;
 		}
 
-		f32 gen_exp_f32(f32 lambda = 1.0f) noexcept {
+		f32 gen_exp_f32(f32 lambda = 1.0f) {
 			if (lambda <= 0.0f) {
 				return 0.0f;
 			}
 			return -std::log(1.0f - gen_f32()) / lambda;
 		}
 
-		f64 gen_exp_f64(f64 lambda = 1.0) noexcept {
+		f64 gen_exp_f64(f64 lambda = 1.0) {
 			if (lambda <= 0.0) {
 				return 0.0;
 			}
@@ -257,7 +257,7 @@ namespace edge {
 		}
 
 		template<TrivialType T>
-		constexpr void shuffle(T* array, usize count) noexcept {
+		constexpr void shuffle(T* array, usize count) {
 			if (!array || count == 0) {
 				return;
 			}
@@ -271,7 +271,7 @@ namespace edge {
 		}
 
 		template<TrivialType T>
-		constexpr T choice(const T* array, usize count) noexcept {
+		constexpr T choice(const T* array, usize count) {
 			if (!array || count == 0) {
 				return T{};
 			}
@@ -281,7 +281,7 @@ namespace edge {
 		}
 
 		template<TrivialType T>
-		constexpr T* choice_ptr(T* array, usize count) noexcept {
+		constexpr T* choice_ptr(T* array, usize count) {
 			if (!array || count == 0) {
 				return nullptr;
 			}
@@ -289,7 +289,7 @@ namespace edge {
 			return &array[index];
 		}
 
-		constexpr void gen_bytes(void* buffer, usize size) noexcept {
+		constexpr void gen_bytes(void* buffer, usize size) {
 			if (!buffer || size == 0) return;
 
 			u8* bytes = static_cast<u8*>(buffer);

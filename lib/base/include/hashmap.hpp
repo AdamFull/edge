@@ -172,7 +172,7 @@ namespace edge {
 			return true;
 		}
 
-		f32 load_factor() const noexcept {
+		f32 load_factor() const {
 			if (m_bucket_count == 0) {
 				return 0.0f;
 			}
@@ -212,7 +212,7 @@ namespace edge {
 			return true;
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> find(const K& key) noexcept {
+		HashMapIterator<K, V, Hash, KeyEqual> find(const K& key) {
 			usize hash = Hash{}(key);
 			usize bucket_index = hash & (m_bucket_count - 1);
 
@@ -231,7 +231,7 @@ namespace edge {
 			return end();
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> find(const K& key) const noexcept {
+		HashMapIterator<K, V, Hash, KeyEqual> find(const K& key) const {
 			return const_cast<HashMap*>(this)->find(key);
 		}
 
@@ -288,7 +288,7 @@ namespace edge {
 			return false;
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> begin() noexcept {
+		HashMapIterator<K, V, Hash, KeyEqual> begin() {
 			HashMapIterator<K, V, Hash, KeyEqual> it;
 			it.map = this;
 			it.bucket_index = 0;
@@ -307,27 +307,27 @@ namespace edge {
 			return HashMapIterator<K, V, Hash, KeyEqual> { this, 0, nullptr };
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> end() noexcept {
+		HashMapIterator<K, V, Hash, KeyEqual> end() {
 			return HashMapIterator<K, V, Hash, KeyEqual>{ this, 0, nullptr };
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> begin() const noexcept {
+		HashMapIterator<K, V, Hash, KeyEqual> begin() const {
 			return const_cast<HashMap*>(this)->begin();
 		}
 
-		HashMapIterator<K, V, Hash, KeyEqual> end() const noexcept {
+		HashMapIterator<K, V, Hash, KeyEqual> end() const {
 			return const_cast<HashMap*>(this)->end();
 		}
 
-		bool contains(const K& key) const noexcept {
+		bool contains(const K& key) const {
 			return find(key) != end();
 		}
 
-		bool empty() const noexcept {
+		bool empty() const {
 			return m_size == 0;
 		}
 
-		usize size() const noexcept {
+		usize size() const {
 			return m_size;
 		}
 

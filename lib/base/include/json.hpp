@@ -50,51 +50,51 @@ namespace edge {
 			HashMap<String, JsonValue> object = {};
 		};
 
-		JsonValue() noexcept
+		JsonValue()
 			: type{ JsonValueType::Null } {
 
 		}
 
-		[[nodiscard]] static JsonValue create() noexcept {
+		[[nodiscard]] static JsonValue create() {
 			return {};
 		}
 
-		[[nodiscard]] static JsonValue create(bool val) noexcept {
+		[[nodiscard]] static JsonValue create(bool val) {
 			JsonValue json = {};
 			json.type = JsonValueType::Boolean;
 			json.boolean = val;
 			return json;
 		}
 
-		[[nodiscard]] static JsonValue create(double val) noexcept {
+		[[nodiscard]] static JsonValue create(double val) {
 			JsonValue json = {};
 			json.type = JsonValueType::Number;
 			json.number = val;
 			return json;
 		}
 
-		[[nodiscard]] static JsonValue create(String val) noexcept {
+		[[nodiscard]] static JsonValue create(String val) {
 			JsonValue json = {};
 			json.type = JsonValueType::String;
 			json.string = val;
 			return json;
 		}
 
-		[[nodiscard]] static JsonValue create(Array<JsonValue> val) noexcept {
+		[[nodiscard]] static JsonValue create(Array<JsonValue> val) {
 			JsonValue json = {};
 			json.type = JsonValueType::Array;
 			json.array = val;
 			return json;
 		}
 
-		[[nodiscard]] static JsonValue create(HashMap<String, JsonValue> val) noexcept {
+		[[nodiscard]] static JsonValue create(HashMap<String, JsonValue> val) {
 			JsonValue json = {};
 			json.type = JsonValueType::Object;
 			json.object = val;
 			return json;
 		}
 
-		void destroy(NotNull<const Allocator*> alloc) noexcept;
+		void destroy(NotNull<const Allocator*> alloc);
 	};
 
 	Result<JsonValue, JsonErrorDesc> json_parse(NotNull<const Allocator*> alloc, StringView<char8_t> content);

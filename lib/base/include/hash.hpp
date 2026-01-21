@@ -49,7 +49,7 @@ namespace edge {
 
 	template<typename T>
 	struct Hash {
-		usize operator()(const T& obj) const noexcept {
+		usize operator()(const T& obj) const {
 			(void)obj;
 			static_assert(sizeof(T) == 0, "Hash specialization not found for this type. Please provide a Hash<T> specialization.");
 			return 0;
@@ -58,7 +58,7 @@ namespace edge {
 
 	template<std::integral T>
 	struct Hash<T> {
-		usize operator()(const T& value) const noexcept {
+		usize operator()(const T& value) const {
 			if constexpr (sizeof(T) == 1) {
 				return static_cast<usize>(value) * 0x9e3779b9u;
 			}

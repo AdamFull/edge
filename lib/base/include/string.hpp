@@ -13,11 +13,11 @@ namespace edge {
 		constexpr usize STRING_DEFAULT_CAPACITY = 16;
 
 		namespace utf8 {
-			inline constexpr bool is_continuation_byte(char8_t c) noexcept {
+			inline constexpr bool is_continuation_byte(char8_t c) {
 				return (c & 0xC0) == 0x80;
 			}
 
-			inline constexpr usize sequence_length(u8 first_byte) noexcept {
+			inline constexpr usize sequence_length(u8 first_byte) {
 				if ((first_byte & 0x80) == 0x00) return 1;      // 0xxxxxxx
 				if ((first_byte & 0xE0) == 0xC0) return 2;      // 110xxxxx
 				if ((first_byte & 0xF0) == 0xE0) return 3;      // 1110xxxx
@@ -25,31 +25,31 @@ namespace edge {
 				return 0;
 			}
 
-			inline constexpr bool is_valid_codepoint(char32_t cp) noexcept {
+			inline constexpr bool is_valid_codepoint(char32_t cp) {
 				return cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF);
 			}
 
-			inline constexpr bool is_surrogate(char32_t cp) noexcept {
+			inline constexpr bool is_surrogate(char32_t cp) {
 				return cp >= 0xD800u && cp <= 0xDFFFu;
 			}
 
-			inline constexpr bool is_high_surrogate(char16_t cp) noexcept {
+			inline constexpr bool is_high_surrogate(char16_t cp) {
 				return cp >= 0xD800u && cp <= 0xDBFFu;
 			}
 
-			inline constexpr bool is_high_surrogate_invalid(char16_t cp) noexcept {
+			inline constexpr bool is_high_surrogate_invalid(char16_t cp) {
 				return cp < 0xD800u || cp > 0xDBFFu;
 			}
 
-			inline constexpr bool is_low_surrogate(char16_t cp) noexcept {
+			inline constexpr bool is_low_surrogate(char16_t cp) {
 				return cp >= 0xDC00u && cp <= 0xDFFFu;
 			}
 
-			inline constexpr bool is_low_surrogate_invalid(char16_t cp) noexcept {
+			inline constexpr bool is_low_surrogate_invalid(char16_t cp) {
 				return cp < 0xDC00u || cp > 0xDFFF;
 			}
 
-			inline constexpr usize char_byte_count(char8_t fb) noexcept {
+			inline constexpr usize char_byte_count(char8_t fb) {
 				auto uc = static_cast<u8>(fb);
 				if ((uc & 0x80) == 0) return 1;
 				if ((uc & 0xE0) == 0xC0) return 2;
@@ -58,7 +58,7 @@ namespace edge {
 				return 0;
 			}
 
-			inline bool decode_char(const char8_t* utf8, usize remaining, char32_t& cp, usize& readed) noexcept {
+			inline bool decode_char(const char8_t* utf8, usize remaining, char32_t& cp, usize& readed) {
 				if (remaining == 0) {
 					return false;
 				}
@@ -111,7 +111,7 @@ namespace edge {
 				}
 			}
 
-			inline bool encode_char(char32_t cp, char8_t* out, usize& len) noexcept {
+			inline bool encode_char(char32_t cp, char8_t* out, usize& len) {
 				if (!is_valid_codepoint(cp)) {
 					return false;
 				}
@@ -150,7 +150,7 @@ namespace edge {
 				return true;
 			}
 
-			inline bool encode_char(char16_t cp, char8_t* out, usize& len) noexcept {
+			inline bool encode_char(char16_t cp, char8_t* out, usize& len) {
 				if (is_high_surrogate(cp) || is_low_surrogate(cp)) {
 					return false;
 				}
@@ -158,7 +158,7 @@ namespace edge {
 				return encode_char(static_cast<char32_t>(cp), out, len);
 			}
 
-			inline bool encode_char(char16_t cp_high, char16_t cp_low, char8_t* out, usize& len) noexcept {
+			inline bool encode_char(char16_t cp_high, char16_t cp_low, char8_t* out, usize& len) {
 				if (is_high_surrogate_invalid(cp_high) || is_low_surrogate_invalid(cp_low)) {
 					return false;
 				}
@@ -167,7 +167,7 @@ namespace edge {
 				return encode_char(cp, out, len);
 			}
 
-			inline bool validate_utf8(const char8_t* data, usize length) noexcept {
+			inline bool validate_utf8(const char8_t* data, usize length) {
 				usize pos = 0;
 				while (pos < length) {
 					char32_t cp = 0;
@@ -198,7 +198,7 @@ namespace edge {
 		usize m_length = 0ull;
 		usize m_capacity = 0ull;
 
-		bool from_raw(NotNull<const Allocator*> alloc, const char* cstr, usize len) noexcept {
+		bool from_raw(NotNull<const Allocator*> alloc, const char* cstr, usize len) {
 			if (!cstr) {
 				return allocate(alloc, len + 1);
 			}
@@ -210,7 +210,7 @@ namespace edge {
 			return true;
 		}
 
-		bool from_utf8(NotNull<const Allocator*> alloc, const_pointer cstr, usize len) noexcept {
+		bool from_utf8(NotNull<const Allocator*> alloc, const_pointer cstr, usize len) {
 			if (!cstr) {
 				return allocate(alloc, detail::STRING_DEFAULT_CAPACITY);
 			}
@@ -231,7 +231,7 @@ namespace edge {
 			return true;
 		}
 	
-		bool from_utf16(NotNull<const Allocator*> alloc, const char16_t* str, usize len) noexcept {
+		bool from_utf16(NotNull<const Allocator*> alloc, const char16_t* str, usize len) {
 			if (!str) {
 				return allocate(alloc, detail::STRING_DEFAULT_CAPACITY);
 			}
@@ -247,11 +247,11 @@ namespace edge {
 		}
 
 		template<usize N>
-		bool from_utf16(NotNull<const Allocator*> alloc, const char16_t(&str)[N]) noexcept {
+		bool from_utf16(NotNull<const Allocator*> alloc, const char16_t(&str)[N]) {
 			return from_utf16(alloc, str, N - 1);
 		}
 
-		bool from_utf32(NotNull<const Allocator*> alloc, const char32_t* str, usize len) noexcept {
+		bool from_utf32(NotNull<const Allocator*> alloc, const char32_t* str, usize len) {
 			if (!str) {
 				return allocate(alloc, detail::STRING_DEFAULT_CAPACITY);
 			}
@@ -267,11 +267,11 @@ namespace edge {
 		}
 
 		template<usize N>
-		bool from_utf32(NotNull<const Allocator*> alloc, const char32_t(&str)[N]) noexcept {
+		bool from_utf32(NotNull<const Allocator*> alloc, const char32_t(&str)[N]) {
 			return from_utf32(alloc, str, N - 1);
 		}
 
-		char16_t* to_utf16(NotNull<const Allocator*> alloc) noexcept {
+		char16_t* to_utf16(NotNull<const Allocator*> alloc) {
 			usize len = 0, pos = 0, out_pos = 0;
 
 			while (pos < m_length) {
@@ -391,15 +391,15 @@ namespace edge {
 
 		template<typename T, usize N>
 			requires std::is_same_v<T, char8_t> || std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t>
-		bool append(NotNull<const Allocator*> alloc, const T(&str)[N]) noexcept {
+		bool append(NotNull<const Allocator*> alloc, const T(&str)[N]) {
 			return append(alloc, str, N - 1);
 		}
 
-		bool append(NotNull<const Allocator*> alloc, const_pointer text) noexcept {
+		bool append(NotNull<const Allocator*> alloc, const_pointer text) {
 			return append(alloc, text, strlen((const char*)text));
 		}
 
-		bool append(NotNull<const Allocator*> alloc, const_pointer buffer, usize length) noexcept {
+		bool append(NotNull<const Allocator*> alloc, const_pointer buffer, usize length) {
 			if (!buffer || length == 0) {
 				return false;
 			}
@@ -479,7 +479,7 @@ namespace edge {
 			return true;
 		}
 
-		bool append(NotNull<const Allocator*> alloc, value_type c) noexcept {
+		bool append(NotNull<const Allocator*> alloc, value_type c) {
 			if (!grow(alloc, 2)) {
 				return false;
 			}
@@ -492,7 +492,7 @@ namespace edge {
 
 		template<typename T>
 			requires std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t>
-		bool append(NotNull<const Allocator*> alloc, T cp) noexcept {
+		bool append(NotNull<const Allocator*> alloc, T cp) {
 			usize byte_len = 0;
 			value_type buf[4];
 			if (!detail::utf8::encode_char(cp, buf, byte_len)) {
@@ -510,7 +510,7 @@ namespace edge {
 			return true;
 		}
 
-		bool append(NotNull<const Allocator*> alloc, char16_t cp_high, char16_t cp_low) noexcept {
+		bool append(NotNull<const Allocator*> alloc, char16_t cp_high, char16_t cp_low) {
 			usize byte_len = 0;
 			value_type buf[4];
 			if (!detail::utf8::encode_char(cp_high, cp_low, buf, byte_len)) {
@@ -565,13 +565,13 @@ namespace edge {
 			return true;
 		}
 
-		bool empty() const noexcept {
+		bool empty() const {
 			return m_length == 0;
 		}
 
 		template<typename CharT>
 			requires std::same_as<CharT, char> || std::same_as<CharT, char8_t>
-		i32 compare(const CharT* other) const noexcept {
+		i32 compare(const CharT* other) const {
 			if (!m_data) {
 				return other ? -1 : 0;
 			}
@@ -584,7 +584,7 @@ namespace edge {
 				m_length < traits_type::length(reinterpret_cast<const char8_t*>(other)) ? m_length : traits_type::length(reinterpret_cast<const char8_t*>(other)));
 		}
 
-		i32 compare(const String& str2) const noexcept {
+		i32 compare(const String& str2) const {
 			if (!m_data) {
 				return str2.m_data ? -1 : 0;
 			}
@@ -608,7 +608,7 @@ namespace edge {
 			return 0;
 		}
 
-		usize find(const_pointer needle) const noexcept {
+		usize find(const_pointer needle) const {
 			if (!m_data || !needle) {
 				return SIZE_MAX;
 			}
@@ -631,7 +631,7 @@ namespace edge {
 			return SIZE_MAX;
 		}
 
-		usize find(value_type c, usize pos = 0) const noexcept {
+		usize find(value_type c, usize pos = 0) const {
 			if (!m_data || pos >= m_length) {
 				return SIZE_MAX;
 			}
@@ -644,34 +644,34 @@ namespace edge {
 			return dest.from_utf8(alloc, m_data, m_length);
 		}
 
-		constexpr const_reference front() const noexcept {
+		constexpr const_reference front() const {
 			assert(m_length > 0 && "front() called on empty String");
 			return m_data[0];
 		}
 
-		constexpr const_reference back() const noexcept {
+		constexpr const_reference back() const {
 			assert(m_length > 0 && "back() called on empty String");
 			return m_data[m_length - 1];
 		}
 
-		iterator begin() noexcept {
+		iterator begin() {
 			return m_data;
 		}
 
-		iterator end() noexcept {
+		iterator end() {
 			return m_data + m_length;
 		}
 
-		const_iterator begin() const noexcept {
+		const_iterator begin() const {
 			return m_data;
 		}
 
-		const_iterator end() const noexcept {
+		const_iterator end() const {
 			return m_data + m_length;
 		}
 
 	private:
-		bool allocate(NotNull<const Allocator*> alloc, usize capacity) noexcept {
+		bool allocate(NotNull<const Allocator*> alloc, usize capacity) {
 			if (capacity < detail::STRING_DEFAULT_CAPACITY) {
 				capacity = detail::STRING_DEFAULT_CAPACITY;
 			}
@@ -688,7 +688,7 @@ namespace edge {
 			return true;
 		}
 
-		bool grow(NotNull<const Allocator*> alloc, usize additional) noexcept {
+		bool grow(NotNull<const Allocator*> alloc, usize additional) {
 			usize required = m_length + additional;
 			if (required <= m_capacity) {
 				return true;
@@ -707,13 +707,13 @@ namespace edge {
 		}
 	};
 
-	inline bool operator==(const String& lhs, const String& rhs) noexcept {
+	inline bool operator==(const String& lhs, const String& rhs) {
 		return lhs.compare(rhs) == 0;
 	}
 
 	template<>
 	struct Hash<String> {
-		EDGE_FORCE_INLINE usize operator()(const String& string) const noexcept {
+		EDGE_FORCE_INLINE usize operator()(const String& string) const {
 #if EDGE_HAS_SSE4_2
 			return hash_crc32(string.m_data, string.m_length);
 #else

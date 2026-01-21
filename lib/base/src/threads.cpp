@@ -85,7 +85,7 @@ namespace edge {
 		return lhs.id == rhs.id;
 	}
 
-	void thread_exit(i32 res) noexcept {
+	void thread_exit(i32 res) {
 		_endthreadex(static_cast<unsigned int>(res));
 	}
 
@@ -502,7 +502,7 @@ namespace edge {
 		return pthread_equal(lhs.handle, rhs.handle) != 0;
 	}
 
-	void thread_exit(i32 res) noexcept {
+	void thread_exit(i32 res) {
 		pthread_exit(reinterpret_cast<void*>(static_cast<intptr_t>(res)));
 	}
 

@@ -81,7 +81,7 @@ namespace edge {
 	Thread thread_current();
 	u32 thread_current_id();
 	bool thread_equal(const Thread& lhs, const Thread& rhs);
-	void thread_exit(i32 res) noexcept;
+	void thread_exit(i32 res);
 	void thread_yield();
 	i32 thread_sleep(const std::chrono::nanoseconds& duration);
 
