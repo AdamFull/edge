@@ -43,13 +43,13 @@ static void job_a() {
         thread_id = edge::job_thread_id();
     }
 
-    edge::job_switch_to_main();
+    edge::job_continue_on_main();
     thread_id = edge::job_thread_id();
     printf("[Thread %d] [Job A] Hello from main thread.\n", thread_id);
-    edge::job_switch_to_io();
+    edge::job_continue_on_io();
     thread_id = edge::job_thread_id();
     printf("[Thread %d] [Job A] Hello from io thread.\n", thread_id);
-    edge::job_switch_to_background();
+    edge::job_continue_on_background();
     thread_id = edge::job_thread_id();
     printf("[Thread %d] [Job A] Hello from background thread.\n", thread_id);
 }

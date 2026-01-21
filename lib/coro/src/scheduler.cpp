@@ -633,7 +633,7 @@ namespace edge {
 		job_yield_base();
 	}
 
-	void job_switch_to_main() noexcept {
+	void job_continue_on_main() noexcept {
 		if (thread_context.worker->wg == Scheduler::Workgroup::Main) {
 			return;
 		}
@@ -643,7 +643,7 @@ namespace edge {
 		job_yield_base();
 	}
 
-	void job_switch_to_background() noexcept {
+	void job_continue_on_background() noexcept {
 		if (thread_context.worker->wg == Scheduler::Workgroup::Background) {
 			return;
 		}
@@ -653,7 +653,7 @@ namespace edge {
 		job_yield_base();
 	}
 
-	void job_switch_to_io() noexcept {
+	void job_continue_on_io() noexcept {
 		if (thread_context.worker->wg == Scheduler::Workgroup::IO) {
 			return;
 		}

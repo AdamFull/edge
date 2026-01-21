@@ -140,9 +140,9 @@ namespace edge {
 	void job_await(Job* child_job) noexcept;
 
 	// NOTE: Yields job and runs it on main/background/io threads
-	void job_switch_to_main() noexcept;
-	void job_switch_to_background() noexcept;
-	void job_switch_to_io() noexcept;
+	void job_continue_on_main() noexcept;
+	void job_continue_on_background() noexcept;
+	void job_continue_on_io() noexcept;
 
 	template<typename T>
 	void job_return(T&& value) noexcept {
