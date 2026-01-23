@@ -239,6 +239,7 @@ namespace edge {
 
 	bool EngineContext::run() {
 		while (!runtime->requested_close()) {
+			sched->tick();
 			frame_time_controller.process([this](f32 delta_time) -> void { tick(delta_time); });
 		}
 
