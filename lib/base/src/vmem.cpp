@@ -12,6 +12,12 @@ namespace edge {
 		return static_cast<usize>(si.dwPageSize);
 	}
 
+	usize vmem_allocation_granularity() {
+		SYSTEM_INFO si;
+		GetSystemInfo(&si);
+		return static_cast<usize>(si.dwAllocationGranularity);
+	}
+
 	bool vmem_reserve(void** out_base, usize reserve_bytes) {
 		if (!out_base) {
 			return false;
@@ -92,6 +98,10 @@ namespace edge {
 			return 4096;
 		}
 		return static_cast<usize>(page_size);
+	}
+
+	usize vmem_allocation_granularity() {
+		return vmem_page_size();
 	}
 
 	bool vmem_reserve(void** out_base, usize reserve_bytes) {

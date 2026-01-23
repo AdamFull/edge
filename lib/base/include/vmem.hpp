@@ -43,6 +43,8 @@ namespace edge {
 	}
 
 	usize vmem_page_size();
+	usize vmem_allocation_granularity();
+
 	bool vmem_reserve(void** out_base, usize reserve_bytes);
 	bool vmem_release(void* base, usize reserve_bytes);
 	bool vmem_commit(void* addr, usize size);
