@@ -93,6 +93,7 @@ namespace edge {
 		gfx::Queue main_queue = {};
 		gfx::Queue copy_queue = {};
 		gfx::Renderer renderer = {};
+		gfx::Uploader uploader = {};
 		
 		ImGuiLayer imgui_layer = {};
 		gfx::ImGuiRenderer imgui_renderer = {};

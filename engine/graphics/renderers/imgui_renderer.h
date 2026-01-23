@@ -15,7 +15,6 @@ namespace edge::gfx {
 	struct Renderer;
 
 	struct ImGuiRendererCreateInfo {
-		const Allocator* alloc = nullptr;
 		Renderer* renderer = nullptr;
 	};
 
@@ -34,7 +33,7 @@ namespace edge::gfx {
 		u64 index_buffer_capacity = 0;
 		bool index_need_to_grow = true;
 
-		bool create(ImGuiRendererCreateInfo create_info);
+		bool create(NotNull<const Allocator*> alloc, ImGuiRendererCreateInfo create_info);
 		void destroy(NotNull<const Allocator*> alloc);
 
 		void execute(NotNull<const Allocator*> alloc);

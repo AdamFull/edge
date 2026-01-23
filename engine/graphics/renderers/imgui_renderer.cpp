@@ -26,16 +26,16 @@ namespace edge::gfx {
 		return result;
 	}
 
-	bool ImGuiRenderer::create(ImGuiRendererCreateInfo create_info) {
+	bool ImGuiRenderer::create(NotNull<const Allocator*> alloc, ImGuiRendererCreateInfo create_info) {
 		renderer = create_info.renderer;
 
 		if (!vertex_shader.create(imgui_vs, imgui_vs_size)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
 		if (!fragment_shader.create(imgui_fs, imgui_fs_size)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
@@ -157,7 +157,7 @@ namespace edge::gfx {
 		};
 
 		if (!pipeline.create(&pipeline_create_info)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
@@ -167,7 +167,7 @@ namespace edge::gfx {
 		index_buffer = renderer->add_resource();
 		index_buffer_capacity = k_initial_index_count;
 
-		update_buffers(create_info.alloc);
+		update_buffers(alloc);
 
 		return true;
 	}

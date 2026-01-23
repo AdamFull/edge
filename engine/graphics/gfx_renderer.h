@@ -3,13 +3,13 @@
 
 #include "gfx_context.h"
 #include "../resources/texture_source.h"
+
+#include <scheduler.hpp>
 #include <handle_pool.hpp>
 #include <free_index_list.hpp>
 
 namespace edge::gfx {
 	struct Renderer;
-
-	constexpr usize RENDERER_FRAME_OVERLAP = 3;
 
 	constexpr usize RENDERER_UAV_MAX = 16;
 
@@ -28,7 +28,6 @@ namespace edge::gfx {
 	};
 
 	struct RendererCreateInfo {
-		const Allocator* alloc = nullptr;
 		Queue main_queue = {};
 	};
 
@@ -108,8 +107,8 @@ namespace edge::gfx {
 		CmdPool cmd_pool = {};
 
 		QueryPool frame_timestamp = {};
-		double timestamp_freq = 0.0;
-		double gpu_delta_time = 0.0;
+		f64 timestamp_freq = 0.0;
+		f64 gpu_delta_time = 0.0;
 
 		DescriptorSetLayout descriptor_layout = {};
 		DescriptorPool descriptor_pool = {};
@@ -121,7 +120,7 @@ namespace edge::gfx {
 		ImageView swapchain_image_views[8] = {};
 		u32 active_image_index = 0u;
 
-		RendererFrame frames[RENDERER_FRAME_OVERLAP] = {};
+		RendererFrame frames[FRAME_OVERLAP] = {};
 		RendererFrame* active_frame = nullptr;
 		u32 frame_number = 0u;
 
@@ -144,7 +143,7 @@ namespace edge::gfx {
 
 		Array<TextureUpload> texture_uploads = {};
 
-		bool create(RendererCreateInfo create_info);
+		bool create(NotNull<const Allocator*> alloc, RendererCreateInfo create_info);
 		void destroy(NotNull<const Allocator*> alloc);
 
 		Handle add_resource();

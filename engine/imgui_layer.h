@@ -10,7 +10,6 @@ namespace edge {
 	struct InputSystem;
 
 	struct ImGuiLayerInitInfo {
-		const Allocator* alloc = nullptr;
 		IRuntime* runtime = nullptr;
 		InputSystem* input_system = nullptr;
 	};
@@ -21,7 +20,7 @@ namespace edge {
 
 		u64 input_listener_id = 0;
 
-		bool create(ImGuiLayerInitInfo init_info);
+		bool create(NotNull<const Allocator*> alloc, ImGuiLayerInitInfo init_info);
 		void destroy(NotNull<const Allocator*> alloc);
 
 		void on_frame_begin(f32 dt);

@@ -190,20 +190,20 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool Renderer::create(RendererCreateInfo create_info) {
-		if (!create_info.alloc || !create_info.main_queue) {
+	bool Renderer::create(NotNull<const Allocator*> alloc, RendererCreateInfo create_info) {
+		if (!create_info.main_queue) {
 			return false;
 		}
 
 		direct_queue = create_info.main_queue;
 
 		if (!cmd_pool.create(direct_queue)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
 		if (!frame_timestamp.create(VK_QUERY_TYPE_TIMESTAMP, 1)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
@@ -240,17 +240,17 @@ namespace edge::gfx {
 		descriptor_layout_builder.add_binding(uav_image_binding, descriptor_binding_flags);
 
 		if (!descriptor_layout.create(descriptor_layout_builder)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
 		if (!descriptor_pool.create(descriptor_layout.descriptor_sizes)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
 		if (!descriptor_set.create(descriptor_pool, &descriptor_layout)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
@@ -259,18 +259,18 @@ namespace edge::gfx {
 		pipeline_layout_builder.add_range(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0u, props->limits.maxPushConstantsSize);
 
 		if (!pipeline_layout.create(pipeline_layout_builder)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
 		SwapchainCreateInfo swapchain_create_info = {};
 		if (!swapchain.create(swapchain_create_info)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
 		if (!swapchain.get_images(swapchain_images)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
@@ -284,20 +284,20 @@ namespace edge::gfx {
 			};
 
 			if (!swapchain_image_views[i].create(swapchain_images[i], VK_IMAGE_VIEW_TYPE_2D, subresource_range)) {
-				destroy(create_info.alloc);
+				destroy(alloc);
 				return false;
 			}
 		}
 
-		for (i32 i = 0; i < RENDERER_FRAME_OVERLAP; ++i) {
-			if (!frames[i].create(create_info.alloc, cmd_pool)) {
-				destroy(create_info.alloc);
+		for (i32 i = 0; i < FRAME_OVERLAP; ++i) {
+			if (!frames[i].create(alloc, cmd_pool)) {
+				destroy(alloc);
 				return false;
 			}
 		}
 
-		if (!resource_handle_pool.create(create_info.alloc, RENDERER_HANDLE_MAX * 2)) {
-			destroy(create_info.alloc);
+		if (!resource_handle_pool.create(alloc, RENDERER_HANDLE_MAX * 2)) {
+			destroy(alloc);
 			return false;
 		}
 
@@ -306,33 +306,33 @@ namespace edge::gfx {
 		};
 		backbuffer_handle = resource_handle_pool.allocate_with_data(backbuffer_resource);
 
-		if (!sampler_indices_list.create(create_info.alloc, RENDERER_HANDLE_MAX)) {
-			destroy(create_info.alloc);
+		if (!sampler_indices_list.create(alloc, RENDERER_HANDLE_MAX)) {
+			destroy(alloc);
 			return false;
 		}
 
-		if (!srv_indices_list.create(create_info.alloc, RENDERER_HANDLE_MAX)) {
-			destroy(create_info.alloc);
+		if (!srv_indices_list.create(alloc, RENDERER_HANDLE_MAX)) {
+			destroy(alloc);
 			return false;
 		}
 
-		if (!uav_indices_list.create(create_info.alloc, RENDERER_HANDLE_MAX)) {
-			destroy(create_info.alloc);
+		if (!uav_indices_list.create(alloc, RENDERER_HANDLE_MAX)) {
+			destroy(alloc);
 			return false;
 		}
 
-		if (!write_descriptor_sets.reserve(create_info.alloc, 256)) {
-			destroy(create_info.alloc);
+		if (!write_descriptor_sets.reserve(alloc, 256)) {
+			destroy(alloc);
 			return false;
 		}
 
-		if (!image_descriptors.reserve(create_info.alloc, 256)) {
-			destroy(create_info.alloc);
+		if (!image_descriptors.reserve(alloc, 256)) {
+			destroy(alloc);
 			return false;
 		}
 
-		if (!buffer_descriptors.reserve(create_info.alloc, 256)) {
-			destroy(create_info.alloc);
+		if (!buffer_descriptors.reserve(alloc, 256)) {
+			destroy(alloc);
 			return false;
 		}
 
@@ -350,14 +350,14 @@ namespace edge::gfx {
 		};
 
 		if (!default_sampler.create(sampler_create_info)) {
-			destroy(create_info.alloc);
+			destroy(alloc);
 			return false;
 		}
 
 		VkDescriptorImageInfo sampler_descriptor = {
 			.sampler = default_sampler.handle
 		};
-		image_descriptors.push_back(create_info.alloc, sampler_descriptor);
+		image_descriptors.push_back(alloc, sampler_descriptor);
 
 		VkWriteDescriptorSet sampler_write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
@@ -368,7 +368,7 @@ namespace edge::gfx {
 			.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
 			.pImageInfo = image_descriptors.back()
 		};
-		write_descriptor_sets.push_back(create_info.alloc, sampler_write);
+		write_descriptor_sets.push_back(alloc, sampler_write);
 
 		return true;
 	}
@@ -411,7 +411,7 @@ namespace edge::gfx {
 
 		resource_handle_pool.destroy(alloc);
 
-		for (i32 i = 0; i < RENDERER_FRAME_OVERLAP; ++i) {
+		for (i32 i = 0; i < FRAME_OVERLAP; ++i) {
 			frames[i].destroy(alloc, this);
 		}
 
@@ -677,7 +677,7 @@ namespace edge::gfx {
 			active_image_index = 0;
 		}
 
-		RendererFrame& current_frame = frames[frame_number % RENDERER_FRAME_OVERLAP];
+		RendererFrame& current_frame = frames[frame_number % FRAME_OVERLAP];
 		if (!current_frame.begin(this)) {
 			return false;
 		}
@@ -703,7 +703,7 @@ namespace edge::gfx {
 					elapsed_time = 0ull;
 				}
 
-				gpu_delta_time = (double)elapsed_time * timestamp_freq / 1000000.0;
+				gpu_delta_time = (f64)elapsed_time * timestamp_freq / 1000000.0;
 			}
 		}
 

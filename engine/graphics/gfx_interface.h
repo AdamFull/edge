@@ -12,6 +12,8 @@ namespace edge {
 }
 
 namespace edge::gfx {
+	constexpr usize FRAME_OVERLAP = 3;
+
 	constexpr u64 MAX_BINDING_COUNT = 16;
 	constexpr u64 DESCRIPTOR_SIZES_COUNT = 11;
 

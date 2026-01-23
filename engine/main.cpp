@@ -134,10 +134,10 @@ namespace edge {
 		EDGE_LOG_INFO("Graphics initialized.");
 
 		const gfx::QueueRequest direct_queue_request = {
-		.required_caps = gfx::QUEUE_CAPS_GRAPHICS | gfx::QUEUE_CAPS_COMPUTE | gfx::QUEUE_CAPS_TRANSFER | gfx::QUEUE_CAPS_PRESENT,
-		.preferred_caps = gfx::QUEUE_CAPS_NONE,
-		.strategy = gfx::QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED,
-		.prefer_separate_family = false
+			.required_caps = gfx::QUEUE_CAPS_GRAPHICS | gfx::QUEUE_CAPS_COMPUTE | gfx::QUEUE_CAPS_TRANSFER | gfx::QUEUE_CAPS_PRESENT,
+			.preferred_caps = gfx::QUEUE_CAPS_NONE,
+			.strategy = gfx::QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED,
+			.prefer_separate_family = false
 		};
 
 		if (!main_queue.request(direct_queue_request)) {
@@ -157,35 +157,42 @@ namespace edge {
 		}
 
 		const gfx::RendererCreateInfo renderer_create_info = {
-		.alloc = &allocator,
-		.main_queue = main_queue
+			.main_queue = main_queue
 		};
 
-		if (!renderer.create(renderer_create_info)) {
+		if (!renderer.create(&allocator, renderer_create_info)) {
 			EDGE_LOG_FATAL("Failed to initialize main renderer context.");
 			return false;
 		}
 
+		const gfx::UploaderCreateInfo uploader_create_info = {
+			.sched = sched,
+			.queue = copy_queue ? copy_queue : main_queue
+		};
+
+		if (!uploader.create(&allocator, uploader_create_info)) {
+			EDGE_LOG_FATAL("Failed to initialize uploader context.");
+			return false;
+		}
+
 		const ImGuiLayerInitInfo imgui_init_info = {
-		.alloc = &allocator,
 		.runtime = runtime,
 		.input_system = &input_system
 		};
 
 		// TODO: This should be optional in future
-		if (!imgui_layer.create(imgui_init_info)) {
+		if (!imgui_layer.create(&allocator, imgui_init_info)) {
 			EDGE_LOG_FATAL("Failed to initialize ImGuiLayer.");
 			return false;
 		}
 		EDGE_LOG_INFO("ImGuiLayer initialized.");
 
 		const gfx::ImGuiRendererCreateInfo imgui_renderer_create_info = {
-			.alloc = &allocator,
 			.renderer = &renderer
 		};
 
 		// TODO: This should be optional in future
-		if (!imgui_renderer.create(imgui_renderer_create_info)) {
+		if (!imgui_renderer.create(&allocator, imgui_renderer_create_info)) {
 			EDGE_LOG_FATAL("Failed to initialize ImGuiRenderer.");
 			return false;
 		}
@@ -206,7 +213,7 @@ namespace edge {
 		if (main_queue) {
 			main_queue.wait_idle();
 		}
-		
+
 		if (copy_queue) {
 			copy_queue.wait_idle();
 		}
@@ -215,6 +222,7 @@ namespace edge {
 
 		imgui_layer.destroy(alloc);
 		imgui_renderer.destroy(alloc);
+		uploader.destroy(alloc);
 		renderer.destroy(alloc);
 
 		if (copy_queue) {

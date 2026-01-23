@@ -298,7 +298,7 @@ namespace edge {
 		}
 	};
 
-	bool ImGuiLayer::create(ImGuiLayerInitInfo init_info) {
+	bool ImGuiLayer::create(NotNull<const Allocator*> alloc, ImGuiLayerInitInfo init_info) {
 		runtime = init_info.runtime;
 		input_system = init_info.input_system;
 
@@ -310,7 +310,7 @@ namespace edge {
 			[](void* ptr, void* user_data) -> void {
 				const Allocator* allocator = (const Allocator*)user_data;
 				allocator->free(ptr);
-			}, (void*)init_info.alloc);
+			}, (void*)alloc.m_ptr);
 
 		if (!ImGui::CreateContext()) {
 			return false;
@@ -348,11 +348,11 @@ namespace edge {
 		io.DisplaySize.x = (f32)width;
 		io.DisplaySize.y = (f32)height;
 
-		ImGuiInputListener* listener = init_info.alloc->allocate<ImGuiInputListener>();
+		ImGuiInputListener* listener = alloc->allocate<ImGuiInputListener>();
 		if (!listener) {
 			return false;
 		}
-		input_listener_id = init_info.input_system->add_listener(init_info.alloc, listener);
+		input_listener_id = init_info.input_system->add_listener(alloc, listener);
 
 		return true;
 	}
