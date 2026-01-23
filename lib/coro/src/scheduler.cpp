@@ -608,7 +608,7 @@ namespace edge {
 		enqueue_job(job, prio, wg);
 	}
 
-	void Scheduler::tick(f32 delta_time) {
+	void Scheduler::tick() {
 		// NOTE: Called from the main engine loop.
 		// TODO: Schedule jobs that must be executed on the main thread.
 		main_thread->tick();

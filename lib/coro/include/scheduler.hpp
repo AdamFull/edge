@@ -115,7 +115,7 @@ namespace edge {
 		static void destroy(NotNull<const Allocator*> alloc, Scheduler* self);
 
 		void schedule(Job* job, Job::Priority prio = Job::Priority::High, Workgroup wg = Workgroup::Background);
-		void tick(f32 delta_time);
+		void tick();
 
 		void run();
 
