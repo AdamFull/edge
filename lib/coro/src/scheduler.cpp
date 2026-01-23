@@ -1,5 +1,7 @@
 #include "scheduler.hpp"
 
+#include <vmem.hpp>
+
 #include <cstdio>
 #include <cassert>
 #include <ctime>
@@ -10,6 +12,106 @@ namespace edge {
 	constexpr usize MAIN_QUEUE_SIZE = 64;
 	constexpr usize IO_QUEUE_SIZE = 64;
 	constexpr usize BACKGROUND_QUEUE_SIZE = 64;
+
+	struct StackAllocatorConfig {
+		usize allocation_size = 65536;
+		usize allocation_alignment = 16;
+		usize guard_size = 4096;
+		usize allocation_count = 1048576;
+	};
+
+	struct StackAllocator {
+		void* region_base = nullptr;
+		usize region_size = 0;
+		usize stack_size = 0;
+		usize guard_size = 0;
+		usize allocation_stride = 0;
+
+		std::atomic<usize> current_offset = 0ull;
+		MPMCQueue<void*> free_blocks = {};
+
+		usize page_size = 0ull;
+		usize granularity = 0ull;
+
+		static StackAllocator* create(NotNull<const Allocator*> alloc, StackAllocatorConfig config);
+		static void destroy(NotNull<const Allocator*> alloc, StackAllocator* self);
+
+		void* allocate(usize block_size);
+		void free(void* stack_ptr);
+	};
+
+	StackAllocator* StackAllocator::create(NotNull<const Allocator*> alloc, StackAllocatorConfig config) {
+		StackAllocator* self = alloc->allocate<StackAllocator>();
+		if (!self) {
+			return nullptr;
+		}
+
+		self->page_size = vmem_page_size();
+		self->granularity = vmem_allocation_granularity();
+
+		self->stack_size = align_up(config.allocation_size, self->page_size);
+		self->guard_size = align_up(config.guard_size, self->page_size);
+
+		self->allocation_stride = self->guard_size + self->stack_size + self->guard_size;
+
+		self->region_size = self->allocation_stride * config.allocation_count;
+		self->region_size = align_up(self->region_size, self->granularity);
+
+		if (!vmem_reserve(&self->region_base, self->region_size)) {
+			destroy(alloc, self);
+			return nullptr;
+		}
+
+		if (!self->free_blocks.create(alloc, config.allocation_count)) {
+			destroy(alloc, self);
+			return nullptr;
+		}
+
+		return self;
+	}
+
+	void StackAllocator::destroy(NotNull<const Allocator*> alloc, StackAllocator* self) {
+		if (self->region_base) {
+			vmem_release(self->region_base, self->region_size);
+		}
+
+		self->free_blocks.destroy(alloc);
+		alloc->deallocate(self);
+	}
+
+	void* StackAllocator::allocate(usize block_size) {
+		void* stack_ptr = nullptr;
+		if (free_blocks.dequeue(&stack_ptr)) {
+			return stack_ptr;
+		}
+
+		usize offset = current_offset.fetch_add(allocation_stride, std::memory_order_relaxed);
+		if (offset + allocation_stride > region_size) {
+			return nullptr;
+		}
+
+		usize total_size = guard_size + stack_size + guard_size;
+
+		u8* allocation_base = (u8*)region_base + offset;
+		if (!vmem_commit(allocation_base, total_size)) {
+			return nullptr;
+		}
+
+		if (!vmem_protect(allocation_base, guard_size, VMemProt::None)) {
+			return nullptr;
+		}
+
+		u8* top_guard = allocation_base + guard_size + stack_size;
+		if (!vmem_protect(top_guard, guard_size, VMemProt::None)) {
+			return nullptr;
+		}
+
+		return allocation_base + guard_size;
+	}
+
+	void StackAllocator::free(void* stack_ptr) {
+		free_blocks.enqueue(stack_ptr);
+	}
 
 	struct Scheduler::Worker {
 		const Allocator* allocator = nullptr;
@@ -253,7 +355,7 @@ namespace edge {
 			return nullptr;
 		}
 
-		void* stack_ptr = thread_context.worker->scheduler->alloc_stack();
+		void* stack_ptr = thread_context.worker->scheduler->stack_alloc->allocate(EDGE_FIBER_STACK_SIZE);
 		if (!stack_ptr) {
 			alloc->deallocate(job);
 			return nullptr;
@@ -262,7 +364,7 @@ namespace edge {
 		job->context = fiber_context_create(alloc, job_main, stack_ptr, EDGE_FIBER_STACK_SIZE);
 		if (!job->context) {
 			alloc->deallocate(job);
-			thread_context.worker->scheduler->free_stack(stack_ptr);
+			thread_context.worker->scheduler->stack_alloc->free(stack_ptr);
 			return nullptr;
 		}
 
@@ -281,7 +383,7 @@ namespace edge {
 		if (self->context) {
 			void* stack_ptr = fiber_get_stack_ptr(self->context);
 			if (stack_ptr) {
-				thread_context.worker->scheduler->free_stack(stack_ptr);
+				thread_context.worker->scheduler->stack_alloc->free(stack_ptr);
 			}
 
 			fiber_context_destroy(alloc, self->context);
@@ -303,15 +405,15 @@ namespace edge {
 			return nullptr;
 		}
 
-		if (!sched->stack_arena.create()) {
-			return nullptr;
-		}
-
-		if (!sched->free_stacks.create(alloc, STACK_POOL_SIZE)) {
+		StackAllocatorConfig stack_alloc_cfg = {};
+		sched->stack_alloc = StackAllocator::create(alloc, stack_alloc_cfg);
+		if (!sched->stack_alloc) {
+			destroy(alloc, sched);
 			return nullptr;
 		}
 
 		if (!sched->free_jobs.create(alloc, JOB_POOL_SIZE)) {
+			destroy(alloc, sched);
 			return nullptr;
 		}
 
@@ -493,8 +595,9 @@ namespace edge {
 		}
 		self->free_jobs.destroy(alloc);
 
-		self->free_stacks.destroy(alloc);
-		self->stack_arena.destroy();
+		if (self->stack_alloc) {
+			StackAllocator::destroy(alloc, self->stack_alloc);
+		}
 
 		alloc->deallocate(self);
 	}
@@ -520,18 +623,6 @@ namespace edge {
 			main_thread->tick();
 			thread_yield();
 		}
-	}
-
-	void* Scheduler::alloc_stack() {
-		void* stack = nullptr;
-		if (!free_stacks.dequeue(&stack)) {
-			return stack_arena.alloc_ex(EDGE_FIBER_STACK_SIZE, EDGE_FIBER_STACK_ALIGN);
-		}
-		return stack;
-	}
-
-	void Scheduler::free_stack(void* stack_ptr) {
-		free_stacks.enqueue(stack_ptr);
 	}
 
 	Job* Scheduler::pick_job(Workgroup wg) {

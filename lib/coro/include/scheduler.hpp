@@ -1,7 +1,6 @@
 #ifndef EDGE_SCHEDULER_HPP
 #define EDGE_SCHEDULER_HPP
 
-#include <arena.hpp>
 #include <array.hpp>
 #include <callable.hpp>
 #include <mpmc_queue.hpp>
@@ -12,6 +11,8 @@
 #include <atomic>
 
 namespace edge {
+	struct StackAllocator;
+
 	static constexpr usize BACKGROUND_QUEUE_COUNT = 2;
 
 	struct Job {
@@ -89,9 +90,7 @@ namespace edge {
 			Background
 		};
 
-		Arena stack_arena = {};
-		// NOTE: To reuse allocated stacks.
-		MPMCQueue<void*> free_stacks = {};
+		StackAllocator* stack_alloc = nullptr;
 
 		// NOTE: To reuse allocated jobs.
 		MPMCQueue<Job*> free_jobs = {};
@@ -121,9 +120,6 @@ namespace edge {
 		void run();
 
 	private:
-		void* alloc_stack();
-		void free_stack(void* stack_ptr);
-
 		Job* pick_job(Workgroup wg);
 		void enqueue_job(Job* job, Job::Priority prio, Workgroup wg);
 	};
