@@ -12,6 +12,7 @@
 #include <atomic>
 
 namespace edge {
+	struct Scheduler;
 	struct StackAllocator;
 
 	static constexpr usize BACKGROUND_QUEUE_COUNT = 2;
@@ -66,11 +67,11 @@ namespace edge {
 		Priority priority = Priority::Low;
 
 		template<typename F>
-		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn, Job::Priority prio = Job::Priority::High) {
-			return create(alloc, callable_create_from_lambda(alloc, std::forward<F>(fn)));
+		static Job* from_lambda(NotNull<const Allocator*> alloc, NotNull<Scheduler*> sched, F&& fn, Job::Priority prio = Job::Priority::High) {
+			return create(alloc, sched, callable_create_from_lambda(alloc, std::forward<F>(fn)));
 		}
 
-		static Job* create(NotNull<const Allocator*> alloc, JobFn&& func, Job::Priority prio = Job::Priority::High);
+		static Job* create(NotNull<const Allocator*> alloc, NotNull<Scheduler*> sched, JobFn&& func, Job::Priority prio = Job::Priority::High);
 		static void destroy(NotNull<const Allocator*> alloc, Job* self);
 
 		template<typename T, typename E>
@@ -124,7 +125,7 @@ namespace edge {
 	private:
 		Job* pick_job(Workgroup wg);
 		void enqueue_job(Job* job, Job::Priority prio, Workgroup wg);
-		void enqueue_jobs(Span<Job*> job, Job::Priority prio, Workgroup wg);
+		void enqueue_jobs(Span<Job*> job, Workgroup wg);
 	};
 
 	Scheduler* sched_current();

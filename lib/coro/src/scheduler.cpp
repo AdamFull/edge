@@ -336,13 +336,8 @@ namespace edge {
 		assert(0 && "Job returned without caller");
 	}
 
-	Job* Job::create(NotNull<const Allocator*> alloc, JobFn&& func, Job::Priority prio) {
+	Job* Job::create(NotNull<const Allocator*> alloc, NotNull<Scheduler*> sched, JobFn&& func, Job::Priority prio) {
 		if (!func.is_valid()) {
-			return nullptr;
-		}
-
-		Scheduler* sched = thread_context.worker->scheduler;
-		if (!sched) {
 			return nullptr;
 		}
 
@@ -355,16 +350,18 @@ namespace edge {
 			return nullptr;
 		}
 
-		void* stack_ptr = thread_context.worker->scheduler->stack_alloc->allocate(EDGE_FIBER_STACK_SIZE);
+		void* stack_ptr = sched->stack_alloc->allocate(EDGE_FIBER_STACK_SIZE);
 		if (!stack_ptr) {
 			alloc->deallocate(job);
 			return nullptr;
 		}
 
+		assert(((uintptr_t)stack_ptr & 15) == 0 && "Stack not 16-byte aligned");
+
 		job->context = fiber_context_create(alloc, job_main, stack_ptr, EDGE_FIBER_STACK_SIZE);
 		if (!job->context) {
 			alloc->deallocate(job);
-			thread_context.worker->scheduler->stack_alloc->free(stack_ptr);
+			sched->stack_alloc->free(stack_ptr);
 			return nullptr;
 		}
 
@@ -406,7 +403,9 @@ namespace edge {
 			return nullptr;
 		}
 
-		StackAllocatorConfig stack_alloc_cfg = {};
+		StackAllocatorConfig stack_alloc_cfg = {
+			.allocation_size = EDGE_FIBER_STACK_SIZE
+		};
 		sched->stack_alloc = StackAllocator::create(alloc, stack_alloc_cfg);
 		if (!sched->stack_alloc) {
 			destroy(alloc, sched);
@@ -610,6 +609,7 @@ namespace edge {
 
 	void Scheduler::schedule(Span<Job*> jobs, Workgroup wg) {
 		active_jobs.fetch_add(jobs.size(), std::memory_order_release);
+		enqueue_jobs(jobs, wg);
 	}
 
 	void Scheduler::tick() {
@@ -684,7 +684,7 @@ namespace edge {
 		}
 	}
 
-	void Scheduler::enqueue_jobs(Span<Job*> jobs, Job::Priority prio, Workgroup wg) {
+	void Scheduler::enqueue_jobs(Span<Job*> jobs, Workgroup wg) {
 		for (auto& job : jobs) {
 			switch (wg)
 			{
@@ -695,7 +695,7 @@ namespace edge {
 				io_queue.enqueue(job);
 				break;
 			case edge::Scheduler::Background: {
-				i32 priority_index = static_cast<i32>(prio);
+				i32 priority_index = static_cast<i32>(job->priority);
 				if (!background_queues[priority_index].enqueue(job)) {
 					return;
 				}
