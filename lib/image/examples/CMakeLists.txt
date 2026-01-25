@@ -1,0 +1,2 @@
+add_executable(image_sample image_sample.cpp)
+target_link_libraries(image_sample PRIVATE edge_base edge_image)

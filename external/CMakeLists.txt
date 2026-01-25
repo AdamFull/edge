@@ -34,19 +34,6 @@ if(NOT zstd_FOUND)
     endif()
 endif()
 
-find_package(lz4 QUIET)
-
-if(NOT lz4_FOUND)
-  FetchContent_Declare(
-      lz4
-      GIT_REPOSITORY https://github.com/lz4/lz4.git
-      GIT_TAG        v1.10.0
-      SOURCE_SUBDIR  build/cmake
-  )
-
-  FetchContent_MakeAvailable(lz4)
-endif()
-
 FetchContent_Declare(
     flecs
     GIT_REPOSITORY https://github.com/SanderMertens/flecs.git
@@ -248,7 +235,6 @@ target_link_libraries(${PROJECT_NAME}
 
     mimalloc-static
 
-    lz4_static
     libzstd_static
 
     stb
