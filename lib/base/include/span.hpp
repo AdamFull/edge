@@ -7,6 +7,12 @@
 #include <type_traits>
 
 namespace edge {
+	template<typename T>
+	struct Array;
+
+	template<TrivialType T, typename StorageProvider>
+	struct Buffer;
+
 	template<TrivialType T>
 	struct Span {
 		constexpr Span() = default;
@@ -23,6 +29,24 @@ namespace edge {
 		template<usize N>
 		constexpr Span(T(&arr)[N])
 			: m_data(arr), m_size(N) {
+		}
+
+		constexpr Span(Array<T>& arr) noexcept
+			: m_data(arr.data()), m_size(arr.size()) {
+		}
+
+		constexpr Span(const Array<T>& arr) noexcept requires std::is_const_v<T>
+			: m_data(arr.data()), m_size(arr.size()) {
+		}
+
+		template<typename StorageProvider>
+		constexpr Span(Buffer<T, StorageProvider>& arr) noexcept
+			: m_data(arr.data()), m_size(arr.size()) {
+		}
+
+		template<typename StorageProvider>
+		constexpr Span(const Buffer<T, StorageProvider>& arr) noexcept requires std::is_const_v<T>
+			: m_data(arr.data()), m_size(arr.size()) {
 		}
 
 		constexpr usize size() const {
