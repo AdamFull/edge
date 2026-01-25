@@ -203,7 +203,10 @@ namespace edge {
 			return false;
 		}
 
-		test_tex = renderer.add_image_from_disk(&allocator, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds");
+		test_tex = HANDLE_INVALID;
+
+		//renderer.add_image_from_disk(&allocator, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds");
+		uploader.load_image(alloc, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds");
 
 		return true;
 	}
@@ -260,7 +263,7 @@ namespace edge {
 
 		imgui_layer.on_frame_begin(delta_time);
 
-		ImGui::Image((ImTextureRef)test_tex, { 512, 512 });
+		//ImGui::Image((ImTextureRef)test_tex, { 512, 512 });
 
 		ImGui::ShowDemoWindow();
 

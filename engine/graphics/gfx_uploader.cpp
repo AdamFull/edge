@@ -4,8 +4,77 @@
 
 #include <math.hpp>
 #include <scheduler.hpp>
+#include <logger.hpp>
+#include <image.hpp>
+
+#include <algorithm>
+
+#include <volk.h>
 
 namespace edge::gfx {
+	struct ImageConsumer final : IImageConsumer {
+		ResourceSet& set;
+		Buffer staging_buffer = {};
+
+		Array<VkBufferImageCopy2KHR> copy_regions = {};
+		usize copy_offset = 0;
+
+		ImageConsumer(ResourceSet& rset)
+			: set{ rset } {
+		}
+
+		ImageConsumer(const ImageConsumer&) = delete;
+		ImageConsumer& operator=(const ImageConsumer&) = delete;
+		ImageConsumer(ImageConsumer&&) = delete;
+		ImageConsumer& operator=(ImageConsumer&&) = delete;
+
+		bool prepare(NotNull<const Allocator*> alloc, const ImageHeader& header) override {
+			usize whole_size = header.get_size();
+
+			BufferView buffer_view = set.try_allocate_staging_memory(alloc, whole_size, 16);
+			if (!buffer_view) {
+				return false;
+			}
+
+			staging_buffer = buffer_view.buffer;
+			copy_offset = buffer_view.local_offset;
+
+			return true;
+		}
+
+		bool read(NotNull<const Allocator*> alloc, const ImageHeader& header, u32 mip_level, u32 array_layer, u32 layer_count) override {
+			u32 mip_width = max(header.base_width >> mip_level, 1u);
+			u32 mip_height = max(header.base_height >> mip_level, 1u);
+			u32 mip_depth = max(header.base_depth >> mip_level, 1u);
+
+			usize copy_size = header.format_desc->comp_size(mip_width, mip_height, mip_depth) * layer_count;
+
+			u8* buffer_dst = (u8*)staging_buffer.memory.map();
+			if (!header.try_read_bytes(buffer_dst + copy_offset, copy_size)) {
+				return false;
+			}
+
+			copy_regions.push_back(alloc, {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2_KHR,
+				.bufferOffset = std::exchange(copy_offset, copy_offset + copy_size),
+				.imageSubresource = {
+					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+					.mipLevel = mip_level,
+					.baseArrayLayer = array_layer,
+					.layerCount = layer_count
+					},
+				.imageOffset = {},
+				.imageExtent = {
+					.width = mip_width,
+					.height = mip_height,
+					.depth = mip_depth
+				}
+				});
+
+			return true;
+		}
+	};
+
 	bool ResourceSet::create(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) {
 		BufferCreateInfo buffer_create_info = {
 				.size = 32 * 1024 * 1024,
@@ -43,7 +112,7 @@ namespace edge::gfx {
 
 	bool ResourceSet::begin() {
 		if (!recording) {
-			staging_offset = 0;
+			staging_offset.store(0, std::memory_order_release);
 
 			for (auto& buffer : temp_staging_memory) {
 				buffer.destroy();
@@ -76,7 +145,7 @@ namespace edge::gfx {
 		}
 
 		VkDeviceSize aligned_requested_size = align_up(required_memory, required_alignment);
-		VkDeviceSize available_size = staging_memory.memory.size - staging_offset;
+		VkDeviceSize available_size = staging_memory.memory.size - staging_offset.load(std::memory_order_acquire);
 
 		if (staging_memory.memory.size < aligned_requested_size || available_size < aligned_requested_size) {
 			BufferCreateInfo create_info = {
@@ -95,49 +164,254 @@ namespace edge::gfx {
 
 		return BufferView{
 			.buffer = staging_memory,
-			.local_offset = std::exchange(staging_offset, staging_offset + aligned_requested_size),
+			.local_offset = staging_offset.fetch_add(aligned_requested_size, std::memory_order_acq_rel),
 			.size = aligned_requested_size
 		};
 	}
 
-	Uploader* uploader_create(UploaderCreateInfo create_info) {
-		Uploader* uploader = create_info.alloc->allocate<Uploader>();
-		if (!uploader) {
-			return nullptr;
+	bool Uploader::create(NotNull<const Allocator*> alloc, UploaderCreateInfo create_info) {
+		allocator = alloc.m_ptr;
+		sched = create_info.sched;
+		queue = create_info.queue;
+
+		if (!cmd_pool.create(queue)) {
+			destroy(alloc);
+			return false;
 		}
 
-		uploader->sched = create_info.sched;
-		uploader->queue = create_info.queue;
-
-		if (!uploader->cmd_pool.create(uploader->queue)) {
-			uploader_destroy(create_info.alloc, uploader);
-			return nullptr;
-		}
-
-		for (isize i = 0; i < 3; ++i) {
-			if (!uploader->resource_sets[i].create(create_info.alloc, uploader)) {
-				uploader_destroy(create_info.alloc, uploader);
-				return nullptr;
+		for (usize i = 0; i < FRAME_OVERLAP; ++i) {
+			if (!resource_sets[i].create(alloc, this)) {
+				destroy(alloc);
+				return false;
 			}
 		}
 
-		// TODO: create uploader thread
-		//Thread thrd;
-		//thread_create(&thrd, )
+		if (!upload_commands.create(alloc, 64)) {
+			destroy(alloc);
+			return false;
+		}
 
-		return uploader;
+		should_exit.store(false, std::memory_order_release);
+
+		if (thread_create(&thread_handle, Uploader::thread_entry, this) != ThreadResult::Success) {
+			destroy(alloc);
+			return false;
+		}
+
+		return true;
 	}
 
-	void uploader_destroy(NotNull<const Allocator*> alloc, Uploader* uploader) {
-		if (!uploader) {
+	void Uploader::destroy(NotNull<const Allocator*> alloc) {
+		queue.wait_idle();
+
+		should_exit.store(true, std::memory_order_release);
+		futex_counter.fetch_add(1, std::memory_order_release);
+		futex_wake_all(&futex_counter);
+		thread_join(thread_handle, nullptr);
+
+		// TODO: Free commands
+		upload_commands.destroy(alloc);
+
+		for (usize i = 0; i < FRAME_OVERLAP; ++i) {
+			resource_sets[i].destroy(alloc, this);
+		}
+
+		cmd_pool.destroy();
+	}
+
+	void Uploader::load_image(NotNull<const Allocator*> alloc, const char* path) {
+		upload_commands.enqueue({ .type = UploadingCommandType::Image, .path = path });
+
+		if (sleeping.load(std::memory_order_acquire)) {
+			futex_counter.fetch_add(1, std::memory_order_release);
+			futex_wake(&futex_counter);
+		}
+	}
+
+	ResourceSet& Uploader::get_resource_set() {
+		return resource_sets[resource_set_index.load(std::memory_order_relaxed) % FRAME_OVERLAP];
+	}
+
+	void Uploader::load_image_job(NotNull<const Allocator*> alloc, FILE* stream) {
+		ImageHeader src = { .stream = stream };
+
+		if (src.read_header(alloc) != ImageHeader::Result::Success) {
+			job_failed(ImageLoadingError::HeaderReadingError);
 			return;
 		}
 
-		for (isize i = 0; i < 3; ++i) {
-			uploader->resource_sets[i].destroy(alloc, uploader);
+		const ImageCreateInfo create_info = {
+				.extent = { src.base_width, src.base_height, src.base_depth },
+				.level_count = src.mip_levels,
+				.layer_count = src.array_layers,
+				.face_count = src.face_count,
+				.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+				.format = static_cast<VkFormat>(src.format_desc->vk_format)
+		};
+
+		Image image = {};
+		if (!image.create(create_info)) {
+			job_failed(ImageLoadingError::FailedToCreateImage);
+			return;
 		}
 
-		uploader->cmd_pool.destroy();
-		alloc->deallocate(uploader);
+		ResourceSet& set = get_resource_set();
+		if (!set.recording) {
+			set.begin();
+		}
+
+		PipelineBarrierBuilder barrier_builder = {};
+		barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
+				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+				.baseMipLevel = 0,
+				.levelCount = src.mip_levels,
+				.baseArrayLayer = 0,
+				.layerCount = src.array_layers * src.face_count
+			});
+		set.cmd.pipeline_barrier(barrier_builder);
+		barrier_builder.reset();
+
+		image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+
+		ImageConsumer data_consumer = { set };
+
+		if (src.read_data(alloc, &data_consumer) != ImageHeader::Result::Success) {
+			job_failed(ImageLoadingError::FailedToReadData);
+			return;
+		}
+
+		const VkCopyBufferToImageInfo2KHR copy_image_info = {
+			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
+			.srcBuffer = data_consumer.staging_buffer,
+			.dstImage = image,
+			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+			.regionCount = static_cast<u32>(data_consumer.copy_regions.size()),
+			.pRegions = data_consumer.copy_regions.data()
+		};
+
+		vkCmdCopyBufferToImage2KHR(set.cmd, &copy_image_info);
+		
+		data_consumer.copy_regions.destroy(alloc);
+
+		job_return(image);
+	}
+
+	i32 Uploader::thread_entry(void* data) {
+		return static_cast<Uploader*>(data)->thread_loop();
+	}
+
+	i32 Uploader::thread_loop() {
+		using ImagePromise = Job::Promise<Image, ImageLoadingError>;
+
+		Array<Job*> uploading_jobs = {};
+		ImagePromise* image_promises = {};
+		usize promise_count = 0;
+
+		image_promises = allocator->allocate_array<ImagePromise>(64);
+		if (!image_promises) {
+			return -1;
+		}
+
+		while (!should_exit.load(std::memory_order_acquire)) {
+			UploadingCommand command = {};
+			while (upload_commands.dequeue(&command)) {
+				// TODO: Make job depends on job type
+				Job* job = Job::from_lambda(allocator, sched,
+					[this, path = command.path]() {
+						FILE* stream = fopen(path, "rb");
+						if (stream) {
+							load_image_job(allocator, stream);
+							fclose(stream);
+						}
+					});
+
+				if (!job) {
+					// TODO: LOG ERROR
+					continue;
+				}
+
+				ImagePromise* promise = image_promises + (promise_count++);
+				promise->status.store(Job::State::Suspended, std::memory_order_release);
+
+				job->promise = promise;
+
+				uploading_jobs.push_back(allocator, job);
+			}
+
+			if (uploading_jobs.empty()) {
+				sleeping.store(true, std::memory_order_release);
+				u32 futex_val = futex_counter.load(std::memory_order_acquire);
+				futex_wait(&futex_counter, futex_val, std::chrono::nanoseconds::max());
+				sleeping.store(false, std::memory_order_release);
+				continue;
+			}
+
+			sched->schedule(uploading_jobs, Scheduler::Workgroup::IO);
+
+			// Wait for all scheduled work.
+			while (std::any_of(image_promises, image_promises + promise_count,
+				[](const auto& p) { return !p.is_done(); })) {
+				thread_yield();
+			}
+
+			usize set_idx = resource_set_index.fetch_add(1, std::memory_order_acq_rel) % FRAME_OVERLAP;
+			ResourceSet& set = resource_sets[set_idx];
+
+			if (set.recording) {
+				set.cmd.end();
+
+				u64 wait_value = set.counter.fetch_add(1, std::memory_order_relaxed);
+				u64 signal_value = wait_value + 1;
+
+				VkSemaphoreSubmitInfoKHR wait_info = {
+					.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
+					.semaphore = set.semaphore,
+					.value = wait_value,
+					.stageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR
+				};
+
+				VkSemaphoreSubmitInfoKHR signal_info = {
+					.sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
+					.semaphore = set.semaphore,
+					.value = signal_value,
+					.stageMask = VK_PIPELINE_STAGE_2_COPY_BIT_KHR
+				};
+
+				VkCommandBufferSubmitInfoKHR command_buffer_info = {
+					.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO_KHR,
+					.commandBuffer = set.cmd
+				};
+
+				VkSubmitInfo2KHR submit_info = {
+					.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
+					.waitSemaphoreInfoCount = set.first_submition ? 0u : 1u,
+					.pWaitSemaphoreInfos = set.first_submition ? nullptr : &wait_info,
+					.commandBufferInfoCount = 1,
+					.pCommandBufferInfos = &command_buffer_info,
+					.signalSemaphoreInfoCount = 1,
+					.pSignalSemaphoreInfos = &signal_info
+				};
+
+				// TODO: Check result
+				queue.submit(VK_NULL_HANDLE, &submit_info);
+
+				if (set.first_submition) {
+					set.first_submition = false;
+				}
+
+				last_submitted_semaphore.store(signal_info, std::memory_order_release);
+
+				EDGE_LOG_INFO("Submitted %d uploads.", uploading_jobs.size());
+			}
+
+			uploading_jobs.clear();
+			promise_count = 0;
+		}
+
+		// Cleanup
+		uploading_jobs.destroy(allocator);
+		allocator->deallocate_array(image_promises, 64);
+
+		return 0;
 	}
 }

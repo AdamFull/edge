@@ -617,29 +617,6 @@ namespace edge::gfx {
 		}
 	}
 
-	Handle Renderer::add_image_from_disk(NotNull<const Allocator*> alloc, const char* path) {
-		FILE* stream = fopen(path, "rb");
-		if (!stream) {
-			return HANDLE_INVALID;
-		}
-
-		TextureSource tex_source = {};
-		auto result = tex_source.from_stream(alloc, stream);
-		if (!TextureSource::is_ok(result)) {
-			tex_source.destroy(alloc);
-			return HANDLE_INVALID;
-		}
-
-		Handle new_handle = add_resource();
-
-		texture_uploads.push_back(alloc, {
-			.handle = new_handle,
-			.texture_source = tex_source
-			});
-
-		return new_handle;
-	}
-
 	bool Renderer::frame_begin() {
 		if (swapchain.is_outdated()) {
 
@@ -723,6 +700,7 @@ namespace edge::gfx {
 
 		CmdBuf cmd = active_frame->cmd;
 
+#if 0
 		for (auto& texture_upload : texture_uploads) {
 			TextureSource& tex_src = texture_upload.texture_source;
 
@@ -780,6 +758,7 @@ namespace edge::gfx {
 			tex_src.destroy(alloc);
 		}
 		texture_uploads.clear();
+#endif
 
 		Resource* backbuffer_resource = resource_handle_pool.get(backbuffer_handle);
 		if (backbuffer_resource) {
