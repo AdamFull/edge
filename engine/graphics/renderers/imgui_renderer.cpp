@@ -43,13 +43,13 @@ namespace edge::gfx {
 			{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 				.stage = VK_SHADER_STAGE_VERTEX_BIT,
-				.module = vertex_shader.handle,
+				.module = vertex_shader,
 				.pName = "main"
 			},
 			{
 				.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
 				.stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-				.module = fragment_shader.handle,
+				.module = fragment_shader,
 				.pName = "main"
 			}
 		};
@@ -152,7 +152,7 @@ namespace edge::gfx {
 			.pDepthStencilState = &depth_stencil_create_info,
 			.pColorBlendState = &color_blend_create_info,
 			.pDynamicState = &dynamic_state_create_info,
-			.layout = renderer->pipeline_layout.handle,
+			.layout = renderer->pipeline_layout,
 			.renderPass = VK_NULL_HANDLE
 		};
 
@@ -227,7 +227,7 @@ namespace edge::gfx {
 
 		const VkRenderingAttachmentInfo color_attachment = {
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-			.imageView = backbuffer_resource->srv.handle,
+			.imageView = backbuffer_resource->srv,
 			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			.loadOp = load_op,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,

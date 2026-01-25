@@ -355,13 +355,13 @@ namespace edge::gfx {
 		}
 
 		VkDescriptorImageInfo sampler_descriptor = {
-			.sampler = default_sampler.handle
+			.sampler = default_sampler
 		};
 		image_descriptors.push_back(alloc, sampler_descriptor);
 
 		VkWriteDescriptorSet sampler_write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptor_set.handle,
+			.dstSet = descriptor_set,
 			.dstBinding = RENDERER_SAMPLER_SLOT,
 			.dstArrayElement = 0,
 			.descriptorCount = 1,
@@ -525,13 +525,13 @@ namespace edge::gfx {
 
 		VkWriteDescriptorSet descriptor_write = {
 			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptor_set.handle,
+			.dstSet = descriptor_set,
 			.descriptorCount = 1u
 		};
 
 		if (image_source.usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
 			const VkDescriptorImageInfo image_descriptor = {
-				.imageView = resource->srv.handle,
+				.imageView = resource->srv,
 				.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR
 			};
 			image_descriptors.push_back(alloc, image_descriptor);
@@ -549,7 +549,7 @@ namespace edge::gfx {
 
 			for (i32 mip = 0; mip < image_source.level_count; ++mip) {
 				const VkDescriptorImageInfo image_descriptor = {
-					.imageView = resource->uav[mip].handle,
+					.imageView = resource->uav[mip],
 					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
 				};
 				image_descriptors.push_back(alloc, image_descriptor);
@@ -813,19 +813,19 @@ namespace edge::gfx {
 
 		VkSemaphoreSubmitInfo wait_semaphores[2] = {};
 		wait_semaphores[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-		wait_semaphores[0].semaphore = acquired_semaphore.handle;
+		wait_semaphores[0].semaphore = acquired_semaphore;
 		wait_semaphores[0].stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
 		VkSemaphoreSubmitInfo signal_semaphores[2] = {};
 		signal_semaphores[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
-		signal_semaphores[0].semaphore = active_frame->rendering_finished.handle;
+		signal_semaphores[0].semaphore = active_frame->rendering_finished;
 		signal_semaphores[0].stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
 
 		i32 cmd_buffer_count = 0;
 		VkCommandBufferSubmitInfo cmd_buffer_submit_infos[6];
 		cmd_buffer_submit_infos[cmd_buffer_count++] = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_SUBMIT_INFO,
-			.commandBuffer = cmd.handle
+			.commandBuffer = cmd
 		};
 
 		const VkSubmitInfo2KHR submit_info = {
@@ -870,27 +870,27 @@ namespace edge::gfx {
 	void Renderer::image_update_end(NotNull<const Allocator*> alloc, ImageUpdateInfo& update_info) {
 		const VkCopyBufferToImageInfo2KHR copy_image_info = {
 			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
-			.srcBuffer = update_info.buffer_view.buffer.handle,
-			.dstImage = update_info.dst_image.handle,
+			.srcBuffer = update_info.buffer_view.buffer,
+			.dstImage = update_info.dst_image,
 			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
 			.regionCount = (u32)update_info.copy_regions.size(),
 			.pRegions = update_info.copy_regions.data()
 		};
 
-		vkCmdCopyBufferToImage2KHR(active_frame->cmd.handle, &copy_image_info);
+		vkCmdCopyBufferToImage2KHR(active_frame->cmd, &copy_image_info);
 		update_info.copy_regions.destroy(alloc);
 	}
 
 	void Renderer::buffer_update_end(NotNull<const Allocator*> alloc, BufferUpdateInfo& update_info) {
 		const VkCopyBufferInfo2KHR copy_buffer_info = {
 			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_INFO_2_KHR,
-			.srcBuffer = update_info.buffer_view.buffer.handle,
-			.dstBuffer = update_info.dst_buffer.handle,
+			.srcBuffer = update_info.buffer_view.buffer,
+			.dstBuffer = update_info.dst_buffer,
 			.regionCount = (u32)update_info.copy_regions.size(),
 			.pRegions = update_info.copy_regions.data()
 		};
 
-		vkCmdCopyBuffer2KHR(active_frame->cmd.handle, &copy_buffer_info);
+		vkCmdCopyBuffer2KHR(active_frame->cmd, &copy_buffer_info);
 		update_info.copy_regions.destroy(alloc);
 	}
 }

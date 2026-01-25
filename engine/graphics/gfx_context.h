@@ -14,15 +14,25 @@ namespace edge::gfx {
 	struct VulkanHandle {
 		T handle = VK_NULL_HANDLE;
 
+		VulkanHandle() = default;
+		VulkanHandle(std::nullptr_t) : handle{ VK_NULL_HANDLE } {}
+
+		VulkanHandle& operator=(std::nullptr_t) {
+			handle = VK_NULL_HANDLE;
+			return *this;
+		}
+
 		void set_name(const char* name) const {
 			context_set_object_name(name, VkObjectTraits<T>::object_type, (u64)handle);
 		}
 
 		explicit operator bool() const { return handle != VK_NULL_HANDLE; }
-		explicit operator T() const { return handle; }
+		operator T() const { return handle; }
 	};
 
 	struct Fence : VulkanHandle<VkFence> {
+		using VulkanHandle<VkFence>::VulkanHandle;
+
 		bool create(VkFenceCreateFlags flags);
 		void destroy();
 		bool wait(u64 timeout);
@@ -30,6 +40,8 @@ namespace edge::gfx {
 	};
 
 	struct Semaphore : VulkanHandle<VkSemaphore> {
+		using VulkanHandle<VkSemaphore>::VulkanHandle;
+
 		VkSemaphoreType type = {};
 		u64 value = 0ull;
 
@@ -54,6 +66,8 @@ namespace edge::gfx {
 	};
 
 	struct QueryPool : VulkanHandle<VkQueryPool> {
+		using VulkanHandle<VkQueryPool>::VulkanHandle;
+
 		VkQueryType type = {};
 		u32 max_query = 0u;
 		bool host_reset_enabled = false;
@@ -65,11 +79,15 @@ namespace edge::gfx {
 	};
 
 	struct PipelineLayout : VulkanHandle<VkPipelineLayout> {
+		using VulkanHandle<VkPipelineLayout>::VulkanHandle;
+
 		bool create(const PipelineLayoutBuilder& builder);
 		void destroy();
 	};
 
 	struct DescriptorSetLayout : VulkanHandle<VkDescriptorSetLayout> {
+		using VulkanHandle<VkDescriptorSetLayout>::VulkanHandle;
+
 		u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT] = {};
 
 		bool create(const DescriptorLayoutBuilder& builder);
@@ -77,6 +95,8 @@ namespace edge::gfx {
 	};
 
 	struct DescriptorPool : VulkanHandle<VkDescriptorPool> {
+		using VulkanHandle<VkDescriptorPool>::VulkanHandle;
+
 		u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT];
 
 		bool create(u32* descriptor_sizes);
@@ -84,6 +104,8 @@ namespace edge::gfx {
 	};
 
 	struct DescriptorSet : VulkanHandle<VkDescriptorSet> {
+		using VulkanHandle<VkDescriptorSet>::VulkanHandle;
+
 		DescriptorPool pool = {};
 
 		bool create(DescriptorPool pool, const DescriptorSetLayout* layouts);
@@ -91,11 +113,15 @@ namespace edge::gfx {
 	};
 
 	struct PipelineCache : VulkanHandle<VkPipelineCache> {
+		using VulkanHandle<VkPipelineCache>::VulkanHandle;
+
 		bool create(const u8* data, usize data_size);
 		void destroy();
 	};
 
 	struct ShaderModule : VulkanHandle<VkShaderModule> {
+		using VulkanHandle<VkShaderModule>::VulkanHandle;
+
 		bool create(const u32* code, usize size);
 		void destroy();
 	};
@@ -107,6 +133,8 @@ namespace edge::gfx {
 	};
 
 	struct Pipeline : VulkanHandle<VkPipeline> {
+		using VulkanHandle<VkPipeline>::VulkanHandle;
+
 		VkPipelineBindPoint bind_point = {};
 
 		bool create(const VkGraphicsPipelineCreateInfo* create_info);
@@ -115,11 +143,15 @@ namespace edge::gfx {
 	};
 
 	struct Sampler : VulkanHandle<VkSampler> {
+		using VulkanHandle<VkSampler>::VulkanHandle;
+
 		bool create(const VkSamplerCreateInfo& create_info);
 		void destroy();
 	};
 
 	struct DeviceMemory : VulkanHandle<VmaAllocation> {
+		using VulkanHandle<VmaAllocation>::VulkanHandle;
+
 		VkDeviceSize size = 0;
 		void* mapped = nullptr;
 
@@ -136,6 +168,8 @@ namespace edge::gfx {
 
 	// TODO: COMPACT DATA
 	struct Image : VulkanHandle<VkImage> {
+		using VulkanHandle<VkImage>::VulkanHandle;
+
 		DeviceMemory memory = {};
 
 		VkExtent3D extent = { 1u, 1u, 1u };
@@ -151,6 +185,8 @@ namespace edge::gfx {
 	};
 
 	struct ImageView : VulkanHandle<VkImageView> {
+		using VulkanHandle<VkImageView>::VulkanHandle;
+
 		VkImageViewType type = {};
 		VkImageSubresourceRange range = {};
 
@@ -159,6 +195,8 @@ namespace edge::gfx {
 	};
 
 	struct Buffer : VulkanHandle<VkBuffer> {
+		using VulkanHandle<VkBuffer>::VulkanHandle;
+
 		DeviceMemory memory = {};
 
 		BufferFlags flags = 0;
@@ -180,6 +218,8 @@ namespace edge::gfx {
 	};
 
 	struct Swapchain : VulkanHandle<VkSwapchainKHR> {
+		using VulkanHandle<VkSwapchainKHR>::VulkanHandle;
+
 		VkFormat format = VK_FORMAT_UNDEFINED;
 		VkColorSpaceKHR color_space = {};
 		u32 image_count = 1u;
@@ -197,11 +237,15 @@ namespace edge::gfx {
 	};
 
 	struct CmdPool : VulkanHandle<VkCommandPool> {
+		using VulkanHandle<VkCommandPool>::VulkanHandle;
+
 		bool create(Queue queue);
 		void destroy();
 	};
 
 	struct CmdBuf : VulkanHandle<VkCommandBuffer> {
+		using VulkanHandle<VkCommandBuffer>::VulkanHandle;
+
 		CmdPool pool = {};
 
 		bool create(CmdPool cmd_pool);

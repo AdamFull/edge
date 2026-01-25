@@ -1135,7 +1135,7 @@ namespace edge::gfx {
 			return false;
 		}
 
-		return vkQueueSubmit2KHR(queue_, 1, submit_info, fence ? fence.handle : VK_NULL_HANDLE) == VK_SUCCESS;
+		return vkQueueSubmit2KHR(queue_, 1, submit_info, fence ? fence : VK_NULL_HANDLE) == VK_SUCCESS;
 	}
 
 	bool Queue::present(const VkPresentInfoKHR* present_info) {
@@ -1198,7 +1198,7 @@ namespace edge::gfx {
 
 		const VkCommandBufferAllocateInfo alloc_info = {
 			.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-			.commandPool = cmd_pool.handle,
+			.commandPool = cmd_pool,
 			.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
 			.commandBufferCount = 1
 		};
@@ -1216,7 +1216,7 @@ namespace edge::gfx {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-		vkFreeCommandBuffers(g_ctx.dev, pool.handle, 1, &handle);
+		vkFreeCommandBuffers(g_ctx.dev, pool, 1, &handle);
 		handle = VK_NULL_HANDLE;
 	}
 
@@ -1271,14 +1271,14 @@ namespace edge::gfx {
 	void CmdBuf::write_timestamp(QueryPool query, VkPipelineStageFlagBits2 stage, u32 query_index) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(query && "QueryPool handle is null");
-		vkCmdWriteTimestamp2KHR(handle, stage, query.handle, query_index);
+		vkCmdWriteTimestamp2KHR(handle, stage, query, query_index);
 	}
 
 	void CmdBuf::bind_descriptor(PipelineLayout layout, DescriptorSet descriptor, VkPipelineBindPoint bind_point) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(layout && "PipelineLayout handle is null");
 		assert(descriptor && "DescriptorSet handle is null");
-		vkCmdBindDescriptorSets(handle, bind_point, layout.handle, 0u, 1u, &descriptor.handle, 0u, NULL);
+		vkCmdBindDescriptorSets(handle, bind_point, layout, 0u, 1u, &descriptor.handle, 0u, NULL);
 	}
 
 	void CmdBuf::pipeline_barrier(const PipelineBarrierBuilder& builder) {
@@ -1310,13 +1310,13 @@ namespace edge::gfx {
 	void CmdBuf::bind_index_buffer(Buffer buffer, VkIndexType type) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(buffer && "Buffer handle is null");
-		vkCmdBindIndexBuffer(handle, buffer.handle, 0, type);
+		vkCmdBindIndexBuffer(handle, buffer, 0, type);
 	}
 
 	void CmdBuf::bind_pipeline(Pipeline pipeline) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(pipeline && "Pipeline handle is null");
-		vkCmdBindPipeline(handle, pipeline.bind_point, pipeline.handle);
+		vkCmdBindPipeline(handle, pipeline.bind_point, pipeline);
 	}
 
 	void CmdBuf::set_viewport(VkViewport viewport) {
@@ -1355,7 +1355,7 @@ namespace edge::gfx {
 	void CmdBuf::push_constants(PipelineLayout layout, VkShaderStageFlags flags, u32 offset, u32 size, const void* data) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 		assert(layout && "PipelineLayout handle is null");
-		vkCmdPushConstants(handle, layout.handle, flags, offset, size, data);
+		vkCmdPushConstants(handle, layout, flags, offset, size, data);
 	}
 
 	void CmdBuf::draw_indexed(u32 idx_cnt, u32 inst_cnt, u32 first_idx, i32 vtx_offset, u32 first_inst) {
@@ -1507,7 +1507,7 @@ namespace edge::gfx {
 
 		const VkDescriptorSetAllocateInfo alloc_info = {
 			.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-			.descriptorPool = pool.handle,
+			.descriptorPool = pool,
 			.descriptorSetCount = 1,
 			.pSetLayouts = &layouts->handle
 		};
@@ -1525,7 +1525,7 @@ namespace edge::gfx {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-		vkFreeDescriptorSets(g_ctx.dev, pool.handle, 1, &handle);
+		vkFreeDescriptorSets(g_ctx.dev, pool, 1, &handle);
 		handle = VK_NULL_HANDLE;
 	}
 
@@ -1544,7 +1544,7 @@ namespace edge::gfx {
 			return;
 		}
 
-		descriptor_layouts[descriptor_layout_count++] = layout.handle;
+		descriptor_layouts[descriptor_layout_count++] = layout;
 	}
 
 	bool PipelineLayout::create(const PipelineLayoutBuilder& builder) {
@@ -1627,13 +1627,13 @@ namespace edge::gfx {
 			.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
 			.stage = {
 				.stage = VK_SHADER_STAGE_COMPUTE_BIT,
-				.module = create_info.shader_module.handle,
+				.module = create_info.shader_module,
 				.pName = "main"
 			},
-			.layout = create_info.layout.handle
+			.layout = create_info.layout
 		};
 
-		VkResult result = vkCreateComputePipelines(g_ctx.dev, create_info.cache ? create_info.cache.handle : VK_NULL_HANDLE, 1, &pipeline_create_info, &g_ctx.vk_alloc, &handle);
+		VkResult result = vkCreateComputePipelines(g_ctx.dev, create_info.cache ? create_info.cache : VK_NULL_HANDLE, 1, &pipeline_create_info, &g_ctx.vk_alloc, &handle);
 		if (result != VK_SUCCESS) {
 			return false;
 		}
@@ -1808,7 +1808,7 @@ namespace edge::gfx {
 		assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 		assert(semaphore && "Semaphore handle is null");
 		assert(next_image_idx && "next_image_ids is null");
-		return vkAcquireNextImageKHR(g_ctx.dev, handle, timeout, semaphore.handle, VK_NULL_HANDLE, next_image_idx) == VK_SUCCESS;
+		return vkAcquireNextImageKHR(g_ctx.dev, handle, timeout, semaphore, VK_NULL_HANDLE, next_image_idx) == VK_SUCCESS;
 	}
 
 	void DeviceMemory::setup() {
@@ -1923,12 +1923,12 @@ namespace edge::gfx {
 	}
 
 	void Image::destroy() {
-		if (handle == VK_NULL_HANDLE || memory.handle == VK_NULL_HANDLE) {
+		if (handle == VK_NULL_HANDLE || !memory) {
 			return;
 		}
-		vmaDestroyImage(g_ctx.vma, handle, memory.handle);
+		vmaDestroyImage(g_ctx.vma, handle, memory);
 		handle = VK_NULL_HANDLE;
-		memory.handle = VK_NULL_HANDLE;
+		memory = VK_NULL_HANDLE;
 	}
 
 	bool ImageView::create(Image image, VkImageViewType type, VkImageSubresourceRange subresource_range) {
@@ -1936,7 +1936,7 @@ namespace edge::gfx {
 
 		const VkImageViewCreateInfo create_info = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-			.image = image.handle,
+			.image = image,
 			.viewType = type,
 			.format = image.format,
 			.components = {
@@ -2061,9 +2061,9 @@ namespace edge::gfx {
 		if (handle == VK_NULL_HANDLE) {
 			return;
 		}
-		vmaDestroyBuffer(g_ctx.vma, handle, memory.handle);
+		vmaDestroyBuffer(g_ctx.vma, handle, memory);
 		handle = VK_NULL_HANDLE;
-		memory.handle = VK_NULL_HANDLE;
+		memory = VK_NULL_HANDLE;
 	}
 
 	void BufferView::write(Span<const u8> data, VkDeviceSize offset) {
@@ -2251,7 +2251,7 @@ namespace edge::gfx {
 			.srcAccessMask = src_layout_info.accessFlags,
 			.dstStageMask = dst_layout_info.stageFlags,
 			.dstAccessMask = dst_layout_info.accessFlags,
-			.buffer = buffer.handle,
+			.buffer = buffer,
 			.offset = offset,
 			.size = size
 		};
@@ -2318,7 +2318,7 @@ namespace edge::gfx {
 			.dstAccessMask = dst_layout_info.accessFlags,
 			.oldLayout = image.layout,
 			.newLayout = new_layout,
-			.image = image.handle,
+			.image = image,
 			.subresourceRange = subresource_range
 		};
 
