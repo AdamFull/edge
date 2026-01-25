@@ -1245,18 +1245,18 @@ namespace edge::gfx {
 	void CmdBuf::begin_marker(const char* name, u32 color) {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
-		VkDebugMarkerMarkerInfoEXT marker_info = {
-			.sType = VK_STRUCTURE_TYPE_DEBUG_MARKER_MARKER_INFO_EXT,
-			.pNext = name
+		VkDebugUtilsLabelEXT label_info = {
+			.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_LABEL_EXT,
+			.pLabelName = name
 		};
-		make_color(color, marker_info.color);
+		make_color(color, label_info.color);
 
-		vkCmdDebugMarkerBeginEXT(handle, &marker_info);
+		vkCmdBeginDebugUtilsLabelEXT(handle, &label_info);
 	}
 
 	void CmdBuf::end_marker() {
 		assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
-		vkCmdDebugMarkerEndEXT(handle);
+		vkCmdEndDebugUtilsLabelEXT(handle);
 	}
 
 	bool CmdBuf::reset() {
