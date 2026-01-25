@@ -336,7 +336,7 @@ namespace edge {
 		assert(0 && "Job returned without caller");
 	}
 
-	Job* Job::create(NotNull<const Allocator*> alloc, JobFn&& func) {
+	Job* Job::create(NotNull<const Allocator*> alloc, JobFn&& func, Job::Priority prio) {
 		if (!func.is_valid()) {
 			return nullptr;
 		}
@@ -369,6 +369,7 @@ namespace edge {
 		}
 
 		job->state.store(Job::State::Suspended, std::memory_order_release);
+		job->priority = prio;
 		job->caller = nullptr;
 		job->func = std::move(func);
 
@@ -602,10 +603,13 @@ namespace edge {
 		alloc->deallocate(self);
 	}
 
-	void Scheduler::schedule(Job* job, Job::Priority prio, Workgroup wg) {
+	void Scheduler::schedule(Job* job, Workgroup wg) {
 		active_jobs.fetch_add(1, std::memory_order_release);
-		job->priority = prio;
-		enqueue_job(job, prio, wg);
+		enqueue_job(job, job->priority, wg);
+	}
+
+	void Scheduler::schedule(Span<Job*> jobs, Workgroup wg) {
+		active_jobs.fetch_add(jobs.size(), std::memory_order_release);
 	}
 
 	void Scheduler::tick() {
@@ -676,6 +680,33 @@ namespace edge {
 		// Wake workers
 		if (sleeping_workers.load(std::memory_order_acquire) > 0) {
 			worker_futex.fetch_add(1, std::memory_order_release);
+			futex_wake(&worker_futex);
+		}
+	}
+
+	void Scheduler::enqueue_jobs(Span<Job*> jobs, Job::Priority prio, Workgroup wg) {
+		for (auto& job : jobs) {
+			switch (wg)
+			{
+			case edge::Scheduler::Main:
+				main_queue.enqueue(job);
+				break;
+			case edge::Scheduler::IO:
+				io_queue.enqueue(job);
+				break;
+			case edge::Scheduler::Background: {
+				i32 priority_index = static_cast<i32>(prio);
+				if (!background_queues[priority_index].enqueue(job)) {
+					return;
+				}
+				break;
+			}
+			}
+		}
+
+		// Wake workers
+		if (sleeping_workers.load(std::memory_order_acquire) > 0) {
+			worker_futex.fetch_add(jobs.size(), std::memory_order_release);
 			futex_wake_all(&worker_futex);
 		}
 	}

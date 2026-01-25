@@ -5,6 +5,7 @@
 #include <callable.hpp>
 #include <mpmc_queue.hpp>
 #include <threads.hpp>
+#include <span.hpp>
 
 #include "fiber.hpp"
 
@@ -65,11 +66,11 @@ namespace edge {
 		Priority priority = Priority::Low;
 
 		template<typename F>
-		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn) {
+		static Job* from_lambda(NotNull<const Allocator*> alloc, F&& fn, Job::Priority prio = Job::Priority::High) {
 			return create(alloc, callable_create_from_lambda(alloc, std::forward<F>(fn)));
 		}
 
-		static Job* create(NotNull<const Allocator*> alloc, JobFn&& func);
+		static Job* create(NotNull<const Allocator*> alloc, JobFn&& func, Job::Priority prio = Job::Priority::High);
 		static void destroy(NotNull<const Allocator*> alloc, Job* self);
 
 		template<typename T, typename E>
@@ -114,7 +115,8 @@ namespace edge {
 		static Scheduler* create(NotNull<const Allocator*> alloc);
 		static void destroy(NotNull<const Allocator*> alloc, Scheduler* self);
 
-		void schedule(Job* job, Job::Priority prio = Job::Priority::High, Workgroup wg = Workgroup::Background);
+		void schedule(Job* job, Workgroup wg = Workgroup::Background);
+		void schedule(Span<Job*> jobs, Workgroup wg = Workgroup::Background);
 		void tick();
 
 		void run();
@@ -122,6 +124,7 @@ namespace edge {
 	private:
 		Job* pick_job(Workgroup wg);
 		void enqueue_job(Job* job, Job::Priority prio, Workgroup wg);
+		void enqueue_jobs(Span<Job*> job, Job::Priority prio, Workgroup wg);
 	};
 
 	Scheduler* sched_current();
