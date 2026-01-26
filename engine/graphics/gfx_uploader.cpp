@@ -219,13 +219,21 @@ namespace edge::gfx {
 		cmd_pool.destroy();
 	}
 
-	void Uploader::load_image(NotNull<const Allocator*> alloc, const char* path) {
-		upload_commands.enqueue({ .type = UploadingCommandType::Image, .path = path });
+	ImagePromise* Uploader::load_image(NotNull<const Allocator*> alloc, const char* path) {
+		ImagePromise* promise = alloc->allocate<ImagePromise>();
+
+		upload_commands.enqueue({ 
+			.type = UploadingCommandType::Image, 
+			.path = path,
+			.image_promise = promise
+			});
 
 		if (sleeping.load(std::memory_order_acquire)) {
 			futex_counter.fetch_add(1, std::memory_order_release);
 			futex_wake(&futex_counter);
 		}
+
+		return promise;
 	}
 
 	ResourceSet& Uploader::get_resource_set() {
@@ -301,14 +309,11 @@ namespace edge::gfx {
 	}
 
 	i32 Uploader::thread_loop() {
-		using ImagePromise = Job::Promise<Image, ImageLoadingError>;
-
 		Array<Job*> uploading_jobs = {};
-		ImagePromise* image_promises = {};
+		Array<ImagePromise*> image_promises = {};
 		usize promise_count = 0;
 
-		image_promises = allocator->allocate_array<ImagePromise>(64);
-		if (!image_promises) {
+		if (!image_promises.reserve(allocator, 64)) {
 			return -1;
 		}
 
@@ -330,11 +335,9 @@ namespace edge::gfx {
 					continue;
 				}
 
-				ImagePromise* promise = image_promises + (promise_count++);
-				promise->status.store(Job::State::Suspended, std::memory_order_release);
+				job->promise = command.image_promise;
 
-				job->promise = promise;
-
+				image_promises.push_back(allocator, command.image_promise);
 				uploading_jobs.push_back(allocator, job);
 			}
 
@@ -349,8 +352,8 @@ namespace edge::gfx {
 			sched->schedule(uploading_jobs, Scheduler::Workgroup::IO);
 
 			// Wait for all scheduled work.
-			while (std::any_of(image_promises, image_promises + promise_count,
-				[](const auto& p) { return !p.is_done(); })) {
+			while (std::any_of(image_promises.begin(), image_promises.end(),
+				[](const auto& p) { return !p->is_done(); })) {
 				thread_yield();
 			}
 
@@ -410,7 +413,7 @@ namespace edge::gfx {
 
 		// Cleanup
 		uploading_jobs.destroy(allocator);
-		allocator->deallocate_array(image_promises, 64);
+		image_promises.destroy(allocator);
 
 		return 0;
 	}

@@ -147,7 +147,7 @@ namespace edge::gfx {
 		void free_resource(NotNull<const Allocator*> alloc, Handle handle);
 
 		bool frame_begin();
-		bool frame_end(NotNull<const Allocator*> alloc);
+		bool frame_end(NotNull<const Allocator*> alloc, VkSemaphoreSubmitInfoKHR uploader_semaphore);
 
 		void image_update_end(NotNull<const Allocator*> alloc, ImageUpdateInfo& update_info);
 		void buffer_update_end(NotNull<const Allocator*> alloc, BufferUpdateInfo& update_info);

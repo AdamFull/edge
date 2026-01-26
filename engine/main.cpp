@@ -205,8 +205,10 @@ namespace edge {
 
 		test_tex = HANDLE_INVALID;
 
-		//renderer.add_image_from_disk(&allocator, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds");
-		uploader.load_image(alloc, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds");
+		pending_images.push_back(alloc, {
+			.handle = renderer.add_resource(),
+			.promise = uploader.load_image(alloc, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds")
+			});
 
 		return true;
 	}
@@ -220,6 +222,11 @@ namespace edge {
 		if (copy_queue) {
 			copy_queue.wait_idle();
 		}
+
+		for (auto& pending : pending_images) {
+			alloc->deallocate(pending.promise);
+		}
+		pending_images.destroy(alloc);
 
 		frame_time_controller.destroy();
 
@@ -263,16 +270,32 @@ namespace edge {
 
 		imgui_layer.on_frame_begin(delta_time);
 
-		//ImGui::Image((ImTextureRef)test_tex, { 512, 512 });
+		if (test_tex != HANDLE_INVALID) {
+			ImGui::Image((ImTextureRef)test_tex, { 512, 512 });
+		}
 
 		ImGui::ShowDemoWindow();
 
 		imgui_layer.on_frame_end();
 
 		if (renderer.frame_begin()) {
+			for (usize i = pending_images.size(); i > 0; --i) {
+				usize index = i - 1;
+
+				PendingImage& pending_image = pending_images[index];
+				if (pending_image.promise->is_done()) {
+					pending_images.remove(index, nullptr);
+
+					test_tex = pending_image.handle;
+
+					renderer.setup_resource(&allocator, pending_image.handle, pending_image.promise->value);
+					allocator.deallocate(pending_image.promise);
+				}
+			}
+
 			imgui_renderer.execute(&allocator);
 
-			renderer.frame_end(&allocator);
+			renderer.frame_end(&allocator, uploader.last_submitted_semaphore.load(std::memory_order_acquire));
 		}
 	}
 }
@@ -321,17 +344,16 @@ int edge_main(RuntimeLayout* runtime_layout) {
 	engine.run();
 
 cleanup:
+	engine.destroy(&allocator);
+
 	if (sched) {
 		Scheduler::destroy(&allocator, sched);
 	}
 
 	logger.destroy(&allocator);
 
-	{
-		size_t net_allocated = allocator.get_net();
-		assert(net_allocated == 0 && "Memory leaks detected.");
-	}
+	usize net_allocated = allocator.get_net();
+	assert(net_allocated == 0 && "Memory leaks detected.");
 
-	engine.destroy(&allocator);
 	return return_value;
 }

@@ -15,6 +15,11 @@
 #include "graphics/renderers/imgui_renderer.h"
 
 namespace edge {
+	struct PendingImage {
+		Handle handle = HANDLE_INVALID;
+		gfx::ImagePromise* promise = nullptr;
+	};
+
 	struct FrameTimeController {
 		using duration_t = std::chrono::high_resolution_clock::duration;
 		using timepoint_t = std::chrono::high_resolution_clock::time_point;
@@ -99,6 +104,8 @@ namespace edge {
 		gfx::ImGuiRenderer imgui_renderer = {};
 
 		FrameTimeController frame_time_controller = {};
+
+		Array<PendingImage> pending_images = {};
 
 		Handle test_tex = HANDLE_INVALID;
 

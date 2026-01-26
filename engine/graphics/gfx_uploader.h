@@ -37,6 +37,14 @@ namespace edge::gfx {
 		FailedToReadData
 	};
 
+	using ImagePromise = Job::Promise<Image, ImageLoadingError>;
+
+	enum class BufferLoadingError {
+		NotImplemented
+	};
+
+	using BufferPromise = Job::Promise<Buffer, BufferLoadingError>;
+
 	enum class UploadingCommandType {
 		Image,
 		Geometry
@@ -45,6 +53,11 @@ namespace edge::gfx {
 	struct UploadingCommand {
 		UploadingCommandType type;
 		const char* path = nullptr;
+
+		union {
+			ImagePromise* image_promise = {};
+			BufferPromise* buffer_promise;
+		};
 	};
 
 	struct UploaderCreateInfo {
@@ -73,7 +86,7 @@ namespace edge::gfx {
 		bool create(NotNull<const Allocator*> alloc, UploaderCreateInfo create_info);
 		void destroy(NotNull<const Allocator*> alloc);
 
-		void load_image(NotNull<const Allocator*> alloc, const char* path);
+		ImagePromise* load_image(NotNull<const Allocator*> alloc, const char* path);
 
 		ResourceSet& get_resource_set();
 	private:

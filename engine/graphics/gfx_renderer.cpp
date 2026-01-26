@@ -693,72 +693,12 @@ namespace edge::gfx {
 		return true;
 	}
 
-	bool Renderer::frame_end(NotNull<const Allocator*> alloc) {
+	bool Renderer::frame_end(NotNull<const Allocator*> alloc, VkSemaphoreSubmitInfoKHR uploader_semaphore) {
 		if (!active_frame || !active_frame->is_recording) {
 			return false;
 		}
 
 		CmdBuf cmd = active_frame->cmd;
-
-#if 0
-		for (auto& texture_upload : texture_uploads) {
-			TextureSource& tex_src = texture_upload.texture_source;
-
-			const ImageCreateInfo image_create_info = {
-				.extent = { tex_src.base_width, tex_src.base_height, tex_src.base_depth },
-				.level_count = tex_src.mip_levels,
-				.layer_count = tex_src.array_layers,
-				.face_count = tex_src.face_count,
-				.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-				.format = static_cast<VkFormat>(tex_src.format_info->vk_format)
-			};
-
-			Image image = {};
-			if (!image.create(image_create_info)) {
-				EDGE_LOG_ERROR("Failed to create image.");
-				tex_src.destroy(alloc);
-				continue;
-			}
-
-			barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
-				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-				.baseMipLevel = 0,
-				.levelCount = tex_src.mip_levels,
-				.baseArrayLayer = 0,
-				.layerCount = tex_src.array_layers * tex_src.face_count
-				});
-			cmd.pipeline_barrier(barrier_builder);
-			barrier_builder.reset();
-
-			image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-
-			ImageUpdateInfo update_info = {
-				.dst_image = image,
-				.buffer_view = active_frame->try_allocate_staging_memory(alloc, tex_src.data_size, 1)
-			};
-
-			for (usize level = 0; level < tex_src.mip_levels; ++level) {
-				u32 mip_width = max(tex_src.base_width >> level, 1u);
-				u32 mip_height = max(tex_src.base_height >> level, 1u);
-				u32 mip_depth = max(tex_src.base_depth >> level, 1u);
-
-				auto subresource_info = tex_src.get_mip(level);
-
-				update_info.write(alloc, {
-						.data = { subresource_info.data, subresource_info.size },
-						.extent = { mip_width, mip_height, mip_depth },
-						.mip_level = (u32)level,
-						.array_layer = 0,
-						.layer_count = tex_src.array_layers * tex_src.face_count
-					});
-			}
-
-			image_update_end(alloc, update_info);
-			setup_resource(alloc, texture_upload.handle, image);
-			tex_src.destroy(alloc);
-		}
-		texture_uploads.clear();
-#endif
 
 		Resource* backbuffer_resource = resource_handle_pool.get(backbuffer_handle);
 		if (backbuffer_resource) {
@@ -794,6 +734,7 @@ namespace edge::gfx {
 		wait_semaphores[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
 		wait_semaphores[0].semaphore = acquired_semaphore;
 		wait_semaphores[0].stageMask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT;
+		wait_semaphores[1] = uploader_semaphore;
 
 		VkSemaphoreSubmitInfo signal_semaphores[2] = {};
 		signal_semaphores[0].sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO;
@@ -809,7 +750,7 @@ namespace edge::gfx {
 
 		const VkSubmitInfo2KHR submit_info = {
 			.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO_2_KHR,
-			.waitSemaphoreInfoCount = 1,
+			.waitSemaphoreInfoCount = uploader_semaphore.semaphore ? 2u : 1u,
 			.pWaitSemaphoreInfos = wait_semaphores,
 			.commandBufferInfoCount = (u32)cmd_buffer_count,
 			.pCommandBufferInfos = cmd_buffer_submit_infos,
