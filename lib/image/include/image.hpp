@@ -3,10 +3,10 @@
 
 #include <cstdio>
 
-#include <allocator.hpp>
+#include <callable.hpp>
 
 namespace edge {
-	struct ImageHeader;
+	using ImageReadFn = Callable<bool(u32 mip_level, u32 layer, u32 layer_count)>;
 
 	struct ImageFormatDesc {
 		u32 block_width;
@@ -30,18 +30,67 @@ namespace edge {
 		}
 	};
 
-	struct IImageConsumer {
-		virtual ~IImageConsumer() = default;
+	enum class ImageContainerType {
+		None,
+		KTX_1_0,
+		DDS,
+		Internal
+	};
 
-		virtual bool prepare(NotNull<const Allocator*> alloc, const ImageHeader& header) = 0;
-		virtual bool read(NotNull<const Allocator*> alloc, const ImageHeader& header, u32 mip_level, u32 array_layer, u32 layer_count) = 0;
+	enum class ImageType {
+		None,
+		Image1D,
+		Image2D,
+		Image3D,
+		ImageCube
+	};
+
+	// TODO: Add flags (1D, 2D, 3D, cube)
+	struct ImageInfo {
+		usize whole_size = 0;
+
+		u32 base_width = 1;
+		u32 base_height = 1;
+		u32 base_depth = 1;
+		u32 mip_levels = 1;
+		u32 array_layers = 1;
+		ImageType type = ImageType::None;
+
+		void init(const ImageFormatDesc* desc, u32 width, u32 height, u32 depth, u32 mip_count, u32 layer_count, u32 face_count);
+	};
+
+	struct ReadBlockInfo {
+		usize write_offset = 0;
+		u32 mip_level = 0;
+		u32 array_layer = 0;
+		u32 layer_count = 0;
+		u32 block_width = 1;
+		u32 block_height = 1;
+		u32 block_depth = 1;
+	};
+
+	struct IImageReader {
+		enum class Result {
+			Success = 0,
+			InvalidHeader,
+			OutOfMemory,
+			InvalidPixelFormat,
+			EndOfStream
+		};
+
+		virtual ~IImageReader() = default;
+
+		virtual Result read_next_block(void* dst_memory, usize& dst_offset, ReadBlockInfo& block_info) = 0;
+
+		virtual const ImageInfo& get_info() const = 0;
+		virtual ImageContainerType get_container_type() const = 0;
+		virtual const ImageFormatDesc* get_format() const = 0;
 	};
 
 	struct ImageHeader {
 		enum class ContainerType {
 			None,
 			KTX_1_0,
-			DDS,
 			Internal
 		};
 
@@ -72,31 +121,9 @@ namespace edge {
 		u32 mip_levels = 1;
 		u32 array_layers = 1;
 		u32 face_count = 1;
+		u32 endianness = 0;
 
 		ContainerType source_container_type = ContainerType::None;
-
-		Result open_strem(const char* path, const char* mode);
-		void close_stream();
-
-		usize read_bytes(void* dst, usize bytes_to_read) const;
-		bool try_read_bytes(void* dst, usize bytes_to_read) const;
-
-		usize get_size() const;
-
-		Result read_header(NotNull<const Allocator*> alloc);
-		Result read_data(NotNull<const Allocator*> alloc, IImageConsumer* output);
-
-		// DDS format
-		Result read_header_dds(NotNull<const Allocator*> alloc);
-		Result read_data_dds(NotNull<const Allocator*> alloc, IImageConsumer* output);
-
-		// KTX1 format
-		Result read_header_ktx1(NotNull<const Allocator*> alloc);
-		Result read_data_ktx1(NotNull<const Allocator*> alloc, IImageConsumer* output);
-
-		// Internal format
-		Result read_header_internal(NotNull<const Allocator*> alloc);
-		Result read_data_internal(NotNull<const Allocator*> alloc, IImageConsumer* output);
 
 		Result write_header_internal(NotNull<const Allocator*> alloc);
 
@@ -104,6 +131,9 @@ namespace edge {
 
 		Result write_internal_stream(NotNull<const Allocator*> alloc);
 	};
+
+	IImageReader* open_image_reader(NotNull<const Allocator*> alloc, const char* path);
+	IImageReader* open_image_reader(NotNull<const Allocator*> alloc, FILE* stream);
 }
 
 #endif

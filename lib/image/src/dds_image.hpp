@@ -1,0 +1,336 @@
+#ifndef EDGE_DDS_IMAGE_H
+#define EDGE_DDS_IMAGE_H
+
+#include "image.hpp"
+#include "image_format.hpp"
+
+#define MAKE_FOURCC(a, b, c, d) ((u32)(a) | ((u32)(b) << 8) | ((u32)(c) << 16) | ((u32)(d) << 24))
+
+namespace edge {
+	namespace detail::dds {
+		constexpr u8 IDENTIFIER[] = {
+				0x44, 0x44, 0x53, 0x20
+		};
+
+		static constexpr usize ident_size = sizeof(IDENTIFIER);
+
+		constexpr u32 FOURCC_DXT1 = MAKE_FOURCC('D', 'X', 'T', '1');
+		constexpr u32 FOURCC_DXT2 = MAKE_FOURCC('D', 'X', 'T', '2');
+		constexpr u32 FOURCC_DXT3 = MAKE_FOURCC('D', 'X', 'T', '3');
+		constexpr u32 FOURCC_DXT4 = MAKE_FOURCC('D', 'X', 'T', '4');
+		constexpr u32 FOURCC_DXT5 = MAKE_FOURCC('D', 'X', 'T', '5');
+		constexpr u32 FOURCC_BC4U = MAKE_FOURCC('B', 'C', '4', 'U');
+		constexpr u32 FOURCC_BC4S = MAKE_FOURCC('B', 'C', '4', 'S');
+		constexpr u32 FOURCC_ATI2 = MAKE_FOURCC('A', 'T', 'I', '2');
+		constexpr u32 FOURCC_BC5U = MAKE_FOURCC('B', 'C', '5', 'U');
+		constexpr u32 FOURCC_BC5S = MAKE_FOURCC('B', 'C', '5', 'S');
+		constexpr u32 FOURCC_RGBG = MAKE_FOURCC('R', 'G', 'B', 'G');
+		constexpr u32 FOURCC_GRGB = MAKE_FOURCC('G', 'R', 'G', 'B');
+		constexpr u32 FOURCC_DX10 = MAKE_FOURCC('D', 'X', '1', '0');
+
+		enum PixelFormatFlagBits : u32 {
+			DDS_PIXEL_FORMAT_ALPHA_PIXELS_FLAG_BIT = 0x1,
+			DDS_PIXEL_FORMAT_ALPHA_FLAG_BIT = 0x2,
+			DDS_PIXEL_FORMAT_FOUR_CC_FLAG_BIT = 0x4,
+			DDS_PIXEL_FORMAT_RGB_FLAG_BIT = 0x40,
+			DDS_PIXEL_FORMAT_YUV_FLAG_BIT = 0x200,
+			DDS_PIXEL_FORMAT_LUMINANCE_FLAG_BIT = 0x20000
+		};
+
+		enum MiscFlagBits : u32 {
+			DDS_MISC_FLAG_NONE = 0,
+			DDS_MISC_TEXTURE_CUBE_FLAG_BIT = 0x4
+		};
+
+		enum ResourceDimension : u32 {
+			DDS_RESOURCE_DIMENSION_UNKNOWN = 0,
+			DDS_RESOURCE_DIMENSION_BUFFER = 1,
+			DDS_RESOURCE_DIMENSION_TEXTURE_1D = 2,
+			DDS_RESOURCE_DIMENSION_TEXTURE_2D = 3,
+			DDS_RESOURCE_DIMENSION_TEXTURE_3D = 4
+		};
+
+		enum CapsFlagBits : u32 {
+			DDS_CAPS_COMPLEX_FLAG_BIT = 0x8,
+			DDS_CAPS_TEXTURE_FLAG_BIT = 0x1000,
+			DDS_CAPS_MIP_MAP_FLAG_BIT = 0x400000
+		};
+
+		enum Caps2FlagBits : u32 {
+			DDS_CAPS2_CUBEMAP_FLAG_BIT = 0x200,
+			DDS_CAPS2_CUBEMAP_POSITIVE_X_FLAG_BIT = 0x400,
+			DDS_CAPS2_CUBEMAP_NEGATIVE_X_FLAG_BIT = 0x800,
+			DDS_CAPS2_CUBEMAP_POSITIVE_Y_FLAG_BIT = 0x1000,
+			DDS_CAPS2_CUBEMAP_NEGATIVE_Y_FLAG_BIT = 0x2000,
+			DDS_CAPS2_CUBEMAP_POSITIVE_Z_FLAG_BIT = 0x4000,
+			DDS_CAPS2_CUBEMAP_NEGATIVE_Z_FLAG_BIT = 0x8000,
+			DDS_CAPS2_VOLUME_FLAG_BIT = 0x200000
+		};
+
+		struct PixelFormat {
+			u32 size;
+			u32 flags;
+			u32 fourcc;
+			u32 rgb_bit_count;
+			u32 r_bit_mask;
+			u32 g_bit_mask;
+			u32 b_bit_mask;
+			u32 a_bit_mask;
+
+			DXGI_FORMAT get_format() const {
+				if (flags & DDS_PIXEL_FORMAT_FOUR_CC_FLAG_BIT) {
+					switch (fourcc)
+					{
+					case FOURCC_DXT1: return DXGI_FORMAT_BC1_UNORM;
+					case FOURCC_DXT2:
+					case FOURCC_DXT3: return DXGI_FORMAT_BC2_UNORM;
+					case FOURCC_DXT4:
+					case FOURCC_DXT5: return DXGI_FORMAT_BC3_UNORM;
+					case FOURCC_BC4U: return DXGI_FORMAT_BC4_UNORM;
+					case FOURCC_BC4S: return DXGI_FORMAT_BC4_SNORM;
+					case FOURCC_ATI2:
+					case FOURCC_BC5U: return DXGI_FORMAT_BC5_UNORM;
+					case FOURCC_BC5S: return DXGI_FORMAT_BC5_SNORM;
+					case FOURCC_RGBG: return DXGI_FORMAT_R8G8_B8G8_UNORM;
+					case FOURCC_GRGB: return DXGI_FORMAT_G8R8_G8B8_UNORM;
+					case 36: return DXGI_FORMAT_R16G16B16A16_UNORM;
+					case 110: return DXGI_FORMAT_R16G16B16A16_SNORM;
+					case 111: return DXGI_FORMAT_R16_FLOAT;
+					case 112: return DXGI_FORMAT_R16G16_FLOAT;
+					case 113: return DXGI_FORMAT_R16G16B16A16_FLOAT;
+					case 114: return DXGI_FORMAT_R32_FLOAT;
+					case 115: return DXGI_FORMAT_R32G32_FLOAT;
+					case 116: return DXGI_FORMAT_R32G32B32A32_FLOAT;
+					default: return DXGI_FORMAT_UNKNOWN;
+					}
+				}
+
+				if (flags & DDS_PIXEL_FORMAT_RGB_FLAG_BIT) {
+					switch (rgb_bit_count) {
+					case 32:
+						// D3DFMT_A8B8G8R8
+						if (r_bit_mask == 0x000000FF && g_bit_mask == 0x0000FF00 &&
+							b_bit_mask == 0x00FF0000 && a_bit_mask == 0xFF000000) {
+							return DXGI_FORMAT_R8G8B8A8_UNORM;
+						}
+						// D3DFMT_G16R16
+						if (r_bit_mask == 0x0000FFFF && g_bit_mask == 0xFFFF0000 && b_bit_mask == 0x00000000) {
+							return DXGI_FORMAT_R16G16_UNORM;
+						}
+						// D3DFMT_A2B10G10R10
+						if (r_bit_mask == 0x000003FF && g_bit_mask == 0x000FFC00 &&
+							b_bit_mask == 0x3FF00000 && a_bit_mask == 0xC0000000) {
+							return DXGI_FORMAT_R10G10B10A2_UNORM;
+						}
+						// D3DFMT_A8R8G8B8
+						if (r_bit_mask == 0x00FF0000 && g_bit_mask == 0x0000FF00 &&
+							b_bit_mask == 0x000000FF && a_bit_mask == 0xFF000000) {
+							return DXGI_FORMAT_B8G8R8A8_UNORM;
+						}
+						// D3DFMT_X8R8G8B8
+						if (r_bit_mask == 0x00FF0000 && g_bit_mask == 0x0000FF00 &&
+							b_bit_mask == 0x000000FF && a_bit_mask == 0x00000000) {
+							return DXGI_FORMAT_B8G8R8X8_UNORM;
+						}
+						break;
+					case 24:
+						// D3DFMT_R8G8B8
+						if (r_bit_mask == 0xFF0000 && g_bit_mask == 0x00FF00 && b_bit_mask == 0x0000FF) {
+							// TODO: N\A in DXGI
+							return DXGI_FORMAT_UNKNOWN;
+						}
+						break;
+					case 16:
+						// D3DFMT_A1R5G5B5
+						if (r_bit_mask == 0x7C00 && g_bit_mask == 0x03E0 &&
+							b_bit_mask == 0x001F && a_bit_mask == 0x8000) {
+							return DXGI_FORMAT_B5G5R5A1_UNORM;
+						}
+						// D3FMT_R5G6B5
+						if (r_bit_mask == 0xF800 && g_bit_mask == 0x07E0 &&
+							b_bit_mask == 0x001F && a_bit_mask == 0x0000) {
+							return DXGI_FORMAT_B5G6R5_UNORM;
+						}
+						break;
+					case 8:
+						// D3DFMT_A8
+						if (flags & DDS_PIXEL_FORMAT_ALPHA_FLAG_BIT && a_bit_mask == 0xFF) {
+							return DXGI_FORMAT_A8_UNORM;
+						}
+						break;
+					}
+				}
+
+				if (flags & DDS_PIXEL_FORMAT_LUMINANCE_FLAG_BIT) {
+					switch (rgb_bit_count) {
+					case 16:
+						// D3DFMT_A8L8
+						if (r_bit_mask == 0x00FF && a_bit_mask == 0xFF00) {
+							// TODO: N\A in DXGI
+							return DXGI_FORMAT_UNKNOWN;
+						}
+						// D3DFMT_L16
+						if (r_bit_mask == 0xFFFF) {
+							return DXGI_FORMAT_R16_UNORM;
+						}
+						break;
+					case 8:
+						// D3DFMT_L8
+						if (r_bit_mask == 0xFF) {
+							return DXGI_FORMAT_R8_UNORM;
+						}
+						// D3DFMT_A4L4
+						if (r_bit_mask == 0xF && a_bit_mask == 0xF0) {
+							// TODO: N\A in DXGI
+							return DXGI_FORMAT_UNKNOWN;
+						}
+					}
+				}
+
+				return DXGI_FORMAT_UNKNOWN;
+			}
+		};
+
+		struct HeaderDXT10 {
+			DXGI_FORMAT dxgi_format;
+			ResourceDimension resource_dimension;
+			u32 misc_flag;
+			u32 array_size;
+			u32 misc_flags2;
+		};
+
+		struct Header {
+			u32 size;
+			u32 flags;
+			u32 height;
+			u32 width;
+			u32 pitch_or_linear_size;
+			u32 depth;
+			u32 mip_map_count;
+			u32 reserved1[11];
+			PixelFormat ddspf;
+			u32 caps;
+			u32 caps2;
+			u32 caps3;
+			u32 caps4;
+			u32 reserved2;
+		};
+
+		static constexpr usize header_size = sizeof(Header);
+		static constexpr usize header_dxt10_size = sizeof(HeaderDXT10);
+	}
+
+	struct DDSReader final : IImageReader {
+		FILE* stream = nullptr;
+		const ImageFormatDesc* format_desc = nullptr;
+		ImageInfo info = {};
+
+		usize current_layer = 0;
+		usize current_mip = 0;
+
+		DDSReader(FILE* file_stream) :
+			stream{ file_stream } {
+
+		}
+
+		~DDSReader() {
+			if (stream) {
+				fclose(stream);
+			}
+		}
+
+		Result read_header() {
+			using namespace detail::dds;
+
+			Header header;
+			if (read_bytes(&header, header_size) != header_size) {
+				return Result::InvalidHeader;
+			}
+
+			bool fourcc_pixel_format = header.ddspf.flags & DDS_PIXEL_FORMAT_FOUR_CC_FLAG_BIT;
+
+			u32 layer_count = 1, face_count = 1;
+			if (fourcc_pixel_format && (header.ddspf.fourcc == FOURCC_DX10)) {
+				HeaderDXT10 header_dxt10;
+				if (read_bytes(&header_dxt10, header_dxt10_size) != header_dxt10_size) {
+					return Result::InvalidHeader;
+				}
+
+				format_desc = detail::find_format_entry_by_dxgi(header_dxt10.dxgi_format);
+				if (!format_desc) {
+					return Result::InvalidPixelFormat;
+				}
+
+				if ((header_dxt10.misc_flag & DDS_MISC_TEXTURE_CUBE_FLAG_BIT) == DDS_MISC_TEXTURE_CUBE_FLAG_BIT) {
+					face_count *= 6;
+				}
+			}
+			else {
+				auto dxgi_format = header.ddspf.get_format();
+
+				format_desc = detail::find_format_entry_by_dxgi(dxgi_format);
+				if (!format_desc) {
+					return Result::InvalidPixelFormat;
+				}
+
+				if (header.caps2 & DDS_CAPS2_CUBEMAP_FLAG_BIT) {
+					face_count *= 6;
+				}
+			}
+
+			info.init(format_desc, header.width, header.height, header.depth, header.mip_map_count, layer_count, face_count);
+
+			return Result::Success;
+		}
+
+		Result read_next_block(void* dst_memory, usize& dst_offset, ReadBlockInfo& block_info) override {
+			if (current_layer >= static_cast<usize>(info.array_layers)) {
+				return Result::EndOfStream;
+			}
+
+			block_info.write_offset = dst_offset;
+			block_info.mip_level = static_cast<u32>(current_mip++);
+			block_info.array_layer = static_cast<u32>(current_layer);
+			block_info.layer_count = 1;
+
+			block_info.block_width = max(info.base_width >> block_info.mip_level, 1u);
+			block_info.block_height = max(info.base_height >> block_info.mip_level, 1u);
+			block_info.block_depth = max(info.base_depth >> block_info.mip_level, 1u);
+
+			usize copy_size = format_desc->comp_size(block_info.block_width, block_info.block_height, block_info.block_depth) * block_info.layer_count;
+			usize bytes_readed = fread((u8*)dst_memory + dst_offset, 1, copy_size, stream);
+			if (bytes_readed != copy_size) {
+				return Result::EndOfStream;
+			}
+
+			dst_offset += copy_size;
+
+			if (current_mip >= static_cast<usize>(info.mip_levels)) {
+				current_mip = 0;
+				++current_layer;
+			}
+
+			return Result::Success;
+		}
+
+		const ImageInfo& get_info() const override {
+			return info;
+		}
+
+		ImageContainerType get_container_type() const override {
+			return ImageContainerType::DDS;
+		}
+
+		const ImageFormatDesc* get_format() const override {
+			return format_desc;
+		}
+	private:
+		usize read_bytes(void* buffer, usize count) const {
+			return fread(buffer, 1, count, stream);
+		}
+	};
+}
+
+#undef MAKE_FOURCC
+
+#endif
