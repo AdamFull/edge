@@ -279,23 +279,26 @@ namespace edge {
 		imgui_layer.on_frame_end();
 
 		if (renderer.frame_begin()) {
-			for (usize i = pending_images.size(); i > 0; --i) {
-				usize index = i - 1;
+			auto semaphore = uploader.last_submitted_semaphore.load(std::memory_order_acquire);
+			if (semaphore.semaphore) {
+				for (usize i = pending_images.size(); i > 0; --i) {
+					usize index = i - 1;
 
-				PendingImage& pending_image = pending_images[index];
-				if (pending_image.promise->is_done()) {
-					pending_images.remove(index, nullptr);
+					PendingImage& pending_image = pending_images[index];
+					if (pending_image.promise->is_done()) {
+						pending_images.remove(index, nullptr);
 
-					test_tex = pending_image.handle;
+						test_tex = pending_image.handle;
 
-					renderer.setup_resource(&allocator, pending_image.handle, pending_image.promise->value);
-					allocator.deallocate(pending_image.promise);
+						renderer.setup_resource(&allocator, pending_image.handle, pending_image.promise->value);
+						allocator.deallocate(pending_image.promise);
+					}
 				}
 			}
 
 			imgui_renderer.execute(&allocator);
 
-			renderer.frame_end(&allocator, uploader.last_submitted_semaphore.load(std::memory_order_acquire));
+			renderer.frame_end(&allocator, semaphore);
 		}
 	}
 }

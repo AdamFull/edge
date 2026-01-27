@@ -34,6 +34,7 @@ namespace edge::gfx {
 	enum class ImageLoadingError {
 		HeaderReadingError,
 		FailedToCreateImage,
+		FailedToAllocateStagingMemory,
 		FailedToReadData
 	};
 
@@ -90,7 +91,7 @@ namespace edge::gfx {
 
 		ResourceSet& get_resource_set();
 	private:
-		void load_image_job(NotNull<const Allocator*> alloc, FILE* stream);
+		void load_image_job(NotNull<const Allocator*> alloc, const char* path);
 
 		static i32 thread_entry(void* data);
 		i32 thread_loop();

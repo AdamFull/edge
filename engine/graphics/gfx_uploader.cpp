@@ -12,69 +12,6 @@
 #include <volk.h>
 
 namespace edge::gfx {
-	struct ImageConsumer final : IImageConsumer {
-		ResourceSet& set;
-		Buffer staging_buffer = {};
-
-		Array<VkBufferImageCopy2KHR> copy_regions = {};
-		usize copy_offset = 0;
-
-		ImageConsumer(ResourceSet& rset)
-			: set{ rset } {
-		}
-
-		ImageConsumer(const ImageConsumer&) = delete;
-		ImageConsumer& operator=(const ImageConsumer&) = delete;
-		ImageConsumer(ImageConsumer&&) = delete;
-		ImageConsumer& operator=(ImageConsumer&&) = delete;
-
-		bool prepare(NotNull<const Allocator*> alloc, const ImageHeader& header) override {
-			usize whole_size = header.get_size();
-
-			BufferView buffer_view = set.try_allocate_staging_memory(alloc, whole_size, 16);
-			if (!buffer_view) {
-				return false;
-			}
-
-			staging_buffer = buffer_view.buffer;
-			copy_offset = buffer_view.local_offset;
-
-			return true;
-		}
-
-		bool read(NotNull<const Allocator*> alloc, const ImageHeader& header, u32 mip_level, u32 array_layer, u32 layer_count) override {
-			u32 mip_width = max(header.base_width >> mip_level, 1u);
-			u32 mip_height = max(header.base_height >> mip_level, 1u);
-			u32 mip_depth = max(header.base_depth >> mip_level, 1u);
-
-			usize copy_size = header.format_desc->comp_size(mip_width, mip_height, mip_depth) * layer_count;
-
-			u8* buffer_dst = (u8*)staging_buffer.memory.map();
-			if (!header.try_read_bytes(buffer_dst + copy_offset, copy_size)) {
-				return false;
-			}
-
-			copy_regions.push_back(alloc, {
-				.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2_KHR,
-				.bufferOffset = std::exchange(copy_offset, copy_offset + copy_size),
-				.imageSubresource = {
-					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-					.mipLevel = mip_level,
-					.baseArrayLayer = array_layer,
-					.layerCount = layer_count
-					},
-				.imageOffset = {},
-				.imageExtent = {
-					.width = mip_width,
-					.height = mip_height,
-					.depth = mip_depth
-				}
-				});
-
-			return true;
-		}
-	};
-
 	bool ResourceSet::create(NotNull<const Allocator*> alloc, NotNull<Uploader*> uploader) {
 		BufferCreateInfo buffer_create_info = {
 				.size = 32 * 1024 * 1024,
@@ -240,25 +177,28 @@ namespace edge::gfx {
 		return resource_sets[resource_set_index.load(std::memory_order_relaxed) % FRAME_OVERLAP];
 	}
 
-	void Uploader::load_image_job(NotNull<const Allocator*> alloc, FILE* stream) {
-		ImageHeader src = { .stream = stream };
-
-		if (src.read_header(alloc) != ImageHeader::Result::Success) {
+	void Uploader::load_image_job(NotNull<const Allocator*> alloc, const char* path) {
+		IImageReader* reader = open_image_reader(alloc, path);
+		if (!reader) {
+			EDGE_LOG_ERROR("Image loading failed. Invalid image header.");
 			job_failed(ImageLoadingError::HeaderReadingError);
 			return;
 		}
 
+		const ImageInfo& image_info = reader->get_info();
+
 		const ImageCreateInfo create_info = {
-				.extent = { src.base_width, src.base_height, src.base_depth },
-				.level_count = src.mip_levels,
-				.layer_count = src.array_layers,
-				.face_count = src.face_count,
+				.extent = { image_info.base_width, image_info.base_height, image_info.base_depth},
+				.level_count = image_info.mip_levels,
+				.layer_count = image_info.array_layers,
+				.face_count = 1,
 				.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-				.format = static_cast<VkFormat>(src.format_desc->vk_format)
+				.format = static_cast<VkFormat>(reader->get_format()->vk_format)
 		};
 
 		Image image = {};
 		if (!image.create(create_info)) {
+			EDGE_LOG_ERROR("Image loading failed. Can't create image handle.");
 			job_failed(ImageLoadingError::FailedToCreateImage);
 			return;
 		}
@@ -272,34 +212,63 @@ namespace edge::gfx {
 		barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.baseMipLevel = 0,
-				.levelCount = src.mip_levels,
+				.levelCount = image_info.mip_levels,
 				.baseArrayLayer = 0,
-				.layerCount = src.array_layers * src.face_count
+				.layerCount = image_info.array_layers
 			});
 		set.cmd.pipeline_barrier(barrier_builder);
 		barrier_builder.reset();
 
 		image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
-		ImageConsumer data_consumer = { set };
-
-		if (src.read_data(alloc, &data_consumer) != ImageHeader::Result::Success) {
-			job_failed(ImageLoadingError::FailedToReadData);
+		// Copy image data
+		BufferView buffer_view = set.try_allocate_staging_memory(alloc, image_info.whole_size, 16);
+		if (!buffer_view) {
+			EDGE_LOG_ERROR("Image loading failed. Failed to allocate uploading memory.");
+			job_failed(ImageLoadingError::FailedToAllocateStagingMemory);
 			return;
 		}
 
+		Buffer staging_buffer = buffer_view.buffer;
+		usize copy_offset = buffer_view.local_offset;
+		Array<VkBufferImageCopy2KHR> copy_regions = {};
+
+		void* buffer_dst = staging_buffer.memory.map();
+
+		ReadBlockInfo read_block_info = {};
+		while (reader->read_next_block(buffer_dst, copy_offset, read_block_info) != IImageReader::Result::EndOfStream) {
+			copy_regions.push_back(alloc, {
+				.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2_KHR,
+				.bufferOffset = read_block_info.write_offset,
+				.imageSubresource = {
+					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+					.mipLevel = read_block_info.mip_level,
+					.baseArrayLayer = read_block_info.array_layer,
+					.layerCount = read_block_info.layer_count
+					},
+				.imageOffset = {},
+				.imageExtent = {
+					.width = read_block_info.block_width,
+					.height = read_block_info.block_height,
+					.depth = read_block_info.block_depth
+				}
+			});
+		}
+
+		alloc->deallocate(reader);
+
 		const VkCopyBufferToImageInfo2KHR copy_image_info = {
 			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
-			.srcBuffer = data_consumer.staging_buffer,
+			.srcBuffer = staging_buffer,
 			.dstImage = image,
 			.dstImageLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-			.regionCount = static_cast<u32>(data_consumer.copy_regions.size()),
-			.pRegions = data_consumer.copy_regions.data()
+			.regionCount = static_cast<u32>(copy_regions.size()),
+			.pRegions = copy_regions.data()
 		};
 
 		vkCmdCopyBufferToImage2KHR(set.cmd, &copy_image_info);
 		
-		data_consumer.copy_regions.destroy(alloc);
+		copy_regions.destroy(alloc);
 
 		job_return(image);
 	}
@@ -323,11 +292,7 @@ namespace edge::gfx {
 				// TODO: Make job depends on job type
 				Job* job = Job::from_lambda(allocator, sched,
 					[this, path = command.path]() {
-						FILE* stream = fopen(path, "rb");
-						if (stream) {
-							load_image_job(allocator, stream);
-							fclose(stream);
-						}
+						load_image_job(allocator, path);
 					});
 
 				if (!job) {
