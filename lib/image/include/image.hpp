@@ -45,9 +45,9 @@ namespace edge {
 		ImageCube
 	};
 
-	// TODO: Add flags (1D, 2D, 3D, cube)
 	struct ImageInfo {
 		usize whole_size = 0;
+		const ImageFormatDesc* format_desc = nullptr;
 
 		u32 base_width = 1;
 		u32 base_height = 1;
@@ -59,7 +59,7 @@ namespace edge {
 		void init(const ImageFormatDesc* desc, u32 width, u32 height, u32 depth, u32 mip_count, u32 layer_count, u32 face_count);
 	};
 
-	struct ReadBlockInfo {
+	struct ImageBlockInfo {
 		usize write_offset = 0;
 		u32 mip_level = 0;
 		u32 array_layer = 0;
@@ -72,6 +72,7 @@ namespace edge {
 	struct IImageReader {
 		enum class Result {
 			Success = 0,
+			FileNotFound,
 			InvalidHeader,
 			OutOfMemory,
 			InvalidPixelFormat,
@@ -80,15 +81,17 @@ namespace edge {
 
 		virtual ~IImageReader() = default;
 
-		virtual Result read_next_block(void* dst_memory, usize& dst_offset, ReadBlockInfo& block_info) = 0;
+		virtual Result create(NotNull<const Allocator*> alloc) = 0;
+		virtual void destroy(NotNull<const Allocator*> alloc) = 0;
+
+		virtual Result read_next_block(void* dst_memory, usize& dst_offset, ImageBlockInfo& block_info) = 0;
 
 		virtual const ImageInfo& get_info() const = 0;
 		virtual ImageContainerType get_container_type() const = 0;
-		virtual const ImageFormatDesc* get_format() const = 0;
 	};
 
-	IImageReader* open_image_reader(NotNull<const Allocator*> alloc, const char* path);
-	IImageReader* open_image_reader(NotNull<const Allocator*> alloc, FILE* stream);
+	Result<IImageReader*, IImageReader::Result> open_image_reader(NotNull<const Allocator*> alloc, const char* path);
+	Result<IImageReader*, IImageReader::Result> open_image_reader(NotNull<const Allocator*> alloc, NotNull<FILE*> stream);
 }
 
 #endif

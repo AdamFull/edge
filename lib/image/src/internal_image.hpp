@@ -221,32 +221,17 @@ namespace edge {
 	};
 
 	struct InternalReader final : IImageReader {
-		const Allocator* allocator = nullptr;
-
 		FILE* stream = nullptr;
-		const ImageFormatDesc* format_desc = nullptr;
 		ImageInfo info = {};
 		IImageDecompressor* decompressor = nullptr;
 
 		usize current_mip = 0;
 
-		InternalReader(NotNull<const Allocator*> alloc, FILE* file_stream) 
-			: allocator{ alloc.m_ptr }
-			, stream{ file_stream } {
+		InternalReader(NotNull<FILE*> fstream)
+			: stream{ fstream.m_ptr } {
 		}
 
-		~InternalReader() {
-			if (decompressor) {
-				decompressor->cleanup(allocator);
-				allocator->deallocate(decompressor);
-			}
-
-			if (stream) {
-				fclose(stream);
-			}
-		}
-
-		Result read_header() {
+		Result create(NotNull<const Allocator*> alloc) override {
 			using namespace detail::internal;
 
 			Header header;
@@ -254,7 +239,7 @@ namespace edge {
 				return Result::InvalidHeader;
 			}
 
-			format_desc = detail::find_format_entry_by_vk(header.vk_format);
+			const ImageFormatDesc* format_desc = detail::find_format_entry_by_vk(header.vk_format);
 			if (!format_desc) {
 				return Result::InvalidPixelFormat;
 			}
@@ -266,15 +251,26 @@ namespace edge {
 
 			// TODO: Detect decompressor type
 
-			decompressor = allocator->allocate<LZ4Decompressor>();
-			if (!decompressor || !decompressor->initialize(allocator)) {
+			decompressor = alloc->allocate<LZ4Decompressor>();
+			if (!decompressor || !decompressor->initialize(alloc)) {
 				return Result::OutOfMemory;
 			}
 
 			return Result::Success;
 		}
 
-		Result read_next_block(void* dst_memory, usize& dst_offset, ReadBlockInfo& block_info) override {
+		void destroy(NotNull<const Allocator*> alloc) override {
+			if (decompressor) {
+				decompressor->cleanup(alloc);
+				alloc->deallocate(decompressor);
+			}
+
+			if (stream) {
+				fclose(stream);
+			}
+		}
+
+		Result read_next_block(void* dst_memory, usize& dst_offset, ImageBlockInfo& block_info) override {
 			using namespace detail::internal;
 
 			if (current_mip >= static_cast<usize>(info.mip_levels)) {
@@ -295,7 +291,7 @@ namespace edge {
 				return Result::EndOfStream;
 			}
 
-			usize calculated_block_size = format_desc->comp_size(block_info.block_width, block_info.block_height, block_info.block_depth) * block_info.layer_count;
+			usize calculated_block_size = info.format_desc->comp_size(block_info.block_width, block_info.block_height, block_info.block_depth) * block_info.layer_count;
 			if (decompressor->decompress(stream, (u8*)dst_memory + dst_offset, next_block_size, calculated_block_size) != calculated_block_size) {
 				// ERROR: Decompression failed
 				return Result::EndOfStream;
@@ -315,10 +311,6 @@ namespace edge {
 
 		ImageContainerType get_container_type() const override {
 			return ImageContainerType::Internal;
-		}
-
-		const ImageFormatDesc* get_format() const override {
-			return format_desc;
 		}
 
 	private:

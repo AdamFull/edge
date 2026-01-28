@@ -43,24 +43,16 @@ namespace edge {
 
 	struct KTX10Reader final : IImageReader {
 		FILE* stream = nullptr;
-		const ImageFormatDesc* format_desc = nullptr;
 		ImageInfo info = {};
 		u32 endianness = 0;
 
 		usize current_mip = 0;
 
-		KTX10Reader(FILE* file_stream) :
-			stream{ file_stream } {
-
+		KTX10Reader(NotNull<FILE*> fstream)
+			: stream{ fstream.m_ptr } {
 		}
 
-		~KTX10Reader() {
-			if (stream) {
-				fclose(stream);
-			}
-		}
-
-		Result read_header() {
+		Result create(NotNull<const Allocator*> alloc) override {
 			using namespace detail::ktx1;
 
 			Header header;
@@ -85,7 +77,7 @@ namespace edge {
 				header.bytes_of_key_value_data = swap_u32(header.bytes_of_key_value_data);
 			}
 
-			format_desc = detail::find_format_entry_by_gl(header.gl_internal_format);
+			const ImageFormatDesc* format_desc = detail::find_format_entry_by_gl(header.gl_internal_format);
 			if (!format_desc) {
 				return Result::InvalidPixelFormat;
 			}
@@ -101,7 +93,13 @@ namespace edge {
 			return Result::Success;
 		}
 
-		Result read_next_block(void* dst_memory, usize& dst_offset, ReadBlockInfo& block_info) override {
+		void destroy(NotNull<const Allocator*> alloc) override {
+			if (stream) {
+				fclose(stream);
+			}
+		}
+
+		Result read_next_block(void* dst_memory, usize& dst_offset, ImageBlockInfo& block_info) override {
 			using namespace detail::ktx1;
 
 			if (current_mip >= static_cast<usize>(info.mip_levels)) {
@@ -127,7 +125,7 @@ namespace edge {
 				next_block_size = swap_u32(next_block_size);
 			}
 
-			usize calculated_block_size = format_desc->comp_size(block_info.block_width, block_info.block_height, block_info.block_depth) * block_info.layer_count;
+			usize calculated_block_size = info.format_desc->comp_size(block_info.block_width, block_info.block_height, block_info.block_depth) * block_info.layer_count;
 			if (calculated_block_size != static_cast<usize>(next_block_size)) {
 				// Invalid image data
 				return Result::EndOfStream;
@@ -152,10 +150,6 @@ namespace edge {
 
 		ImageContainerType get_container_type() const override {
 			return ImageContainerType::KTX_1_0;
-		}
-
-		const ImageFormatDesc* get_format() const override {
-			return format_desc;
 		}
 
 	private:

@@ -67,6 +67,17 @@ namespace edge {
 			DDS_CAPS2_VOLUME_FLAG_BIT = 0x200000
 		};
 
+		enum HeaderFlagBits : u32 {
+			DDS_HEADER_CAPS_FLAG_BIT = 0x1,
+			DDS_HEADER_HEIGHT_FLAG_BIT = 0x2,
+			DDS_HEADER_WIDTH_FLAG_BIT = 0x4,
+			DDS_HEADER_PITCH_FLAG_BIT = 0x8,
+			DDS_HEADER_PIXEL_FORMAT_FLAG_BIT = 0x1000,
+			DDS_HEADER_MIP_MAP_COUNT_FLAG_BIT = 0x20000,
+			DDS_HEADER_LINEAR_SIZE_FLAG_BIT = 0x80000,
+			DDS_HEADER_DEPTH_FLAG_BIT = 0x800000
+		};
+
 		struct PixelFormat {
 			u32 size;
 			u32 flags;
@@ -222,24 +233,16 @@ namespace edge {
 
 	struct DDSReader final : IImageReader {
 		FILE* stream = nullptr;
-		const ImageFormatDesc* format_desc = nullptr;
 		ImageInfo info = {};
 
 		usize current_layer = 0;
 		usize current_mip = 0;
 
-		DDSReader(FILE* file_stream) :
-			stream{ file_stream } {
-
+		DDSReader(NotNull<FILE*> fstream)
+			: stream{ fstream.m_ptr } {
 		}
 
-		~DDSReader() {
-			if (stream) {
-				fclose(stream);
-			}
-		}
-
-		Result read_header() {
+		Result create(NotNull<const Allocator*> alloc) override {
 			using namespace detail::dds;
 
 			Header header;
@@ -249,6 +252,7 @@ namespace edge {
 
 			bool fourcc_pixel_format = header.ddspf.flags & DDS_PIXEL_FORMAT_FOUR_CC_FLAG_BIT;
 
+			const ImageFormatDesc* format_desc = nullptr;
 			u32 layer_count = 1, face_count = 1;
 			if (fourcc_pixel_format && (header.ddspf.fourcc == FOURCC_DX10)) {
 				HeaderDXT10 header_dxt10;
@@ -283,7 +287,13 @@ namespace edge {
 			return Result::Success;
 		}
 
-		Result read_next_block(void* dst_memory, usize& dst_offset, ReadBlockInfo& block_info) override {
+		void destroy(NotNull<const Allocator*> alloc) override {
+			if (stream) {
+				fclose(stream);
+			}
+		}
+
+		Result read_next_block(void* dst_memory, usize& dst_offset, ImageBlockInfo& block_info) override {
 			if (current_layer >= static_cast<usize>(info.array_layers)) {
 				return Result::EndOfStream;
 			}
@@ -297,7 +307,7 @@ namespace edge {
 			block_info.block_height = max(info.base_height >> block_info.mip_level, 1u);
 			block_info.block_depth = max(info.base_depth >> block_info.mip_level, 1u);
 
-			usize copy_size = format_desc->comp_size(block_info.block_width, block_info.block_height, block_info.block_depth) * block_info.layer_count;
+			usize copy_size = info.format_desc->comp_size(block_info.block_width, block_info.block_height, block_info.block_depth) * block_info.layer_count;
 			usize bytes_readed = fread((u8*)dst_memory + dst_offset, 1, copy_size, stream);
 			if (bytes_readed != copy_size) {
 				return Result::EndOfStream;
@@ -321,9 +331,6 @@ namespace edge {
 			return ImageContainerType::DDS;
 		}
 
-		const ImageFormatDesc* get_format() const override {
-			return format_desc;
-		}
 	private:
 		usize read_bytes(void* buffer, usize count) const {
 			return fread(buffer, 1, count, stream);

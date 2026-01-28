@@ -10,6 +10,8 @@ namespace edge {
 	}
 
 	void ImageInfo::init(const ImageFormatDesc* desc, u32 width, u32 height, u32 depth, u32 mip_count, u32 layer_count, u32 face_count) {
+		format_desc = desc;
+
 		base_width = width;
 		base_height = max(height, 1u);
 		base_depth = max(depth, 1u);
@@ -34,63 +36,43 @@ namespace edge {
 			u32 mip_height = max(base_height >> static_cast<u32>(i), 1u);
 			u32 mip_depth = max(base_depth >> static_cast<u32>(i), 1u);
 
-			whole_size += desc->comp_size(mip_width, mip_height, mip_depth) * array_layers;
+			whole_size += format_desc->comp_size(mip_width, mip_height, mip_depth) * array_layers;
 		}
 	}
 
-	IImageReader* open_image_reader(NotNull<const Allocator*> alloc, const char* path) {
+	Result<IImageReader*, IImageReader::Result> open_image_reader(NotNull<const Allocator*> alloc, const char* path) {
 		FILE* stream = fopen(path, "rb");
 		if (!stream) {
-			// TODO: Error file not found
-			return nullptr;
+			return IImageReader::Result::FileNotFound;
 		}
 
 		return open_image_reader(alloc, stream);
 	}
 
-	IImageReader* open_image_reader(NotNull<const Allocator*> alloc, FILE* stream) {
+	Result<IImageReader*, IImageReader::Result> open_image_reader(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) {
 		u8 buffer[detail::max_ident_size];
 
-		if (fread(buffer, 1, detail::max_ident_size, stream) != detail::max_ident_size) {
-			// TODO: Result::InvalidHeader
-			return nullptr;
+		if (fread(buffer, 1, detail::max_ident_size, stream.m_ptr) != detail::max_ident_size) {
+			return IImageReader::Result::InvalidHeader;
 		}
 
+		IImageReader* reader = nullptr;
 		if (memcmp(buffer, detail::dds::IDENTIFIER, detail::dds::ident_size) == 0) {
-			fseek(stream, detail::dds::ident_size, SEEK_SET);
-			DDSReader* reader = alloc->allocate<DDSReader>(stream);
-			auto result = reader->read_header();
-			if (result != IImageReader::Result::Success) {
-				alloc->deallocate(reader);
-				reader = nullptr;
-			}
-			return reader;
+			fseek(stream.m_ptr, detail::dds::ident_size, SEEK_SET);
+			reader = alloc->allocate<DDSReader>(stream);
 		}
 		else if (memcmp(buffer, detail::ktx1::IDENTIFIER, detail::ktx1::ident_size) == 0) {
-			fseek(stream, detail::ktx1::ident_size, SEEK_SET);
-
-			KTX10Reader* reader = alloc->allocate<KTX10Reader>(stream);
-
-			auto result = reader->read_header();
-			if (result != IImageReader::Result::Success) {
-				alloc->deallocate(reader);
-				reader = nullptr;
-			}
-			return reader;
+			fseek(stream.m_ptr, detail::ktx1::ident_size, SEEK_SET);
+			reader = alloc->allocate<KTX10Reader>(stream);
 		}
 		else if (memcmp(buffer, detail::internal::IDENTIFIER, detail::internal::ident_size) == 0) {
-			fseek(stream, detail::internal::ident_size, SEEK_SET);
-
-			InternalReader* reader = alloc->allocate<InternalReader>(alloc, stream);
-
-			auto result = reader->read_header();
-			if (result != IImageReader::Result::Success) {
-				alloc->deallocate(reader);
-				reader = nullptr;
-			}
-			return reader;
+			fseek(stream.m_ptr, detail::internal::ident_size, SEEK_SET);
+			reader = alloc->allocate<InternalReader>(stream);
+		}
+		else {
+			return IImageReader::Result::InvalidHeader;
 		}
 
-		return nullptr; //Result::UnsupportedFileFormat;
+		return reader;
 	}
 }
