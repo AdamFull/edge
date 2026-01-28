@@ -178,9 +178,16 @@ namespace edge::gfx {
 	}
 
 	void Uploader::load_image_job(NotNull<const Allocator*> alloc, const char* path) {
-		IImageReader* reader = open_image_reader(alloc, path);
-		if (!reader) {
-			EDGE_LOG_ERROR("Image loading failed. Invalid image header.");
+		// TODO: Write error descriptions and converters
+		auto reader_open_result = open_image_reader(alloc, path);
+		if (!reader_open_result) {
+			job_failed(ImageLoadingError::OpenImageError);
+			return;
+		}
+
+		IImageReader* reader = reader_open_result.value();
+		auto reader_result = reader->create(alloc);
+		if (reader_result != IImageReader::Result::Success) {
 			job_failed(ImageLoadingError::HeaderReadingError);
 			return;
 		}
@@ -193,7 +200,7 @@ namespace edge::gfx {
 				.layer_count = image_info.array_layers,
 				.face_count = 1,
 				.usage_flags = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-				.format = static_cast<VkFormat>(reader->get_format()->vk_format)
+				.format = static_cast<VkFormat>(image_info.format_desc->vk_format)
 		};
 
 		Image image = {};
@@ -235,7 +242,7 @@ namespace edge::gfx {
 
 		void* buffer_dst = staging_buffer.memory.map();
 
-		ReadBlockInfo read_block_info = {};
+		ImageBlockInfo read_block_info = {};
 		while (reader->read_next_block(buffer_dst, copy_offset, read_block_info) != IImageReader::Result::EndOfStream) {
 			copy_regions.push_back(alloc, {
 				.sType = VK_STRUCTURE_TYPE_BUFFER_IMAGE_COPY_2_KHR,
@@ -255,6 +262,7 @@ namespace edge::gfx {
 			});
 		}
 
+		reader->destroy(alloc);
 		alloc->deallocate(reader);
 
 		const VkCopyBufferToImageInfo2KHR copy_image_info = {

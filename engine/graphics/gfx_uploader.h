@@ -32,6 +32,7 @@ namespace edge::gfx {
 	};
 
 	enum class ImageLoadingError {
+		OpenImageError,
 		HeaderReadingError,
 		FailedToCreateImage,
 		FailedToAllocateStagingMemory,
