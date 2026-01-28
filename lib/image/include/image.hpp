@@ -87,51 +87,6 @@ namespace edge {
 		virtual const ImageFormatDesc* get_format() const = 0;
 	};
 
-	struct ImageHeader {
-		enum class ContainerType {
-			None,
-			KTX_1_0,
-			Internal
-		};
-
-		enum class Result : u32 {
-			Success = 0,
-			InvalidHeader,
-			UnsupportedFileFormat,
-			UnsupportedPixelFormat,
-			OutOfMemory,
-			UnexpectedEndOfStream,
-			BadStream,
-			CompressionFailed
-		};
-
-		struct MipInfo {
-			usize size;
-			usize offset;
-		};
-
-		FILE* stream = nullptr;
-		bool stream_owner = false;
-
-		const ImageFormatDesc* format_desc = nullptr;
-
-		u32 base_width = 1;
-		u32 base_height = 1;
-		u32 base_depth = 1;
-		u32 mip_levels = 1;
-		u32 array_layers = 1;
-		u32 face_count = 1;
-		u32 endianness = 0;
-
-		ContainerType source_container_type = ContainerType::None;
-
-		Result write_header_internal(NotNull<const Allocator*> alloc);
-
-		// TODO: Read data as
-
-		Result write_internal_stream(NotNull<const Allocator*> alloc);
-	};
-
 	IImageReader* open_image_reader(NotNull<const Allocator*> alloc, const char* path);
 	IImageReader* open_image_reader(NotNull<const Allocator*> alloc, FILE* stream);
 }

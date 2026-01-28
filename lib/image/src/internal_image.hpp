@@ -35,6 +35,7 @@ namespace edge {
 		static constexpr usize header_size = sizeof(Header);
 		static constexpr usize chunk_size = 64 * 1024;
 
+#if 0
 		static ImageHeader::Result compress_lz4(
 			NotNull<const Allocator*> alloc,
 			NotNull<FILE*> stream,
@@ -119,6 +120,7 @@ namespace edge {
 
 			return ImageHeader::Result::Success;
 		}
+#endif
 	}
 
 	struct IImageDecompressor {
@@ -325,6 +327,7 @@ namespace edge {
 		}
 	};
 
+#if 0
 	ImageHeader::Result ImageHeader::write_header_internal(NotNull<const Allocator*> alloc) {
 		using namespace detail::internal;
 
@@ -352,7 +355,6 @@ namespace edge {
 		return Result::Success;
 	}
 
-#if 0
 	ImageHeader::Result ImageHeader::write_internal_stream(NotNull<const Allocator*> alloc) {
 		// TODO: Write data
 		using namespace detail::internal;
@@ -377,7 +379,6 @@ namespace edge {
 			return Result::OutOfMemory;
 		}
 
-#if 0
 		for (usize mip = 0; mip < mip_levels; ++mip) {
 			LevelInfo& level_info = level_infos[mip];
 
@@ -404,7 +405,6 @@ namespace edge {
 
 			fseek(stream.m_ptr, frame_end_offset, SEEK_SET);
 		}
-#endif
 
 		LZ4F_freeCompressionContext(lz4cctx);
 
