@@ -126,10 +126,19 @@ namespace edge {
 	struct IImageDecompressor {
 		virtual ~IImageDecompressor() = default;
 
-		virtual bool initialize(NotNull<const Allocator*> alloc) = 0;
-		virtual void cleanup(NotNull<const Allocator*> alloc) = 0;
+		virtual bool create(NotNull<const Allocator*> alloc) = 0;
+		virtual void destroy(NotNull<const Allocator*> alloc) = 0;
 
 		virtual usize decompress(FILE* stream, void* dst_buffer, usize compressed_size, usize original_size) = 0;
+	};
+
+	struct IImageCompressor {
+		virtual ~IImageCompressor() = default;
+
+		virtual bool create(NotNull<const Allocator*> alloc) = 0;
+		virtual void destroy(NotNull<const Allocator*> alloc) = 0;
+
+		virtual usize compress(FILE* stream, const void* src_buffer, usize src_size, u32& total_compressed) = 0;
 	};
 
 	struct LZ4Decompressor final : IImageDecompressor {
@@ -137,7 +146,7 @@ namespace edge {
 		LZ4F_dctx* lz4ktx = nullptr;
 		char* io_buffer = nullptr;
 
-		bool initialize(NotNull<const Allocator*> alloc) override {
+		bool create(NotNull<const Allocator*> alloc) override {
 			using namespace detail::internal;
 
 			custom_mem = {
@@ -154,14 +163,14 @@ namespace edge {
 
 			io_buffer = (char*)alloc->malloc(chunk_size * 2, 1);
 			if (!io_buffer) {
-				cleanup(alloc);
+				destroy(alloc);
 				return false;
 			}
 
 			return true;
 		}
 
-		void cleanup(NotNull<const Allocator*> alloc) override {
+		void destroy(NotNull<const Allocator*> alloc) override {
 			if (io_buffer) {
 				alloc->free(io_buffer);
 				io_buffer = nullptr;
@@ -220,6 +229,50 @@ namespace edge {
 		}
 	};
 
+	struct LZ4Compressor final : IImageCompressor {
+		const LZ4F_preferences_t prefs = {
+			.frameInfo = {
+				.blockSizeID = LZ4F_max256KB,
+				.blockMode = LZ4F_blockLinked,
+				.contentChecksumFlag = LZ4F_noContentChecksum,
+				.frameType = LZ4F_frame,
+				.contentSize = 0,
+				.dictID = 0,
+				.blockChecksumFlag = LZ4F_noBlockChecksum
+			},
+			.compressionLevel = 0,
+			.autoFlush = 0,
+			.favorDecSpeed = 0
+		};
+
+		LZ4F_CustomMem custom_mem = {};
+		LZ4F_cctx* lz4ktx = nullptr;
+
+		bool create(NotNull<const Allocator*> alloc) override {
+			custom_mem = {
+				.customAlloc = [](void* ud, usize size) -> void* { return static_cast<const Allocator*>(ud)->malloc(size, 1); },
+				.customCalloc = nullptr,
+				.customFree = [](void* ud, void* address) -> void { static_cast<const Allocator*>(ud)->free(address); },
+				.opaqueState = (void*)alloc.m_ptr
+			};
+
+			lz4ktx = LZ4F_createCompressionContext_advanced(custom_mem, LZ4F_VERSION);
+			if (!lz4ktx) {
+				return false;
+			}
+
+			return true;
+		}
+
+		usize compress(FILE* stream, const void* src_buffer, usize src_size, u32& total_compressed) override {
+
+		}
+
+		void destroy(NotNull<const Allocator*> alloc) override {
+
+		}
+	};
+
 	struct InternalReader final : IImageReader {
 		FILE* stream = nullptr;
 		ImageInfo info = {};
@@ -249,11 +302,14 @@ namespace edge {
 				header.number_of_mipmap_levels, header.number_of_array_elements,
 				header.number_of_faces);
 
-			// TODO: Detect decompressor type
-
-			decompressor = alloc->allocate<LZ4Decompressor>();
-			if (!decompressor || !decompressor->initialize(alloc)) {
-				return Result::OutOfMemory;
+			if (header.compression == ImageCompressionMethod::LZ4) {
+				decompressor = alloc->allocate<LZ4Decompressor>();
+				if (!decompressor || !decompressor->create(alloc)) {
+					return Result::OutOfMemory;
+				}
+			}
+			else if (header.compression != ImageCompressionMethod::None) {
+				return Result::InvalidHeader;
 			}
 
 			return Result::Success;
@@ -261,7 +317,7 @@ namespace edge {
 
 		void destroy(NotNull<const Allocator*> alloc) override {
 			if (decompressor) {
-				decompressor->cleanup(alloc);
+				decompressor->destroy(alloc);
 				alloc->deallocate(decompressor);
 			}
 
@@ -292,9 +348,21 @@ namespace edge {
 			}
 
 			usize calculated_block_size = info.format_desc->comp_size(block_info.block_width, block_info.block_height, block_info.block_depth) * block_info.layer_count;
-			if (decompressor->decompress(stream, (u8*)dst_memory + dst_offset, next_block_size, calculated_block_size) != calculated_block_size) {
-				// ERROR: Decompression failed
-				return Result::EndOfStream;
+			if (decompressor) {
+				if (decompressor->decompress(stream, (u8*)dst_memory + dst_offset, next_block_size, calculated_block_size) != calculated_block_size) {
+					// ERROR: Decompression failed
+					return Result::EndOfStream;
+				}
+			}
+			else {
+				if (next_block_size != calculated_block_size) {
+					return Result::EndOfStream;
+				}
+
+				usize bytes_read = read_bytes((u8*)dst_memory + dst_offset, calculated_block_size);
+				if (bytes_read != calculated_block_size) {
+					return Result::EndOfStream;
+				}
 			}
 
 			dst_offset += calculated_block_size;
@@ -319,34 +387,74 @@ namespace edge {
 		}
 	};
 
+	struct InternalWriter final : IImageWriter {
+		FILE* stream = nullptr;
+		ImageInfo info = {};
+
+		InternalWriter(NotNull<FILE*> fstream)
+			: stream{ fstream.m_ptr } {
+		}
+
+		Result create(NotNull<const Allocator*> alloc, const ImageInfo& image_info) override {
+			using namespace detail::internal;
+
+			if (!image_info.format_desc || image_info.format_desc->vk_format == 0) {
+				return Result::InvalidPixelFormat;
+			}
+
+			info = image_info;
+
+			if (write_bytes(IDENTIFIER, ident_size) != ident_size) {
+				return Result::BadStream;
+			}
+
+			Header header = {};
+			header.vk_format = info.format_desc->vk_format;
+			header.pixel_width = info.base_width;
+			header.pixel_height = info.base_height;
+			header.pixel_depth = info.base_depth;
+			header.number_of_array_elements = info.array_layers;
+			header.number_of_faces = 1;
+			header.number_of_mipmap_levels = info.mip_levels;
+			header.compression = ImageCompressionMethod::None;
+
+			if (info.type == ImageType::ImageCube) {
+				header.number_of_faces = 6;
+				header.number_of_array_elements = max(info.array_layers / 6u, 1u);
+			}
+
+			if (write_bytes(&header, header_size) != header_size) {
+				return Result::BadStream;
+			}
+
+			return Result::Success;
+		}
+
+		void destroy(NotNull<const Allocator*> alloc) override {
+			if (stream) {
+				fclose(stream);
+			}
+		}
+
+		Result write_next_block(const void* src_memory, usize& src_offset, const ImageBlockInfo& block_info) override {
+			return Result::Success;
+		}
+
+		const ImageInfo& get_info() const override {
+			return info;
+		}
+
+		ImageContainerType get_container_type() const override {
+			return ImageContainerType::Internal;
+		}
+
+	private:
+		usize write_bytes(const void* buffer, usize count) const {
+			return fwrite(buffer, 1, count, stream);
+		}
+	};
+
 #if 0
-	ImageHeader::Result ImageHeader::write_header_internal(NotNull<const Allocator*> alloc) {
-		using namespace detail::internal;
-
-		usize bytes_written = fwrite(IDENTIFIER, 1, ident_size, stream);
-		if (bytes_written != ident_size) {
-			return Result::BadStream;
-		}
-
-		Header header = {
-			.vk_format = format_desc->vk_format,
-			.pixel_width = base_width,
-			.pixel_height = base_height,
-			.pixel_depth = base_depth,
-			.number_of_array_elements = array_layers,
-			.number_of_faces = face_count,
-			.number_of_mipmap_levels = mip_levels,
-			.compression = ImageCompressionMethod::LZ4
-		};
-
-		bytes_written = fwrite(&header, 1, header_size, stream);
-		if (bytes_written != header_size) {
-			return Result::BadStream;
-		}
-
-		return Result::Success;
-	}
-
 	ImageHeader::Result ImageHeader::write_internal_stream(NotNull<const Allocator*> alloc) {
 		// TODO: Write data
 		using namespace detail::internal;

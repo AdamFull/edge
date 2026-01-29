@@ -1,12 +1,11 @@
 #include "dds_image.hpp"
 #include "ktx_image.hpp"
-#include "internal_image.hpp"
 
 #include <math.hpp>
 
 namespace edge {
 	namespace detail {
-		constexpr usize max_ident_size = max(ktx1::ident_size, max(dds::ident_size, internal::ident_size));
+		constexpr usize max_ident_size = max(ktx1::ident_size, dds::ident_size);
 	}
 
 	void ImageInfo::init(const ImageFormatDesc* desc, u32 width, u32 height, u32 depth, u32 mip_count, u32 layer_count, u32 face_count) {
@@ -40,15 +39,6 @@ namespace edge {
 		}
 	}
 
-	Result<IImageReader*, IImageReader::Result> open_image_reader(NotNull<const Allocator*> alloc, const char* path) {
-		FILE* stream = fopen(path, "rb");
-		if (!stream) {
-			return IImageReader::Result::FileNotFound;
-		}
-
-		return open_image_reader(alloc, stream);
-	}
-
 	Result<IImageReader*, IImageReader::Result> open_image_reader(NotNull<const Allocator*> alloc, NotNull<FILE*> stream) {
 		u8 buffer[detail::max_ident_size];
 
@@ -65,14 +55,27 @@ namespace edge {
 			fseek(stream.m_ptr, detail::ktx1::ident_size, SEEK_SET);
 			reader = alloc->allocate<KTX10Reader>(stream);
 		}
-		else if (memcmp(buffer, detail::internal::IDENTIFIER, detail::internal::ident_size) == 0) {
-			fseek(stream.m_ptr, detail::internal::ident_size, SEEK_SET);
-			reader = alloc->allocate<InternalReader>(stream);
-		}
 		else {
 			return IImageReader::Result::InvalidHeader;
 		}
 
 		return reader;
+	}
+
+	Result<IImageWriter*, IImageWriter::Result> open_image_writer(NotNull<const Allocator*> alloc, NotNull<FILE*> stream, ImageContainerType type) {
+		IImageWriter* writer = nullptr;
+
+		switch (type) {
+		case ImageContainerType::DDS:
+			writer = alloc->allocate<DDSWriter>(stream);
+			break;
+		case ImageContainerType::KTX_1_0:
+			writer = alloc->allocate<KTX10Writer>(stream);
+			break;
+		default:
+			return IImageWriter::Result::InvalidHeader;
+		}
+
+		return writer;
 	}
 }

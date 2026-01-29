@@ -4,6 +4,8 @@
 #include "image.hpp"
 #include "image_format.hpp"
 
+#include <math.hpp>
+
 #define MAKE_FOURCC(a, b, c, d) ((u32)(a) | ((u32)(b) << 8) | ((u32)(c) << 16) | ((u32)(d) << 24))
 
 namespace edge {
@@ -287,11 +289,7 @@ namespace edge {
 			return Result::Success;
 		}
 
-		void destroy(NotNull<const Allocator*> alloc) override {
-			if (stream) {
-				fclose(stream);
-			}
-		}
+		void destroy(NotNull<const Allocator*> alloc) override {}
 
 		Result read_next_block(void* dst_memory, usize& dst_offset, ImageBlockInfo& block_info) override {
 			if (current_layer >= static_cast<usize>(info.array_layers)) {
@@ -334,6 +332,142 @@ namespace edge {
 	private:
 		usize read_bytes(void* buffer, usize count) const {
 			return fread(buffer, 1, count, stream);
+		}
+	};
+
+	struct DDSWriter final : IImageWriter {
+		FILE* stream = nullptr;
+		ImageInfo info = {};
+
+		DDSWriter(NotNull<FILE*> fstream)
+			: stream{ fstream.m_ptr } {
+		}
+
+		Result create(NotNull<const Allocator*> alloc, const ImageInfo& image_info) override {
+			using namespace detail::dds;
+
+			if (!image_info.format_desc || image_info.format_desc->dxgi_format == DXGI_FORMAT_UNKNOWN) {
+				return Result::InvalidPixelFormat;
+			}
+
+			info = image_info;
+
+			if (write_bytes(IDENTIFIER, ident_size) != ident_size) {
+				return Result::BadStream;
+			}
+
+			Header header = {
+				.size = header_size,
+				.flags = DDS_HEADER_CAPS_FLAG_BIT | DDS_HEADER_HEIGHT_FLAG_BIT | DDS_HEADER_WIDTH_FLAG_BIT | DDS_HEADER_PIXEL_FORMAT_FLAG_BIT,
+				.height = info.base_height,
+				.width = info.base_width
+			};
+
+			const u32 base_depth = max(info.base_depth, 1u);
+			if (base_depth > 1) {
+				header.flags |= DDS_HEADER_DEPTH_FLAG_BIT;
+				header.depth = base_depth;
+			}
+
+			if (info.mip_levels > 1) {
+				header.flags |= DDS_HEADER_MIP_MAP_COUNT_FLAG_BIT;
+				header.mip_map_count = info.mip_levels;
+				header.caps |= DDS_CAPS_MIP_MAP_FLAG_BIT;
+			}
+
+			header.caps |= DDS_CAPS_TEXTURE_FLAG_BIT;
+
+			const usize base_size = info.format_desc->comp_size(info.base_width, info.base_height, base_depth);
+			if (info.format_desc->compressed) {
+				header.flags |= DDS_HEADER_LINEAR_SIZE_FLAG_BIT;
+				header.pitch_or_linear_size = static_cast<u32>(base_size);
+			}
+			else {
+				header.flags |= DDS_HEADER_PITCH_FLAG_BIT;
+				header.pitch_or_linear_size = static_cast<u32>(info.base_width * info.format_desc->block_size);
+			}
+
+			// TODO: Since DXT10 header is used, it is not necessary to fill it, but for full support it is recommended...
+			header.ddspf = {
+				.size = sizeof(PixelFormat),
+				.flags = DDS_PIXEL_FORMAT_FOUR_CC_FLAG_BIT,
+				.fourcc = FOURCC_DX10,
+				.rgb_bit_count = 0,
+				.r_bit_mask = 0,
+				.g_bit_mask = 0,
+				.b_bit_mask = 0,
+				.a_bit_mask = 0
+			};
+
+			if (info.type == ImageType::ImageCube) {
+				header.caps2 |= DDS_CAPS2_CUBEMAP_FLAG_BIT |
+					DDS_CAPS2_CUBEMAP_POSITIVE_X_FLAG_BIT |
+					DDS_CAPS2_CUBEMAP_NEGATIVE_X_FLAG_BIT |
+					DDS_CAPS2_CUBEMAP_POSITIVE_Y_FLAG_BIT |
+					DDS_CAPS2_CUBEMAP_NEGATIVE_Y_FLAG_BIT |
+					DDS_CAPS2_CUBEMAP_POSITIVE_Z_FLAG_BIT |
+					DDS_CAPS2_CUBEMAP_NEGATIVE_Z_FLAG_BIT;
+			}
+			else if (info.type == ImageType::Image3D) {
+				header.caps2 |= DDS_CAPS2_VOLUME_FLAG_BIT;
+			}
+
+			if (write_bytes(&header, header_size) != header_size) {
+				return Result::BadStream;
+			}
+
+			HeaderDXT10 header_dxt10 = {
+				.dxgi_format = static_cast<DXGI_FORMAT>(info.format_desc->dxgi_format),
+				.array_size = info.array_layers,
+				.resource_dimension = DDS_RESOURCE_DIMENSION_TEXTURE_2D,
+				.misc_flag = DDS_MISC_FLAG_NONE
+			};
+
+			if (info.type == ImageType::Image1D) {
+				header_dxt10.resource_dimension = DDS_RESOURCE_DIMENSION_TEXTURE_1D;
+			}
+			else if (info.type == ImageType::Image3D) {
+				header_dxt10.resource_dimension = DDS_RESOURCE_DIMENSION_TEXTURE_3D;
+			}
+
+			if (info.type == ImageType::ImageCube) {
+				header_dxt10.misc_flag |= DDS_MISC_TEXTURE_CUBE_FLAG_BIT;
+				header_dxt10.array_size = max(info.array_layers / 6u, 1u);
+			}
+
+			if (write_bytes(&header_dxt10, header_dxt10_size) != header_dxt10_size) {
+				return Result::BadStream;
+			}
+
+			return Result::Success;
+		}
+
+		void destroy(NotNull<const Allocator*> alloc) override {
+			if (stream) {
+				fclose(stream);
+			}
+		}
+
+		Result write_next_block(const void* src_memory, usize& src_offset, const ImageBlockInfo& block_info) override {
+			// TODO: NOT IMPLEMENTED
+			// NOTE: Needed to implement writing to the DDS memory layout, depending on how the data is represented. 
+			// Input (src) data layout described in block_info.
+			// DDS data format: [layer 0: [mip 0, mip 1, mip 2, ...], layer 1: [mip 0, mip 1, mip 2, ...]]
+
+			return Result::Success;
+		}
+
+		const ImageInfo& get_info() const override {
+			return info;
+		}
+
+		ImageContainerType get_container_type() const override {
+			return ImageContainerType::DDS;
+		}
+
+	private:
+		usize write_bytes(const void* buffer, usize count) const {
+			return fwrite(buffer, 1, count, stream);
 		}
 	};
 }

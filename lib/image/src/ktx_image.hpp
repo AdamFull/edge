@@ -39,6 +39,36 @@ namespace edge {
 				((val & 0x0000FF00) << 8) |
 				((val & 0x000000FF) << 24);
 		}
+
+		static u32 gl_type_size_from_gl_type(u32 gl_type) {
+			switch (gl_type) {
+			case GL_BYTE:
+			case GL_UNSIGNED_BYTE:
+				return 1;
+			case GL_SHORT:
+			case GL_UNSIGNED_SHORT:
+			case GL_HALF_FLOAT:
+			case GL_UNSIGNED_SHORT_4_4_4_4:
+			case GL_UNSIGNED_SHORT_4_4_4_4_REV:
+			case GL_UNSIGNED_SHORT_5_5_5_1:
+			case GL_UNSIGNED_SHORT_1_5_5_5_REV:
+			case GL_UNSIGNED_SHORT_5_6_5:
+			case GL_UNSIGNED_SHORT_5_6_5_REV:
+				return 2;
+			case GL_INT:
+			case GL_UNSIGNED_INT:
+			case GL_FLOAT:
+			case GL_UNSIGNED_INT_24_8:
+			case GL_UNSIGNED_INT_2_10_10_10_REV:
+			case GL_UNSIGNED_INT_10F_11F_11F_REV:
+			case GL_UNSIGNED_INT_5_9_9_9_REV:
+				return 4;
+			case GL_DOUBLE:
+				return 8;
+			default:
+				return 0;
+			}
+		}
 	}
 
 	struct KTX10Reader final : IImageReader {
@@ -93,11 +123,7 @@ namespace edge {
 			return Result::Success;
 		}
 
-		void destroy(NotNull<const Allocator*> alloc) override {
-			if (stream) {
-				fclose(stream);
-			}
-		}
+		void destroy(NotNull<const Allocator*> alloc) override {}
 
 		Result read_next_block(void* dst_memory, usize& dst_offset, ImageBlockInfo& block_info) override {
 			using namespace detail::ktx1;
@@ -155,6 +181,92 @@ namespace edge {
 	private:
 		usize read_bytes(void* buffer, usize count) const {
 			return fread(buffer, 1, count, stream);
+		}
+	};
+
+	struct KTX10Writer final : IImageWriter {
+		FILE* stream = nullptr;
+		ImageInfo info = {};
+
+		KTX10Writer(NotNull<FILE*> fstream)
+			: stream{ fstream.m_ptr } {
+		}
+
+		Result create(NotNull<const Allocator*> alloc, const ImageInfo& image_info) override {
+			using namespace detail::ktx1;
+
+			if (!image_info.format_desc || image_info.format_desc->gl_internal_format == 0) {
+				return Result::InvalidPixelFormat;
+			}
+
+			info = image_info;
+
+			if (write_bytes(IDENTIFIER, ident_size) != ident_size) {
+				return Result::BadStream;
+			}
+
+			Header header = {
+				.endianness = KTX_ENDIAN_REF,
+				.gl_type = info.format_desc->gl_type,
+				.gl_format = info.format_desc->gl_format,
+				.gl_internal_format = info.format_desc->gl_internal_format,
+				.gl_base_internal_format = info.format_desc->gl_format != 0 ? info.format_desc->gl_format : info.format_desc->gl_internal_format,
+				.pixel_width = info.base_width,
+				.pixel_height = info.base_height,
+				.pixel_depth = info.base_depth,
+				.number_of_array_elements = info.array_layers,
+				.number_of_faces = 1,
+				.number_of_mipmap_levels = info.mip_levels,
+				.bytes_of_key_value_data = 0
+			};
+
+			if (info.type == ImageType::ImageCube) {
+				header.number_of_faces = 6;
+				header.number_of_array_elements = max(info.array_layers / 6u, 1u);
+			}
+
+			if (info.format_desc->compressed) {
+				header.gl_type = 0;
+				header.gl_format = 0;
+				header.gl_type_size = 1;
+			}
+			else {
+				header.gl_type_size = gl_type_size_from_gl_type(header.gl_type);
+				if (header.gl_type_size == 0) {
+					return Result::UnsupportedFormat;
+				}
+			}
+
+			if (write_bytes(&header, header_size) != header_size) {
+				return Result::BadStream;
+			}
+
+			return Result::Success;
+		}
+
+		void destroy(NotNull<const Allocator*> alloc) override {
+			if (stream) {
+				fclose(stream);
+			}
+		}
+
+		Result write_next_block(const void* src_memory, usize& src_offset, const ImageBlockInfo& block_info) override {
+			using namespace detail::ktx1;
+
+			return Result::Success;
+		}
+
+		const ImageInfo& get_info() const override {
+			return info;
+		}
+
+		ImageContainerType get_container_type() const override {
+			return ImageContainerType::KTX_1_0;
+		}
+
+	private:
+		usize write_bytes(const void* buffer, usize count) const {
+			return fwrite(buffer, 1, count, stream);
 		}
 	};
 }

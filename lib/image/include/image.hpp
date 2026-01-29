@@ -62,6 +62,7 @@ namespace edge {
 	struct ImageBlockInfo {
 		usize write_offset = 0;
 		u32 mip_level = 0;
+		u32 mip_count = 0;
 		u32 array_layer = 0;
 		u32 layer_count = 0;
 		u32 block_width = 1;
@@ -72,7 +73,7 @@ namespace edge {
 	struct IImageReader {
 		enum class Result {
 			Success = 0,
-			FileNotFound,
+			IOError,
 			InvalidHeader,
 			OutOfMemory,
 			InvalidPixelFormat,
@@ -90,8 +91,31 @@ namespace edge {
 		virtual ImageContainerType get_container_type() const = 0;
 	};
 
-	Result<IImageReader*, IImageReader::Result> open_image_reader(NotNull<const Allocator*> alloc, const char* path);
+	struct IImageWriter {
+		enum class Result {
+			Success = 0,
+			IOError,
+			InvalidHeader,
+			OutOfMemory,
+			InvalidPixelFormat,
+			UnsupportedFormat,
+			BadStream,
+			EndOfStream
+		};
+
+		virtual ~IImageWriter() = default;
+
+		virtual Result create(NotNull<const Allocator*> alloc, const ImageInfo& info) = 0;
+		virtual void destroy(NotNull<const Allocator*> alloc) = 0;
+
+		virtual Result write_next_block(const void* src_memory, usize& src_offset, const ImageBlockInfo& block_info) = 0;
+
+		virtual const ImageInfo& get_info() const = 0;
+		virtual ImageContainerType get_container_type() const = 0;
+	};
+
 	Result<IImageReader*, IImageReader::Result> open_image_reader(NotNull<const Allocator*> alloc, NotNull<FILE*> stream);
+	Result<IImageWriter*, IImageWriter::Result> open_image_writer(NotNull<const Allocator*> alloc, NotNull<FILE*> stream, ImageContainerType type);
 }
 
 #endif
