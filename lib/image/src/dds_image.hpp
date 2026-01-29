@@ -418,9 +418,9 @@ namespace edge {
 
 			HeaderDXT10 header_dxt10 = {
 				.dxgi_format = static_cast<DXGI_FORMAT>(info.format_desc->dxgi_format),
-				.array_size = info.array_layers,
 				.resource_dimension = DDS_RESOURCE_DIMENSION_TEXTURE_2D,
-				.misc_flag = DDS_MISC_FLAG_NONE
+				.misc_flag = DDS_MISC_FLAG_NONE,
+				.array_size = info.array_layers
 			};
 
 			if (info.type == ImageType::Image1D) {

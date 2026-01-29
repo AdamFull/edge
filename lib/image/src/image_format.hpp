@@ -198,7 +198,7 @@ namespace edge::detail {
 			{ 1u, 1u, 1u, false, GL_ALPHA8_EXT, GL_ALPHA, GL_UNSIGNED_BYTE, VK_FORMAT_A8_UNORM, DXGI_FORMAT_A8_UNORM }
 	};
 
-	static const ImageFormatDesc* find_format_entry_by_vk(u32 vk_format) {
+	[[maybe_unused]] static const ImageFormatDesc* find_format_entry_by_vk(u32 vk_format) {
 		for (const auto& entry : g_format_table) {
 			if (entry.vk_format == vk_format) {
 				return &entry;
