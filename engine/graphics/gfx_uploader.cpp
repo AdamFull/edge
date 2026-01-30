@@ -178,10 +178,16 @@ namespace edge::gfx {
 	}
 
 	void Uploader::load_image_job(NotNull<const Allocator*> alloc, const char* path) {
-		// TODO: Write error descriptions and converters
-		auto reader_open_result = open_image_reader(alloc, path);
-		if (!reader_open_result) {
+		FILE* stream = fopen(path, "rb");
+		if (!stream) {
 			job_failed(ImageLoadingError::OpenImageError);
+			return;
+		}
+
+		// TODO: Write error descriptions and converters
+		auto reader_open_result = open_image_reader(alloc, stream);
+		if (!reader_open_result) {
+			job_failed(ImageLoadingError::HeaderReadingError);
 			return;
 		}
 
@@ -264,6 +270,8 @@ namespace edge::gfx {
 
 		reader->destroy(alloc);
 		alloc->deallocate(reader);
+
+		fclose(stream);
 
 		const VkCopyBufferToImageInfo2KHR copy_image_info = {
 			.sType = VK_STRUCTURE_TYPE_COPY_BUFFER_TO_IMAGE_INFO_2_KHR,
