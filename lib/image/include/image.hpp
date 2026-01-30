@@ -108,7 +108,7 @@ namespace edge {
 		virtual Result create(NotNull<const Allocator*> alloc, const ImageInfo& info) = 0;
 		virtual void destroy(NotNull<const Allocator*> alloc) = 0;
 
-		virtual Result write_next_block(const void* src_memory, usize& src_offset, const ImageBlockInfo& block_info) = 0;
+		virtual Result write_next_block(const void* src_memory, const ImageBlockInfo& block_info) = 0;
 
 		virtual const ImageInfo& get_info() const = 0;
 		virtual ImageContainerType get_container_type() const = 0;

@@ -448,11 +448,50 @@ namespace edge {
 			}
 		}
 
-		Result write_next_block(const void* src_memory, usize& src_offset, const ImageBlockInfo& block_info) override {
-			// TODO: NOT IMPLEMENTED
-			// NOTE: Needed to implement writing to the DDS memory layout, depending on how the data is represented. 
-			// Input (src) data layout described in block_info.
-			// DDS data format: [layer 0: [mip 0, mip 1, mip 2, ...], layer 1: [mip 0, mip 1, mip 2, ...]]
+		Result write_next_block(const void* src_memory, const ImageBlockInfo& block_info) override {
+			using namespace detail::dds;
+
+			if (block_info.mip_level >= info.mip_levels) {
+				return Result::EndOfStream;
+			}
+
+			const u32 block_width = block_info.block_width;
+			const u32 block_height = block_info.block_height;
+			const u32 block_depth = block_info.block_depth;
+			const usize layer_block_size = info.format_desc->comp_size(block_width, block_height, block_depth);
+
+			auto mip_comp_size = [this](u32 mip_level) {
+				const u32 mip_width = max(info.base_width >> mip_level, 1u);
+				const u32 mip_height = max(info.base_height >> mip_level, 1u);
+				const u32 mip_depth = max(info.base_depth >> mip_level, 1u);
+				return info.format_desc->comp_size(mip_width, mip_height, mip_depth);
+				};
+
+			usize per_layer_size = 0;
+			for (u32 mip = 0; mip < info.mip_levels; ++mip) {
+				per_layer_size += mip_comp_size(mip);
+			}
+
+			usize mip_offset = 0;
+			for (u32 mip = 0; mip < block_info.mip_level; ++mip) {
+				mip_offset += mip_comp_size(mip);
+			}
+
+			const usize data_start_offset = ident_size + header_size + header_dxt10_size;
+
+			const u8* src_bytes = static_cast<const u8*>(src_memory);
+			for (u32 layer_index = 0; layer_index < block_info.layer_count; ++layer_index) {
+				const u32 layer = block_info.array_layer + layer_index;
+				const usize dst_offset = data_start_offset + static_cast<usize>(layer) * per_layer_size + mip_offset;
+				if (fseek(stream, static_cast<long>(dst_offset), SEEK_SET) != 0) {
+					return Result::BadStream;
+				}
+
+				const usize src_block_offset = block_info.write_offset + static_cast<usize>(layer_index) * layer_block_size;
+				if (write_bytes(src_bytes + src_block_offset, layer_block_size) != layer_block_size) {
+					return Result::BadStream;
+				}
+			}
 
 			return Result::Success;
 		}

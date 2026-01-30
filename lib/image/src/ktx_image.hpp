@@ -244,14 +244,63 @@ namespace edge {
 			return Result::Success;
 		}
 
-		void destroy(NotNull<const Allocator*> alloc) override {
-			if (stream) {
-				fclose(stream);
-			}
-		}
+		void destroy(NotNull<const Allocator*> alloc) override {}
 
-		Result write_next_block(const void* src_memory, usize& src_offset, const ImageBlockInfo& block_info) override {
+		Result write_next_block(const void* src_memory, const ImageBlockInfo& block_info) override {
 			using namespace detail::ktx1;
+
+			if (block_info.mip_level >= info.mip_levels) {
+				return Result::EndOfStream;
+			}
+
+			const u32 block_width = block_info.block_width;
+			const u32 block_height = block_info.block_height;
+			const u32 block_depth = block_info.block_depth;
+			const usize layer_block_size = info.format_desc->comp_size(block_width, block_height, block_depth);
+
+			if (block_info.array_layer + block_info.layer_count > info.array_layers) {
+				return Result::EndOfStream;
+			}
+
+			auto mip_comp_size = [this](u32 mip_level) {
+				const u32 mip_width = max(info.base_width >> mip_level, 1u);
+				const u32 mip_height = max(info.base_height >> mip_level, 1u);
+				const u32 mip_depth = max(info.base_depth >> mip_level, 1u);
+				return info.format_desc->comp_size(mip_width, mip_height, mip_depth);
+				};
+
+			usize mip_block_offset = ident_size + header_size;
+			for (u32 mip = 0; mip < block_info.mip_level; ++mip) {
+				const usize mip_size = mip_comp_size(mip) * info.array_layers;
+				const usize mip_block_size = 4 + mip_size;
+				mip_block_offset += (mip_block_size + 3) & ~static_cast<usize>(3);
+			}
+
+			const usize mip_block_size = mip_comp_size(block_info.mip_level) * info.array_layers;
+			const u32 image_size = static_cast<u32>(mip_block_size);
+
+			if (fseek(stream, static_cast<long>(mip_block_offset), SEEK_SET) != 0) {
+				return Result::BadStream;
+			}
+
+			if (write_bytes(&image_size, 4) != 4) {
+				return Result::BadStream;
+			}
+
+			const usize mip_data_offset = mip_block_offset + 4;
+			const u8* src_bytes = static_cast<const u8*>(src_memory);
+			for (u32 layer_index = 0; layer_index < block_info.layer_count; ++layer_index) {
+				const u32 layer = block_info.array_layer + layer_index;
+				const usize dst_offset = mip_data_offset + static_cast<usize>(layer) * layer_block_size;
+				if (fseek(stream, static_cast<long>(dst_offset), SEEK_SET) != 0) {
+					return Result::BadStream;
+				}
+
+				const usize src_block_offset = block_info.write_offset + static_cast<usize>(layer_index) * layer_block_size;
+				if (write_bytes(src_bytes + src_block_offset, layer_block_size) != layer_block_size) {
+					return Result::BadStream;
+				}
+			}
 
 			return Result::Success;
 		}
