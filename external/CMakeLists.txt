@@ -142,49 +142,7 @@ add_library(GPUOpen::VulkanMemoryAllocator ALIAS vma)
 add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/mimalloc")
 
 # stb
-set(STB_DIR "${CMAKE_CURRENT_SOURCE_DIR}/stb")
-set(STB_IMAGE_IMPL_DIR "${CMAKE_CURRENT_BINARY_DIR}/stb_impl")
-
-set(STB_IMAGE_IMPL_C "${STB_IMAGE_IMPL_DIR}/stb_image.c")
-set(STB_IMAGE_RESIZE2_IMPL_C "${STB_IMAGE_IMPL_DIR}/stb_image_resize2.c")
-set(STB_IMAGE_WRITE_IMPL_C "${STB_IMAGE_IMPL_DIR}/stb_image_write.c")
-
-file(WRITE "${STB_IMAGE_IMPL_C}"
-"#ifndef STB_IMAGE_IMPLEMENTATION\n"
-"#define STB_IMAGE_IMPLEMENTATION\n"
-"#define USE_MIMALLOC"
-"#ifdef USE_MIMALLOC"
-"#include <mimalloc.h>"
-"#define STBI_MALLOC(sz) mi_malloc(sz)"
-"#define STBI_REALLOC(p,newsz) mi_realloc(p,newsz)"
-"#define STBI_FREE(p) mi_free(p)"
-"#endif"
-"#include \"stb_image.h\"\n"
-"#endif\n"
-)
-
-file(WRITE "${STB_IMAGE_RESIZE2_IMPL_C}"
-"#ifndef STB_IMAGE_RESIZE_IMPLEMENTATION\n"
-"#define STB_IMAGE_RESIZE_IMPLEMENTATION\n"
-"#include \"stb_image_resize2.h\"\n"
-"#endif\n"
-)
-
-file(WRITE "${STB_IMAGE_WRITE_IMPL_C}"
-"#ifndef STB_IMAGE_WRITE_IMPLEMENTATION\n"
-"#define STB_IMAGE_WRITE_IMPLEMENTATION\n"
-"#include \"stb_image_write.h\"\n"
-"#endif\n"
-)
-
-add_library(stb STATIC
-    ${STB_IMAGE_IMPL_C}
-    ${STB_IMAGE_RESIZE2_IMPL_C}
-    ${STB_IMAGE_WRITE_IMPL_C}
-)
-
-target_link_libraries(stb PRIVATE mimalloc-static)
-target_include_directories(stb PUBLIC ${STB_DIR})
+add_subdirectory(stb)
 
 # glm
 add_library(glm INTERFACE)
@@ -236,8 +194,6 @@ target_link_libraries(${PROJECT_NAME}
     mimalloc-static
 
     libzstd_static
-
-    stb
 
     glm::glm
 
