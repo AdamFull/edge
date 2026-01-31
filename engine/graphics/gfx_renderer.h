@@ -119,7 +119,7 @@ namespace edge::gfx {
 		u32 frame_number = 0u;
 
 		HandlePool<Resource> resource_handle_pool = {};
-		Handle backbuffer_handle = 0;
+		Handle backbuffer_handle = HANDLE_INVALID;
 
 		FreeIndexList sampler_indices_list = {};
 		FreeIndexList srv_indices_list = {};
