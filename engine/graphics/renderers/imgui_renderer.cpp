@@ -267,7 +267,7 @@ namespace edge::gfx {
 			.sampler_index = 0
 		};
 
-		Handle last_image_index = HANDLE_INVALID;
+		ImTextureBinding last_image_binding = ImTextureBinding{ HANDLE_INVALID, HANDLE_INVALID };
 
 		ImGuiIO& io = ImGui::GetIO();
 		for (i32 n = 0; n < draw_data->CmdListsCount; n++) {
@@ -290,12 +290,13 @@ namespace edge::gfx {
 				// Apply scissor/clipping rectangle
 				cmd.set_scissor(clip_min.x, clip_min.y, clip_max.x - clip_min.x, clip_max.y - clip_min.y);
 
-				Handle new_image_index = (Handle)pcmd->GetTexID();
-				if (new_image_index != last_image_index) {
-					Resource* render_resource = renderer->get_resource(new_image_index);
+				ImTextureBinding new_image_binding = ImTextureBinding::from_texture_id(pcmd->GetTexID());
+				if (new_image_binding != last_image_binding) {
+					Resource* render_resource = renderer->get_resource(new_image_binding.image);
 					push_constant.image_index = render_resource->srv_index;
+					// TODO: Add sampler
 					renderer->push_constants(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, push_constant);
-					last_image_index = new_image_index;
+					last_image_binding = new_image_binding;
 				}
 
 				cmd.draw_indexed(pcmd->ElemCount, 1u, pcmd->IdxOffset + global_idx_offset, pcmd->VtxOffset + global_vtx_offset, 0u);
@@ -396,7 +397,8 @@ namespace edge::gfx {
 			renderer->image_update_end(alloc, update_info);
 			renderer->setup_resource(alloc, image_handle, image);
 
-			tex->SetTexID(image_handle);
+			ImTextureBinding binding{ image_handle, HANDLE_INVALID };
+			tex->SetTexID((ImTextureID)binding);
 			tex->SetStatus(ImTextureStatus_OK);
 		}
 		else if (tex->Status == ImTextureStatus_WantUpdates) {

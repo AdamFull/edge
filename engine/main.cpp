@@ -271,7 +271,8 @@ namespace edge {
 		imgui_layer.on_frame_begin(delta_time);
 
 		if (test_tex != HANDLE_INVALID) {
-			ImGui::Image((ImTextureRef)test_tex, { 512, 512 });
+			ImTextureBinding imgui_binding{ test_tex, HANDLE_INVALID };
+			ImGui::Image((ImTextureRef)imgui_binding, { 512, 512 });
 		}
 
 		ImGui::ShowDemoWindow();

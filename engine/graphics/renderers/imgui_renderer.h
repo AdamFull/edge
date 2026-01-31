@@ -1,15 +1,12 @@
 #ifndef IMGUI_RENDERER_H
 #define IMGUI_RENDERER_H
 
-#include "../gfx_context.h"
+#include "../../imgui_integration.h"
+#include "../gfx_subrenderer_interface.h"
 #include <handle_pool.hpp>
 
 struct ImDrawData;
 struct ImTextureData;
-
-namespace edge {
-	struct Allocator;
-}
 
 namespace edge::gfx {
 	struct Renderer;
