@@ -1,7 +1,6 @@
 #ifndef EDGE_FIBER_H
 #define EDGE_FIBER_H
 
-#include "stddef.hpp"
 #include "allocator.hpp"
 
 #ifndef EDGE_FIBER_STACK_SIZE

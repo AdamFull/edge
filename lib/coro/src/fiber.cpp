@@ -1,5 +1,4 @@
 ﻿#include "fiber.hpp"
-#include "platform_detect.hpp"
 
 #include <atomic>
 #include <cstdlib>
