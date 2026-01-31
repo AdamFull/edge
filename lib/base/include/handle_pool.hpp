@@ -4,134 +4,114 @@
 #include "array.hpp"
 
 namespace edge {
-    struct Allocator;
-
-#ifdef EDGE_HANDLE_USE_32BIT
-    using Handle = u32;
-    using HandleVersion = u16;
+    using HandleRawType = u32;
+    using HandleIndexType = u32;
+    using HandleVersionType = u16;
     constexpr u32 HANDLE_INDEX_BITS = 20;
     constexpr u32 HANDLE_VERSION_BITS = 12;
-    constexpr Handle HANDLE_INVALID = ~0u;
-#else
-    using Handle = u64;
-    using HandleVersion = u32;
-    constexpr u32 HANDLE_INDEX_BITS = 32;
-    constexpr u32 HANDLE_VERSION_BITS = 32;
-    constexpr Handle HANDLE_INVALID = ~0ull;
-#endif
 
+    struct Handle {
+        u32 version : HANDLE_VERSION_BITS;
+        u32 index : HANDLE_INDEX_BITS;
+
+        constexpr Handle() : version(0), index(0) {}
+        constexpr explicit Handle(HandleRawType raw)
+            : version{ raw & ((1u << HANDLE_VERSION_BITS) - 1) }
+            , index{ (raw >> HANDLE_VERSION_BITS) & ((1u << HANDLE_INDEX_BITS) - 1) } {
+        }
+        constexpr Handle(HandleIndexType idx, HandleVersionType ver)
+            : version{ ver & ((1u << HANDLE_VERSION_BITS) - 1) }
+            , index{ idx & ((1u << HANDLE_INDEX_BITS) - 1) } {
+        }
+
+        constexpr explicit operator HandleIndexType() const {
+            return (static_cast<HandleIndexType>(index) << HANDLE_VERSION_BITS) | static_cast<HandleIndexType>(version);
+        }
+
+        constexpr bool operator==(const Handle& other) const { return index == other.index && version == other.version; }
+        constexpr bool operator!=(const Handle& other) const { return !(*this == other); }
+
+        constexpr bool is_invalid() const {
+            return index == ((1u << HANDLE_INDEX_BITS) - 1) && version == ((1u << HANDLE_VERSION_BITS) - 1);
+        }
+    };
+
+    constexpr Handle HANDLE_INVALID = Handle(~0u);
     constexpr u64 HANDLE_INDEX_MASK = (1ull << HANDLE_INDEX_BITS) - 1;
     constexpr u64 HANDLE_VERSION_MASK = (1ull << HANDLE_VERSION_BITS) - 1;
     constexpr u32 HANDLE_MAX_CAPACITY = static_cast<u32>(HANDLE_INDEX_MASK);
 
-    /**
-     * Create a handle from index and version
-     */
-    inline Handle handle_make(u32 index, u32 version) {
-        return ((static_cast<Handle>(index & HANDLE_INDEX_MASK) << HANDLE_VERSION_BITS) |
-            (static_cast<Handle>(version & HANDLE_VERSION_MASK)));
-    }
-
-    /**
-     * Extract index from handle
-     */
-    inline u32 handle_get_index(Handle handle) {
-        return static_cast<u32>((handle >> HANDLE_VERSION_BITS) & HANDLE_INDEX_MASK);
-    }
-
-    /**
-     * Extract version from handle
-     */
-    inline HandleVersion handle_get_version(Handle handle) {
-        return static_cast<HandleVersion>(handle & HANDLE_VERSION_MASK);
-    }
-
-    template<TrivialType T>
-    struct HandlePool;
-
-    template<TrivialType T>
-    struct HandlePoolIterator {
-        HandlePool<T>* m_pool;
-        u32 m_current_index;
-
-        struct Entry {
-            Handle handle;
-            T* element;
-        };
-
-        HandlePoolIterator& operator++() {
-            if (m_pool) {
-                m_current_index++;
-                while (m_current_index < m_pool->m_capacity) {
-                    Handle handle = handle_make(m_current_index, m_pool->m_versions[m_current_index]);
-                    if (m_pool->is_valid(handle)) {
-                        break;
-                    }
-                    m_current_index++;
-                }
-            }
-            return *this;
-        }
-
-        Entry operator*() const {
-            Handle handle = handle_make(m_current_index, m_pool->m_versions[m_current_index]);
-            return { handle, &m_pool->m_data[m_current_index] };
-        }
-
-        bool operator!=(const HandlePoolIterator& other) const {
-            return m_current_index != other.m_current_index || m_pool != other.m_pool;
-        }
-
-        bool operator==(const HandlePoolIterator& other) const {
-            return m_current_index == other.m_current_index && m_pool == other.m_pool;
-        }
-    };
-
-    template<TrivialType T>
-    struct HandlePoolConstIterator {
-        const HandlePool<T>* m_pool;
-        u32 m_current_index;
-
-        struct Entry {
-            Handle handle;
-            const T* element;
-        };
-
-        HandlePoolConstIterator& operator++() {
-            if (m_pool) {
-                m_current_index++;
-                while (m_current_index < m_pool->m_capacity) {
-                    Handle handle = handle_make(m_current_index, m_pool->m_versions[m_current_index]);
-                    if (handle_pool_is_valid(m_pool, handle)) {
-                        break;
-                    }
-                    m_current_index++;
-                }
-            }
-            return *this;
-        }
-
-        Entry operator*() const {
-            Handle handle = handle_make(m_current_index, m_pool->m_versions[m_current_index]);
-            return { handle, &m_pool->m_data[m_current_index] };
-        }
-
-        bool operator!=(const HandlePoolConstIterator& other) const {
-            return m_current_index != other.m_current_index || m_pool != other.m_pool;
-        }
-
-        bool operator==(const HandlePoolConstIterator& other) const {
-            return m_current_index == other.m_current_index && m_pool == other.m_pool;
-        }
-    };
-
     template<TrivialType T>
     struct HandlePool {
         T* m_data = nullptr;
-        HandleVersion* m_versions = nullptr;
-        Array<u32> m_free_indices;
+        HandleVersionType* m_versions = nullptr;
+        Array<HandleIndexType> m_free_indices;
         u32 m_capacity = 0ull;
         u32 m_count = 0ull;
+
+        struct Iterator {
+            HandlePool<T>* m_pool;
+            u32 m_current_index;
+
+            struct Entry {
+                Handle handle;
+                T* element;
+            };
+
+            Iterator& operator++() {
+                if (m_pool) {
+                    m_current_index++;
+                    while (m_current_index < m_pool->m_capacity) {
+                        auto handle = Handle{ m_current_index, m_pool->m_versions[m_current_index] };
+                        if (m_pool->is_valid(handle)) {
+                            break;
+                        }
+                        m_current_index++;
+                    }
+                }
+                return *this;
+            }
+
+            Entry operator*() const {
+                auto handle = Handle{ m_current_index, m_pool->m_versions[m_current_index] };
+                return { handle, &m_pool->m_data[m_current_index] };
+            }
+
+            bool operator!=(const Iterator& other) const { return m_current_index != other.m_current_index || m_pool != other.m_pool; }
+            bool operator==(const Iterator& other) const { return m_current_index == other.m_current_index && m_pool == other.m_pool; }
+        };
+
+        struct ConstIterator {
+            const HandlePool<T>* m_pool;
+            HandleIndexType m_current_index;
+
+            struct Entry {
+                Handle handle;
+                const T* element;
+            };
+
+            ConstIterator& operator++() {
+                if (m_pool) {
+                    m_current_index++;
+                    while (m_current_index < m_pool->m_capacity) {
+                        auto handle = Handle{ m_current_index, m_pool->m_versions[m_current_index] };
+                        if (m_pool->is_valid(handle)) {
+                            break;
+                        }
+                        m_current_index++;
+                    }
+                }
+                return *this;
+            }
+
+            Entry operator*() const {
+                auto handle = Handle{ m_current_index, m_pool->m_versions[m_current_index] };
+                return { handle, &m_pool->m_data[m_current_index] };
+            }
+
+            bool operator!=(const ConstIterator& other) const { return m_current_index != other.m_current_index || m_pool != other.m_pool; }
+            bool operator==(const ConstIterator& other) const { return m_current_index == other.m_current_index && m_pool == other.m_pool; }
+        };
 
         bool create(NotNull<const Allocator*> alloc, u32 capacity) {
             if (capacity == 0 || capacity > HANDLE_MAX_CAPACITY) {
@@ -143,7 +123,7 @@ namespace edge {
                 return false;
             }
 
-            m_versions = alloc->allocate_array<HandleVersion>(capacity);
+            m_versions = alloc->allocate_array<HandleVersionType>(capacity);
             if (!m_versions) {
                 alloc->deallocate_array(m_data, m_capacity);
                 return false;
@@ -159,9 +139,9 @@ namespace edge {
             m_count = 0;
 
             // Initialize free indices in reverse order (so 0 is allocated first)
-            for (u32 i = 0; i < capacity; i++) {
-                u32 index = capacity - 1 - i;
-                m_free_indices.push_back(alloc, index);
+            for (usize i = 0; i < capacity; i++) {
+                usize index = capacity - 1 - i;
+                m_free_indices.push_back(alloc, static_cast<HandleIndexType>(index));
             }
 
             return true;
@@ -184,17 +164,17 @@ namespace edge {
                 return HANDLE_INVALID;
             }
 
-            u32 index;
+            HandleIndexType index;
             if (!m_free_indices.pop_back(&index)) {
                 return HANDLE_INVALID;
             }
 
             memset(&m_data[index], 0, sizeof(T));
 
-            HandleVersion version = m_versions[index];
+            auto version = m_versions[index];
             m_count++;
 
-            return handle_make(index, version);
+            return Handle{ index, version };
         }
 
         Handle allocate_with_data(const T& element) {
@@ -202,17 +182,17 @@ namespace edge {
                 return HANDLE_INVALID;
             }
 
-            u32 index;
+            HandleIndexType index;
             if (!m_free_indices.pop_back(&index)) {
                 return HANDLE_INVALID;
             }
 
             memcpy(&m_data[index], &element, sizeof(T));
 
-            HandleVersion version = m_versions[index];
+            auto version = m_versions[index];
             m_count++;
 
-            return handle_make(index, version);
+            return Handle{ index, version };
         }
 
         bool free(NotNull<const Allocator*> alloc, Handle handle) {
@@ -220,24 +200,21 @@ namespace edge {
                 return false;
             }
 
-            u32 index = handle_get_index(handle);
-            HandleVersion version = handle_get_version(handle);
-
-            if (index >= m_capacity) {
+            if (handle.index >= m_capacity) {
                 return false;
             }
 
-            if (m_versions[index] != version) {
+            if (m_versions[handle.index] != handle.version) {
                 return false;
             }
 
             // Increment version (wrapping around within version mask)
-            m_versions[index] = (m_versions[index] + 1) & HANDLE_VERSION_MASK;
+            m_versions[handle.index] = (m_versions[handle.index] + 1) & HANDLE_VERSION_MASK;
 
             // Clear the element data
-            memset(&m_data[index], 0, sizeof(T));
+            memset(&m_data[handle.index], 0, sizeof(T));
 
-            m_free_indices.push_back(alloc, index);
+            m_free_indices.push_back(alloc, handle.index);
             m_count--;
 
             return true;
@@ -248,18 +225,15 @@ namespace edge {
                 return nullptr;
             }
 
-            u32 index = handle_get_index(handle);
-            HandleVersion version = handle_get_version(handle);
-
-            if (index >= m_capacity) {
+            if (handle.index >= m_capacity) {
                 return nullptr;
             }
 
-            if (m_versions[index] != version) {
+            if (m_versions[handle.index] != handle.version) {
                 return nullptr;
             }
 
-            return &m_data[index];
+            return &m_data[handle.index];
         }
 
         const T* get(Handle handle) const {
@@ -267,18 +241,15 @@ namespace edge {
                 return nullptr;
             }
 
-            u32 index = handle_get_index(handle);
-            HandleVersion version = handle_get_version(handle);
-
-            if (index >= m_capacity) {
+            if (handle.index >= m_capacity) {
                 return nullptr;
             }
 
-            if (m_versions[index] != version) {
+            if (m_versions[handle.index] != handle.version) {
                 return nullptr;
             }
 
-            return &m_data[index];
+            return &m_data[handle.index];
         }
 
         bool set(Handle handle, const T& element) {
@@ -286,18 +257,15 @@ namespace edge {
                 return false;
             }
 
-            u32 index = handle_get_index(handle);
-            HandleVersion version = handle_get_version(handle);
-
-            if (index >= m_capacity) {
+            if (handle.index >= m_capacity) {
                 return false;
             }
 
-            if (m_versions[index] != version) {
+            if (m_versions[handle.index] != handle.version) {
                 return false;
             }
 
-            memcpy(&m_data[index], &element, sizeof(T));
+            memcpy(&m_data[handle.index], &element, sizeof(T));
             return true;
         }
 
@@ -306,14 +274,11 @@ namespace edge {
                 return false;
             }
 
-            u32 index = handle_get_index(handle);
-            HandleVersion version = handle_get_version(handle);
-
-            if (index >= m_capacity) {
+            if (handle.index >= m_capacity) {
                 return false;
             }
 
-            return m_versions[index] == version;
+            return m_versions[handle.index] == handle.version;
         }
 
         bool is_full() const {
@@ -339,55 +304,39 @@ namespace edge {
 
             m_count = 0;
         }
+
+        Iterator begin() {
+            HandleIndexType index = 0;
+            while (index < m_capacity) {
+                auto handle = Handle{ index, m_versions[index] };
+                if (is_valid(handle)) {
+                    break;
+                }
+                index++;
+            }
+            return { this, index };
+        }
+
+        Iterator end() {
+            return { this, m_capacity };
+        }
+
+        ConstIterator begin() const {
+            HandleIndexType index = 0;
+            while (index < m_capacity) {
+                auto handle = Handle{ index, m_versions[index] };
+                if (is_valid(handle)) {
+                    break;
+                }
+                index++;
+            }
+            return { this, index };
+        }
+
+        ConstIterator end() const {
+            return { this, m_capacity };
+        }
     };
-
-    /**
-     * Get iterator to first active handle
-     */
-    template<TrivialType T>
-    HandlePoolIterator<T> begin(HandlePool<T>& pool) {
-        u32 index = 0;
-        while (index < pool.m_capacity) {
-            Handle handle = handle_make(index, pool.m_versions[index]);
-            if (pool.is_valid(handle)) {
-                break;
-            }
-            index++;
-        }
-        return { &pool, index };
-    }
-
-    /**
-     * Get iterator past the last active handle
-     */
-    template<TrivialType T>
-    HandlePoolIterator<T> end(HandlePool<T>& pool) {
-        return { &pool, pool.m_capacity };
-    }
-
-    /**
-     * Get const iterator to first active handle
-     */
-    template<TrivialType T>
-    HandlePoolConstIterator<T> begin(const HandlePool<T>& pool) {
-        u32 index = 0;
-        while (index < pool.m_capacity) {
-            Handle handle = handle_make(index, pool.m_versions[index]);
-            if (pool.is_valid(handle)) {
-                break;
-            }
-            index++;
-        }
-        return { &pool, index };
-    }
-
-    /**
-     * Get const iterator past the last active handle
-     */
-    template<TrivialType T>
-    HandlePoolConstIterator<T> end(const HandlePool<T>& pool) {
-        return { &pool, pool.m_capacity };
-    }
 }
 
 #endif
