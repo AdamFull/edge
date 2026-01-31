@@ -200,23 +200,26 @@ namespace edge::gfx {
 
 		update_geometry(alloc, draw_data);
 
-		Resource* vertex_buffer_resorce = renderer->get_resource(vertex_buffer);
-		Resource* index_buffer_resorce = renderer->get_resource(index_buffer);
-		Resource* backbuffer_resource = renderer->get_resource(renderer->backbuffer_handle);
+		RenderResource* vertex_buffer_resource = renderer->get_resource(vertex_buffer);
+		Buffer* vertex_buffer_ptr = renderer->buffer_handle_pool.get(vertex_buffer_resource->get_handle());
+		RenderResource* index_buffer_resource = renderer->get_resource(index_buffer);
+		Buffer* index_buffer_ptr = renderer->buffer_handle_pool.get(index_buffer_resource->get_handle());
+		RenderResource* backbuffer_resource = renderer->get_resource(renderer->backbuffer_handle);
+		Image* backbuffer_ptr = renderer->image_handle_pool.get(backbuffer_resource->get_handle());
 
 		CmdBuf cmd = renderer->active_frame->cmd;
 
 		VkAttachmentLoadOp load_op = VK_ATTACHMENT_LOAD_OP_LOAD;
-		if (backbuffer_resource->image.layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
+		if (backbuffer_ptr->layout != VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL) {
 			PipelineBarrierBuilder barrier_builder = {};
-			barrier_builder.add_image(backbuffer_resource->image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VkImageSubresourceRange{
+			barrier_builder.add_image(*backbuffer_ptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VkImageSubresourceRange{
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.baseMipLevel = 0,
 				.levelCount = 1,
 				.baseArrayLayer = 0,
 				.layerCount = 1
 				});
-			backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+			backbuffer_ptr->layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
 			cmd.pipeline_barrier(barrier_builder);
 			load_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
@@ -225,9 +228,11 @@ namespace edge::gfx {
 		i32 global_vtx_offset = 0;
 		i32 global_idx_offset = 0;
 
+		ImageView* image_view = renderer->image_srv_handle_pool.get(backbuffer_resource->get_srv_handle());
+
 		const VkRenderingAttachmentInfo color_attachment = {
 			.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR,
-			.imageView = backbuffer_resource->srv,
+			.imageView = *image_view,
 			.imageLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
 			.loadOp = load_op,
 			.storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -238,7 +243,7 @@ namespace edge::gfx {
 			.sType = VK_STRUCTURE_TYPE_RENDERING_INFO_KHR,
 			.renderArea = {
 				.offset = { 0, 0 },
-				.extent = { backbuffer_resource->image.extent.width, backbuffer_resource->image.extent.height }
+				.extent = { backbuffer_ptr->extent.width, backbuffer_ptr->extent.height }
 			},
 			.layerCount = 1,
 			.colorAttachmentCount = 1,
@@ -247,16 +252,16 @@ namespace edge::gfx {
 
 		cmd.begin_rendering(rendering_info);
 
-		cmd.bind_index_buffer(index_buffer_resorce->buffer, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
+		cmd.bind_index_buffer(*index_buffer_ptr, sizeof(ImDrawIdx) == 2 ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32);
 		cmd.bind_pipeline(pipeline);
 
-		cmd.set_viewport(0.0f, 0.0f, (f32)backbuffer_resource->image.extent.width, (f32)backbuffer_resource->image.extent.height);
+		cmd.set_viewport(0.0f, 0.0f, (f32)backbuffer_ptr->extent.width, (f32)backbuffer_ptr->extent.height);
 
 		ImVec2 clip_off = draw_data->DisplayPos;         // (0,0) unless using multi-viewports
 		ImVec2 clip_scale = draw_data->FramebufferScale; // (1,1) unless using retina display which are often (2,2)
 
 		imgui::PushConstant push_constant = {
-			.vertices = vertex_buffer_resorce->buffer.address,
+			.vertices = vertex_buffer_ptr->address,
 			.scale = {
 				2.0f / draw_data->DisplaySize.x,
 				2.0f / draw_data->DisplaySize.y},
@@ -292,8 +297,10 @@ namespace edge::gfx {
 
 				ImTextureBinding new_image_binding = ImTextureBinding::from_texture_id(pcmd->GetTexID());
 				if (new_image_binding != last_image_binding) {
-					Resource* render_resource = renderer->get_resource(new_image_binding.image);
-					push_constant.image_index = render_resource->srv_index;
+					RenderResource* image_resource = renderer->get_resource(new_image_binding.image);
+					push_constant.image_index = image_resource->get_srv_handle().index;
+					RenderResource* sampler_resource = renderer->get_resource(new_image_binding.sampler);
+					push_constant.sampler_index = sampler_resource ? sampler_resource->get_srv_handle().index : 0u;
 					// TODO: Add sampler
 					renderer->push_constants(VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, push_constant);
 					last_image_binding = new_image_binding;
@@ -395,7 +402,7 @@ namespace edge::gfx {
 					}
 				});
 			renderer->image_update_end(alloc, update_info);
-			renderer->setup_resource(alloc, image_handle, image);
+			renderer->attach_resource(image_handle, image);
 
 			ImTextureBinding binding{ image_handle, HANDLE_INVALID };
 			tex->SetTexID((ImTextureID)binding);
@@ -403,7 +410,7 @@ namespace edge::gfx {
 		}
 		else if (tex->Status == ImTextureStatus_WantUpdates) {
 			Handle resource_id = (Handle)tex->GetTexID();
-			Resource* resource = renderer->get_resource(resource_id);
+			RenderResource* resource = renderer->get_resource(resource_id);
 
 			usize total_size = 0;
 			for (const ImTextureRect& update_region : tex->Updates) {
@@ -421,13 +428,15 @@ namespace edge::gfx {
 				.layerCount = 1
 			};
 
-			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subresource_range);
+			Image* image = renderer->image_handle_pool.get(resource->get_handle());
+
+			barrier_builder.add_image(*image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, subresource_range);
 			cmd.pipeline_barrier(barrier_builder);
 			barrier_builder.reset();
-			resource->image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+			image->layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
 			ImageUpdateInfo update_info = {
-				.dst_image = resource->image,
+				.dst_image = *image,
 				.buffer_view = renderer->active_frame->try_allocate_staging_memory(alloc, total_size, 1)
 			};
 
@@ -465,9 +474,9 @@ namespace edge::gfx {
 			renderer->image_update_end(alloc, update_info);
 			alloc->free(compacted_data);
 
-			barrier_builder.add_image(resource->image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, subresource_range);
+			barrier_builder.add_image(*image, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, subresource_range);
 			cmd.pipeline_barrier(barrier_builder);
-			resource->image.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+			image->layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
 			tex->SetStatus(ImTextureStatus_OK);
 		}
@@ -493,16 +502,18 @@ namespace edge::gfx {
 
 		update_buffers(alloc);
 
-		Resource* vertex_buffer_resorce = renderer->get_resource(vertex_buffer);
-		Resource* index_buffer_resorce = renderer->get_resource(index_buffer);
+		RenderResource* vertex_buffer_resource = renderer->get_resource(vertex_buffer);
+		Buffer* vertex_buffer_ptr = renderer->buffer_handle_pool.get(vertex_buffer_resource->get_handle());
+		RenderResource* index_buffer_resource = renderer->get_resource(index_buffer);
+		Buffer* index_buffer_ptr = renderer->buffer_handle_pool.get(index_buffer_resource->get_handle());
 
 		BufferUpdateInfo vb_update = {
-			.dst_buffer = vertex_buffer_resorce->buffer,
+			.dst_buffer = *vertex_buffer_ptr,
 			.buffer_view = renderer->active_frame->try_allocate_staging_memory(alloc, draw_data->TotalVtxCount * sizeof(ImDrawVert), 1)
 		};
 
 		BufferUpdateInfo ib_update = {
-			.dst_buffer = index_buffer_resorce->buffer,
+			.dst_buffer = *index_buffer_ptr,
 			.buffer_view = renderer->active_frame->try_allocate_staging_memory(alloc, draw_data->TotalIdxCount * sizeof(ImDrawIdx), 1)
 		};
 
@@ -520,10 +531,10 @@ namespace edge::gfx {
 
 		// TODO: barriers
 		PipelineBarrierBuilder barrier_builder = {};
-		barrier_builder.add_buffer(vertex_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
-		vertex_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
-		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
-		index_buffer_resorce->buffer.layout = BufferLayout::TransferDst;
+		barrier_builder.add_buffer(*vertex_buffer_ptr, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
+		vertex_buffer_ptr->layout = BufferLayout::TransferDst;
+		barrier_builder.add_buffer(*index_buffer_ptr, BufferLayout::TransferDst, 0, VK_WHOLE_SIZE);
+		index_buffer_ptr->layout = BufferLayout::TransferDst;
 
 		CmdBuf cmd = renderer->active_frame->cmd;
 
@@ -533,11 +544,11 @@ namespace edge::gfx {
 		renderer->buffer_update_end(alloc, vb_update);
 		renderer->buffer_update_end(alloc, ib_update);
 
-		barrier_builder.add_buffer(vertex_buffer_resorce->buffer, BufferLayout::ShaderRead, 0, VK_WHOLE_SIZE);
-		vertex_buffer_resorce->buffer.layout = BufferLayout::ShaderRead;
+		barrier_builder.add_buffer(*vertex_buffer_ptr, BufferLayout::ShaderRead, 0, VK_WHOLE_SIZE);
+		vertex_buffer_ptr->layout = BufferLayout::ShaderRead;
 
-		barrier_builder.add_buffer(index_buffer_resorce->buffer, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
-		index_buffer_resorce->buffer.layout = BufferLayout::IndexBuffer;
+		barrier_builder.add_buffer(*index_buffer_ptr, BufferLayout::IndexBuffer, 0, VK_WHOLE_SIZE);
+		index_buffer_ptr->layout = BufferLayout::IndexBuffer;
 
 		cmd.pipeline_barrier(barrier_builder);
 	}

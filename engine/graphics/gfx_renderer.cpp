@@ -23,6 +23,80 @@ namespace edge::gfx {
 			format == VK_FORMAT_D24_UNORM_S8_UINT;
 	}
 
+	void RenderResource::cleanup(NotNull<Renderer*> renderer) {
+		switch (type)
+		{
+		case edge::gfx::RenderResourceType::Image: {
+			if (Image* image_ptr = renderer->image_handle_pool.get(image.handle)) {
+				if (ImageView* image_view_ptr = renderer->image_srv_handle_pool.get(image.srv_handle)) {
+					image_view_ptr->destroy();
+				}
+
+				for (usize i = 0; i < image_ptr->level_count; ++i) {
+					if (ImageView* image_view_ptr = renderer->image_uav_handle_pool.get(image.uav_handles[i])) {
+						image_view_ptr->destroy();
+					}
+				}
+
+				image_ptr->destroy();
+			}
+
+			break;
+		}
+		case edge::gfx::RenderResourceType::Buffer: {
+			if (Buffer* buffer_ptr = renderer->buffer_handle_pool.get(buffer.handle)) {
+				buffer_ptr->destroy();
+			}
+			break;
+		}
+		case edge::gfx::RenderResourceType::Sampler: {
+			if (Sampler* sampler_ptr = renderer->sampler_handle_pool.get(sampler.handle)) {
+				sampler_ptr->destroy();
+			}
+			break;
+		}
+		default:
+			break;
+		}
+	}
+
+	Handle RenderResource::get_handle() {
+		switch (type)
+		{
+		case edge::gfx::RenderResourceType::Image: return image.handle;
+		case edge::gfx::RenderResourceType::Buffer: return buffer.handle;
+		case edge::gfx::RenderResourceType::Sampler: return sampler.handle;
+		default: return HANDLE_INVALID;
+		}
+	}
+
+	Handle RenderResource::get_srv_handle() {
+		switch (type)
+		{
+		case edge::gfx::RenderResourceType::Image: return image.srv_handle;
+		case edge::gfx::RenderResourceType::Buffer: return buffer.handle;
+		case edge::gfx::RenderResourceType::Sampler: return sampler.handle;
+		default: return HANDLE_INVALID;
+		}
+	}
+
+	Handle RenderResource::get_uav_handle(usize index) {
+		switch (type)
+		{
+		case edge::gfx::RenderResourceType::Image: {
+			if (index >= RENDERER_UAV_MAX) {
+				return HANDLE_INVALID;
+			}
+			return image.uav_handles[index];
+		}
+		case edge::gfx::RenderResourceType::Buffer: return buffer.handle;
+		case edge::gfx::RenderResourceType::Sampler: return sampler.handle;
+		default: return HANDLE_INVALID;
+		}
+	}
+
+
+
 	bool RendererFrame::create(NotNull<const Allocator*> alloc, CmdPool cmd_pool) {
 		BufferCreateInfo buffer_create_info = {
 				.size = RENDERER_UPDATE_STAGING_ARENA_SIZE,
@@ -78,20 +152,7 @@ namespace edge::gfx {
 
 	void RendererFrame::release_resources(NotNull<Renderer*> renderer) {
 		for (auto& resource : free_resources) {
-			if (resource.type == ResourceType::Image) {
-				resource.srv.destroy();
-				renderer->srv_indices_list.free(resource.srv_index);
-
-				for (i32 j = 0; j < resource.image.level_count; ++j) {
-					resource.uav[j].destroy();
-					renderer->uav_indices_list.free(resource.uav_index + j);
-				}
-
-				resource.image.destroy();
-			}
-			else if (resource.type == ResourceType::Buffer) {
-				resource.buffer.destroy();
-			}
+			resource.cleanup(renderer);
 		}
 
 		free_resources.clear();
@@ -106,9 +167,9 @@ namespace edge::gfx {
 		fence.reset();
 		cmd.reset();
 
-		is_recording = cmd.begin();
-
 		release_resources(renderer);
+
+		is_recording = cmd.begin();
 
 		staging_offset = 0;
 
@@ -301,22 +362,27 @@ namespace edge::gfx {
 			return false;
 		}
 
-		Resource backbuffer_resource = {
-			.type = ResourceType::Image
-		};
-		backbuffer_handle = resource_handle_pool.allocate_with_data(backbuffer_resource);
-
-		if (!sampler_indices_list.create(alloc, RENDERER_HANDLE_MAX)) {
+		if (!image_handle_pool.create(alloc, RENDERER_HANDLE_MAX)) {
 			destroy(alloc);
 			return false;
 		}
 
-		if (!srv_indices_list.create(alloc, RENDERER_HANDLE_MAX)) {
+		if (!image_srv_handle_pool.create(alloc, RENDERER_HANDLE_MAX)) {
 			destroy(alloc);
 			return false;
 		}
 
-		if (!uav_indices_list.create(alloc, RENDERER_HANDLE_MAX)) {
+		if (!image_uav_handle_pool.create(alloc, RENDERER_HANDLE_MAX)) {
+			destroy(alloc);
+			return false;
+		}
+
+		if (!sampler_handle_pool.create(alloc, RENDERER_HANDLE_MAX)) {
+			destroy(alloc);
+			return false;
+		}
+
+		if (!buffer_handle_pool.create(alloc, RENDERER_HANDLE_MAX)) {
 			destroy(alloc);
 			return false;
 		}
@@ -336,80 +402,35 @@ namespace edge::gfx {
 			return false;
 		}
 
-		VkSamplerCreateInfo sampler_create_info = {
-			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-			.magFilter = VK_FILTER_LINEAR,
-			.minFilter = VK_FILTER_LINEAR,
-			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-			.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-			.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-			.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-			.mipLodBias = 1.0f,
-			.anisotropyEnable = VK_TRUE,
-			.maxAnisotropy = 4.0f
+		RenderResource backbuffer_resource = {
+			.type = RenderResourceType::Image
 		};
-
-		if (!default_sampler.create(sampler_create_info)) {
-			destroy(alloc);
-			return false;
-		}
-
-		VkDescriptorImageInfo sampler_descriptor = {
-			.sampler = default_sampler
-		};
-		image_descriptors.push_back(alloc, sampler_descriptor);
-
-		VkWriteDescriptorSet sampler_write = {
-			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-			.dstSet = descriptor_set,
-			.dstBinding = RENDERER_SAMPLER_SLOT,
-			.dstArrayElement = 0,
-			.descriptorCount = 1,
-			.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-			.pImageInfo = image_descriptors.back()
-		};
-		write_descriptor_sets.push_back(alloc, sampler_write);
+		backbuffer_resource.image.handle = image_handle_pool.allocate();
+		backbuffer_resource.image.srv_handle = image_srv_handle_pool.allocate();
+		backbuffer_handle = resource_handle_pool.allocate_with_data(backbuffer_resource);
 
 		return true;
 	}
 
 	void Renderer::destroy(NotNull<const Allocator*> alloc) {
 		direct_queue.wait_idle();
-		default_sampler.destroy();
 
 		write_descriptor_sets.destroy(alloc);
 		image_descriptors.destroy(alloc);
 		buffer_descriptors.destroy(alloc);
 
-		Resource* backbuffer_resource = get_resource(backbuffer_handle);
-		if (backbuffer_resource) {
-			backbuffer_resource->image = {};
-			backbuffer_resource->srv = {};
-		}
-
 		for (auto entry : resource_handle_pool) {
-			Resource* resource = entry.element;
-			if (resource->type == ResourceType::Image) {
-				resource->srv.destroy();
-				srv_indices_list.free(resource->srv_index);
-
-				for (i32 mip = 0; mip < resource->image.level_count; ++mip) {
-					resource->uav[mip].destroy();
-					uav_indices_list.free(resource->uav_index + mip);
-				}
-
-				resource->image.destroy();
-			}
-			else if (resource->type == ResourceType::Buffer) {
-				resource->buffer.destroy();
+			if (entry.element) {
+				entry.element->cleanup(this);
 			}
 		}
-
-		uav_indices_list.destroy(alloc);
-		srv_indices_list.destroy(alloc);
-		sampler_indices_list.destroy(alloc);
-
 		resource_handle_pool.destroy(alloc);
+
+		buffer_handle_pool.destroy(alloc);
+		sampler_handle_pool.destroy(alloc);
+		image_uav_handle_pool.destroy(alloc);
+		image_srv_handle_pool.destroy(alloc);
+		image_handle_pool.destroy(alloc);
 
 		for (i32 i = 0; i < FRAME_OVERLAP; ++i) {
 			frames[i].destroy(alloc, this);
@@ -435,92 +456,84 @@ namespace edge::gfx {
 		return resource_handle_pool.allocate();
 	}
 
-	bool Renderer::setup_resource(NotNull<const Allocator*> alloc, Handle handle, Image image) {
-		Resource* resource = resource_handle_pool.get(handle);
-		resource->type = ResourceType::Image;
-		resource->image = image;
+	bool Renderer::attach_resource(Handle handle, Image image) {
+		RenderResource* render_resource = resource_handle_pool.get(handle);
+		if (!render_resource) {
+			return false;
+		}
 
-		Image& image_source = resource->image;
-
-		VkImageAspectFlags image_aspect = (image_source.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
+		VkImageAspectFlags image_aspect = (image.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) ? VK_IMAGE_ASPECT_DEPTH_BIT : VK_IMAGE_ASPECT_COLOR_BIT;
 
 		VkImageViewType view_type = {};
-		if (image_source.extent.depth > 1) {
+		if (image.extent.depth > 1) {
 			view_type = VK_IMAGE_VIEW_TYPE_3D;
 		}
-		else if (image_source.extent.height > 1) {
-			if (image_source.layer_count > 1) {
-				view_type = (image_source.face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+		else if (image.extent.height > 1) {
+			if (image.layer_count > 1) {
+				view_type = (image.face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE_ARRAY : VK_IMAGE_VIEW_TYPE_2D_ARRAY;
 			}
 			else {
-				view_type = (image_source.face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
+				view_type = (image.face_count > 1) ? VK_IMAGE_VIEW_TYPE_CUBE : VK_IMAGE_VIEW_TYPE_2D;
 			}
 		}
-		else if (image_source.extent.width > 1) {
-			view_type = image_source.layer_count > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
+		else if (image.extent.width > 1) {
+			view_type = image.layer_count > 1 ? VK_IMAGE_VIEW_TYPE_1D_ARRAY : VK_IMAGE_VIEW_TYPE_1D;
 		}
 
-		if (image_source.usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+		if (image.usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
 			const VkImageSubresourceRange srv_subresource_range = {
 				.aspectMask = image_aspect,
 				.baseMipLevel = 0u,
-				.levelCount = image_source.level_count,
+				.levelCount = image.level_count,
 				.baseArrayLayer = 0u,
-				.layerCount = image_source.layer_count * image_source.face_count
+				.layerCount = image.layer_count * image.face_count
 			};
 
-			if (!resource->srv.create(image_source, view_type, srv_subresource_range)) {
+			ImageView srv = {};
+			if (!srv.create(image, view_type, srv_subresource_range)) {
 				return false;
 			}
-
-			if (!srv_indices_list.allocate(&resource->srv_index)) {
-				return false;
-			}
+			render_resource->image.srv_handle = image_srv_handle_pool.allocate_with_data(srv);
 		}
 
-		if (image_source.usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
+		if (image.usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
 			VkImageSubresourceRange uav_subresource_range = {
 				.aspectMask = image_aspect,
 				.baseMipLevel = 0u,
 				.levelCount = 1u,
 				.baseArrayLayer = 0u,
-				.layerCount = image_source.layer_count * image_source.face_count
+				.layerCount = image.layer_count * image.face_count
 			};
 
-			for (i32 i = 0; i < image_source.level_count; ++i) {
+			for (usize i = 0; i < image.level_count; ++i) {
 				uav_subresource_range.baseMipLevel = i;
 
-				if (!resource->uav[i].create(image_source, view_type, uav_subresource_range)) {
+				ImageView uav = {};
+				if (!uav.create(image, view_type, uav_subresource_range)) {
 					return false;
 				}
-
-				u32 uav_index;
-				if (!uav_indices_list.allocate(&uav_index)) {
-					return false;
-				}
-
-				if (i == 0) {
-					resource->uav_index = uav_index;
-				}
+				render_resource->image.uav_handles[i] = image_uav_handle_pool.allocate_with_data(uav);
 			}
 		}
 
-		bool is_attachment = (image_source.usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) || (image_source.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
-		if (!is_attachment && image_source.layout != VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR) {
+		render_resource->image.handle = image_handle_pool.allocate_with_data(image);
+		render_resource->type = RenderResourceType::Image;
+
+		bool is_attachment = (image.usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) || (image.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT);
+		if (!is_attachment && image.layout != VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR) {
 			VkImageSubresourceRange subresource_range = {
 				.aspectMask = image_aspect,
 				.baseMipLevel = 0u,
-				.levelCount = image_source.level_count,
+				.levelCount = image.level_count,
 				.baseArrayLayer = 0u,
-				.layerCount = image_source.layer_count
+				.layerCount = image.layer_count
 			};
 
-			// TODO: Make batching updates
-			barrier_builder.add_image(image_source, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
+			barrier_builder.add_image(image, VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR, subresource_range);
 			active_frame->cmd.pipeline_barrier(barrier_builder);
 			barrier_builder.reset();
 
-			image_source.layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
+			image.layout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
 		}
 
 		VkWriteDescriptorSet descriptor_write = {
@@ -529,44 +542,82 @@ namespace edge::gfx {
 			.descriptorCount = 1u
 		};
 
-		if (image_source.usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+		if (image.usage_flags & VK_IMAGE_USAGE_SAMPLED_BIT) {
+			ImageView* image_view = image_srv_handle_pool.get(render_resource->image.srv_handle);
+
 			const VkDescriptorImageInfo image_descriptor = {
-				.imageView = resource->srv,
+				.imageView = *image_view,
 				.imageLayout = VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR
 			};
-			image_descriptors.push_back(alloc, image_descriptor);
+			image_descriptors.push_back(image_descriptor);
 
 			descriptor_write.dstBinding = RENDERER_SRV_SLOT;
-			descriptor_write.dstArrayElement = resource->srv_index;
+			descriptor_write.dstArrayElement = render_resource->image.srv_handle.index;
 			descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 			descriptor_write.pImageInfo = image_descriptors.back();
-			write_descriptor_sets.push_back(alloc, descriptor_write);
+			write_descriptor_sets.push_back(descriptor_write);
 		}
 
-		if (image_source.usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
+		if (image.usage_flags & VK_IMAGE_USAGE_STORAGE_BIT) {
 			descriptor_write.dstBinding = RENDERER_UAV_SLOT;
 			descriptor_write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 
-			for (i32 mip = 0; mip < image_source.level_count; ++mip) {
-				const VkDescriptorImageInfo image_descriptor = {
-					.imageView = resource->uav[mip],
-					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
-				};
-				image_descriptors.push_back(alloc, image_descriptor);
+			for (usize i = 0; i < image.level_count; ++i) {
+				if (!render_resource->image.uav_handles[i].is_invalid()) {
+					ImageView* image_view = image_uav_handle_pool.get(render_resource->image.uav_handles[i]);
 
-				descriptor_write.dstArrayElement = resource->uav_index + mip;
-				descriptor_write.pImageInfo = image_descriptors.back();
-				write_descriptor_sets.push_back(alloc, descriptor_write);
+					const VkDescriptorImageInfo image_descriptor = {
+					.imageView = *image_view,
+					.imageLayout = VK_IMAGE_LAYOUT_GENERAL
+					};
+					image_descriptors.push_back(image_descriptor);
+
+					descriptor_write.dstArrayElement = render_resource->image.uav_handles[i].index;
+					descriptor_write.pImageInfo = image_descriptors.back();
+					write_descriptor_sets.push_back(descriptor_write);
+				}
 			}
 		}
 
 		return true;
 	}
 
-	bool Renderer::setup_resource(Handle handle, Buffer buffer) {
-		Resource* resource = resource_handle_pool.get(handle);
-		resource->type = ResourceType::Buffer;
-		resource->buffer = buffer;
+	bool Renderer::attach_resource(Handle handle, Buffer buffer) {
+		RenderResource* render_resource = resource_handle_pool.get(handle);
+		if (!render_resource) {
+			return false;
+		}
+
+		render_resource->type = RenderResourceType::Buffer;
+		render_resource->buffer.handle = buffer_handle_pool.allocate_with_data(buffer);
+		return true;
+	}
+
+	bool Renderer::attach_resource(Handle handle, Sampler sampler) {
+		RenderResource* render_resource = resource_handle_pool.get(handle);
+		if (!render_resource) {
+			return false;
+		}
+
+		render_resource->type = RenderResourceType::Sampler;
+		render_resource->sampler.handle = sampler_handle_pool.allocate_with_data(sampler);
+
+		VkDescriptorImageInfo sampler_descriptor = {
+			.sampler = sampler
+		};
+		image_descriptors.push_back(sampler_descriptor);
+
+		VkWriteDescriptorSet sampler_write = {
+			.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+			.dstSet = descriptor_set,
+			.dstBinding = RENDERER_SAMPLER_SLOT,
+			.dstArrayElement = render_resource->sampler.handle.index,
+			.descriptorCount = 1,
+			.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
+			.pImageInfo = image_descriptors.back()
+		};
+		write_descriptor_sets.push_back(sampler_write);
+
 		return true;
 	}
 
@@ -576,13 +627,12 @@ namespace edge::gfx {
 		}
 
 		if (active_frame) {
-			Resource* resource = resource_handle_pool.get(handle);
-			if (resource->type != ResourceType::Unknown) {
-				active_frame->free_resources.push_back(alloc, *resource);
-			}
+			RenderResource* resource = resource_handle_pool.get(handle);
+			assert(resource && "Resource should not be null.");
+			active_frame->free_resources.push_back(alloc, *resource);
 		}
 
-		setup_resource(alloc, handle, image);
+		attach_resource(handle, image);
 	}
 
 	void Renderer::update_resource(NotNull<const Allocator*> alloc, Handle handle, Buffer buffer) {
@@ -591,29 +641,27 @@ namespace edge::gfx {
 		}
 
 		if (active_frame) {
-			Resource* resource = resource_handle_pool.get(handle);
-			if (resource->type != ResourceType::Unknown) {
-				active_frame->free_resources.push_back(alloc, *resource);
-			}
+			RenderResource* resource = resource_handle_pool.get(handle);
+			assert(resource && "Resource should not be null.");
+			active_frame->free_resources.push_back(alloc, *resource);
 		}
 
-		setup_resource(handle, buffer);
+		attach_resource(handle, buffer);
 	}
 
-	Resource* Renderer::get_resource(Handle handle) {
+	RenderResource* Renderer::get_resource(Handle handle) {
 		return resource_handle_pool.get(handle);
 	}
 
 	void Renderer::free_resource(NotNull<const Allocator*> alloc, Handle handle) {
 		if (resource_handle_pool.is_valid(handle)) {
 			if (active_frame) {
-				Resource* resource = resource_handle_pool.get(handle);
-				if (resource->type != ResourceType::Unknown) {
-					active_frame->free_resources.push_back(alloc, *resource);
-				}
+				RenderResource* resource = resource_handle_pool.get(handle);
+				assert(resource && "Resource should not be null.");
+				active_frame->free_resources.push_back(alloc, *resource);
 			}
 
-			resource_handle_pool.free(alloc, handle);
+			resource_handle_pool.free(handle);
 		}
 	}
 
@@ -632,7 +680,7 @@ namespace edge::gfx {
 				return false;
 			}
 
-			for (i32 i = 0; i < swapchain.image_count; ++i) {
+			for (usize i = 0; i < swapchain.image_count; ++i) {
 				VkImageSubresourceRange subresource_range = {
 					.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 					.baseMipLevel = 0u,
@@ -668,9 +716,12 @@ namespace edge::gfx {
 		active_frame = &current_frame;
 
 		// Update backbuffer resource
-		Resource* backbuffer_resource = resource_handle_pool.get(backbuffer_handle);
-		backbuffer_resource->image = swapchain_images[active_image_index];
-		backbuffer_resource->srv = swapchain_image_views[active_image_index];
+		if (RenderResource* backbuffer_resource = resource_handle_pool.get(backbuffer_handle)) {
+			Image* image_ptr = image_handle_pool.get(backbuffer_resource->image.handle);
+			*image_ptr = swapchain_images[active_image_index];
+			ImageView* image_view_ptr = image_srv_handle_pool.get(backbuffer_resource->image.srv_handle);
+			*image_view_ptr = swapchain_image_views[active_image_index];
+		}
 
 		if (frame_number > 0) {
 			u64 timestamps[2] = {};
@@ -700,9 +751,9 @@ namespace edge::gfx {
 
 		CmdBuf cmd = active_frame->cmd;
 
-		Resource* backbuffer_resource = resource_handle_pool.get(backbuffer_handle);
-		if (backbuffer_resource) {
-			if (backbuffer_resource->image.layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
+		if (RenderResource* backbuffer_resource = resource_handle_pool.get(backbuffer_handle)) {
+			Image* image = image_handle_pool.get(backbuffer_resource->image.handle);
+			if (image->layout != VK_IMAGE_LAYOUT_PRESENT_SRC_KHR) {
 				VkImageSubresourceRange subresource_range = {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.baseMipLevel = 0u,
@@ -711,11 +762,11 @@ namespace edge::gfx {
 				.layerCount = 1u
 				};
 
-				barrier_builder.add_image(backbuffer_resource->image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
+				barrier_builder.add_image(*image, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR, subresource_range);
 				cmd.pipeline_barrier(barrier_builder);
 				barrier_builder.reset();
 
-				backbuffer_resource->image.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+				image->layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 			}
 		}
 

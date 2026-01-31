@@ -20,28 +20,40 @@ namespace edge::gfx {
 
 	constexpr usize RENDERER_UPDATE_STAGING_ARENA_SIZE = 1048576;
 
-	enum class ResourceType {
-		Unknown = -1,
-		Image,
-		Buffer
-	};
-
 	struct RendererCreateInfo {
 		Queue main_queue = {};
 	};
 
-	struct Resource {
-		ResourceType type = ResourceType::Unknown;
+	enum class RenderResourceType {
+		None = 0,
+		Image, 
+		Buffer,
+		Sampler
+	};
+
+	struct RenderResource {
+		RenderResourceType type = RenderResourceType::None;
 		union {
-			Image image = {};
-			Buffer buffer;
+			struct {
+				Handle handle;
+				Handle srv_handle;
+				Handle uav_handles[16];
+			} image = {};
+
+			struct {
+				Handle handle;
+			} buffer;
+
+			struct {
+				Handle handle;
+			} sampler;
 		};
 
-		ImageView srv = {};
-		u32 srv_index = 0u;
+		void cleanup(NotNull<Renderer*> renderer);
 
-		ImageView uav[RENDERER_UAV_MAX] = {};
-		u32 uav_index = 0u;
+		Handle get_handle();
+		Handle get_srv_handle();
+		Handle get_uav_handle(usize index);
 	};
 
 	struct RendererFrame {
@@ -57,7 +69,7 @@ namespace edge::gfx {
 		CmdBuf cmd = {};
 		bool is_recording = false;
 
-		Array<Resource> free_resources = {};
+		Array<RenderResource> free_resources = {};
 
 		bool create(NotNull<const Allocator*> alloc, CmdPool cmd_pool);
 		void destroy(NotNull<const Allocator*> alloc, NotNull<Renderer*> renderer);
@@ -118,12 +130,14 @@ namespace edge::gfx {
 		RendererFrame* active_frame = nullptr;
 		u32 frame_number = 0u;
 
-		HandlePool<Resource> resource_handle_pool = {};
-		Handle backbuffer_handle = HANDLE_INVALID;
+		HandlePool<RenderResource> resource_handle_pool = {};
+		HandlePool<Image> image_handle_pool = {};
+		HandlePool<ImageView> image_srv_handle_pool = {};
+		HandlePool<ImageView> image_uav_handle_pool = {};
+		HandlePool<Sampler> sampler_handle_pool = {};
+		HandlePool<Buffer> buffer_handle_pool = {};
 
-		FreeIndexList sampler_indices_list = {};
-		FreeIndexList srv_indices_list = {};
-		FreeIndexList uav_indices_list = {};
+		Handle backbuffer_handle = HANDLE_INVALID;
 
 		PipelineBarrierBuilder barrier_builder = {};
 
@@ -133,17 +147,18 @@ namespace edge::gfx {
 		Array<VkDescriptorImageInfo> image_descriptors = {};
 		Array<VkDescriptorBufferInfo> buffer_descriptors = {};
 
-		Sampler default_sampler = {};
-
 		bool create(NotNull<const Allocator*> alloc, RendererCreateInfo create_info);
 		void destroy(NotNull<const Allocator*> alloc);
 
 		Handle add_resource();
-		bool setup_resource(NotNull<const Allocator*> alloc, Handle handle, Image image); // TODO: Maybe attach_resource sounds better
-		bool setup_resource(Handle handle, Buffer buffer); // TODO: Maybe attach_resource sounds better
+		bool attach_resource(Handle handle, Image image);
+		bool attach_resource(Handle handle, Buffer buffer);
+		bool attach_resource(Handle handle, Sampler sampler);
+
 		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Image image);
 		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Buffer buffer);
-		Resource* get_resource(Handle handle);
+
+		RenderResource* get_resource(Handle handle);
 		void free_resource(NotNull<const Allocator*> alloc, Handle handle);
 
 		bool frame_begin();

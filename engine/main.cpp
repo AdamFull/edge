@@ -3,7 +3,6 @@
 #include <allocator.hpp>
 #include <logger.hpp>
 #include <scheduler.hpp>
-#include <platform_detect.hpp>
 
 #include <assert.h>
 
@@ -210,6 +209,27 @@ namespace edge {
 			.promise = uploader.load_image(alloc, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds")
 			});
 
+		VkSamplerCreateInfo sampler_create_info = {
+			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+			.magFilter = VK_FILTER_LINEAR,
+			.minFilter = VK_FILTER_LINEAR,
+			.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+			.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+			.mipLodBias = 1.0f,
+			.anisotropyEnable = VK_TRUE,
+			.maxAnisotropy = 4.0f
+		};
+
+		gfx::Sampler default_sampler = {};
+		if (!default_sampler.create(sampler_create_info)) {
+			return false;
+		}
+
+		default_sampler_handle = renderer.add_resource();
+		renderer.attach_resource(default_sampler_handle, default_sampler);
+
 		return true;
 	}
 
@@ -271,7 +291,7 @@ namespace edge {
 		imgui_layer.on_frame_begin(delta_time);
 
 		if (test_tex != HANDLE_INVALID) {
-			ImTextureBinding imgui_binding{ test_tex, HANDLE_INVALID };
+			ImTextureBinding imgui_binding{ test_tex, default_sampler_handle };
 			ImGui::Image((ImTextureRef)imgui_binding, { 512, 512 });
 		}
 
@@ -291,7 +311,7 @@ namespace edge {
 
 						test_tex = pending_image.handle;
 
-						renderer.setup_resource(&allocator, pending_image.handle, pending_image.promise->value);
+						renderer.attach_resource(pending_image.handle, pending_image.promise->value);
 						allocator.deallocate(pending_image.promise);
 					}
 				}

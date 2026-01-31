@@ -108,6 +108,7 @@ namespace edge {
 		Array<PendingImage> pending_images = {};
 
 		Handle test_tex = HANDLE_INVALID;
+		Handle default_sampler_handle = HANDLE_INVALID;
 
 		bool create(NotNull<const Allocator*> alloc, NotNull<RuntimeLayout*> runtime_layout);
 		void destroy(NotNull<const Allocator*> alloc);
