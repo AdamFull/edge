@@ -1,5 +1,4 @@
 #include "vmem.hpp"
-#include "platform_detect.hpp"
 
 #if EDGE_HAS_WINDOWS_API
 #define WIN32_LEAN_AND_MEAN

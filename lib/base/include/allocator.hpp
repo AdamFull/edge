@@ -2,7 +2,6 @@
 #define EDGE_ALLOCATOR_H
 
 #include "stddef.hpp"
-#include "platform_detect.hpp"
 
 #include <atomic>
 #include <new>

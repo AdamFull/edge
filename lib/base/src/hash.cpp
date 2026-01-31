@@ -1,5 +1,4 @@
 #include "hash.hpp"
-#include "platform_detect.hpp"
 
 #include <bit>
 

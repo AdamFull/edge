@@ -1,5 +1,4 @@
 #include "random.hpp"
-#include "platform_detect.hpp"
 
 #include <cmath>
 #include <cstring>

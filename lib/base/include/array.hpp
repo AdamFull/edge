@@ -123,6 +123,17 @@ namespace edge {
 			return true;
 		}
 
+		bool push_back(const T element) {
+			bool is_full = m_size >= m_capacity;
+			assert(!is_full && "Array is already full.");
+			if (is_full) {
+				return false;
+			}
+
+			m_data[m_size++] = element;
+			return true;
+		}
+
 		bool pop_back(T* out_element) {
 			if (m_size == 0) {
 				return false;

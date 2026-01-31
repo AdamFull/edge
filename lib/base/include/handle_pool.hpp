@@ -14,7 +14,7 @@ namespace edge {
         u32 version : HANDLE_VERSION_BITS;
         u32 index : HANDLE_INDEX_BITS;
 
-        constexpr Handle() : version(0), index(0) {}
+        constexpr Handle() : Handle{ ~0u } {}
         constexpr explicit Handle(HandleRawType raw)
             : version{ raw & ((1u << HANDLE_VERSION_BITS) - 1) }
             , index{ (raw >> HANDLE_VERSION_BITS) & ((1u << HANDLE_INDEX_BITS) - 1) } {
@@ -195,7 +195,7 @@ namespace edge {
             return Handle{ index, version };
         }
 
-        bool free(NotNull<const Allocator*> alloc, Handle handle) {
+        bool free(Handle handle) {
             if (handle == HANDLE_INVALID) {
                 return false;
             }
@@ -214,7 +214,7 @@ namespace edge {
             // Clear the element data
             memset(&m_data[handle.index], 0, sizeof(T));
 
-            m_free_indices.push_back(alloc, handle.index);
+            m_free_indices.push_back(handle.index);
             m_count--;
 
             return true;
@@ -289,13 +289,13 @@ namespace edge {
             return m_count == 0;
         }
 
-        void clear(NotNull<const Allocator*> alloc) {
+        void clear() {
             m_free_indices.clear();
 
             // Re-initialize free indices and increment versions
             for (u32 i = 0; i < m_capacity; i++) {
                 u32 index = m_capacity - 1 - i;
-                m_free_indices.push_back(alloc, index);
+                m_free_indices.push_back(index);
 
                 m_versions[i] = (m_versions[i] + 1) & HANDLE_VERSION_MASK;
 

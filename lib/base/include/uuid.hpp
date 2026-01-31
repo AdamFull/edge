@@ -3,7 +3,6 @@
 
 #include "hash.hpp"
 #include "random.hpp"
-#include "platform_detect.hpp"
 
 namespace edge {
 	struct alignas(16) UUID {

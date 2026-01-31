@@ -2,7 +2,6 @@
 #define EDGE_THREADS_H
 
 #include "stddef.hpp"
-#include "platform_detect.hpp"
 
 #include <atomic>
 #include <chrono>

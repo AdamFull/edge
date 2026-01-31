@@ -7,6 +7,8 @@
 #include <type_traits>
 #include <concepts>
 
+#include "platform_detect.hpp"
+
 using i8 = int8_t;
 using u8 = uint8_t;
 using i16 = int16_t;
@@ -177,6 +179,29 @@ namespace edge {
 	template<typename T, usize N>
 	constexpr usize array_size(const T(&)[N]) {
 		return N;
+	}
+
+	template<typename TargetT, typename SourceT>
+	TargetT safe_cast(SourceT* ptr) {
+		static_assert(std::is_pointer<TargetT>::value, "Target must be a pointer type");
+
+#if EDGE_DEBUG
+		TargetT result = dynamic_cast<TargetT>(ptr);
+		assert(result != nullptr && "safe_cast: dynamic_cast failed - invalid cast");
+		return result;
+#else
+		return static_cast<TargetT>(ptr);
+#endif
+	}
+
+	template<typename TargetT, typename SourceT>
+	TargetT safe_cast(SourceT& ref) {
+		static_assert(std::is_reference<TargetT>::value, "Target must be a reference type");
+#if EDGE_DEBUG
+		return dynamic_cast<TargetT>(ref);
+#else
+		return static_cast<TargetT>(ref);
+#endif
 	}
 }
 
