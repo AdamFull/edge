@@ -222,7 +222,8 @@ namespace edge::gfx {
 		}
 
 		PipelineBarrierBuilder barrier_builder = {};
-		barrier_builder.add_image(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, {
+		barrier_builder.add_image(image, 
+			ResourceState::Undefined, ResourceState::TransferDst, {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.baseMipLevel = 0,
 				.levelCount = image_info.mip_levels,
@@ -231,8 +232,6 @@ namespace edge::gfx {
 			});
 		set.cmd.pipeline_barrier(barrier_builder);
 		barrier_builder.reset();
-
-		image.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
 
 		// Copy image data
 		BufferView buffer_view = set.try_allocate_staging_memory(alloc, image_info.whole_size, 16);

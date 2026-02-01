@@ -1798,7 +1798,6 @@ namespace edge::gfx {
 			image.face_count = 1;
 			image.usage_flags = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
 			image.format = format;
-			image.layout = VK_IMAGE_LAYOUT_UNDEFINED;
 		}
 
 		return true;
@@ -1917,7 +1916,6 @@ namespace edge::gfx {
 		face_count = create_info.face_count;
 		usage_flags = create_info.usage_flags;
 		format = create_info.format;
-		layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 		return true;
 	}
@@ -2161,96 +2159,174 @@ namespace edge::gfx {
 		return true;
 	}
 
-	struct LayoutInfo {
-		VkPipelineStageFlags2KHR stageFlags;
-		VkAccessFlags2 accessFlags;
+	struct VulkanStateInfo {
+		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
+		VkPipelineStageFlags2KHR stage_mask = VK_PIPELINE_STAGE_2_NONE;
+		VkAccessFlags2 access_mask = VK_ACCESS_2_NONE;
 	};
 
-	static LayoutInfo get_buffer_layout_info(BufferLayout layout) {
-		constexpr VkPipelineStageFlags2KHR shader_stages = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT |
-			VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT |
-			VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT;
-
-		switch (layout) {
-		case BufferLayout::TransferSrc: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-			.accessFlags = VK_ACCESS_2_TRANSFER_READ_BIT
-		};
-		case BufferLayout::TransferDst: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-			.accessFlags = VK_ACCESS_2_TRANSFER_WRITE_BIT
-		};
-		case BufferLayout::VertexBuffer: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
-			.accessFlags = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT
-		};
-		case BufferLayout::IndexBuffer: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
-			.accessFlags = VK_ACCESS_2_INDEX_READ_BIT
-		};
-		case BufferLayout::UniformBuffer: return {
-			.stageFlags = shader_stages,
-			.accessFlags = VK_ACCESS_2_UNIFORM_READ_BIT
-		};
-		case BufferLayout::StorageBufferRead: return {
-			.stageFlags = shader_stages,
-			.accessFlags = VK_ACCESS_2_SHADER_STORAGE_READ_BIT
-		};
-		case BufferLayout::StorageBufferWrite: return {
-			.stageFlags = shader_stages,
-			.accessFlags = VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-		};
-		case BufferLayout::StorageBufferRW: return {
-			.stageFlags = shader_stages,
-			.accessFlags = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
-		};
-		case BufferLayout::IndirectBuffer: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
-			.accessFlags = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
-		};
-		case BufferLayout::HostRead: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_HOST_BIT,
-			.accessFlags = VK_ACCESS_2_HOST_READ_BIT
-		};
-		case BufferLayout::HostWrite: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_HOST_BIT,
-			.accessFlags = VK_ACCESS_2_HOST_WRITE_BIT
-		};
-		case BufferLayout::ShaderRead: return {
-			.stageFlags = shader_stages,
-			.accessFlags = VK_ACCESS_2_SHADER_READ_BIT_KHR
-		};
-		case BufferLayout::ShaderWrite: return {
-			.stageFlags = shader_stages,
-			.accessFlags = VK_ACCESS_2_SHADER_WRITE_BIT_KHR
-		};
-		case BufferLayout::ShaderRW: return {
-			.stageFlags = shader_stages,
-			.accessFlags = VK_ACCESS_2_SHADER_READ_BIT_KHR | VK_ACCESS_2_SHADER_WRITE_BIT_KHR
-		};
-		case BufferLayout::Undefined:
-		default: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_NONE,
-			.accessFlags = VK_ACCESS_2_NONE
-		};
+	static VulkanStateInfo get_image_state_info(ResourceState state) {
+		switch (state) {
+		case ResourceState::Undefined:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_UNDEFINED,
+				.stage_mask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+				.access_mask = VK_ACCESS_2_NONE
+			};
+		case ResourceState::TransferSrc:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+				.access_mask = VK_ACCESS_2_TRANSFER_READ_BIT
+			};
+		case ResourceState::TransferDst:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+				.access_mask = VK_ACCESS_2_TRANSFER_WRITE_BIT
+			};
+		case ResourceState::ShaderReadOnly:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.access_mask = VK_ACCESS_2_SHADER_SAMPLED_READ_BIT
+			};
+		case ResourceState::ShaderReadWrite:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_GENERAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.access_mask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+			};
+		case ResourceState::General:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_GENERAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+				.access_mask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT
+			};
+		case ResourceState::ColorAttachment:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
+				.access_mask = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
+			};
+		case ResourceState::DepthStencilRead:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+				.access_mask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+			};
+		case ResourceState::DepthStencilWrite:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
+				.access_mask = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
+			};
+		case ResourceState::Present:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+				.stage_mask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+				.access_mask = VK_ACCESS_2_NONE
+			};
+		case ResourceState::HostRead:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_GENERAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_HOST_BIT,
+				.access_mask = VK_ACCESS_2_HOST_READ_BIT
+			};
+		case ResourceState::HostWrite:
+			return VulkanStateInfo{
+				.layout = VK_IMAGE_LAYOUT_GENERAL,
+				.stage_mask = VK_PIPELINE_STAGE_2_HOST_BIT,
+				.access_mask = VK_ACCESS_2_HOST_WRITE_BIT
+			};
+		default:
+			return {};
 		}
 	}
 
-	bool PipelineBarrierBuilder::add_buffer(Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size) {
+	static VulkanStateInfo get_buffer_state_info(ResourceState state) {
+		switch (state) {
+		case ResourceState::Undefined:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_NONE,
+				.access_mask = VK_ACCESS_2_NONE
+			};
+		case ResourceState::TransferSrc:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+				.access_mask = VK_ACCESS_2_TRANSFER_READ_BIT
+			};
+		case ResourceState::TransferDst:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
+				.access_mask = VK_ACCESS_2_TRANSFER_WRITE_BIT
+			};
+		case ResourceState::ShaderReadOnly:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.access_mask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT
+			};
+		case ResourceState::ShaderReadWrite:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.access_mask = VK_ACCESS_2_SHADER_STORAGE_READ_BIT | VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT
+			};
+		case ResourceState::General:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
+				.access_mask = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT
+			};
+		case ResourceState::VertexBuffer:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT,
+				.access_mask = VK_ACCESS_2_VERTEX_ATTRIBUTE_READ_BIT
+			};
+		case ResourceState::IndexBuffer:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT,
+				.access_mask = VK_ACCESS_2_INDEX_READ_BIT
+			};
+		case ResourceState::IndirectBuffer:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT,
+				.access_mask = VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT
+			};
+		case ResourceState::UniformBuffer:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
+				.access_mask = VK_ACCESS_2_UNIFORM_READ_BIT
+			};
+		case ResourceState::HostRead:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_HOST_BIT,
+				.access_mask = VK_ACCESS_2_HOST_READ_BIT
+			};
+		case ResourceState::HostWrite:
+			return VulkanStateInfo{
+				.stage_mask = VK_PIPELINE_STAGE_2_HOST_BIT,
+				.access_mask = VK_ACCESS_2_HOST_WRITE_BIT
+			};
+		default:
+			// TODO: Log error or warning
+			return {};
+		}
+	}
+
+	bool PipelineBarrierBuilder::add_buffer(Buffer buffer, ResourceState old_state, ResourceState new_state, VkDeviceSize offset, VkDeviceSize size) {
 		if (buffer_barrier_count >= BUFFER_BARRIERS_MAX || !buffer) {
 			return false;
 		}
 
-		LayoutInfo src_layout_info = get_buffer_layout_info(buffer.layout);
-		LayoutInfo dst_layout_info = get_buffer_layout_info(new_layout);
+		VulkanStateInfo src_layout_info = get_buffer_state_info(old_state);
+		VulkanStateInfo dst_layout_info = get_buffer_state_info(new_state);
 
 		// TODO: Use StackBuffer
 		buffer_barriers[buffer_barrier_count++] = {
 			.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2,
-			.srcStageMask = src_layout_info.stageFlags,
-			.srcAccessMask = src_layout_info.accessFlags,
-			.dstStageMask = dst_layout_info.stageFlags,
-			.dstAccessMask = dst_layout_info.accessFlags,
+			.srcStageMask = src_layout_info.stage_mask,
+			.srcAccessMask = src_layout_info.access_mask,
+			.dstStageMask = dst_layout_info.stage_mask,
+			.dstAccessMask = dst_layout_info.access_mask,
 			.buffer = buffer,
 			.offset = offset,
 			.size = size
@@ -2259,65 +2335,23 @@ namespace edge::gfx {
 		return true;
 	}
 
-	static LayoutInfo get_image_layout_info(VkImageLayout layout) {
-		switch (layout)
-		{
-		case VK_IMAGE_LAYOUT_UNDEFINED: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-			.accessFlags = VK_ACCESS_2_NONE
-		};
-		case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT,
-			.accessFlags = VK_ACCESS_2_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_2_COLOR_ATTACHMENT_WRITE_BIT
-		};
-		case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT,
-			.accessFlags = VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_READ_BIT | VK_ACCESS_2_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT
-		};
-		case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT,
-			.accessFlags = VK_ACCESS_2_SHADER_READ_BIT
-		};
-		case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT,
-			.accessFlags = VK_ACCESS_2_SHADER_READ_BIT
-		};
-		case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-			.accessFlags = VK_ACCESS_2_TRANSFER_READ_BIT
-		};
-		case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_TRANSFER_BIT,
-			.accessFlags = VK_ACCESS_2_TRANSFER_WRITE_BIT
-		};
-		case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-			.accessFlags = VK_ACCESS_2_NONE
-		};
-		default: return {
-			.stageFlags = VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT,
-			.accessFlags = VK_ACCESS_2_MEMORY_READ_BIT | VK_ACCESS_2_MEMORY_WRITE_BIT
-		};
-		}
-	}
-
-	bool PipelineBarrierBuilder::add_image(Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range) {
+	bool PipelineBarrierBuilder::add_image(Image image, ResourceState old_state, ResourceState new_state, VkImageSubresourceRange subresource_range) {
 		if (image_barrier_count >= IMAGE_BARRIERS_MAX || !image) {
 			return false;
 		}
 
-		LayoutInfo src_layout_info = get_image_layout_info(image.layout);
-		LayoutInfo dst_layout_info = get_image_layout_info(new_layout);
+		VulkanStateInfo src_layout_info = get_image_state_info(old_state);
+		VulkanStateInfo dst_layout_info = get_image_state_info(new_state);
 
 		// TODO: Use StackBuffer
 		image_barriers[image_barrier_count++] = {
 			.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER_2,
-			.srcStageMask = src_layout_info.stageFlags,
-			.srcAccessMask = src_layout_info.accessFlags,
-			.dstStageMask = dst_layout_info.stageFlags,
-			.dstAccessMask = dst_layout_info.accessFlags,
-			.oldLayout = image.layout,
-			.newLayout = new_layout,
+			.srcStageMask = src_layout_info.stage_mask,
+			.srcAccessMask = src_layout_info.access_mask,
+			.dstStageMask = dst_layout_info.stage_mask,
+			.dstAccessMask = dst_layout_info.access_mask,
+			.oldLayout = src_layout_info.layout,
+			.newLayout = dst_layout_info.layout,
 			.image = image,
 			.subresourceRange = subresource_range
 		};

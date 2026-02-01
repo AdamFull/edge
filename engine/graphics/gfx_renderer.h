@@ -7,6 +7,8 @@
 #include <handle_pool.hpp>
 #include <free_index_list.hpp>
 
+#include <variant>
+
 namespace edge::gfx {
 	struct Renderer;
 
@@ -31,29 +33,89 @@ namespace edge::gfx {
 		Sampler
 	};
 
+	struct ImageResource {
+		Image handle;
+		ImageView srv;
+		ImageView uavs[RENDERER_UAV_MAX];
+
+		void destroy();
+	};
+
+	struct BufferResource {
+		Buffer handle;
+
+		void destroy();
+	};
+
+	struct SamplerResource {
+		Sampler handle;
+
+		void destroy();
+	};
+
 	struct RenderResource {
-		RenderResourceType type = RenderResourceType::None;
-		union {
-			struct {
-				Handle handle;
-				Handle srv_handle;
-				Handle uav_handles[16];
-			} image = {};
+		using ResourceType = std::variant<std::monostate, ImageResource, BufferResource, SamplerResource>;
 
-			struct {
-				Handle handle;
-			} buffer;
+		ResourceType resource;
+		ResourceState state = ResourceState::Undefined;
 
-			struct {
-				Handle handle;
-			} sampler;
+		u32 srv_index = ~0u;
+		u32 uav_indices[RENDERER_UAV_MAX] = { 
+			~0u, ~0u, ~0u, ~0u, 
+			~0u, ~0u, ~0u, ~0u, 
+			~0u, ~0u, ~0u, ~0u, 
+			~0u, ~0u, ~0u, ~0u 
 		};
 
-		void cleanup(NotNull<Renderer*> renderer);
+		void destroy();
 
-		Handle get_handle();
-		Handle get_srv_handle();
-		Handle get_uav_handle(usize index);
+		bool is_valid() const { return !std::holds_alternative<std::monostate>(resource); }
+		bool is_image() const { return std::holds_alternative<ImageResource>(resource); }
+		bool is_buffer() const { return std::holds_alternative<BufferResource>(resource); }
+		bool is_sampler() const { return std::holds_alternative<SamplerResource>(resource); }
+
+		u32 get_srv_index() const { return srv_index; }
+		u32 get_uav_index(usize mip = 0) const {
+			if (is_image()) {
+				if (auto* img = std::get_if<ImageResource>(&resource)) {
+					if (mip >= img->handle.level_count) {
+						return ~0u;
+					}
+					return uav_indices[mip];
+				}
+			}
+			else if (is_buffer()) {
+				return uav_indices[0];
+			}
+			
+			return ~0u;
+		}
+
+		template<typename T>
+		T* as() {
+			return std::get_if<T>(&resource);
+		}
+
+		Image* as_image() {
+			if (auto* img = std::get_if<ImageResource>(&resource)) {
+				return &img->handle;
+			}
+			return nullptr;
+		}
+
+		Buffer* as_buffer() {
+			if (auto* buf = std::get_if<BufferResource>(&resource)) {
+				return &buf->handle;
+			}
+			return nullptr;
+		}
+
+		Sampler* as_sampler() {
+			if (auto* smp = std::get_if<SamplerResource>(&resource)) {
+				return &smp->handle;
+			}
+			return nullptr;
+		}
 	};
 
 	struct RendererFrame {
@@ -69,11 +131,10 @@ namespace edge::gfx {
 		CmdBuf cmd = {};
 		bool is_recording = false;
 
-		Array<RenderResource> free_resources = {};
+		Array<RenderResource> pending_destroys = {};
 
 		bool create(NotNull<const Allocator*> alloc, CmdPool cmd_pool);
 		void destroy(NotNull<const Allocator*> alloc, NotNull<Renderer*> renderer);
-		void release_resources(NotNull<Renderer*> renderer);
 
 		bool begin(NotNull<Renderer*> renderer);
 
@@ -107,6 +168,11 @@ namespace edge::gfx {
 		bool write(NotNull<const Allocator*> alloc, const ImageSubresourceData& subresource_info);
 	};
 
+	struct StateTranslation {
+		Handle handle = HANDLE_INVALID;
+		ResourceState new_state = ResourceState::Undefined;
+	};
+
 	struct Renderer {
 		Queue direct_queue = {};
 
@@ -130,16 +196,10 @@ namespace edge::gfx {
 		RendererFrame* active_frame = nullptr;
 		u32 frame_number = 0u;
 
-		HandlePool<RenderResource> resource_handle_pool = {};
-		HandlePool<Image> image_handle_pool = {};
-		HandlePool<ImageView> image_srv_handle_pool = {};
-		HandlePool<ImageView> image_uav_handle_pool = {};
-		HandlePool<Sampler> sampler_handle_pool = {};
-		HandlePool<Buffer> buffer_handle_pool = {};
-
 		Handle backbuffer_handle = HANDLE_INVALID;
 
-		PipelineBarrierBuilder barrier_builder = {};
+		StateTranslation state_translations[IMAGE_BARRIERS_MAX + BUFFER_BARRIERS_MAX] = {};
+		usize state_translation_count = 0;
 
 		Semaphore acquired_semaphore = {};
 
@@ -150,16 +210,25 @@ namespace edge::gfx {
 		bool create(NotNull<const Allocator*> alloc, RendererCreateInfo create_info);
 		void destroy(NotNull<const Allocator*> alloc);
 
-		Handle add_resource();
-		bool attach_resource(Handle handle, Image image);
-		bool attach_resource(Handle handle, Buffer buffer);
-		bool attach_resource(Handle handle, Sampler sampler);
+		Handle create_empty();
 
-		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Image image);
-		void update_resource(NotNull<const Allocator*> alloc, Handle handle, Buffer buffer);
+		Handle create_image(const ImageCreateInfo& create_info);
+		bool attach_image(Handle h, Image image);
+		bool update_image(NotNull<const Allocator*> alloc, Handle h, Image img);
 
-		RenderResource* get_resource(Handle handle);
-		void free_resource(NotNull<const Allocator*> alloc, Handle handle);
+		Handle create_buffer(const BufferCreateInfo& create_info);
+		bool attach_buffer(Handle h, Buffer buf);
+		bool update_buffer(NotNull<const Allocator*> alloc, Handle h, Buffer buf);
+
+		Handle create_sampler(const VkSamplerCreateInfo& create_info);
+		bool attach_sampler(Handle handle, Sampler smp);
+		bool update_sampler(NotNull<const Allocator*> alloc, Handle h, Sampler smp);
+
+		RenderResource* get_resource(Handle h);
+		void free_resource(NotNull<const Allocator*> alloc, Handle h);
+
+		void add_state_translation(Handle h, ResourceState new_state);
+		void translate_states(CmdBuf cmd);
 
 		bool frame_begin();
 		bool frame_end(NotNull<const Allocator*> alloc, VkSemaphoreSubmitInfoKHR uploader_semaphore);
@@ -171,6 +240,19 @@ namespace edge::gfx {
 		void push_constants(VkShaderStageFlags, T data) {
 			active_frame->cmd.push_constants(pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(T), &data);
 		}
+
+	private:
+		void flush_resource_destruction(RendererFrame& frame);
+
+		void update_srv_descriptor(u32 index, Sampler sampler);
+		void update_srv_descriptor(u32 index, ImageView view);
+		void update_uav_descriptor(u32 index, ImageView view);
+
+		HandlePool<RenderResource> resource_pool = {};
+
+		FreeIndexList smp_index_allocator = {};
+		FreeIndexList srv_index_allocator = {};
+		FreeIndexList uav_index_allocator = {};
 	};
 }
 

@@ -66,31 +66,55 @@ namespace edge::gfx {
 
 	using BufferFlags = u16;
 
-	enum class BufferLayout {
-		Undefined,
+	enum class ResourceState : u8 {
+		// Common states
+		Undefined = 0,		// Initial state, contents undefined
+		TransferSrc,		// Source of a copy/blit operation
+		TransferDst,		// Destination of a copy/blit operation
+		ShaderReadOnly,		// Read-only shader access (SRV)
+		ShaderReadWrite,	// Read-write shader access (UAV)
 		General,
 
-		TransferSrc,
-		TransferDst,
+		// Image-only states
+		ColorAttachment,	// Render target for color output
+		DepthStencilRead,	// Depth/stencil read-only
+		DepthStencilWrite,	// Depth/stencil write
+		Present,			// Ready for presentation to swapchain
 
-		VertexBuffer,
-		IndexBuffer,
+		// Buffer-only states
+		VertexBuffer,		// Vertex buffer binding
+		IndexBuffer,		// Index buffer binding
+		IndirectBuffer,		// Indirect draw/dispatch arguments
+		UniformBuffer,		// Uniform/constant buffer
 
-		UniformBuffer,
+		// Host access states
+		HostRead,           // CPU read access
+		HostWrite,          // CPU write access
 
-		StorageBufferRead,
-		StorageBufferWrite,
-		StorageBufferRW,
-
-		IndirectBuffer,
-
-		HostRead,
-		HostWrite,
-
-		ShaderRead,
-		ShaderWrite,
-		ShaderRW
+		Count
 	};
+
+	inline constexpr const char* to_cstring(ResourceState state) {
+		switch (state) {
+		case ResourceState::Undefined:         return "Undefined";
+		case ResourceState::TransferSrc:       return "TransferSrc";
+		case ResourceState::TransferDst:       return "TransferDst";
+		case ResourceState::ShaderReadOnly:    return "ShaderReadOnly";
+		case ResourceState::ShaderReadWrite:   return "ShaderReadWrite";
+		case ResourceState::General:           return "General";
+		case ResourceState::ColorAttachment:   return "ColorAttachment";
+		case ResourceState::DepthStencilRead:  return "DepthStencilRead";
+		case ResourceState::DepthStencilWrite: return "DepthStencilWrite";
+		case ResourceState::Present:           return "Present";
+		case ResourceState::VertexBuffer:      return "VertexBuffer";
+		case ResourceState::IndexBuffer:       return "IndexBuffer";
+		case ResourceState::IndirectBuffer:    return "IndirectBuffer";
+		case ResourceState::UniformBuffer:     return "UniformBuffer";
+		case ResourceState::HostRead:          return "HostRead";
+		case ResourceState::HostWrite:         return "HostWrite";
+		default:                               return "Unknown";
+		}
+	}
 
 	struct BufferCreateInfo {
 		VkDeviceSize size = 0ull;

@@ -178,7 +178,6 @@ namespace edge::gfx {
 		u32 face_count = 1u;
 		VkImageUsageFlags usage_flags = 0;
 		VkFormat format = VK_FORMAT_UNDEFINED;
-		VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
 
 		bool create(ImageCreateInfo create_info);
 		void destroy();
@@ -201,7 +200,6 @@ namespace edge::gfx {
 
 		BufferFlags flags = 0;
 		VkDeviceAddress address = 0;
-		BufferLayout layout = BufferLayout::Undefined;
 
 		bool create(BufferCreateInfo create_info);
 		void destroy();
@@ -293,8 +291,8 @@ namespace edge::gfx {
 
 		bool add_memory(VkPipelineStageFlags2 src_stage_mask, VkAccessFlags2 src_access_mask,
 			VkPipelineStageFlags2 dst_stage_mask, VkAccessFlags2 dst_access_mask);
-		bool add_buffer(Buffer buffer, BufferLayout new_layout, VkDeviceSize offset, VkDeviceSize size);
-		bool add_image(Image image, VkImageLayout new_layout, VkImageSubresourceRange subresource_range);
+		bool add_buffer(Buffer buffer, ResourceState old_state, ResourceState new_state, VkDeviceSize offset, VkDeviceSize size);
+		bool add_image(Image image, ResourceState old_state, ResourceState new_state, VkImageSubresourceRange subresource_range);
 		void reset();
 	};
 

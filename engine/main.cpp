@@ -205,10 +205,10 @@ namespace edge {
 		test_tex = HANDLE_INVALID;
 
 		pending_images.push_back(alloc, {
-			.handle = renderer.add_resource(),
+			.handle = renderer.create_empty(),
 			.promise = uploader.load_image(alloc, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds")
 			});
-
+		
 		VkSamplerCreateInfo sampler_create_info = {
 			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
 			.magFilter = VK_FILTER_LINEAR,
@@ -222,13 +222,7 @@ namespace edge {
 			.maxAnisotropy = 4.0f
 		};
 
-		gfx::Sampler default_sampler = {};
-		if (!default_sampler.create(sampler_create_info)) {
-			return false;
-		}
-
-		default_sampler_handle = renderer.add_resource();
-		renderer.attach_resource(default_sampler_handle, default_sampler);
+		default_sampler_handle = renderer.create_sampler(sampler_create_info);
 
 		return true;
 	}
@@ -309,9 +303,12 @@ namespace edge {
 					if (pending_image.promise->is_done()) {
 						pending_images.remove(index, nullptr);
 
+						gfx::RenderResource* res = renderer.get_resource(pending_image.handle);
+						res->state = gfx::ResourceState::TransferDst;
+
 						test_tex = pending_image.handle;
 
-						renderer.attach_resource(pending_image.handle, pending_image.promise->value);
+						renderer.attach_image(pending_image.handle, pending_image.promise->value);
 						allocator.deallocate(pending_image.promise);
 					}
 				}
