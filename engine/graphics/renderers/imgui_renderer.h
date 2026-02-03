@@ -3,9 +3,9 @@
 
 #include <inttypes.h>
 #include <handle_pool.hpp>
+#include "../gfx_context.h"
 
 #include "../../imgui_integration.h"
-#include "../gfx_subrenderer_interface.h"
 
 struct ImDrawData;
 struct ImTextureData;

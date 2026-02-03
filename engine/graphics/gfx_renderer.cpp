@@ -1,8 +1,6 @@
 #include "gfx_renderer.h"
 #include "gfx_context.h"
 
-#include "../resources/texture_source.h"
-
 #include <array.hpp>
 #include <math.hpp>
 #include <logger.hpp>
