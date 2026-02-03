@@ -203,11 +203,6 @@ namespace edge {
 		}
 
 		test_tex = HANDLE_INVALID;
-
-		pending_images.push_back(alloc, {
-			.handle = renderer.create_empty(),
-			.promise = uploader.load_image(alloc, "D:\\GitHub\\edge\\assets\\images\\texture_with_mips.dds")
-			});
 		
 		VkSamplerCreateInfo sampler_create_info = {
 			.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
