@@ -187,6 +187,20 @@ target_compile_definitions(imgui PUBLIC
 target_include_directories(imgui SYSTEM PUBLIC ${IMGUI_DIR})
 #target_link_libraries(imgui PRIVATE freetype)
 
+# cgltf
+set(CGLTF_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cgltf")
+set(CGLTF_IMPL_C "${CMAKE_CURRENT_BINARY_DIR}/cgltf.c")
+
+file(WRITE "${CGLTF_IMPL_C}"
+"#ifndef CGLTF_IMPLEMENTATION\n"
+"#define CGLTF_IMPLEMENTATION\n"
+"#include \"cgltf.h\"\n"
+"#endif\n"
+)
+
+add_library(cgltf STATIC "${CGLTF_IMPL_C}")
+target_include_directories(cgltf SYSTEM PUBLIC ${CGLTF_DIR})
+
 add_library(${PROJECT_NAME} INTERFACE)
 target_link_libraries(${PROJECT_NAME}
     INTERFACE
@@ -202,6 +216,7 @@ target_link_libraries(${PROJECT_NAME}
     GPUOpen::VulkanMemoryAllocator
 
     imgui
+    cgltf
 
     flecs::flecs_static
 )
