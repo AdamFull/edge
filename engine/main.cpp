@@ -284,6 +284,34 @@ namespace edge {
 
 		imgui_layer.on_frame_begin(delta_time);
 
+		{
+			ImGuiWindowFlags overlay_flags =
+				ImGuiWindowFlags_NoDecoration |
+				ImGuiWindowFlags_NoDocking |
+				ImGuiWindowFlags_AlwaysAutoResize |
+				ImGuiWindowFlags_NoSavedSettings |
+				ImGuiWindowFlags_NoFocusOnAppearing |
+				ImGuiWindowFlags_NoNav |
+				ImGuiWindowFlags_NoMove;
+
+			ImGuiIO& io = ImGui::GetIO();
+
+			const ImGuiViewport* viewport = ImGui::GetMainViewport();
+			ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f), ImGuiCond_Always);
+			ImGui::SetNextWindowViewport(viewport->ID);
+			ImGui::SetNextWindowBgAlpha(0.35f);
+			
+
+			if (ImGui::Begin("Debug Overlay", nullptr, overlay_flags)) {
+				ImGui::Text("FPS: %u", frame_time_controller.mean_fps);
+				ImGui::Text("Delta Time: %.3f ms", delta_time * 1000.0f);
+				ImGui::Text("Avg Frame Time: %.3f ms", frame_time_controller.mean_frame_time * 1000.0f);
+				ImGui::Text("GPU Delta Time: %.3f ms", renderer.gpu_delta_time);
+				ImGui::Text("Swapchain: %ux%u (%u images)", renderer.swapchain.extent.width, renderer.swapchain.extent.height, renderer.swapchain.image_count);
+			}
+			ImGui::End();
+		}
+
 		if (test_tex != HANDLE_INVALID) {
 			ImTextureBinding imgui_binding{ test_tex, default_sampler_handle };
 			ImGui::Image((ImTextureRef)imgui_binding, { 512, 512 });
@@ -363,7 +391,6 @@ int edge_main(RuntimeLayout* runtime_layout) {
 	}
 
 	engine.run();
-
 cleanup:
 	engine.destroy(&allocator);
 
