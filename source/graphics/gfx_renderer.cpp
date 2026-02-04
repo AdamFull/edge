@@ -54,24 +54,29 @@ namespace edge::gfx {
 		if (!staging_memory.create(buffer_create_info)) {
 			return false;
 		}
+		staging_memory.set_name("frame_staging_memory[%p]", this);
 
 		temp_staging_memory.reserve(alloc, 128);
 
 		if (!image_available.create(VK_SEMAPHORE_TYPE_BINARY, 0)) {
 			return false;
 		}
+		image_available.set_name("frame_image_available_semaphore[%p]", this);
 
 		if (!rendering_finished.create(VK_SEMAPHORE_TYPE_BINARY, 0)) {
 			return false;
 		}
+		rendering_finished.set_name("frame_rendering_finished_semaphore[%p]", this);
 
 		if (!fence.create(VK_FENCE_CREATE_SIGNALED_BIT)) {
 			return false;
 		}
+		fence.set_name("frame_fence[%p]", this);
 
 		if (!cmd.create(cmd_pool)) {
 			return false;
 		}
+		cmd.set_name("frame_cmd_list[%p]", this);
 
 		if (!pending_destroys.reserve(alloc, 256)) {
 			return false;
@@ -198,11 +203,13 @@ namespace edge::gfx {
 			destroy(alloc);
 			return false;
 		}
+		cmd_pool.set_name("direct_cmd_pool");
 
 		if (!frame_timestamp.create(VK_QUERY_TYPE_TIMESTAMP, 1)) {
 			destroy(alloc);
 			return false;
 		}
+		frame_timestamp.set_name("timestamp_query");
 
 		const VkPhysicalDeviceProperties* props = get_adapter_props();
 		timestamp_freq = props->limits.timestampPeriod;
@@ -240,16 +247,19 @@ namespace edge::gfx {
 			destroy(alloc);
 			return false;
 		}
+		descriptor_layout.set_name("bindless_layout");
 
 		if (!descriptor_pool.create(descriptor_layout.descriptor_sizes)) {
 			destroy(alloc);
 			return false;
 		}
+		descriptor_pool.set_name("bindless_pool");
 
 		if (!descriptor_set.create(descriptor_pool, &descriptor_layout)) {
 			destroy(alloc);
 			return false;
 		}
+		descriptor_set.set_name("bindless_set");
 
 		PipelineLayoutBuilder pipeline_layout_builder = {};
 		pipeline_layout_builder.add_layout(descriptor_layout);
@@ -259,6 +269,7 @@ namespace edge::gfx {
 			destroy(alloc);
 			return false;
 		}
+		pipeline_layout.set_name("base_pipeline_layout");
 
 		SwapchainCreateInfo swapchain_create_info = {};
 		if (!swapchain.create(swapchain_create_info)) {
@@ -271,7 +282,7 @@ namespace edge::gfx {
 			return false;
 		}
 
-		for (i32 i = 0; i < swapchain.image_count; ++i) {
+		for (usize i = 0; i < swapchain.image_count; ++i) {
 			VkImageSubresourceRange subresource_range = {
 				.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
 				.baseMipLevel = 0u,
@@ -284,6 +295,9 @@ namespace edge::gfx {
 				destroy(alloc);
 				return false;
 			}
+
+			swapchain_images[i].set_name("backbuffer[%"PRIu64"]", i);
+			swapchain_image_views[i].set_name("backbuffer_view[%"PRIu64"]", i);
 		}
 
 		for (i32 i = 0; i < FRAME_OVERLAP; ++i) {
@@ -875,7 +889,7 @@ namespace edge::gfx {
 			.dstArrayElement = index,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER,
-			.pImageInfo = image_descriptors.back()
+			.pImageInfo = &image_descriptors.back()
 		};
 		write_descriptor_sets.push_back(sampler_write);
 	}
@@ -894,7 +908,7 @@ namespace edge::gfx {
 			.dstArrayElement = index,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE,
-			.pImageInfo = image_descriptors.back()
+			.pImageInfo = &image_descriptors.back()
 		};
 		write_descriptor_sets.push_back(descriptor_write);
 	}
@@ -913,7 +927,7 @@ namespace edge::gfx {
 			.dstArrayElement = index,
 			.descriptorCount = 1,
 			.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-			.pImageInfo = image_descriptors.back()
+			.pImageInfo = &image_descriptors.back()
 		};
 		write_descriptor_sets.push_back(descriptor_write);
 	}

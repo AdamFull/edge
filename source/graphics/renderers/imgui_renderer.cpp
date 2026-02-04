@@ -364,6 +364,7 @@ namespace edge::gfx {
 			usize whole_size = tex->Width * tex->Height * tex->BytesPerPixel;
 
 			Image* image = renderer->get_resource(image_handle)->as_image();
+			image->set_name("imgui_font");
 
 			ImageUpdateInfo update_info = {
 				.dst_image = *image,

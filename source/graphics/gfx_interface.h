@@ -265,6 +265,12 @@ namespace edge::gfx {
 	};
 
 	template<>
+	struct VkObjectTraits<VkFence> {
+		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_FENCE;
+		static constexpr const char* name = "VkFence";
+	};
+
+	template<>
 	struct VkObjectTraits<VkQueue> {
 		static constexpr VkObjectType object_type = VK_OBJECT_TYPE_QUEUE;
 		static constexpr const char* name = "VkQueue";
