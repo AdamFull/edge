@@ -13,7 +13,7 @@ namespace edge {
 		u64 state = 0;
 		u64 inc = 0;
 
-		constexpr void seed(u64 seed_val) {
+		constexpr void seed(u64 seed_val) noexcept {
 			state = 0;
 			inc = (seed_val << 1) | 1;
 			state = state * 6364136223846793005ULL + inc;
@@ -21,12 +21,16 @@ namespace edge {
 			state = state * 6364136223846793005ULL + inc;
 		}
 
-		constexpr u32 next() {
+		constexpr u32 next32() noexcept {
 			u64 oldstate = state;
 			state = oldstate * 6364136223846793005ULL + inc;
 			u32 xorshifted = (u32)(((oldstate >> 18u) ^ oldstate) >> 27u);
 			u32 rot = (u32)(oldstate >> 59u);
 			return (xorshifted >> rot) | (xorshifted << ((-(i32)rot) & 31));
+		}
+
+		constexpr u64 next64() noexcept {
+			return (static_cast<u64>(next32()) << 32) | next32();
 		}
 	};
 
@@ -37,7 +41,7 @@ namespace edge {
 			0xa9582618e03fc9aaULL, 0x39abdc4529b1661cULL
 		};
 
-		constexpr void seed(u64 seed_val) {
+		constexpr void seed(u64 seed_val) noexcept {
 			u64 z = seed_val;
 			for (i32 i = 0; i < 4; i++) {
 				z += 0x9e3779b97f4a7c15ULL;
@@ -48,7 +52,7 @@ namespace edge {
 			}
 		}
 
-		constexpr u64 next() {
+		constexpr u64 next64() noexcept {
 			u64 result = std::rotl(s[1] * 5, 7) * 9;
 			u64 t = s[1] << 17;
 
@@ -62,56 +66,49 @@ namespace edge {
 			return result;
 		}
 
-		constexpr void jump() {
+		constexpr u32 next32() noexcept {
+			return static_cast<u32>(next64());
+		}
+
+		constexpr void jump() noexcept {
 			u64 s0 = 0, s1 = 0, s2 = 0, s3 = 0;
 			for (i32 i = 0; i < 4; i++) {
 				for (i32 b = 0; b < 64; b++) {
 					if (jmpvals[i] & (1ULL << b)) {
-						s0 ^= s[0];
-						s1 ^= s[1];
-						s2 ^= s[2];
-						s3 ^= s[3];
+						s0 ^= s[0]; s1 ^= s[1]; s2 ^= s[2]; s3 ^= s[3];
 					}
-					next();
+					next64();
 				}
 			}
-			s[0] = s0;
-			s[1] = s1;
-			s[2] = s2;
-			s[3] = s3;
+			s[0] = s0; s[1] = s1; s[2] = s2; s[3] = s3;
 		}
 	};
 
 	struct RngSplitMix64 {
 		u64 state = 0;
 
-		constexpr void seed(u64 seed_val) {
+		constexpr void seed(u64 seed_val) noexcept {
 			state = seed_val;
 		}
 
-		constexpr u64 next() {
+		constexpr u64 next64() noexcept {
 			u64 z = (state += 0x9e3779b97f4a7c15ULL);
 			z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9ULL;
 			z = (z ^ (z >> 27)) * 0x94d049bb133111ebULL;
 			return z ^ (z >> 31);
+		}
+
+		constexpr u32 next32() noexcept {
+			return static_cast<u32>(next64());
 		}
 	};
 
 	template<typename T>
 	concept RngAlgorithm = requires(T rng, u64 seed) {
 		{ rng.seed(seed) } -> std::same_as<void>;
-		{ rng.next() } -> std::convertible_to<u64>;
+		{ rng.next32() } -> std::same_as<u32>;
+		{ rng.next64() } -> std::same_as<u64>;
 	};
-
-	template<RngAlgorithm Algorithm>
-	inline constexpr u32 rng_gen_u32(Algorithm& state) noexcept {
-		if constexpr (std::is_same_v<Algorithm, RngPCG>) {
-			return state.next();
-		}
-		else {
-			return static_cast<u32>(state.next());
-		}
-	}
 
 	template<RngAlgorithm Algorithm>
 	inline constexpr u32 rng_gen_u32_bounded(Algorithm& state, u32 bound) noexcept {
@@ -119,11 +116,11 @@ namespace edge {
 			return 0;
 		}
 
-		u32 threshold = (u32)(-bound) % bound;
+		auto threshold = (u32)(-bound) % bound;
 		for (;;) {
-			u32 r = rng_gen_u32(state);
-			u64 m = static_cast<u64>(r) * static_cast<u64>(bound);
-			u32 l = static_cast<u32>(m);
+			auto r = state.next32();
+			auto m = static_cast<u64>(r) * static_cast<u64>(bound);
+			auto l = static_cast<u32>(m);
 			if (l >= threshold) {
 				return static_cast<u32>(m >> 32);
 			}
@@ -143,13 +140,13 @@ namespace edge {
 
 	template<RngAlgorithm Algorithm>
 	inline constexpr f32 rng_gen_f32(Algorithm& state) noexcept {
-		u32 r = rng_gen_u32(state) >> 8;
+		auto r = state.next32() >> 8;
 		return static_cast<f32>(r) * (1.0f / 16777216.0f);
 	}
 
 	template<RngAlgorithm Algorithm>
 	inline constexpr f32 rng_gen_f32_range(Algorithm& state, f32 min_val, f32 max_val) noexcept {
-		return min_val + rng_gen_f32(state) * (max_val - min_val);
+		return min_val + state.next32() * (max_val - min_val);
 	}
 
 	template<RngAlgorithm Algorithm>
@@ -185,21 +182,11 @@ namespace edge {
 	}
 
 	template<RngAlgorithm Algorithm>
-	inline constexpr u64 rng_gen_u64(Algorithm& state) noexcept {
-		if constexpr (std::is_same_v<Algorithm, RngPCG>) {
-			return (static_cast<u64>(state.next()) << 32) | state.next();
-		}
-		else {
-			return state.next();
-		}
-	}
-
-	template<RngAlgorithm Algorithm>
 	inline constexpr u64 rng_gen_u64_bounded(Algorithm& state, u64 bound) noexcept {
 		if (bound == 0) {
 			return 0;
 		}
-		return rng_gen_u64(state) % bound;
+		return state.next64() % bound;
 	}
 
 	template<RngAlgorithm Algorithm>
@@ -209,13 +196,13 @@ namespace edge {
 			min_val = max_val;
 			max_val = temp;
 		}
-		u64 range = static_cast<u64>(max_val - min_val + 1);
+		auto range = static_cast<u64>(max_val - min_val + 1);
 		return static_cast<i64>(rng_gen_u64_bounded(range)) + min_val;
 	}
 
 	template<RngAlgorithm Algorithm>
 	inline constexpr f64 rng_gen_f64(Algorithm& state) noexcept {
-		u64 r = rng_gen_u64(state) >> 11;
+		auto r = state.next64() >> 11;
 		return static_cast<f64>(r) * (1.0 / 9007199254740992.0);
 	}
 
@@ -302,18 +289,14 @@ namespace edge {
 		usize i = 0;
 
 		while (i + 8 <= size) {
-			u64 val = rng_gen_u64(state);
-			for (usize j = 0; j < 8; ++j) {
-				bytes[i + j] = static_cast<u8>(val >> (j * 8));
-			}
+			auto val = state.next64();
+			memcpy(bytes + i, &val, 8);
 			i += 8;
 		}
 
 		if (i < size) {
-			u64 val = rng_gen_u64(state);
-			for (usize j = 0; j < (size - i); ++j) {
-				bytes[i + j] = static_cast<u8>(val >> (j * 8));
-			}
+			auto val = state.next64();
+			memcpy(bytes + i, &val, size - i);
 		}
 	}
 
