@@ -156,7 +156,7 @@ namespace edge {
 			return true;
 		}
 
-		bool pop_back(pointer out_element) {
+		bool pop_back(pointer out_element = nullptr) {
 			assert(m_size > 0 && "Array::pop_back: array is empty");
 			if (m_size == 0) {
 				return false;
@@ -164,7 +164,11 @@ namespace edge {
 
 			--m_size;
 			if (out_element) {
-				*out_element = m_data[m_size];
+				if constexpr (std::is_move_assignable_v<T> && !std::is_trivially_copyable_v<T>) {
+					*out_element = std::move(m_data[m_size]);
+				} else {
+					*out_element = m_data[m_size];
+				}
 			}
 
 			if constexpr (!std::is_trivially_destructible_v<T>) {
@@ -186,40 +190,39 @@ namespace edge {
 				}
 			}
 
-			if (index < m_size) {
-				if constexpr (std::is_trivially_copyable_v<T>) {
+			if constexpr (std::is_trivially_copyable_v<T>) {
+				if (index < m_size) {
 					memmove(&m_data[index + 1], &m_data[index], sizeof(T) * (m_size - index));
 				}
-				else {
+				m_data[index] = value;
+			} else {
+				if (index < m_size) {
 					new (&m_data[m_size]) T(std::move(m_data[m_size - 1]));
-					for (size_type i = m_size - 1; i > index; --i) {
+					for (usize i = m_size - 1; i > index; --i) {
 						m_data[i] = std::move(m_data[i - 1]);
 					}
+					m_data[index] = value;
+				} else {
+					new (&m_data[index]) T(value);
 				}
-			}
-
-			if constexpr (std::is_trivially_copyable_v<T>) {
-				m_data[index] = value;
-			}
-			else {
-				if (index < m_size) {
-					m_data[index].~T();
-				}
-				new (&m_data[index]) T(value);
 			}
 			++m_size;
 
 			return true;
 		}
 
-		bool remove(size_type index, pointer out_element) {
+		bool remove(size_type index, pointer out_element = nullptr) {
 			assert(index < m_size && "Array::erase: index out of bounds");
 			if (index >= m_size) {
 				return false;
 			}
 
 			if (out_element) {
-				*out_element = m_data[index];
+				if constexpr (std::is_move_assignable_v<T> && !std::is_trivially_copyable_v<T>) {
+					*out_element = std::move(m_data[index]);
+				} else {
+					*out_element = m_data[index];
+				}
 			}
 
 			if constexpr (std::is_trivially_copyable_v<T>) {
