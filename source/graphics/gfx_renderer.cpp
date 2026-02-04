@@ -193,6 +193,41 @@ namespace edge::gfx {
 	}
 
 	bool Renderer::create(NotNull<const Allocator*> alloc, RendererCreateInfo create_info) {
+		if (!resource_pool.create(alloc, RENDERER_HANDLE_MAX * 2)) {
+			destroy(alloc);
+			return false;
+		}
+
+		if (!smp_index_allocator.create(alloc, RENDERER_HANDLE_MAX)) {
+			destroy(alloc);
+			return false;
+		}
+
+		if (!srv_index_allocator.create(alloc, RENDERER_HANDLE_MAX)) {
+			destroy(alloc);
+			return false;
+		}
+
+		if (!uav_index_allocator.create(alloc, RENDERER_HANDLE_MAX)) {
+			destroy(alloc);
+			return false;
+		}
+
+		if (!write_descriptor_sets.reserve(alloc, 256)) {
+			destroy(alloc);
+			return false;
+		}
+
+		if (!image_descriptors.reserve(alloc, 256)) {
+			destroy(alloc);
+			return false;
+		}
+
+		if (!buffer_descriptors.reserve(alloc, 256)) {
+			destroy(alloc);
+			return false;
+		}
+
 		if (!create_info.main_queue) {
 			return false;
 		}
@@ -291,66 +326,19 @@ namespace edge::gfx {
 				.layerCount = 1u
 			};
 
-			if (!swapchain_image_views[i].create(swapchain_images[i], VK_IMAGE_VIEW_TYPE_2D, subresource_range)) {
+			ImageResource img_res = {};
+			img_res.handle = swapchain_images[i];
+
+			if (!img_res.srv.create(swapchain_images[i], VK_IMAGE_VIEW_TYPE_2D, subresource_range)) {
 				destroy(alloc);
 				return false;
 			}
 
 			swapchain_images[i].set_name("backbuffer[%"PRIu64"]", i);
-			swapchain_image_views[i].set_name("backbuffer_view[%"PRIu64"]", i);
-		}
+			img_res.srv.set_name("backbuffer_view[%"PRIu64"]", i);
 
-		for (i32 i = 0; i < FRAME_OVERLAP; ++i) {
-			if (!frames[i].create(alloc, cmd_pool)) {
-				destroy(alloc);
-				return false;
-			}
-		}
-
-		if (!resource_pool.create(alloc, RENDERER_HANDLE_MAX * 2)) {
-			destroy(alloc);
-			return false;
-		}
-
-		if (!smp_index_allocator.create(alloc, RENDERER_HANDLE_MAX)) {
-			destroy(alloc);
-			return false;
-		}
-
-		if (!srv_index_allocator.create(alloc, RENDERER_HANDLE_MAX)) {
-			destroy(alloc);
-			return false;
-		}
-
-		if (!uav_index_allocator.create(alloc, RENDERER_HANDLE_MAX)) {
-			destroy(alloc);
-			return false;
-		}
-
-		if (!write_descriptor_sets.reserve(alloc, 256)) {
-			destroy(alloc);
-			return false;
-		}
-
-		if (!image_descriptors.reserve(alloc, 256)) {
-			destroy(alloc);
-			return false;
-		}
-
-		if (!buffer_descriptors.reserve(alloc, 256)) {
-			destroy(alloc);
-			return false;
-		}
-
-		// TODO: Can be moved upper
-		for (usize i = 0; i < swapchain.image_count; ++i) {
 			backbuffer_handles[i] = create_empty();
 			RenderResource* res = resource_pool.get(backbuffer_handles[i]);
-			
-			ImageResource img_res = {
-				.handle = swapchain_images[i],
-				.srv = swapchain_image_views[i]
-			};
 
 			if (!srv_index_allocator.allocate(&res->srv_index)) {
 				destroy(alloc);
@@ -358,6 +346,13 @@ namespace edge::gfx {
 			}
 
 			res->resource = img_res;
+		}
+
+		for (i32 i = 0; i < FRAME_OVERLAP; ++i) {
+			if (!frames[i].create(alloc, cmd_pool)) {
+				destroy(alloc);
+				return false;
+			}
 		}
 
 		return true;
@@ -373,10 +368,6 @@ namespace edge::gfx {
 		for (usize i = 0; i < FRAME_OVERLAP; ++i) {
 			flush_resource_destruction(frames[i]);
 			frames[i].destroy(alloc, this);
-		}
-
-		for (usize i = 0; i < swapchain.image_count; ++i) {
-			swapchain_image_views[i].destroy();
 		}
 
 		for (auto entry : resource_pool) {
@@ -697,20 +688,14 @@ namespace edge::gfx {
 					.layerCount = 1u
 				};
 
-				Image& image = swapchain_images[i];
-				ImageView& image_view = swapchain_image_views[i];
-
-				image_view.destroy();
-				if (!image_view.create(image, VK_IMAGE_VIEW_TYPE_2D, subresource_range)) {
-					return false;
-				}
-
 				// Update swapchain resources
 				RenderResource* res = resource_pool.get(backbuffer_handles[i]);
-				res->resource = ImageResource{
-					.handle = swapchain_images[i],
-					.srv = swapchain_image_views[i]
-				};
+				ImageResource* img_res = res->as<ImageResource>();
+				img_res->handle = swapchain_images[i];
+				img_res->srv.destroy();
+				if (!img_res->srv.create(swapchain_images[i], VK_IMAGE_VIEW_TYPE_2D, subresource_range)) {
+					return false;
+				}
 				res->state = ResourceState::Undefined;
 			}
 

@@ -189,7 +189,6 @@ namespace edge::gfx {
 
 		Swapchain swapchain = {};
 		Image swapchain_images[8] = {};
-		ImageView swapchain_image_views[8] = {};
 		Handle backbuffer_handles[8] = {};
 		u32 active_image_index = 0u;
 
