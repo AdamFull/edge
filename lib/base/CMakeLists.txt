@@ -13,7 +13,6 @@ set(EDGE_BASE_SOURCES
     "src/arena.cpp"
     "src/filesystem.cpp"
     "src/hash.cpp"
-    "src/json.cpp"
     "src/random.cpp"
     "src/threads.cpp"
     "src/uuid.cpp"
