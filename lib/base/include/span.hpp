@@ -1,7 +1,7 @@
 #ifndef EDGE_SPAN_H
 #define EDGE_SPAN_H
 
-#include "stddef.hpp"
+#include "random_access_iterator.hpp"
 
 #include <cstring>
 #include <type_traits>
@@ -15,18 +15,20 @@ namespace edge {
 
 	template<TrivialType T>
 	struct Span {
+		EDGE_DECLARE_CONTAINER_HEADER(T)
+
 		constexpr Span() = default;
 
-		constexpr Span(T* data, usize size)
+		constexpr Span(pointer data, size_type size)
 			: m_data(data), m_size(size) {
 		}
 
-		constexpr Span(T* begin, T* end)
-			: m_data(begin), m_size(static_cast<usize>(end - begin)) {
+		constexpr Span(pointer begin, pointer end)
+			: m_data(begin), m_size(static_cast<size_type>(end - begin)) {
 			assert(end >= begin);
 		}
 
-		template<usize N>
+		template<size_type N>
 		constexpr Span(T(&arr)[N])
 			: m_data(arr), m_size(N) {
 		}
@@ -49,11 +51,11 @@ namespace edge {
 			: m_data(arr.data()), m_size(arr.size()) {
 		}
 
-		constexpr usize size() const {
+		constexpr size_type size() const {
 			return m_size;
 		}
 
-		constexpr usize size_bytes() const {
+		constexpr size_type size_bytes() const {
 			return m_size * sizeof(T);
 		}
 
@@ -61,74 +63,52 @@ namespace edge {
 			return m_size == 0;
 		}
 
-		T& operator[](usize index) {
-			assert(index < m_size);
+		constexpr reference operator[](size_type index) {
+			assert(index < m_size && "Span::operator[]: index out of bounds");
 			return m_data[index];
 		}
 
-		const T& operator[](usize index) const {
-			assert(index < m_size);
+		constexpr const_reference operator[](size_type index) const {
+			assert(index < m_size && "Span::operator[]: index out of bounds");
 			return m_data[index];
 		}
 
-		T* front() {
-			if (m_size == 0) {
-				return nullptr;
-			}
-			return &m_data[0];
+		constexpr reference front() {
+			assert(m_size > 0 && "Span::front(): span is empty");
+			return m_data[0];
 		}
 
-		const T* front() const {
-			if (m_size == 0) {
-				return nullptr;
-			}
-			return &m_data[0];
+		constexpr const_reference front() const {
+			assert(m_size > 0 && "Span::front(): span is empty");
+			return m_data[0];
 		}
 
-		T* back() {
-			if (m_size == 0) {
-				return nullptr;
-			}
-			return &m_data[m_size - 1];
+		constexpr reference back() {
+			assert(m_size > 0 && "Span::back(): span is empty");
+			return m_data[m_size - 1];
 		}
 
-		const T* back() const {
-			if (m_size == 0) {
-				return nullptr;
-			}
-			return &m_data[m_size - 1];
+		constexpr const_reference back() const {
+			assert(m_size > 0 && "Span::back(): span is empty");
+			return m_data[m_size - 1];
 		}
 
-		T* data() {
+		constexpr pointer data() noexcept {
 			return m_data;
 		}
 
-		const T* data() const {
+		constexpr const_pointer data() const noexcept {
 			return m_data;
 		}
 
-		T* begin() {
-			return m_data;
-		}
+		EDGE_DECLARE_RANDOM_ACCESS_ITERATOR(T, m_data, m_size)
 
-		T* end() {
-			return m_data + m_size;
-		}
-
-		const T* begin() const {
-			return m_data;
-		}
-
-		const T* end() const {
-			return m_data + m_size;
-		}
-
-		Span<T> subspan(usize offset, usize count) const {
+		Span<T> subspan(size_type offset, size_type count) const {
 			if (offset >= m_size) {
 				return Span<T>();
 			}
 
-			usize actual_count = count;
+			size_type actual_count = count;
 			if (offset + count > m_size) {
 				actual_count = m_size - offset;
 			}
@@ -136,40 +116,40 @@ namespace edge {
 			return Span<T>(m_data + offset, actual_count);
 		}
 
-		Span<T> subspan(usize offset) const {
+		Span<T> subspan(size_type offset) const {
 			return subspan(offset, m_size);
 		}
 
-		Span<T> first(usize count) const {
+		Span<T> first(size_type count) const {
 			if (count > m_size) {
 				count = m_size;
 			}
 			return Span<T>(m_data, count);
 		}
 
-		Span<T> last(usize count) const {
+		Span<T> last(size_type count) const {
 			if (count > m_size) {
 				count = m_size;
 			}
 			return Span<T>(m_data + (m_size - count), count);
 		}
 
-		void copy_to(T* dest) const {
+		void copy_to(pointer dest) const {
 			if (m_data && dest && m_size > 0) {
 				memcpy(dest, m_data, sizeof(T) * m_size);
 			}
 		}
 
-		void copy_from(const T* src, usize count) {
+		void copy_from(const_pointer src, size_type count) {
 			if (m_data && src && count > 0) {
-				usize actual_count = count > m_size ? m_size : count;
+				size_type actual_count = count > m_size ? m_size : count;
 				memcpy(m_data, src, sizeof(T) * actual_count);
 			}
 		}
 
 	private:
-		T* m_data = nullptr;
-		usize m_size = 0;
+		pointer m_data = nullptr;
+		size_type m_size = 0;
 	};
 }
 #endif

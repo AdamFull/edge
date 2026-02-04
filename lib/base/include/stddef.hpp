@@ -205,4 +205,13 @@ namespace edge {
 	}
 }
 
+#define EDGE_DECLARE_CONTAINER_HEADER(Type) \
+using element_type = Type; \
+using pointer = Type*; \
+using const_pointer = const Type*; \
+using reference = Type&; \
+using const_reference = const Type&; \
+using size_type = usize; \
+using difference_type = isize;
+
 #endif

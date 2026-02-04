@@ -2,6 +2,7 @@
 #define EDGE_ARRAY_H
 
 #include "allocator.hpp"
+#include "random_access_iterator.hpp"
 
 #include <cstring>
 #include <cstdlib>
@@ -10,163 +11,209 @@
 namespace edge {
 	template<typename T>
 	struct Array {
+		EDGE_DECLARE_CONTAINER_HEADER(T)
+
 		void destroy(NotNull<const Allocator*> alloc) {
+			destroy_elements();
 			if (m_data) {
-				alloc->deallocate_array(m_data, m_capacity);
-				m_data = nullptr;
-				m_size = 0;
-				m_capacity = 0;
+				alloc->free(m_data);
 			}
+			m_data = nullptr;
+			m_size = 0;
+			m_capacity = 0;
 		}
 
 		void clear() {
-			for (usize i = 0; i < m_size; ++i) {
-				m_data[i].~T();
-			}
+			destroy_elements();
 			m_size = 0;
 		}
 
-		bool reserve(NotNull<const Allocator*> alloc, usize capacity) {
-			if (capacity == 0) {
-				capacity = 16;
-			}
-
-			if (capacity <= m_capacity) {
+		bool reserve(NotNull<const Allocator*> alloc, size_type new_cap) {
+			if (new_cap <= m_capacity) {
 				return true;
 			}
-
-			T* new_data = alloc->allocate_array<T>(capacity);
-			if (!new_data) {
-				return false;
-			}
-
-			if (m_data) {
-				memcpy(new_data, m_data, sizeof(T) * m_size);
-				alloc->deallocate_array(m_data, m_capacity);
-			}
-
-			m_data = new_data;
-			m_capacity = capacity;
-
-			return true;
+			return grow_to(alloc, new_cap);
 		}
 
-		bool resize(NotNull<const Allocator*> alloc, usize new_size) {
+		bool resize(NotNull<const Allocator*> alloc, size_type new_size) {
 			if (new_size > m_capacity) {
-				usize new_capacity = m_capacity;
-				while (new_capacity < new_size) {
-					new_capacity *= 2;
-				}
-				if (!reserve(alloc, new_capacity)) {
+				if (!grow_to(alloc, new_size)) {
 					return false;
 				}
 			}
 
 			if (new_size > m_size) {
-				memset(&m_data[m_size], 0, sizeof(T) * (new_size - m_size));
-			}
-			else if (new_size < m_size) {
-				for (usize i = new_size; i < m_size; ++i) {
-					m_data[i].~T();
+				if constexpr (std::is_trivially_constructible_v<T> && std::is_trivially_destructible_v<T>) {
+					memset(&m_data[m_size], 0, sizeof(T) * (new_size - m_size));
+				}
+				else {
+					for (size_type i = m_size; i < new_size; ++i) {
+						new (&m_data[i]) T();
+					}
 				}
 			}
-
+			else if (new_size < m_size) {
+				if constexpr (!std::is_trivially_destructible_v<T>) {
+					for (size_type i = new_size; i < m_size; ++i) {
+						m_data[i].~T();
+					}
+				}
+			}
 			m_size = new_size;
 			return true;
 		}
 
-		usize size() const {
-			return m_size;
-		}
-
-		usize capacity() const {
-			return m_capacity;
-		}
-
-		bool empty() const {
-			return m_size == 0;
-		}
-
-		T& operator[](usize index) {
-			assert(index < m_size);
+		constexpr reference operator[](size_type index) {
+			assert(index < m_size && "Array::operator[]: index out of bounds");
 			return m_data[index];
 		}
 
-		const T& operator[](usize index) const {
-			assert(index < m_size);
+		constexpr const_reference operator[](size_type index) const {
+			assert(index < m_size && "Array::operator[]: index out of bounds");
 			return m_data[index];
 		}
 
-		T* front() {
-			if (m_size == 0) {
-				return nullptr;
-			}
-			return &m_data[0];
+		constexpr reference front() {
+			assert(m_size > 0 && "Array::front(): array is empty");
+			return m_data[0];
 		}
 
-		T* back() {
-			if (m_size == 0) {
-				return nullptr;
-			}
-			return &m_data[m_size - 1];
+		constexpr const_reference front() const {
+			assert(m_size > 0 && "Array::front(): array is empty");
+			return m_data[0];
 		}
 
-		bool push_back(NotNull<const Allocator*> alloc, const T element) {
-			if (m_size >= m_capacity) {
-				usize new_capacity = m_capacity * 2;
-				if (!reserve(alloc, new_capacity)) {
+		constexpr reference back() {
+			assert(m_size > 0 && "Array::back(): array is empty");
+			return m_data[m_size - 1];
+		}
+
+		constexpr const_reference back() const {
+			assert(m_size > 0 && "Array::back(): array is empty");
+			return m_data[m_size - 1];
+		}
+
+		constexpr size_type size() const noexcept {
+			return m_size; 
+		}
+
+		constexpr size_type capacity() const noexcept {
+			return m_capacity; 
+		}
+
+		constexpr bool empty() const noexcept { 
+			return m_size == 0; 
+		}
+
+		bool push_back(NotNull<const Allocator*> alloc, const_reference value) {
+			if (m_size == m_capacity) {
+				if (!grow_to(alloc, m_capacity == 0 ? 16 : m_capacity * 2)) {
 					return false;
 				}
 			}
-
-			m_data[m_size++] = element;
+			new (&m_data[m_size++]) T(value);
 			return true;
 		}
 
-		bool push_back(const T element) {
+		bool push_back(const_reference value) {
 			bool is_full = m_size >= m_capacity;
 			assert(!is_full && "Array is already full.");
 			if (is_full) {
 				return false;
 			}
-
-			m_data[m_size++] = element;
+			new (&m_data[m_size++]) T(value);
 			return true;
 		}
 
-		bool pop_back(T* out_element) {
+		bool push_back(NotNull<const Allocator*> alloc, T&& value) {
+			if (m_size == m_capacity) {
+				if (!grow_to(alloc, m_capacity == 0 ? 16 : m_capacity * 2)) {
+					return false;
+				}
+			}
+			new (&m_data[m_size++]) T(std::move(value));
+			return true;
+		}
+
+		bool push_back(T&& value) {
+			bool is_full = m_size >= m_capacity;
+			assert(!is_full && "Array is already full.");
+			if (is_full) {
+				return false;
+			}
+			new (&m_data[m_size++]) T(std::move(value));
+			return true;
+		}
+
+		template<typename... Args>
+		bool emplace_back(NotNull<const Allocator*> alloc, Args&&... args) {
+			if (m_size == m_capacity) {
+				if (!grow_to(alloc, m_capacity == 0 ? 16 : m_capacity * 2)) {
+					return false;
+				}
+			}
+			new (&m_data[m_size++]) T(std::forward<Args>(args)...);
+			return true;
+		}
+
+		bool pop_back(pointer out_element) {
+			assert(m_size > 0 && "Array::pop_back: array is empty");
 			if (m_size == 0) {
 				return false;
 			}
 
+			--m_size;
 			if (out_element) {
-				*out_element = m_data[--m_size];
+				*out_element = m_data[m_size];
+			}
+
+			if constexpr (!std::is_trivially_destructible_v<T>) {
+				m_data[m_size].~T();
 			}
 
 			return true;
 		}
 
-		bool insert(NotNull<const Allocator*> alloc, usize index, const T element) {
+		bool insert(NotNull<const Allocator*> alloc, size_type index, const_reference value) {
+			assert(index <= m_size && "Array::insert: index out of bounds");
 			if (index > m_size) {
 				return false;
 			}
 
-			if (m_size >= m_capacity) {
-				if (!reserve(alloc, m_capacity * 2)) {
+			if (m_size == m_capacity) {
+				if (!grow_to(alloc, m_capacity == 0 ? 16 : m_capacity * 2)) {
 					return false;
 				}
 			}
 
 			if (index < m_size) {
-				memmove(&m_data[index + 1], &m_data[index], sizeof(T) * (m_size - index));
+				if constexpr (std::is_trivially_copyable_v<T>) {
+					memmove(&m_data[index + 1], &m_data[index], sizeof(T) * (m_size - index));
+				}
+				else {
+					new (&m_data[m_size]) T(std::move(m_data[m_size - 1]));
+					for (size_type i = m_size - 1; i > index; --i) {
+						m_data[i] = std::move(m_data[i - 1]);
+					}
+				}
 			}
 
-			m_data[index] = element;
-			m_size++;
+			if constexpr (std::is_trivially_copyable_v<T>) {
+				m_data[index] = value;
+			}
+			else {
+				if (index < m_size) {
+					m_data[index].~T();
+				}
+				new (&m_data[index]) T(value);
+			}
+			++m_size;
+
 			return true;
 		}
 
-		bool remove(usize index, T* out_element) {
+		bool remove(size_type index, pointer out_element) {
+			assert(index < m_size && "Array::erase: index out of bounds");
 			if (index >= m_size) {
 				return false;
 			}
@@ -175,43 +222,77 @@ namespace edge {
 				*out_element = m_data[index];
 			}
 
-			if (index < m_size - 1) {
-				memmove(&m_data[index], &m_data[index + 1], sizeof(T) * (m_size - index - 1));
+			if constexpr (std::is_trivially_copyable_v<T>) {
+				if (index < m_size - 1) {
+					memmove(&m_data[index], &m_data[index + 1], sizeof(T) * (m_size - index - 1));
+				}
 			}
-
-			m_size--;
+			else {
+				for (size_type i = index; i < m_size - 1; ++i) {
+					m_data[i] = std::move(m_data[i + 1]);
+				}
+				m_data[m_size - 1].~T();
+			}
+			--m_size;
 
 			return true;
 		}
 
-		T* data() {
-			return m_data;
+		constexpr pointer data() noexcept { 
+			return m_data; 
 		}
 
-		const T* data() const {
-			return m_data;
+		constexpr const_pointer data() const noexcept { 
+			return m_data; 
 		}
 
-		T* begin() {
-			return m_data;
-		}
-
-		T* end() {
-			return m_data + m_size;
-		}
-
-		const T* begin() const {
-			return m_data;
-		}
-
-		const T* end()  const {
-			return m_data + m_size;
-		}
+		EDGE_DECLARE_RANDOM_ACCESS_ITERATOR(T, m_data, m_size)
 
 	private:
-		T* m_data = nullptr;
-		usize m_size = 0;
-		usize m_capacity = 0;
+		pointer m_data = nullptr;
+		size_type m_size = 0;
+		size_type m_capacity = 0;
+
+		void destroy_elements() {
+			if constexpr (!std::is_trivially_destructible_v<T>) {
+				for (size_type i = m_size; i > 0; --i) {
+					m_data[i - 1].~T();
+				}
+			}
+		}
+
+		bool grow_to(NotNull<const Allocator*> alloc, size_type new_cap) {
+			auto new_data = static_cast<pointer>(alloc->malloc(sizeof(T) * new_cap, alignof(T)));
+			assert(new_data && "Array: allocation failed during grow");
+			if (!new_data) {
+				return false;
+			}
+
+			move_elements(new_data, m_data, m_size);
+
+			if (m_data) {
+				alloc->free(m_data);
+			}
+			m_data = new_data;
+			m_capacity = new_cap;
+			return true;
+		}
+
+		static void move_elements(pointer dst, pointer src, size_type count) {
+			if (!src || count == 0) {
+				return;
+			}
+
+			if constexpr (std::is_trivially_copyable_v<T>) {
+				memcpy(dst, src, sizeof(T) * count);
+			}
+			else {
+				for (size_type i = 0; i < count; ++i) {
+					new (&dst[i]) T(std::move(src[i]));
+					src[i].~T();
+				}
+			}
+		}
 	};
 }
 
