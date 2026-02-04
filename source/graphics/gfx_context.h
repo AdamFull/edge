@@ -1,6 +1,9 @@
 #ifndef GFX_CONTEXT_H
 #define GFX_CONTEXT_H
 
+#include <stdio.h>
+#include <inttypes.h>
+
 #include "gfx_interface.h"
 
 namespace edge::gfx {
@@ -24,6 +27,13 @@ namespace edge::gfx {
 
 		void set_name(const char* name) const {
 			context_set_object_name(name, VkObjectTraits<T>::object_type, (u64)handle);
+		}
+
+		template<typename... Args>
+		void set_name(const char* format, Args&&... args) const {
+			char buffer[256];
+			snprintf(buffer, sizeof(buffer), format, std::forward<Args>(args)...);
+			context_set_object_name(buffer, VkObjectTraits<T>::object_type, (u64)handle);
 		}
 
 		explicit operator bool() const { return handle != VK_NULL_HANDLE; }
