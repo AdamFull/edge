@@ -201,14 +201,14 @@ namespace edge::gfx {
 		auto* vb_res = renderer->get_resource(vertex_buffer)->as<BufferResource>();
 		auto* ib_res = renderer->get_resource(index_buffer)->as<BufferResource>();
 
-		RenderResource* bb_rres = renderer->get_resource(renderer->backbuffer_handle);
+		RenderResource* bb_rres = renderer->get_resource(renderer->get_backbuffer_handle());
 		auto* bb_res = bb_rres->as<ImageResource>();
 
 		CmdBuf cmd = renderer->active_frame->cmd;
 
 		VkAttachmentLoadOp load_op = VK_ATTACHMENT_LOAD_OP_LOAD;
 		if (bb_rres->state != ResourceState::ColorAttachment) {
-			renderer->add_state_translation(renderer->backbuffer_handle, ResourceState::ColorAttachment);
+			renderer->add_state_translation(renderer->get_backbuffer_handle(), ResourceState::ColorAttachment);
 			renderer->translate_states(cmd);
 			load_op = VK_ATTACHMENT_LOAD_OP_CLEAR;
 		}

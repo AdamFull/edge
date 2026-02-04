@@ -190,13 +190,12 @@ namespace edge::gfx {
 		Swapchain swapchain = {};
 		Image swapchain_images[8] = {};
 		ImageView swapchain_image_views[8] = {};
+		Handle backbuffer_handles[8] = {};
 		u32 active_image_index = 0u;
 
 		RendererFrame frames[FRAME_OVERLAP] = {};
 		RendererFrame* active_frame = nullptr;
 		u32 frame_number = 0u;
-
-		Handle backbuffer_handle = HANDLE_INVALID;
 
 		StateTranslation state_translations[IMAGE_BARRIERS_MAX + BUFFER_BARRIERS_MAX] = {};
 		usize state_translation_count = 0;
@@ -240,6 +239,8 @@ namespace edge::gfx {
 		void push_constants(VkShaderStageFlags, T data) {
 			active_frame->cmd.push_constants(pipeline_layout, VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(T), &data);
 		}
+
+		Handle get_backbuffer_handle() const;
 
 	private:
 		void flush_resource_destruction(RendererFrame& frame);

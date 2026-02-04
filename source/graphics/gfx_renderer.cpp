@@ -342,12 +342,22 @@ namespace edge::gfx {
 			return false;
 		}
 
-		backbuffer_handle = create_empty();
-		RenderResource* res = resource_pool.get(backbuffer_handle);
-		res->resource = ImageResource{};
-		if (!srv_index_allocator.allocate(&res->srv_index)) {
-			destroy(alloc);
-			return false;
+		// TODO: Can be moved upper
+		for (usize i = 0; i < swapchain.image_count; ++i) {
+			backbuffer_handles[i] = create_empty();
+			RenderResource* res = resource_pool.get(backbuffer_handles[i]);
+			
+			ImageResource img_res = {
+				.handle = swapchain_images[i],
+				.srv = swapchain_image_views[i]
+			};
+
+			if (!srv_index_allocator.allocate(&res->srv_index)) {
+				destroy(alloc);
+				return false;
+			}
+
+			res->resource = img_res;
 		}
 
 		return true;
@@ -694,6 +704,14 @@ namespace edge::gfx {
 				if (!image_view.create(image, VK_IMAGE_VIEW_TYPE_2D, subresource_range)) {
 					return false;
 				}
+
+				// Update swapchain resources
+				RenderResource* res = resource_pool.get(backbuffer_handles[i]);
+				res->resource = ImageResource{
+					.handle = swapchain_images[i],
+					.srv = swapchain_image_views[i]
+				};
+				res->state = ResourceState::Undefined;
 			}
 
 			active_frame = nullptr;
@@ -715,13 +733,6 @@ namespace edge::gfx {
 		}
 
 		active_frame = &current_frame;
-
-		// Update backbuffer resource
-		if (RenderResource* backbuffer_resource = resource_pool.get(backbuffer_handle)) {
-			auto* img_res = backbuffer_resource->as<ImageResource>();
-			img_res->handle = swapchain_images[active_image_index];
-			img_res->srv = swapchain_image_views[active_image_index];
-		}
 
 		if (frame_number > 0) {
 			u64 timestamps[2] = {};
@@ -751,7 +762,7 @@ namespace edge::gfx {
 
 		CmdBuf cmd = active_frame->cmd;
 
-		add_state_translation(backbuffer_handle, ResourceState::Present);
+		add_state_translation(backbuffer_handles[active_image_index], ResourceState::Present);
 		translate_states(cmd);
 
 		if (!write_descriptor_sets.empty()) {
@@ -847,6 +858,10 @@ namespace edge::gfx {
 
 		vkCmdCopyBuffer2KHR(active_frame->cmd, &copy_buffer_info);
 		update_info.copy_regions.destroy(alloc);
+	}
+
+	Handle Renderer::get_backbuffer_handle() const {
+		return backbuffer_handles[active_image_index];
 	}
 
 	void Renderer::flush_resource_destruction(RendererFrame& frame) {
