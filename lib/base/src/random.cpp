@@ -17,7 +17,7 @@
 
 namespace edge {
 	namespace detail {
-		inline u64 get_time_seed() {
+		static u64 get_time_seed() {
 #if EDGE_HAS_WINDOWS_API
 			LARGE_INTEGER counter;
 			QueryPerformanceCounter(&counter);
@@ -31,7 +31,7 @@ namespace edge {
 #endif
 		}
 
-		inline bool get_system_entropy(void* buffer, usize size) {
+		static bool get_system_entropy(void* buffer, usize size) {
 #if EDGE_HAS_WINDOWS_API
 			return BCryptGenRandom(nullptr, (PUCHAR)buffer, (ULONG)size, BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0;
 #elif EDGE_PLATFORM_POSIX
@@ -48,7 +48,7 @@ namespace edge {
 #endif
 		}
 
-		inline u64 mix_entropy(u64 a, u64 b, u64 c) {
+		static u64 mix_entropy(u64 a, u64 b, u64 c) {
 			a = a ^ (b << 13) ^ (c >> 7);
 			b = b ^ (c << 17) ^ (a >> 11);
 			c = c ^ (a << 5) ^ (b >> 23);
