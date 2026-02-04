@@ -16,13 +16,11 @@ option(EDGE_CORO_BUILD_EXAMPLES "Build examples" ON)
 
 # Library source files
 set(EDGE_COROUTINE_SOURCES
-    "src/coro.cpp"
     "src/fiber.cpp"
     "src/scheduler.cpp"
 )
 
 set(EDGE_COROUTINE_HEADERS
-    "include/coro.hpp"
     "include/fiber.hpp"
     "include/scheduler.hpp"
 )
