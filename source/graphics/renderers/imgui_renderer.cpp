@@ -381,8 +381,8 @@ namespace edge::gfx {
 				});
 			renderer->image_update_end(alloc, update_info);
 
-			//renderer->add_state_translation(image_handle, ResourceState::ShaderReadOnly);
-			//renderer->translate_states(cmd);
+			renderer->add_state_translation(image_handle, ResourceState::ShaderReadOnly);
+			renderer->translate_states(cmd);
 
 			ImTextureBinding binding{ image_handle, HANDLE_INVALID };
 			tex->SetTexID((ImTextureID)binding);
@@ -442,9 +442,8 @@ namespace edge::gfx {
 			renderer->image_update_end(alloc, update_info);
 			alloc->free(compacted_data);
 
-			// NOTE: Not needed
-			//renderer->add_state_translation(resource_id, ResourceState::ShaderReadOnly);
-			//renderer->translate_states(cmd);
+			renderer->add_state_translation(resource_id, ResourceState::ShaderReadOnly);
+			renderer->translate_states(cmd);
 
 			tex->SetStatus(ImTextureStatus_OK);
 		}
