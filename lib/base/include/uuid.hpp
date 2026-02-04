@@ -46,9 +46,9 @@ namespace edge {
 	}
 
 	template<RngAlgorithm Algorithm>
-	UUID uuid_v4_generate(Rng<Algorithm>& rng) {
+	UUID uuid_v4_generate(Algorithm& state) {
 		UUID uuid;
-		rng.gen_bytes(uuid.bytes, 16);
+		rng_gen_bytes(state, uuid.bytes, 16);
 		uuid.bytes[6] = (uuid.bytes[6] & 0x0F) | 0x40;
 		uuid.bytes[8] = (uuid.bytes[8] & 0x3F) | 0x80;
 		return uuid;

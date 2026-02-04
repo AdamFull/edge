@@ -57,26 +57,22 @@ namespace edge {
 	}
 
 	template<RngAlgorithm Algorithm>
-	void Rng<Algorithm>::seed_entropy() {
+	void rng_seed_entropy(Algorithm& state) {
 		u64 s = detail::get_time_seed();
 		s ^= static_cast<u64>(clock());
-		s ^= static_cast<u64>(reinterpret_cast<uintptr_t>(this));
+		s ^= static_cast<u64>(reinterpret_cast<uintptr_t>(&state));
 		set_seed(s);
 	}
 
 	template<RngAlgorithm Algorithm>
-	void Rng<Algorithm>::seed_entropy_secure() {
+	void rng_seed_entropy_secure(Algorithm& state) {
 		u64 entropy[4];
 		if (detail::get_system_entropy(entropy, sizeof(entropy))) {
 			u64 s = detail::mix_entropy(entropy[0], entropy[1], entropy[2]) ^ entropy[3];
-			set_seed(s);
+			state.seed(s);
 		}
 		else {
-			seed_entropy();
+			rng_seed_entropy(state);
 		}
 	}
-
-	template struct Rng<RngPCG>;
-	template struct Rng<RngXoshiro256>;
-	template struct Rng<RngSplitMix64>;
 }
