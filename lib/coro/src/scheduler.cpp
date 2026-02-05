@@ -34,15 +34,15 @@ struct StackAllocator {
   usize granularity = 0ull;
 
   static StackAllocator *create(NotNull<const Allocator *> alloc,
-                                StackAllocatorConfig config);
+                                const StackAllocatorConfig &config);
   static void destroy(NotNull<const Allocator *> alloc, StackAllocator *self);
 
   void *allocate(usize block_size);
   void free(void *stack_ptr);
 };
 
-StackAllocator *StackAllocator::create(NotNull<const Allocator *> alloc,
-                                       StackAllocatorConfig config) {
+StackAllocator *StackAllocator::create(const NotNull<const Allocator *> alloc,
+                                       const StackAllocatorConfig &config) {
   StackAllocator *self = alloc->allocate<StackAllocator>();
   if (!self) {
     return nullptr;
@@ -73,7 +73,7 @@ StackAllocator *StackAllocator::create(NotNull<const Allocator *> alloc,
   return self;
 }
 
-void StackAllocator::destroy(NotNull<const Allocator *> alloc,
+void StackAllocator::destroy(const NotNull<const Allocator *> alloc,
                              StackAllocator *self) {
   if (self->region_base) {
     vmem_release(self->region_base, self->region_size);
@@ -89,15 +89,15 @@ void *StackAllocator::allocate(usize block_size) {
     return stack_ptr;
   }
 
-  usize offset =
+  const usize offset =
       current_offset.fetch_add(allocation_stride, std::memory_order_relaxed);
   if (offset + allocation_stride > region_size) {
     return nullptr;
   }
 
-  usize total_size = guard_size + stack_size + guard_size;
+  const usize total_size = guard_size + stack_size + guard_size;
 
-  u8 *allocation_base = (u8 *)region_base + offset;
+  auto *allocation_base = static_cast<u8 *>(region_base) + offset;
   if (!vmem_commit(allocation_base, total_size)) {
     return nullptr;
   }
@@ -106,8 +106,8 @@ void *StackAllocator::allocate(usize block_size) {
     return nullptr;
   }
 
-  u8 *top_guard = allocation_base + guard_size + stack_size;
-  if (!vmem_protect(top_guard, guard_size, VMemProt::None)) {
+  if (u8 *top_guard = allocation_base + guard_size + stack_size;
+      !vmem_protect(top_guard, guard_size, VMemProt::None)) {
     return nullptr;
   }
 
@@ -118,7 +118,7 @@ void StackAllocator::free(void *stack_ptr) { free_blocks.enqueue(stack_ptr); }
 
 struct Scheduler::Worker {
   const Allocator *allocator = nullptr;
-  Workgroup wg = Workgroup::Main;
+  Workgroup wg = Main;
 
   Thread thread_handle = {};
   Scheduler *scheduler = nullptr;
@@ -129,12 +129,12 @@ struct Scheduler::Worker {
   static void destroy(NotNull<const Allocator *> alloc, Worker *self);
 
   static i32 entry(void *arg) {
-    Worker *worker = static_cast<Worker *>(arg);
+    auto *worker = static_cast<Worker *>(arg);
     return worker->loop();
   }
 
   i32 loop();
-  bool tick();
+  bool tick() const;
 };
 
 enum class FlowReturnType { None, Done, Yielded, Awaited, SwitchTo };
@@ -151,7 +151,7 @@ struct FlowInfo {
 };
 
 struct SchedulerThreadContext {
-  Scheduler::Worker *worker = nullptr;
+  Scheduler::Worker *thread_worker = nullptr;
 
   Job *current_job = nullptr;
   Job main_job = {};
@@ -159,14 +159,14 @@ struct SchedulerThreadContext {
 
   FlowInfo flow_info = {};
 
-  bool create(Scheduler::Worker *worker);
-  void shutdown();
+  void create(Scheduler::Worker *worker);
+  void shutdown() const;
 };
 
 static thread_local SchedulerThreadContext thread_context = {};
 
-Scheduler::Worker *Scheduler::Worker::create(NotNull<const Allocator *> alloc) {
-  Scheduler::Worker *worker = alloc->allocate<Scheduler::Worker>();
+Scheduler::Worker *Scheduler::Worker::create(const NotNull<const Allocator *> alloc) {
+  auto *worker = alloc->allocate<Worker>();
   if (!worker) {
     return nullptr;
   }
@@ -174,7 +174,7 @@ Scheduler::Worker *Scheduler::Worker::create(NotNull<const Allocator *> alloc) {
   worker->allocator = alloc.m_ptr;
   worker->should_exit.store(false, std::memory_order_relaxed);
 
-  if (thread_create(&worker->thread_handle, Scheduler::Worker::entry, worker) !=
+  if (thread_create(&worker->thread_handle, entry, worker) !=
       ThreadResult::Success) {
     alloc->deallocate(worker);
     return nullptr;
@@ -183,18 +183,15 @@ Scheduler::Worker *Scheduler::Worker::create(NotNull<const Allocator *> alloc) {
   return worker;
 }
 
-void Scheduler::Worker::destroy(NotNull<const Allocator *> alloc,
-                                Scheduler::Worker *self) {
+void Scheduler::Worker::destroy(const NotNull<const Allocator *> alloc,
+                                Worker *self) {
   self->should_exit.store(true, std::memory_order_release);
   thread_join(self->thread_handle, nullptr);
   alloc->deallocate(self);
 }
 
 i32 Scheduler::Worker::loop() {
-  if (!thread_context.create(this)) {
-    // TODO: LOG ERROR
-    return -1;
-  }
+  thread_context.create(this);
 
   while (!should_exit.load(std::memory_order_acquire)) {
     if (!tick()) {
@@ -207,29 +204,29 @@ i32 Scheduler::Worker::loop() {
   return 0;
 }
 
-bool Scheduler::Worker::tick() {
-  auto job = scheduler->pick_job(wg);
+bool Scheduler::Worker::tick() const {
+  const auto job = scheduler->pick_job(wg);
   if (!job) {
     if (scheduler->shutdown.load(std::memory_order_acquire)) {
       return false;
     }
 
     // NOTE: The main worker does not need to sleep when there is no work.
-    if (wg == Workgroup::Main) {
+    if (wg == Main) {
       return true;
     }
 
     scheduler->sleeping_workers.fetch_add(1, std::memory_order_relaxed);
     std::atomic_thread_fence(std::memory_order_seq_cst);
-    u32 futex_val = scheduler->worker_futex.load(std::memory_order_acquire);
+    const u32 futex_val = scheduler->worker_futex.load(std::memory_order_acquire);
     futex_wait(&scheduler->worker_futex, futex_val,
                std::chrono::nanoseconds::max());
     scheduler->sleeping_workers.fetch_sub(1, std::memory_order_relaxed);
     return true;
   }
 
-  Job::State expected = Job::State::Suspended;
-  if (!job->state.compare_exchange_strong(expected, Job::State::Running,
+  if (auto expected = Job::State::Suspended;
+      !job->state.compare_exchange_strong(expected, Job::State::Running,
                                           std::memory_order_acquire,
                                           std::memory_order_relaxed)) {
     // TODO: I think there is a bug here, and I might lose the job at this
@@ -249,15 +246,14 @@ bool Scheduler::Worker::tick() {
   thread_context.current_job = caller;
   caller->state.store(Job::State::Running, std::memory_order_release);
 
-  Job::State job_state = job->state.load(std::memory_order_acquire);
+  const Job::State job_state = job->state.load(std::memory_order_acquire);
   switch (thread_context.flow_info.type) {
   case FlowReturnType::Done: {
     thread_context.flow_info.clear();
 
     scheduler->active_jobs.fetch_sub(1, std::memory_order_release);
 
-    Job *next_job = job->continuation;
-    if (next_job) {
+    if (Job *next_job = job->continuation) {
       job->continuation = nullptr;
       scheduler->enqueue_job(next_job, next_job->priority, wg);
     }
@@ -294,20 +290,18 @@ bool Scheduler::Worker::tick() {
   }
 }
 
-bool SchedulerThreadContext::create(Scheduler::Worker *worker) {
-  this->worker = worker;
-  main_context = fiber_context_create(worker->allocator, nullptr, nullptr, 0);
+void SchedulerThreadContext::create(Scheduler::Worker *worker) {
+  this->thread_worker = worker;
+  main_context = fiber_context_create(thread_worker->allocator, nullptr, nullptr, 0);
   main_job.context = main_context;
   current_job = &main_job;
 
   main_job.state.store(Job::State::Running, std::memory_order_release);
-
-  return true;
 }
 
-void SchedulerThreadContext::shutdown() {
+void SchedulerThreadContext::shutdown() const {
   if (main_context) {
-    fiber_context_destroy(worker->allocator, main_context);
+    fiber_context_destroy(thread_worker->allocator, main_context);
   }
 }
 
@@ -316,7 +310,6 @@ extern "C" void job_main(void) {
 
   if (!job || !job->func.is_valid()) {
     assert(false && "Invalid job in fiber_main");
-    return;
   }
 
   // NOTE: Do i need to check here that job was in suspended state?
@@ -339,8 +332,9 @@ extern "C" void job_main(void) {
   assert(0 && "Job returned without caller");
 }
 
-Job *Job::create(NotNull<const Allocator *> alloc, NotNull<Scheduler *> sched,
-                 JobFn &&func, Job::Priority prio) {
+Job *Job::create(const NotNull<const Allocator *> alloc,
+                 const NotNull<Scheduler *> sched,
+                 JobFn &&func, const Priority prio) {
   if (!func.is_valid()) {
     return nullptr;
   }
@@ -360,7 +354,7 @@ Job *Job::create(NotNull<const Allocator *> alloc, NotNull<Scheduler *> sched,
     return nullptr;
   }
 
-  assert(((uintptr_t)stack_ptr & 15) == 0 && "Stack not 16-byte aligned");
+  assert((reinterpret_cast<uintptr_t>(stack_ptr) & 15) == 0 && "Stack not 16-byte aligned");
 
   job->context =
       fiber_context_create(alloc, job_main, stack_ptr, EDGE_FIBER_STACK_SIZE);
@@ -373,43 +367,41 @@ Job *Job::create(NotNull<const Allocator *> alloc, NotNull<Scheduler *> sched,
   job->state.store(Job::State::Suspended, std::memory_order_release);
   job->priority = prio;
   job->caller = nullptr;
-  job->func = std::move(func);
+  job->func = func;
 
   return job;
 }
 
-void Job::destroy(NotNull<const Allocator *> alloc, Job *self) {
+void Job::destroy(const NotNull<const Allocator *> alloc, Job *self) {
   if (self->func.is_valid()) {
     self->func.destroy(alloc);
   }
 
   if (self->context) {
-    void *stack_ptr = fiber_get_stack_ptr(self->context);
-    if (stack_ptr) {
-      thread_context.worker->scheduler->stack_alloc->free(stack_ptr);
+    if (void *stack_ptr = fiber_get_stack_ptr(self->context)) {
+      thread_context.thread_worker->scheduler->stack_alloc->free(stack_ptr);
     }
 
     fiber_context_destroy(alloc, self->context);
     self->context = nullptr;
   }
 
-  Scheduler *sched = thread_context.worker->scheduler;
-  if (sched) {
+  if (Scheduler *sched = thread_context.thread_worker->scheduler) {
     if (!sched->free_jobs.enqueue(self)) {
       alloc->deallocate(self);
     }
   }
 }
 
-Scheduler *Scheduler::create(NotNull<const Allocator *> alloc) {
+Scheduler *Scheduler::create(const NotNull<const Allocator *> alloc) {
   // NOTE: Should be created only on main thread, or on thread that i consider
   // to be the main one.
-  Scheduler *sched = alloc->allocate<Scheduler>();
+  auto *sched = alloc->allocate<Scheduler>();
   if (!sched) {
     return nullptr;
   }
 
-  StackAllocatorConfig stack_alloc_cfg = {.allocation_size =
+  constexpr StackAllocatorConfig stack_alloc_cfg = {.allocation_size =
                                               EDGE_FIBER_STACK_SIZE};
   sched->stack_alloc = StackAllocator::create(alloc, stack_alloc_cfg);
   if (!sched->stack_alloc) {
@@ -432,7 +424,7 @@ Scheduler *Scheduler::create(NotNull<const Allocator *> alloc) {
     return nullptr;
   }
 
-  Range<Job::Priority> range(Job::Priority::Low, Job::Priority::High);
+  constexpr Range<Job::Priority> range(Job::Priority::Low, Job::Priority::High);
   for (auto it = range.begin(); it != range.end(); ++it) {
     if (!sched->background_queues[it].create(alloc, BACKGROUND_QUEUE_SIZE)) {
       destroy(alloc, sched);
@@ -441,7 +433,7 @@ Scheduler *Scheduler::create(NotNull<const Allocator *> alloc) {
   }
 
   CpuInfo cpu_info[128];
-  i32 cpu_count = thread_get_cpu_topology(cpu_info, 128);
+  const i32 cpu_count = thread_get_cpu_topology(cpu_info, 128);
 
   i32 num_cores = thread_get_physical_core_count(cpu_info, cpu_count);
   if (num_cores <= 0) {
@@ -477,13 +469,10 @@ Scheduler *Scheduler::create(NotNull<const Allocator *> alloc) {
   sched->main_thread->scheduler = sched;
 
   // NOTE: Init main therad context
-  if (!thread_context.create(sched->main_thread)) {
-    destroy(alloc, sched);
-    return nullptr;
-  }
+  thread_context.create(sched->main_thread);
 
   for (i32 i = 0; i < num_cores; ++i) {
-    char buffer[32] = {0};
+    char buffer[32] = {};
 
     {
       Worker *worker = Worker::create(alloc);
@@ -492,7 +481,7 @@ Scheduler *Scheduler::create(NotNull<const Allocator *> alloc) {
         return nullptr;
       }
 
-      worker->wg = Workgroup::IO;
+      worker->wg = IO;
       worker->scheduler = sched;
       worker->thread_id = i;
 
@@ -515,7 +504,7 @@ Scheduler *Scheduler::create(NotNull<const Allocator *> alloc) {
         return nullptr;
       }
 
-      worker->wg = Workgroup::Background;
+      worker->wg = Background;
       worker->scheduler = sched;
       worker->thread_id = i;
 
@@ -535,8 +524,8 @@ Scheduler *Scheduler::create(NotNull<const Allocator *> alloc) {
   return sched;
 }
 
-void Scheduler::destroy(NotNull<const Allocator *> alloc, Scheduler *self) {
-  assert(self->main_thread->thread_id == thread_context.worker->thread_id &&
+void Scheduler::destroy(const NotNull<const Allocator *> alloc, Scheduler *self) {
+  assert(self->main_thread->thread_id == thread_context.thread_worker->thread_id &&
          "Destroy can be called only from main thread.");
 
   thread_context.shutdown();
@@ -586,7 +575,7 @@ void Scheduler::destroy(NotNull<const Allocator *> alloc, Scheduler *self) {
     self->io_queue.destroy(alloc);
   }
 
-  Range<Job::Priority> range(Job::Priority::Low, Job::Priority::High);
+  constexpr Range range(Job::Priority::Low, Job::Priority::High);
   for (auto it = range.begin(); it != range.end(); ++it) {
     MPMCQueue<Job *> &queue = self->background_queues[it];
 
@@ -598,7 +587,7 @@ void Scheduler::destroy(NotNull<const Allocator *> alloc, Scheduler *self) {
     queue.destroy(alloc);
   }
 
-  for (auto &job : self->free_jobs) {
+  for (const auto &job : self->free_jobs) {
     alloc->deallocate(job);
   }
   self->free_jobs.destroy(alloc);
@@ -610,24 +599,24 @@ void Scheduler::destroy(NotNull<const Allocator *> alloc, Scheduler *self) {
   alloc->deallocate(self);
 }
 
-void Scheduler::schedule(Job *job, Workgroup wg) {
+void Scheduler::schedule(Job *job, const Workgroup wg) {
   active_jobs.fetch_add(1, std::memory_order_release);
   enqueue_job(job, job->priority, wg);
 }
 
-void Scheduler::schedule(Span<Job *> jobs, Workgroup wg) {
+void Scheduler::schedule(const Span<Job *> jobs, const Workgroup wg) {
   active_jobs.fetch_add(jobs.size(), std::memory_order_release);
   enqueue_jobs(jobs, wg);
 }
 
-void Scheduler::tick() {
+void Scheduler::tick() const {
   // NOTE: Called from the main engine loop.
   // TODO: Schedule jobs that must be executed on the main thread.
   main_thread->tick();
 }
 
-void Scheduler::run() {
-  assert(main_thread->thread_id == thread_context.worker->thread_id &&
+void Scheduler::run() const {
+  assert(main_thread->thread_id == thread_context.thread_worker->thread_id &&
          "Run can be called only from main thread.");
 
   while (active_jobs.load(std::memory_order_acquire) > 0 &&
@@ -637,23 +626,23 @@ void Scheduler::run() {
   }
 }
 
-Job *Scheduler::pick_job(Workgroup wg) {
+Job *Scheduler::pick_job(const Workgroup wg) {
   Job *job = nullptr;
   switch (wg) {
-  case edge::Scheduler::Main: {
+  case Main: {
     if (main_queue.dequeue(&job)) {
       return job;
     }
     break;
   }
-  case edge::Scheduler::IO: {
+  case IO: {
     if (io_queue.dequeue(&job)) {
       return job;
     }
     break;
   }
-  case edge::Scheduler::Background: {
-    Range<Job::Priority> range(Job::Priority::Low, Job::Priority::High);
+  case Background: {
+    constexpr Range range(Job::Priority::Low, Job::Priority::High);
     for (auto it = range.rbegin(); it != range.rend(); ++it) {
       if (background_queues[it].dequeue(&job)) {
         return job;
@@ -668,15 +657,15 @@ Job *Scheduler::pick_job(Workgroup wg) {
 
 void Scheduler::enqueue_job(Job *job, Job::Priority prio, Workgroup wg) {
   switch (wg) {
-  case edge::Scheduler::Main:
+  case Main:
     main_queue.enqueue(job);
     break;
-  case edge::Scheduler::IO:
+  case IO:
     io_queue.enqueue(job);
     break;
-  case edge::Scheduler::Background: {
-    i32 priority_index = static_cast<i32>(prio);
-    if (!background_queues[priority_index].enqueue(job)) {
+  case Background: {
+    if (const i32 priority_index = static_cast<i32>(prio);
+        !background_queues[priority_index].enqueue(job)) {
       return;
     }
     break;
@@ -690,18 +679,18 @@ void Scheduler::enqueue_job(Job *job, Job::Priority prio, Workgroup wg) {
   }
 }
 
-void Scheduler::enqueue_jobs(Span<Job *> jobs, Workgroup wg) {
+void Scheduler::enqueue_jobs(const Span<Job *> jobs, const Workgroup wg) {
   for (auto &job : jobs) {
     switch (wg) {
     case edge::Scheduler::Main:
       main_queue.enqueue(job);
       break;
-    case edge::Scheduler::IO:
+    case IO:
       io_queue.enqueue(job);
       break;
-    case edge::Scheduler::Background: {
-      i32 priority_index = static_cast<i32>(job->priority);
-      if (!background_queues[priority_index].enqueue(job)) {
+    case Background: {
+      if (const i32 priority_index = static_cast<i32>(job->priority);
+          !background_queues[priority_index].enqueue(job)) {
         return;
       }
       break;
@@ -716,18 +705,18 @@ void Scheduler::enqueue_jobs(Span<Job *> jobs, Workgroup wg) {
   }
 }
 
-Scheduler *sched_current() { return thread_context.worker->scheduler; }
+Scheduler *sched_current() { return thread_context.thread_worker->scheduler; }
 
 Job *job_current() { return thread_context.current_job; }
 
-i32 job_thread_id() { return thread_context.worker->thread_id; }
+i32 job_thread_id() { return thread_context.thread_worker->thread_id; }
 
 bool is_running_in_job() {
   return thread_context.current_job != &thread_context.main_job;
 }
 
 bool is_running_on_main() {
-  return thread_context.worker->wg == Scheduler::Workgroup::Main;
+  return thread_context.thread_worker->wg == Scheduler::Workgroup::Main;
 }
 
 static void job_yield_base() {
@@ -755,7 +744,7 @@ void job_await(Job *child_job) {
 }
 
 void job_continue_on_main() {
-  if (thread_context.worker->wg == Scheduler::Workgroup::Main) {
+  if (thread_context.thread_worker->wg == Scheduler::Workgroup::Main) {
     return;
   }
 
@@ -765,7 +754,7 @@ void job_continue_on_main() {
 }
 
 void job_continue_on_background() {
-  if (thread_context.worker->wg == Scheduler::Workgroup::Background) {
+  if (thread_context.thread_worker->wg == Scheduler::Workgroup::Background) {
     return;
   }
 
@@ -775,7 +764,7 @@ void job_continue_on_background() {
 }
 
 void job_continue_on_io() {
-  if (thread_context.worker->wg == Scheduler::Workgroup::IO) {
+  if (thread_context.thread_worker->wg == Scheduler::Workgroup::IO) {
     return;
   }
 

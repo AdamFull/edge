@@ -63,15 +63,15 @@ struct Job {
 
   template <typename F>
   static Job *from_lambda(NotNull<const Allocator *> alloc,
-                          NotNull<Scheduler *> sched, F &&fn,
-                          Job::Priority prio = Job::Priority::High) {
+                          const NotNull<Scheduler *> sched, F &&fn,
+                          Priority prio = Priority::High) {
     return create(alloc, sched,
-                  callable_create_from_lambda(alloc, std::forward<F>(fn)));
+                  callable_create_from_lambda(alloc, std::forward<F>(fn)), prio);
   }
 
   static Job *create(NotNull<const Allocator *> alloc,
                      NotNull<Scheduler *> sched, JobFn &&func,
-                     Job::Priority prio = Job::Priority::High);
+                     Priority prio = Priority::High);
   static void destroy(NotNull<const Allocator *> alloc, Job *self);
 
   template <typename T, typename E>
@@ -112,11 +112,11 @@ struct Scheduler {
   static Scheduler *create(NotNull<const Allocator *> alloc);
   static void destroy(NotNull<const Allocator *> alloc, Scheduler *self);
 
-  void schedule(Job *job, Workgroup wg = Workgroup::Background);
-  void schedule(Span<Job *> jobs, Workgroup wg = Workgroup::Background);
-  void tick();
+  void schedule(Job *job, Workgroup wg = Background);
+  void schedule(Span<Job *> jobs, Workgroup wg = Background);
+  void tick() const;
 
-  void run();
+  void run() const;
 
 private:
   Job *pick_job(Workgroup wg);
