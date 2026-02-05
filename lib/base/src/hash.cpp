@@ -17,13 +17,13 @@
 
 namespace edge {
 namespace detail {
-inline u32 read32(const void *ptr) {
+static u32 read32(const void *ptr) {
   u32 result;
   memcpy(&result, ptr, sizeof(u32));
   return result;
 }
 
-inline u64 read64(const void *ptr) {
+static u64 read64(const void *ptr) {
   u64 result;
   memcpy(&result, ptr, sizeof(u64));
   return result;
@@ -32,7 +32,7 @@ inline u64 read64(const void *ptr) {
 static u32 g_crc32_table[256];
 static bool g_crc32_table_initialized = false;
 
-inline void crc32_init_table() {
+static void crc32_init_table() {
   for (u32 i = 0; i < 256; i++) {
     u32 crc = i;
     for (u32 j = 0; j < 8; j++) {
@@ -49,7 +49,7 @@ u32 hash_crc32(const void *data, usize size) {
     detail::crc32_init_table();
   }
 
-  const u8 *bytes = static_cast<const u8 *>(data);
+  auto bytes = static_cast<const u8 *>(data);
   u32 crc = 0xFFFFFFFF;
 
 #if defined(EDGE_HASH_HAS_CRC32) && defined(EDGE_HASH_X86)

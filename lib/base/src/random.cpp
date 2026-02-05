@@ -31,7 +31,7 @@ namespace detail {
 
 [[maybe_unused]] static bool get_system_entropy(void *buffer, usize size) {
 #if EDGE_HAS_WINDOWS_API
-  return BCryptGenRandom(nullptr, (PUCHAR)buffer, (ULONG)size,
+  return BCryptGenRandom(nullptr, static_cast<PUCHAR>(buffer), static_cast<ULONG>(size),
                          BCRYPT_USE_SYSTEM_PREFERRED_RNG) >= 0;
 #elif EDGE_PLATFORM_POSIX
   FILE *urandom = fopen("/dev/urandom", "rb");

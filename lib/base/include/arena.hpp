@@ -20,7 +20,7 @@ struct Arena {
   bool create(usize size = 0);
   void destroy();
 
-  bool protect(void *addr, usize size, VMemProt prot);
+  bool protect(void *addr, usize size, VMemProt prot) const;
   void *alloc_ex(usize size, usize alignment);
   void *alloc(const usize size) { return alloc_ex(size, alignof(max_align_t)); }
 

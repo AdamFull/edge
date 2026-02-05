@@ -15,22 +15,22 @@ struct ThreadStartInfo {
 };
 
 static unsigned int __stdcall thread_start_wrapper(void *arg) {
-  ThreadStartInfo *info = static_cast<ThreadStartInfo *>(arg);
-  ThreadFunc func = info->func;
+  const auto info = static_cast<ThreadStartInfo *>(arg);
+  const ThreadFunc func = info->func;
   void *user_arg = info->arg;
   delete info;
 
-  i32 result = func(user_arg);
+  const i32 result = func(user_arg);
   return static_cast<unsigned int>(result);
 }
 } // namespace detail
 
-ThreadResult thread_create(Thread *thr, ThreadFunc func, void *arg) {
+ThreadResult thread_create(Thread *thr, const ThreadFunc func, void *arg) {
   if (!thr || !func) {
     return ThreadResult::Error;
   }
 
-  detail::ThreadStartInfo *info = new detail::ThreadStartInfo{func, arg};
+  auto *info = new detail::ThreadStartInfo{func, arg};
 
   thr->handle = reinterpret_cast<HANDLE>(_beginthreadex(
       nullptr, 0, detail::thread_start_wrapper, info, 0, &thr->id));
@@ -41,13 +41,13 @@ ThreadResult thread_create(Thread *thr, ThreadFunc func, void *arg) {
   return ThreadResult::Success;
 }
 
-ThreadResult thread_join(Thread &thr, i32 *res) {
+ThreadResult thread_join(const Thread &thr, i32 *res) {
   if (!thr.handle) {
     return ThreadResult::Error;
   }
 
-  DWORD wait_result = WaitForSingleObject(thr.handle, INFINITE);
-  if (wait_result != WAIT_OBJECT_0) {
+  if (const DWORD wait_result = WaitForSingleObject(thr.handle, INFINITE);
+      wait_result != WAIT_OBJECT_0) {
     return ThreadResult::Error;
   }
 
@@ -62,7 +62,7 @@ ThreadResult thread_join(Thread &thr, i32 *res) {
   return ThreadResult::Success;
 }
 
-ThreadResult thread_detach(Thread &thr) {
+ThreadResult thread_detach(const Thread &thr) {
   if (!thr.handle) {
     return ThreadResult::Error;
   }
@@ -71,47 +71,51 @@ ThreadResult thread_detach(Thread &thr) {
 }
 
 Thread thread_current() {
-  Thread thr;
+  Thread thr{};
   thr.handle = GetCurrentThread();
   thr.id = GetCurrentThreadId();
   return thr;
 }
 
 u32 thread_current_id() {
-  Thread thrd = thread_current();
-  return thrd.id;
+  auto [handle, id] = thread_current();
+  return id;
 }
 
 bool thread_equal(const Thread &lhs, const Thread &rhs) {
   return lhs.id == rhs.id;
 }
 
-void thread_exit(i32 res) { _endthreadex(static_cast<unsigned int>(res)); }
+void thread_exit(const i32 res) {
+  _endthreadex(static_cast<unsigned int>(res));
+}
 
 void thread_yield() { SwitchToThread(); }
 
 i32 thread_sleep(const std::chrono::nanoseconds &duration) {
-  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+  const auto ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(duration);
   Sleep(static_cast<DWORD>(ms.count()));
   return 0;
 }
 
 FutexResult futex_wait(std::atomic<u32> *addr, u32 expected_value,
-                       std::chrono::nanoseconds timeout) {
+                       const std::chrono::nanoseconds timeout) {
   if (!addr) {
     return FutexResult::Error;
   }
 
   DWORD timeout_ms = INFINITE;
   if (timeout != std::chrono::nanoseconds::zero()) {
-    auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
+    const auto ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
     timeout_ms = static_cast<DWORD>(ms.count());
   }
 
-  BOOL result = WaitOnAddress(addr, &expected_value, sizeof(u32), timeout_ms);
-  if (!result) {
-    DWORD error = GetLastError();
-    if (error == ERROR_TIMEOUT) {
+  if (const BOOL result =
+          WaitOnAddress(addr, &expected_value, sizeof(u32), timeout_ms);
+      !result) {
+    if (const DWORD error = GetLastError(); error == ERROR_TIMEOUT) {
       return FutexResult::TimedOut;
     }
     return FutexResult::Error;
@@ -120,7 +124,7 @@ FutexResult futex_wait(std::atomic<u32> *addr, u32 expected_value,
   return FutexResult::Success;
 }
 
-i32 futex_wake(std::atomic<u32> *addr, i32 count) {
+i32 futex_wake(std::atomic<u32> *addr, const i32 count) {
   if (!addr) {
     return 0;
   }
@@ -143,7 +147,7 @@ i32 futex_wake_all(std::atomic<u32> *addr) {
   return 1;
 }
 
-ThreadResult mutex_init(Mutex *mtx, MutexType type) {
+ThreadResult mutex_init(Mutex *mtx, const MutexType type) {
   if (!mtx) {
     return ThreadResult::Error;
   }
@@ -168,16 +172,16 @@ void mutex_destroy(Mutex *mtx) {
   }
 }
 
-ThreadResult mutex_lock(Mutex *mtx) {
+ThreadResult mutex_lock(const Mutex *mtx) {
   if (!mtx) {
     return ThreadResult::Error;
   }
 
-  DWORD result = WaitForSingleObject(mtx->handle, INFINITE);
+  const DWORD result = WaitForSingleObject(mtx->handle, INFINITE);
   return result == WAIT_OBJECT_0 ? ThreadResult::Success : ThreadResult::Error;
 }
 
-ThreadResult mutex_trylock(Mutex *mtx) {
+ThreadResult mutex_trylock(const Mutex *mtx) {
   if (!mtx) {
     return ThreadResult::Error;
   }
@@ -191,14 +195,15 @@ ThreadResult mutex_trylock(Mutex *mtx) {
   return ThreadResult::Error;
 }
 
-ThreadResult mutex_timedlock(Mutex *mtx,
+ThreadResult mutex_timedlock(const Mutex *mtx,
                              const std::chrono::nanoseconds &timeout) {
   if (!mtx) {
     return ThreadResult::Error;
   }
 
-  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
-  DWORD result =
+  const auto ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
+  const DWORD result =
       WaitForSingleObject(mtx->handle, static_cast<DWORD>(ms.count()));
   if (result == WAIT_OBJECT_0) {
     return ThreadResult::Success;
@@ -208,7 +213,7 @@ ThreadResult mutex_timedlock(Mutex *mtx,
   return ThreadResult::Error;
 }
 
-ThreadResult mutex_unlock(Mutex *mtx) {
+ThreadResult mutex_unlock(const Mutex *mtx) {
   if (!mtx) {
     return ThreadResult::Error;
   }
@@ -240,7 +245,7 @@ void cond_destroy(ConditionVariable *cnd) {
   }
 }
 
-ThreadResult cond_signal(ConditionVariable *cnd) {
+ThreadResult cond_signal(const ConditionVariable *cnd) {
   if (!cnd) {
     return ThreadResult::Error;
   }
@@ -248,7 +253,7 @@ ThreadResult cond_signal(ConditionVariable *cnd) {
   return SetEvent(cnd->handle) ? ThreadResult::Success : ThreadResult::Error;
 }
 
-ThreadResult cond_broadcast(ConditionVariable *cnd) {
+ThreadResult cond_broadcast(const ConditionVariable *cnd) {
   if (!cnd) {
     return ThreadResult::Error;
   }
@@ -256,29 +261,30 @@ ThreadResult cond_broadcast(ConditionVariable *cnd) {
   return SetEvent(cnd->handle) ? ThreadResult::Success : ThreadResult::Error;
 }
 
-ThreadResult cond_wait(ConditionVariable *cnd, Mutex *mtx) {
+ThreadResult cond_wait(const ConditionVariable *cnd, const Mutex *mtx) {
   if (!cnd || !mtx) {
     return ThreadResult::Error;
   }
 
   // Release mutex, wait for signal, reacquire mutex
   mutex_unlock(mtx);
-  DWORD result = WaitForSingleObject(cnd->handle, INFINITE);
+  const DWORD result = WaitForSingleObject(cnd->handle, INFINITE);
   ResetEvent(cnd->handle);
   mutex_lock(mtx);
   return result == WAIT_OBJECT_0 ? ThreadResult::Success : ThreadResult::Error;
 }
 
-ThreadResult cond_timedwait(ConditionVariable *cnd, Mutex *mtx,
+ThreadResult cond_timedwait(const ConditionVariable *cnd, const Mutex *mtx,
                             const std::chrono::nanoseconds &timeout) {
   if (!cnd || !mtx) {
     return ThreadResult::Error;
   }
 
-  auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
+  const auto ms =
+      std::chrono::duration_cast<std::chrono::milliseconds>(timeout);
 
   mutex_unlock(mtx);
-  DWORD result =
+  const DWORD result =
       WaitForSingleObject(cnd->handle, static_cast<DWORD>(ms.count()));
   ResetEvent(cnd->handle);
   mutex_lock(mtx);
@@ -306,30 +312,30 @@ void call_once(OnceFlag *flag, void (*func)()) {
   }
 }
 
-ThreadResult thread_set_affinity_platform(Thread &thr, i32 core_id) {
+ThreadResult thread_set_affinity_platform(const Thread &thr,
+                                          const i32 core_id) {
   if (core_id < 0) {
     return ThreadResult::Error;
   }
 
-  DWORD_PTR affinity_mask = static_cast<DWORD_PTR>(1) << core_id;
-
-  if (SetThreadAffinityMask(thr.handle, affinity_mask) == 0) {
+  if (const DWORD_PTR affinity_mask = static_cast<DWORD_PTR>(1) << core_id;
+      SetThreadAffinityMask(thr.handle, affinity_mask) == 0) {
     return ThreadResult::Error;
   }
   return ThreadResult::Success;
 }
 
-ThreadResult thread_set_name(Thread &thr, const char *name) {
+ThreadResult thread_set_name(const Thread &thr, const char *name) {
   if (!name) {
     return ThreadResult::Error;
   }
 
-  i32 size_needed = MultiByteToWideChar(CP_UTF8, 0, name, -1, nullptr, 0);
+  const i32 size_needed = MultiByteToWideChar(CP_UTF8, 0, name, -1, nullptr, 0);
   if (size_needed <= 0) {
     return ThreadResult::Error;
   }
 
-  wchar_t *wide_name = new wchar_t[size_needed];
+  auto *wide_name = new wchar_t[size_needed];
   if (!wide_name) {
     return ThreadResult::NoMem;
   }
@@ -339,7 +345,7 @@ ThreadResult thread_set_name(Thread &thr, const char *name) {
     return ThreadResult::Error;
   }
 
-  HRESULT hr = SetThreadDescription(thr.handle, wide_name);
+  const HRESULT hr = SetThreadDescription(thr.handle, wide_name);
   delete[] wide_name;
 
   return SUCCEEDED(hr) ? ThreadResult::Success : ThreadResult::Error;
@@ -353,12 +359,12 @@ i32 thread_get_cpu_topology(CpuInfo *cpu_info, i32 max_cpus) {
   using GetLogicalProcessorInformationFunc =
       BOOL(WINAPI *)(PSYSTEM_LOGICAL_PROCESSOR_INFORMATION, PDWORD);
 
-  HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
+  const HMODULE kernel32 = GetModuleHandleA("kernel32.dll");
   if (!kernel32) {
     return -1;
   }
 
-  GetLogicalProcessorInformationFunc GetLogicalProcessorInfo =
+  const auto GetLogicalProcessorInfo =
       reinterpret_cast<GetLogicalProcessorInformationFunc>(
           GetProcAddress(kernel32, "GetLogicalProcessorInformation"));
 
@@ -373,7 +379,7 @@ i32 thread_get_cpu_topology(CpuInfo *cpu_info, i32 max_cpus) {
     return -1;
   }
 
-  PSYSTEM_LOGICAL_PROCESSOR_INFORMATION buffer =
+  const auto buffer =
       static_cast<PSYSTEM_LOGICAL_PROCESSOR_INFORMATION>(malloc(buffer_size));
 
   if (!buffer) {
@@ -385,13 +391,14 @@ i32 thread_get_cpu_topology(CpuInfo *cpu_info, i32 max_cpus) {
     return -1;
   }
 
-  DWORD count = buffer_size / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
+  const DWORD count =
+      buffer_size / sizeof(SYSTEM_LOGICAL_PROCESSOR_INFORMATION);
   i32 cpu_count = 0;
   i32 physical_core = 0;
 
   for (DWORD i = 0; i < count && cpu_count < max_cpus; i++) {
     if (buffer[i].Relationship == RelationProcessorCore) {
-      ULONG_PTR mask = buffer[i].ProcessorMask;
+      const ULONG_PTR mask = buffer[i].ProcessorMask;
 
       for (i32 bit = 0; bit < 64 && cpu_count < max_cpus; bit++) {
         if (mask & (static_cast<ULONG_PTR>(1) << bit)) {
@@ -409,7 +416,7 @@ i32 thread_get_cpu_topology(CpuInfo *cpu_info, i32 max_cpus) {
   return cpu_count;
 }
 
-i32 thread_get_physical_core_count(CpuInfo *cpu_info, i32 count) {
+i32 thread_get_physical_core_count(const CpuInfo *cpu_info, const i32 count) {
   if (!cpu_info || count < 0) {
     return -1;
   }
@@ -417,7 +424,7 @@ i32 thread_get_physical_core_count(CpuInfo *cpu_info, i32 count) {
   return cpu_info[count - 1].core_id + 1;
 }
 
-i32 thread_get_logical_core_count(CpuInfo *cpu_info, i32 count) {
+i32 thread_get_logical_core_count(const CpuInfo *cpu_info, const i32 count) {
   if (!cpu_info || count < 0) {
     return -1;
   }
@@ -867,9 +874,9 @@ i32 thread_get_logical_core_count(CpuInfo *cpu_info, i32 count) {
 #endif
 
 namespace edge {
-ThreadResult thread_set_affinity_ex(Thread &thr, CpuInfo *cpu_info,
-                                    i32 cpu_count, i32 core_id,
-                                    bool prefer_physical) {
+ThreadResult thread_set_affinity_ex(const Thread &thr, const CpuInfo *cpu_info,
+                                    const i32 cpu_count, const i32 core_id,
+                                    const bool prefer_physical) {
   if (core_id < 0) {
     return ThreadResult::Error;
   }
@@ -894,10 +901,10 @@ ThreadResult thread_set_affinity_ex(Thread &thr, CpuInfo *cpu_info,
   return thread_set_affinity_platform(thr, target_logical_id);
 }
 
-ThreadResult thread_set_affinity(Thread &thr, i32 core_id,
-                                 bool prefer_physical) {
+ThreadResult thread_set_affinity(const Thread &thr, const i32 core_id,
+                                 const bool prefer_physical) {
   CpuInfo cpu_info[256];
-  i32 cpu_count = thread_get_cpu_topology(cpu_info, 256);
+  const i32 cpu_count = thread_get_cpu_topology(cpu_info, 256);
   if (cpu_count <= 0) {
     return ThreadResult::Error;
   }

@@ -8,16 +8,16 @@ namespace edge {
 usize vmem_page_size() {
   SYSTEM_INFO si;
   GetSystemInfo(&si);
-  return static_cast<usize>(si.dwPageSize);
+  return si.dwPageSize;
 }
 
 usize vmem_allocation_granularity() {
   SYSTEM_INFO si;
   GetSystemInfo(&si);
-  return static_cast<usize>(si.dwAllocationGranularity);
+  return si.dwAllocationGranularity;
 }
 
-bool vmem_reserve(void **out_base, usize reserve_bytes) {
+bool vmem_reserve(void **out_base, const usize reserve_bytes) {
   if (!out_base) {
     return false;
   }
@@ -30,7 +30,7 @@ bool vmem_reserve(void **out_base, usize reserve_bytes) {
   return true;
 }
 
-bool vmem_release(void *base, usize reserve_bytes) {
+bool vmem_release(void *base, const usize reserve_bytes) {
   if (!base) {
     return false;
   }
@@ -39,7 +39,7 @@ bool vmem_release(void *base, usize reserve_bytes) {
   return VirtualFree(base, 0, MEM_RELEASE) != 0;
 }
 
-bool vmem_commit(void *addr, usize size) {
+bool vmem_commit(void *addr, const usize size) {
   if (!addr) {
     return false;
   }
@@ -53,9 +53,9 @@ inline DWORD translate_protection_flags(VMemProt p) {
     return PAGE_NOACCESS;
   }
 
-  u32 flags = static_cast<u32>(p);
-  bool has_write = (flags & static_cast<u32>(VMemProt::Write)) != 0;
-  bool has_exec = (flags & static_cast<u32>(VMemProt::Exec)) != 0;
+  const u32 flags = static_cast<u32>(p);
+  const bool has_write = (flags & static_cast<u32>(VMemProt::Write)) != 0;
+  const bool has_exec = (flags & static_cast<u32>(VMemProt::Exec)) != 0;
 
   if (has_write) {
     if (has_exec) {
@@ -72,14 +72,14 @@ inline DWORD translate_protection_flags(VMemProt p) {
 }
 } // namespace detail
 
-bool vmem_protect(void *addr, usize size, VMemProt prot) {
+bool vmem_protect(void *addr, const usize size, const VMemProt prot) {
   if (!addr) {
     return false;
   }
 
   DWORD old;
-  DWORD new_prot = detail::translate_protection_flags(prot);
-  if (!VirtualProtect(addr, size, new_prot, &old)) {
+  if (DWORD new_prot = detail::translate_protection_flags(prot);
+      !VirtualProtect(addr, size, new_prot, &old)) {
     return false;
   }
   return true;

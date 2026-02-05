@@ -3,29 +3,29 @@
 
 namespace edge {
 namespace detail {
-static void *ptr_add(void *p, usize bytes) {
+static void *ptr_add(void *p, const usize bytes) {
   return reinterpret_cast<void *>(reinterpret_cast<uintptr_t>(p) + bytes);
 }
 
-static bool arena_ensure_committed_locked(Arena *arena, usize required_bytes) {
+static bool arena_ensure_committed_locked(Arena *arena,
+                                          const usize required_bytes) {
   if (required_bytes <= arena->m_committed) {
     return true;
   }
 
-  usize max_size = arena->m_reserved;
+  const usize max_size = arena->m_reserved;
   if (required_bytes > max_size) {
     return false;
   }
 
-  usize need = required_bytes - arena->m_committed;
+  const usize need = required_bytes - arena->m_committed;
   usize commit_size = align_up(need, ARENA_COMMIT_CHUNK_SIZE);
   if (arena->m_committed + commit_size > max_size) {
     commit_size = max_size - arena->m_committed;
   }
 
-  void *commit_addr = ptr_add(arena->m_base, arena->m_committed);
-
-  if (!vmem_commit(commit_addr, commit_size)) {
+  if (void *commit_addr = ptr_add(arena->m_base, arena->m_committed);
+      !vmem_commit(commit_addr, commit_size)) {
     return false;
   }
 
@@ -39,7 +39,7 @@ bool Arena::create(usize size) {
     size = ARENA_MAX_SIZE;
   }
 
-  usize page_size = vmem_page_size();
+  const usize page_size = vmem_page_size();
   size = align_up(size, page_size);
 
   void *base = nullptr;
@@ -63,28 +63,28 @@ void Arena::destroy() {
   }
 }
 
-bool Arena::protect(void *addr, usize size, VMemProt prot) {
+bool Arena::protect(void *addr, const usize size, const VMemProt prot) const {
   if (!m_base) {
     return false;
   }
 
-  uintptr_t base = reinterpret_cast<uintptr_t>(m_base);
-  uintptr_t astart = reinterpret_cast<uintptr_t>(addr);
-  if (astart < base) {
+  const auto base = reinterpret_cast<uintptr_t>(m_base);
+  const auto addr_start = reinterpret_cast<uintptr_t>(addr);
+  if (addr_start < base) {
     return false;
   }
-  if (astart + size > base + m_reserved) {
+  if (addr_start + size > base + m_reserved) {
     return false;
   }
 
-  uintptr_t page_mask = ~static_cast<uintptr_t>(m_page_size - 1);
-  uintptr_t page_addr = astart & page_mask;
-  usize page_off = astart - page_addr;
-  usize total = align_up(size + page_off, m_page_size);
+  const uintptr_t page_mask = ~static_cast<uintptr_t>(m_page_size - 1);
+  const uintptr_t page_addr = addr_start & page_mask;
+  const usize page_off = addr_start - page_addr;
+  const usize total = align_up(size + page_off, m_page_size);
   return vmem_protect(reinterpret_cast<void *>(page_addr), total, prot);
 }
 
-void *Arena::alloc_ex(usize size, usize alignment) {
+void *Arena::alloc_ex(const usize size, usize alignment) {
   if (!m_base || size == 0) {
     return nullptr;
   }
@@ -100,15 +100,15 @@ void *Arena::alloc_ex(usize size, usize alignment) {
   // TODO: Update after threads port
   // std::lock_guard<std::recursive_mutex> lock(arena->m_mutex);
 
-  usize offset = m_offset;
-  usize aligned_offset = align_up(offset, alignment);
+  const usize offset = m_offset;
+  const usize aligned_offset = align_up(offset, alignment);
 
   if (aligned_offset > SIZE_MAX - size) {
     return nullptr;
   }
 
-  usize max_size = m_reserved;
-  usize new_offset = aligned_offset + size;
+  const usize max_size = m_reserved;
+  const usize new_offset = aligned_offset + size;
   if (new_offset > max_size) {
     return nullptr;
   }
@@ -123,7 +123,7 @@ void *Arena::alloc_ex(usize size, usize alignment) {
   return result;
 }
 
-void Arena::reset(bool zero_memory) {
+void Arena::reset(const bool zero_memory) {
   if (zero_memory && m_committed > 0) {
     memset(m_base, 0, m_committed);
   }

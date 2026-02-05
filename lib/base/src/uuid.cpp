@@ -22,20 +22,20 @@ static constexpr char value_to_hex_lut[16] = {'0', '1', '2', '3', '4', '5',
                                               '6', '7', '8', '9', 'a', 'b',
                                               'c', 'd', 'e', 'f'};
 
-static bool is_hex_char(char c) {
+static bool is_hex_char(const char c) {
   return hex_to_value_lut[static_cast<u8>(c)] != -1;
 }
 
-static u8 hex_to_byte(char high, char low) {
-  i8 h = hex_to_value_lut[static_cast<u8>(high)];
-  i8 l = hex_to_value_lut[static_cast<u8>(low)];
+static u8 hex_to_byte(const char high, const char low) {
+  const i8 h = hex_to_value_lut[static_cast<u8>(high)];
+  const i8 l = hex_to_value_lut[static_cast<u8>(low)];
   if (h < 0 || l < 0) {
     return 0;
   }
   return static_cast<u8>((h << 4) | l);
 }
 
-static void byte_to_hex(u8 byte, char *out) {
+static void byte_to_hex(const u8 byte, char *out) {
   out[0] = value_to_hex_lut[(byte >> 4) & 0x0F];
   out[1] = value_to_hex_lut[byte & 0x0F];
 }
@@ -46,11 +46,10 @@ UUID uuid_v4_parse(const char *str) {
     return {};
   }
 
-  usize len = strlen(str);
-  bool has_hyphens = (len == 36);
-  bool no_hyphens = (len == 32);
+  const usize len = strlen(str);
+  const bool has_hyphens = (len == 36);
 
-  if (!has_hyphens && !no_hyphens) {
+  if (const bool no_hyphens = (len == 32); !has_hyphens && !no_hyphens) {
     return {};
   }
 
@@ -58,7 +57,7 @@ UUID uuid_v4_parse(const char *str) {
   usize byte_idx = 0;
   usize str_idx = 0;
 
-  const usize hyphen_positions[] = {8, 13, 18, 23};
+  constexpr usize hyphen_positions[] = {8, 13, 18, 23};
   usize hyphen_idx = 0;
 
   while (byte_idx < 16 && str_idx < len) {
@@ -94,7 +93,7 @@ UUID uuid_v4_parse(const char *str) {
   return result;
 }
 
-usize uuid_to_string(const UUID &uuid, char *buffer, usize buffer_size) {
+usize uuid_to_string(const UUID &uuid, char *buffer, const usize buffer_size) {
   if (!buffer || buffer_size < 37) {
     return 0;
   }
@@ -135,7 +134,7 @@ usize uuid_to_string(const UUID &uuid, char *buffer, usize buffer_size) {
 }
 
 usize uuid_to_compact_string(const UUID &uuid, char *buffer,
-                             usize buffer_size) {
+                             const usize buffer_size) {
   if (!buffer || buffer_size < 33) {
     return 0;
   }

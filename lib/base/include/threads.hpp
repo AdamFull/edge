@@ -67,8 +67,8 @@ struct OnceFlag {
 #endif
 
 ThreadResult thread_create(Thread *thr, ThreadFunc func, void *arg);
-ThreadResult thread_join(Thread &thr, i32 *res = nullptr);
-ThreadResult thread_detach(Thread &thr);
+ThreadResult thread_join(const Thread &thr, i32 *res = nullptr);
+ThreadResult thread_detach(const Thread &thr);
 Thread thread_current();
 u32 thread_current_id();
 bool thread_equal(const Thread &lhs, const Thread &rhs);
@@ -83,34 +83,34 @@ i32 futex_wake_all(std::atomic<u32> *addr);
 
 ThreadResult mutex_init(Mutex *mtx, MutexType type = MutexType::Plain);
 void mutex_destroy(Mutex *mtx);
-ThreadResult mutex_lock(Mutex *mtx);
-ThreadResult mutex_trylock(Mutex *mtx);
-ThreadResult mutex_timedlock(Mutex *mtx,
+ThreadResult mutex_lock(const Mutex *mtx);
+ThreadResult mutex_trylock(const Mutex *mtx);
+ThreadResult mutex_timedlock(const Mutex *mtx,
                              const std::chrono::nanoseconds &timeout);
-ThreadResult mutex_unlock(Mutex *mtx);
+ThreadResult mutex_unlock(const Mutex *mtx);
 
 ThreadResult cond_init(ConditionVariable *cnd);
 void cond_destroy(ConditionVariable *cnd);
-ThreadResult cond_signal(ConditionVariable *cnd);
-ThreadResult cond_broadcast(ConditionVariable *cnd);
-ThreadResult cond_wait(ConditionVariable *cnd, Mutex *mtx);
-ThreadResult cond_timedwait(ConditionVariable *cnd, Mutex *mtx,
+ThreadResult cond_signal(const ConditionVariable *cnd);
+ThreadResult cond_broadcast(const ConditionVariable *cnd);
+ThreadResult cond_wait(const ConditionVariable *cnd, const Mutex *mtx);
+ThreadResult cond_timedwait(const ConditionVariable *cnd, const Mutex *mtx,
                             const std::chrono::nanoseconds &timeout);
 
 void call_once(OnceFlag *flag, void (*func)());
 
-ThreadResult thread_set_affinity(Thread &thr, i32 core_id,
+ThreadResult thread_set_affinity(const Thread &thr, i32 core_id,
                                  bool prefer_physical = true);
-ThreadResult thread_set_affinity_ex(Thread &thr, CpuInfo *cpu_info,
+ThreadResult thread_set_affinity_ex(const Thread &thr, const CpuInfo *cpu_info,
                                     i32 cpu_count, i32 core_id,
                                     bool prefer_physical = true);
-ThreadResult thread_set_name(Thread &thr, const char *name);
+ThreadResult thread_set_name(const Thread &thr, const char *name);
 
 i32 thread_get_cpu_topology(CpuInfo *cpu_info, i32 max_cpus);
-i32 thread_get_physical_core_count(CpuInfo *cpu_info, i32 count);
-i32 thread_get_logical_core_count(CpuInfo *cpu_info, i32 count);
+i32 thread_get_physical_core_count(const CpuInfo *cpu_info, i32 count);
+i32 thread_get_logical_core_count(const CpuInfo *cpu_info, i32 count);
 
-ThreadResult thread_set_affinity_platform(Thread &thr, i32 core_id);
+ThreadResult thread_set_affinity_platform(const Thread &thr, i32 core_id);
 } // namespace edge
 
 #endif
