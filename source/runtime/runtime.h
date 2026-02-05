@@ -4,46 +4,42 @@
 #include <allocator.hpp>
 
 namespace edge {
-	struct RuntimeLayout;
-	struct InputSystem;
+struct RuntimeLayout;
+struct InputSystem;
 
-	enum class WindowMode {
-		Windowed,
-		Fullscreen,
-		FullscreenBorderless
-	};
+enum class WindowMode { Windowed, Fullscreen, FullscreenBorderless };
 
-	struct RuntimeInitInfo {
-		const Allocator* alloc = nullptr;
-		RuntimeLayout* layout = nullptr;
-		InputSystem* input_system = nullptr;
+struct RuntimeInitInfo {
+  const Allocator *alloc = nullptr;
+  RuntimeLayout *layout = nullptr;
+  InputSystem *input_system = nullptr;
 
-		const char* title = nullptr;
-		WindowMode mode = WindowMode::Windowed;
-		bool vsync = false;
-		i32 width = 1;
-		i32 height = 1;
-	};
+  const char *title = nullptr;
+  WindowMode mode = WindowMode::Windowed;
+  bool vsync = false;
+  i32 width = 1;
+  i32 height = 1;
+};
 
-	struct IRuntime {
-        virtual ~IRuntime() = default;
+struct IRuntime {
+  virtual ~IRuntime() = default;
 
-		virtual bool init(const RuntimeInitInfo& init_info) = 0;
-		virtual void deinit(NotNull<const Allocator*> alloc) = 0;
+  virtual bool init(const RuntimeInitInfo &init_info) = 0;
+  virtual void deinit(NotNull<const Allocator *> alloc) = 0;
 
-		virtual bool requested_close() const = 0;
-		virtual void process_events() = 0;
+  virtual bool requested_close() const = 0;
+  virtual void process_events() = 0;
 
-		virtual void get_surface(void* surface_info) const = 0;
-		virtual void get_surface_extent(i32& width, i32& height) const = 0;
-		virtual f32 get_surface_scale_factor() const = 0;
+  virtual void get_surface(void *surface_info) const = 0;
+  virtual void get_surface_extent(i32 &width, i32 &height) const = 0;
+  virtual f32 get_surface_scale_factor() const = 0;
 
-		virtual bool is_focused() const = 0;
+  virtual bool is_focused() const = 0;
 
-		virtual void set_title(const char* title) = 0;
-	};
+  virtual void set_title(const char *title) = 0;
+};
 
-	IRuntime* create_runtime(NotNull<const Allocator*> alloc);
-}
+IRuntime *create_runtime(NotNull<const Allocator *> alloc);
+} // namespace edge
 
 #endif // RUNTIME_H

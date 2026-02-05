@@ -11,7 +11,6 @@
 
 #ifdef __cplusplus
 #include <glm/glm.hpp>
-#include <cstdint>
 using namespace glm;
 
 #define SHDR_NAMESPACE_BEGIN namespace {
@@ -23,12 +22,10 @@ using namespace glm;
 
 #endif
 
-//#define USE_POINTERS
+// #define USE_POINTERS
 
 #ifdef __cplusplus
 
-#include <glm/glm.hpp>
-#include <glm/packing.hpp>
 #include <glm/gtx/compatibility.hpp>
 
 using int8_t2 = glm::i8vec2;
@@ -84,45 +81,39 @@ using float4x3 = glm::mat4x3;
 using float4x4 = glm::mat4;
 
 namespace edge::gfx {
-	using namespace glm;
+using namespace glm;
 
-	template<typename _Ty>
-	inline _Ty select(bool cond, _Ty l, _Ty r) {
-		return cond ? l : r;
-	}
-
-	template<typename _Ty, typename _Tty>
-	inline auto mul(const _Ty& a, const _Tty& b) -> decltype(a* b) {
-		return a * b;
-	}
-
-	template<typename _Ty>
-	struct GPUPointer {
-		GPUPointer(uint64_t addr = ~0ull) 
-			: address_{ addr } {
-		}
-
-		auto operator[](size_t idx) const -> const _Ty& {
-			static _Ty t{};
-			return t;
-		};
-
-		operator bool() const {
-			return address_ != ~0ull;
-		}
-
-		uint64_t address_{ ~0ull };
-	};
+template <typename _Ty> inline _Ty select(bool cond, _Ty l, _Ty r) {
+  return cond ? l : r;
 }
+
+template <typename _Ty, typename _Tty>
+inline auto mul(const _Ty &a, const _Tty &b) -> decltype(a * b) {
+  return a * b;
+}
+
+template <typename _Ty> struct GPUPointer {
+  GPUPointer(uint64_t addr = ~0ull) : address_{addr} {}
+
+  auto operator[](size_t idx) const -> const _Ty & {
+    static _Ty t{};
+    return t;
+  };
+
+  operator bool() const { return address_ != ~0ull; }
+
+  uint64_t address_{~0ull};
+};
+} // namespace edge::gfx
 
 #define TYPE_PTR(type) edge::gfx::GPUPointer<type>
 #define CONSTRUCTOR(type, ...) type(__VA_ARGS__)
-#define AS_IN(type) const type&
-#define AS_OUT(type) type&
-#define AS_INOUT(type) type&
+#define AS_IN(type) const type &
+#define AS_OUT(type) type &
+#define AS_INOUT(type) type &
 #elif __SLANG__
 #ifdef USE_POINTERS
-#define TYPE_PTR(type) type*
+#define TYPE_PTR(type) type *
 #else
 #define TYPE_PTR(type) vk::BufferPointer<type>
 #endif // USE_POINTERS
@@ -134,13 +125,11 @@ namespace edge::gfx {
 #endif
 
 namespace edge::gfx {
-	inline uint8_t4 encode_color(AS_IN(float4) c) {
-		return uint8_t4(clamp(round(c * 255.0f), 0.0f, 255.0f));
-	}
-
-	inline float4 decode_color(AS_IN(uint8_t4) c) {
-		return float4(c) / 255.0f;
-	}
+inline uint8_t4 encode_color(AS_IN(float4) c) {
+  return uint8_t4(clamp(round(c * 255.0f), 0.0f, 255.0f));
 }
+
+inline float4 decode_color(AS_IN(uint8_t4) c) { return float4(c) / 255.0f; }
+} // namespace edge::gfx
 
 #endif

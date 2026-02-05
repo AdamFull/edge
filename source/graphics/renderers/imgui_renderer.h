@@ -1,9 +1,8 @@
 #ifndef IMGUI_RENDERER_H
 #define IMGUI_RENDERER_H
 
-#include <inttypes.h>
-#include <handle_pool.hpp>
 #include "../gfx_context.h"
+#include <handle_pool.hpp>
 
 #include "../../imgui_integration.h"
 
@@ -11,36 +10,40 @@ struct ImDrawData;
 struct ImTextureData;
 
 namespace edge::gfx {
-	struct Renderer;
+struct Renderer;
 
-	struct ImGuiRendererCreateInfo {
-		Renderer* renderer = nullptr;
-	};
+struct ImGuiRendererCreateInfo {
+  Renderer *renderer = nullptr;
+};
 
-	struct ImGuiRenderer {
-		Renderer* renderer = nullptr;
+struct ImGuiRenderer {
+  Renderer *renderer = nullptr;
 
-		ShaderModule vertex_shader = {};
-		ShaderModule fragment_shader = {};
-		Pipeline pipeline = {};
+  ShaderModule vertex_shader = {};
+  ShaderModule fragment_shader = {};
+  Pipeline pipeline = {};
 
-		Handle vertex_buffer = HANDLE_INVALID;
-		u64 vertex_buffer_capacity = 0;
-		bool vertex_need_to_grow = true;
+  Handle vertex_buffer = HANDLE_INVALID;
+  u64 vertex_buffer_capacity = 0;
+  bool vertex_need_to_grow = true;
 
-		Handle index_buffer = HANDLE_INVALID;
-		u64 index_buffer_capacity = 0;
-		bool index_need_to_grow = true;
+  Handle index_buffer = HANDLE_INVALID;
+  u64 index_buffer_capacity = 0;
+  bool index_need_to_grow = true;
 
-		bool create(NotNull<const Allocator*> alloc, ImGuiRendererCreateInfo create_info);
-		void destroy(NotNull<const Allocator*> alloc);
+  bool create(NotNull<const Allocator *> alloc,
+              ImGuiRendererCreateInfo create_info);
+  void destroy(NotNull<const Allocator *> alloc);
 
-		void execute(NotNull<const Allocator*> alloc);
-	private:
-		void update_buffers(NotNull<const Allocator*> alloc);
-		void update_texture(NotNull<const Allocator*> alloc, NotNull<ImTextureData*> tex);
-		void update_geometry(NotNull<const Allocator*> alloc, NotNull<ImDrawData*> draw_data);
-	};
-}
+  void execute(NotNull<const Allocator *> alloc);
+
+private:
+  void update_buffers(NotNull<const Allocator *> alloc);
+  void update_texture(NotNull<const Allocator *> alloc,
+                      NotNull<ImTextureData *> tex);
+  void update_geometry(NotNull<const Allocator *> alloc,
+                       NotNull<ImDrawData *> draw_data);
+};
+} // namespace edge::gfx
 
 #endif
