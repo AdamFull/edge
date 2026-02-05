@@ -2,10 +2,10 @@
 #define EDGE_STDDEF_H
 
 #include <cassert>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
-#include <concepts>
 
 #include "platform_detect.hpp"
 
@@ -23,195 +23,185 @@ using usize = size_t;
 using isize = ptrdiff_t;
 
 namespace edge {
-	template<typename T>
-	concept TrivialType = std::is_trivially_destructible_v<T> || std::is_trivially_copyable_v<T>;
+template <typename T>
+concept TrivialType =
+    std::is_trivially_destructible_v<T> || std::is_trivially_copyable_v<T>;
 
-    template<typename T>
-    concept Character = 
-        std::same_as<std::remove_cv_t<T>, char> ||
-        std::same_as<std::remove_cv_t<T>, char8_t> ||
-        std::same_as<std::remove_cv_t<T>, wchar_t> ||
-        std::same_as<std::remove_cv_t<T>, char16_t> ||
-        std::same_as<std::remove_cv_t<T>, char32_t>;
+template <typename T>
+concept Character = std::same_as<std::remove_cv_t<T>, char> ||
+                    std::same_as<std::remove_cv_t<T>, char8_t> ||
+                    std::same_as<std::remove_cv_t<T>, wchar_t> ||
+                    std::same_as<std::remove_cv_t<T>, char16_t> ||
+                    std::same_as<std::remove_cv_t<T>, char32_t>;
 
-	template<typename T>
-	concept Arithmetic = std::is_arithmetic_v<T>;
+template <typename T>
+concept Arithmetic = std::is_arithmetic_v<T>;
 
-	template<typename T>
-	concept SignedArithmetic = std::is_signed_v<T> && std::is_arithmetic_v<T>;
+template <typename T>
+concept SignedArithmetic = std::is_signed_v<T> && std::is_arithmetic_v<T>;
 
-	template<typename T>
-	concept UnsignedArithmetic = std::is_unsigned_v<T> && std::is_arithmetic_v<T>;
+template <typename T>
+concept UnsignedArithmetic = std::is_unsigned_v<T> && std::is_arithmetic_v<T>;
 
-	template<typename T>
-	concept FloatingPoint = std::is_floating_point_v<T>;
+template <typename T>
+concept FloatingPoint = std::is_floating_point_v<T>;
 
-	template<typename E>
-		requires std::is_enum_v<E>
-	struct Range {
-		using underlying_t = std::underlying_type_t<E>;
+template <typename E>
+  requires std::is_enum_v<E>
+struct Range {
+  using underlying_t = std::underlying_type_t<E>;
 
-		struct iterator {	
-			underlying_t val;
+  struct iterator {
+    underlying_t val;
 
-			E operator*() const { return static_cast<E>(val); }
-			operator underlying_t() const { return val; }
+    E operator*() const { return static_cast<E>(val); }
+    operator underlying_t() const { return val; }
 
-			iterator& operator++() { ++val; return *this; }
-			bool operator!=(iterator other) const { return val != other.val; }
-		};
+    iterator &operator++() {
+      ++val;
+      return *this;
+    }
+    bool operator!=(iterator other) const { return val != other.val; }
+  };
 
-		struct reverse_iterator {
-			underlying_t val;
+  struct reverse_iterator {
+    underlying_t val;
 
-			E operator*() const { return static_cast<E>(val); }
-			operator underlying_t() const { return val; }
+    E operator*() const { return static_cast<E>(val); }
+    operator underlying_t() const { return val; }
 
-			reverse_iterator& operator++() { --val; return *this; }
-			bool operator!=(reverse_iterator other) const { return val != other.val; }
-		};
+    reverse_iterator &operator++() {
+      --val;
+      return *this;
+    }
+    bool operator!=(reverse_iterator other) const { return val != other.val; }
+  };
 
-		E first, last;
+  E first, last;
 
-		iterator begin() const { 
-			return { .val = static_cast<underlying_t>(first) }; 
-		}
+  iterator begin() const { return {.val = static_cast<underlying_t>(first)}; }
 
-		iterator end() const { 
-			auto end_val = static_cast<underlying_t>(last);
-			++end_val;
-			return {  .val = end_val };
-		}
+  iterator end() const {
+    auto end_val = static_cast<underlying_t>(last);
+    ++end_val;
+    return {.val = end_val};
+  }
 
-		reverse_iterator rbegin() const {
-			return { .val = static_cast<underlying_t>(last) };
-		}
+  reverse_iterator rbegin() const {
+    return {.val = static_cast<underlying_t>(last)};
+  }
 
-		reverse_iterator rend() const {
-			auto end_val = static_cast<underlying_t>(first);
-			--end_val;
-			return { .val = end_val };
-		}
-	};
+  reverse_iterator rend() const {
+    auto end_val = static_cast<underlying_t>(first);
+    --end_val;
+    return {.val = end_val};
+  }
+};
 
-	template<typename T>
-	struct NotNull {
-		static_assert(std::is_pointer_v<T>, "NotNull requires a pointer type");
+template <typename T> struct NotNull {
+  static_assert(std::is_pointer_v<T>, "NotNull requires a pointer type");
 
-		using pointer = T;
-		using element_type = std::remove_pointer_t<T>;
+  using pointer = T;
+  using element_type = std::remove_pointer_t<T>;
 
-		constexpr NotNull(T ptr) : m_ptr(ptr) {
-			assert(ptr != nullptr);
-		}
+  constexpr NotNull(T ptr) : m_ptr(ptr) { assert(ptr != nullptr); }
 
-		constexpr NotNull(const NotNull& other) = default;
-		constexpr NotNull(NotNull&& other) = default;
+  constexpr NotNull(const NotNull &other) = default;
+  constexpr NotNull(NotNull &&other) = default;
 
-		constexpr NotNull& operator=(const NotNull& other) = default;
-		constexpr NotNull& operator=(NotNull&& other) = default;
+  constexpr NotNull &operator=(const NotNull &other) = default;
+  constexpr NotNull &operator=(NotNull &&other) = default;
 
-		constexpr NotNull& operator=(T ptr) {
-			m_ptr = ptr;
-			return *this;
-		}
+  constexpr NotNull &operator=(T ptr) {
+    m_ptr = ptr;
+    return *this;
+  }
 
-		NotNull(std::nullptr_t) = delete;
-		NotNull& operator=(std::nullptr_t) = delete;
+  NotNull(std::nullptr_t) = delete;
+  NotNull &operator=(std::nullptr_t) = delete;
 
-		constexpr element_type& operator*() const {
-			return *m_ptr;
-		}
+  constexpr element_type &operator*() const { return *m_ptr; }
 
-		constexpr T operator->() const {
-			return m_ptr;
-		}
+  constexpr T operator->() const { return m_ptr; }
 
-		T m_ptr;
-	};
+  T m_ptr;
+};
 
-	template<typename V, typename E>
-	struct Result {
-		Result(V value) 
-			: m_has_value(true), m_value(value) {
-		}
+template <typename V, typename E> struct Result {
+  Result(V value) : m_has_value(true), m_value(value) {}
 
-		Result(E error)
-			: m_has_value(false), m_error(error) {
-		}
+  Result(E error) : m_has_value(false), m_error(error) {}
 
-		explicit operator bool() const {
-			return m_has_value;
-		}
+  explicit operator bool() const { return m_has_value; }
 
-		V* operator->() {
-			assert(m_has_value && "operator->() called on error state");
-			return &m_value;
-		}
+  V *operator->() {
+    assert(m_has_value && "operator->() called on error state");
+    return &m_value;
+  }
 
-		V& operator*() {
-			assert(m_has_value && "operator*() called on error state");
-			return m_value;
-		}
+  V &operator*() {
+    assert(m_has_value && "operator*() called on error state");
+    return m_value;
+  }
 
-		V value() const {
-			assert(m_has_value && "Result::value() called on error state");
-			return m_value;
-		}
+  V value() const {
+    assert(m_has_value && "Result::value() called on error state");
+    return m_value;
+  }
 
-		E error() const {
-			assert(!m_has_value && "Result::error() called on value state");
-			return m_error;
-		}
-	private:
-		bool m_has_value = false;
-		union {
-			V m_value;
-			E m_error;
-		};
-	};
+  E error() const {
+    assert(!m_has_value && "Result::error() called on value state");
+    return m_error;
+  }
 
-	template<typename Container>
-	constexpr auto array_size(const Container& c) -> decltype(c.size()) {
-		return c.size();
-	}
+private:
+  bool m_has_value = false;
+  union {
+    V m_value;
+    E m_error;
+  };
+};
 
-	template<typename T, usize N>
-	constexpr usize array_size(const T(&)[N]) {
-		return N;
-	}
-
-	template<typename TargetT, typename SourceT>
-	TargetT safe_cast(SourceT* ptr) {
-		static_assert(std::is_pointer<TargetT>::value, "Target must be a pointer type");
-
-#if EDGE_DEBUG
-		TargetT result = dynamic_cast<TargetT>(ptr);
-		assert(result != nullptr && "safe_cast: dynamic_cast failed - invalid cast");
-		return result;
-#else
-		return static_cast<TargetT>(ptr);
-#endif
-	}
-
-	template<typename TargetT, typename SourceT>
-	TargetT safe_cast(SourceT& ref) {
-		static_assert(std::is_reference<TargetT>::value, "Target must be a reference type");
-#if EDGE_DEBUG
-		return dynamic_cast<TargetT>(ref);
-#else
-		return static_cast<TargetT>(ref);
-#endif
-	}
+template <typename Container>
+constexpr auto array_size(const Container &c) -> decltype(c.size()) {
+  return c.size();
 }
 
-#define EDGE_DECLARE_CONTAINER_HEADER(Type) \
-using element_type = Type; \
-using pointer = Type*; \
-using const_pointer = const Type*; \
-using reference = Type&; \
-using const_reference = const Type&; \
-using size_type = usize; \
-using difference_type = isize;
+template <typename T, usize N> constexpr usize array_size(const T (&)[N]) {
+  return N;
+}
+
+template <typename TargetT, typename SourceT> TargetT safe_cast(SourceT *ptr) {
+  static_assert(std::is_pointer<TargetT>::value,
+                "Target must be a pointer type");
+
+#if EDGE_DEBUG
+  TargetT result = dynamic_cast<TargetT>(ptr);
+  assert(result != nullptr && "safe_cast: dynamic_cast failed - invalid cast");
+  return result;
+#else
+  return static_cast<TargetT>(ptr);
+#endif
+}
+
+template <typename TargetT, typename SourceT> TargetT safe_cast(SourceT &ref) {
+  static_assert(std::is_reference<TargetT>::value,
+                "Target must be a reference type");
+#if EDGE_DEBUG
+  return dynamic_cast<TargetT>(ref);
+#else
+  return static_cast<TargetT>(ref);
+#endif
+}
+} // namespace edge
+
+#define EDGE_DECLARE_CONTAINER_HEADER(Type)                                    \
+  using element_type = Type;                                                   \
+  using pointer = Type *;                                                      \
+  using const_pointer = const Type *;                                          \
+  using reference = Type &;                                                    \
+  using const_reference = const Type &;                                        \
+  using size_type = usize;                                                     \
+  using difference_type = isize;
 
 #endif

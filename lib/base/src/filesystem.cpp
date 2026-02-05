@@ -1,5 +1,3 @@
 #include "filesystem.hpp"
 
-namespace edge {
-
-}
+namespace edge {}

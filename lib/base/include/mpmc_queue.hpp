@@ -8,257 +8,240 @@
 #include <cstring>
 
 namespace edge {
-	template<TrivialType T>
-	struct alignas(64) MPMCNode {
-		std::atomic<usize> sequence;
-		T data;
-	};
+template <TrivialType T> struct alignas(64) MPMCNode {
+  std::atomic<usize> sequence;
+  T data;
+};
 
-	template<TrivialType T>
-	struct MPMCQueue {
-		MPMCNode<T>* m_buffer = nullptr;
-		usize m_capacity = 0ull;
-		usize m_mask = 0ull;
-		alignas(64) std::atomic<usize> m_enqueue_pos = 0ull;
-		alignas(64) std::atomic<usize> m_dequeue_pos = 0ull;
+template <TrivialType T> struct MPMCQueue {
+  MPMCNode<T> *m_buffer = nullptr;
+  usize m_capacity = 0ull;
+  usize m_mask = 0ull;
+  alignas(64) std::atomic<usize> m_enqueue_pos = 0ull;
+  alignas(64) std::atomic<usize> m_dequeue_pos = 0ull;
 
-		struct Iterator {
-			MPMCQueue<T>* queue;
-			usize index;
-			usize end_index;
+  struct Iterator {
+    MPMCQueue<T> *queue;
+    usize index;
+    usize end_index;
 
-			Iterator(MPMCQueue<T>* q, usize idx, usize end)
-				: queue(q), index(idx), end_index(end) {
-			}
+    Iterator(MPMCQueue<T> *q, usize idx, usize end)
+        : queue(q), index(idx), end_index(end) {}
 
-			T& operator*() {
-				return queue->m_buffer[index & queue->m_mask].data;
-			}
+    T &operator*() { return queue->m_buffer[index & queue->m_mask].data; }
 
-			Iterator& operator++() {
-				++index;
-				return *this;
-			}
+    Iterator &operator++() {
+      ++index;
+      return *this;
+    }
 
-			bool operator!=(const Iterator& other) const {
-				return index != other.index;
-			}
-		};
+    bool operator!=(const Iterator &other) const {
+      return index != other.index;
+    }
+  };
 
-		bool create(NotNull<const Allocator*> alloc, usize capacity) {
-			if (capacity == 0) {
-				return false;
-			}
+  bool create(NotNull<const Allocator *> alloc, usize capacity) {
+    if (capacity == 0) {
+      return false;
+    }
 
-			if (!is_pow2(capacity)) {
-				capacity = next_pow2(capacity);
-			}
+    if (!is_pow2(capacity)) {
+      capacity = next_pow2(capacity);
+    }
 
-			if (capacity > SIZE_MAX / 2) {
-				return false;
-			}
+    if (capacity > SIZE_MAX / 2) {
+      return false;
+    }
 
-			m_buffer = alloc->allocate_array<MPMCNode<T>>(capacity);
-			if (!m_buffer) {
-				return false;
-			}
+    m_buffer = alloc->allocate_array<MPMCNode<T>>(capacity);
+    if (!m_buffer) {
+      return false;
+    }
 
-			for (usize i = 0; i < capacity; i++) {
-				m_buffer[i].sequence.store(i, std::memory_order_relaxed);
-			}
+    for (usize i = 0; i < capacity; i++) {
+      m_buffer[i].sequence.store(i, std::memory_order_relaxed);
+    }
 
-			m_capacity = capacity;
-			m_mask = capacity - 1;
+    m_capacity = capacity;
+    m_mask = capacity - 1;
 
-			m_enqueue_pos.store(0, std::memory_order_relaxed);
-			m_dequeue_pos.store(0, std::memory_order_relaxed);
+    m_enqueue_pos.store(0, std::memory_order_relaxed);
+    m_dequeue_pos.store(0, std::memory_order_relaxed);
 
-			return true;
-		}
-		
-		void destroy(NotNull<const Allocator*> alloc) {
-			if (m_buffer) {
-				alloc->deallocate_array(m_buffer, m_capacity);
-			}
-		}
+    return true;
+  }
 
-		bool enqueue(const T& element) {
-			usize pos;
-			MPMCNode<T>* node;
-			usize seq;
+  void destroy(NotNull<const Allocator *> alloc) {
+    if (m_buffer) {
+      alloc->deallocate_array(m_buffer, m_capacity);
+    }
+  }
 
-			for (;;) {
-				pos = m_enqueue_pos.load(std::memory_order_relaxed);
-				node = &m_buffer[pos & m_mask];
-				seq = node->sequence.load(std::memory_order_acquire);
+  bool enqueue(const T &element) {
+    usize pos;
+    MPMCNode<T> *node;
+    usize seq;
 
-				isize diff = (isize)seq - (isize)pos;
+    for (;;) {
+      pos = m_enqueue_pos.load(std::memory_order_relaxed);
+      node = &m_buffer[pos & m_mask];
+      seq = node->sequence.load(std::memory_order_acquire);
 
-				if (diff == 0) {
-					if (m_enqueue_pos.compare_exchange_weak(pos, pos + 1,
-						std::memory_order_relaxed,
-						std::memory_order_relaxed)) {
-						break;
-					}
-				}
-				else if (diff < 0) {
-					return false;
-				}
-			}
+      isize diff = (isize)seq - (isize)pos;
 
-			node->data = element;
-			node->sequence.store(pos + 1, std::memory_order_release);
+      if (diff == 0) {
+        if (m_enqueue_pos.compare_exchange_weak(pos, pos + 1,
+                                                std::memory_order_relaxed,
+                                                std::memory_order_relaxed)) {
+          break;
+        }
+      } else if (diff < 0) {
+        return false;
+      }
+    }
 
-			return true;
-		}
+    node->data = element;
+    node->sequence.store(pos + 1, std::memory_order_release);
 
-		bool dequeue(T* out_element) {
-			usize pos;
-			MPMCNode<T>* node;
-			usize seq;
+    return true;
+  }
 
-			for (;;) {
-				pos = m_dequeue_pos.load(std::memory_order_relaxed);
-				node = &m_buffer[pos & m_mask];
-				seq = node->sequence.load(std::memory_order_acquire);
+  bool dequeue(T *out_element) {
+    usize pos;
+    MPMCNode<T> *node;
+    usize seq;
 
-				isize diff = (isize)seq - (isize)(pos + 1);
+    for (;;) {
+      pos = m_dequeue_pos.load(std::memory_order_relaxed);
+      node = &m_buffer[pos & m_mask];
+      seq = node->sequence.load(std::memory_order_acquire);
 
-				if (diff == 0) {
-					if (m_dequeue_pos.compare_exchange_weak(pos, pos + 1,
-						std::memory_order_relaxed,
-						std::memory_order_relaxed)) {
-						break;
-					}
-				}
-				else if (diff < 0) {
-					return false;
-				}
-			}
+      isize diff = (isize)seq - (isize)(pos + 1);
 
-			if (out_element) {
-				*out_element = node->data;
-			}
+      if (diff == 0) {
+        if (m_dequeue_pos.compare_exchange_weak(pos, pos + 1,
+                                                std::memory_order_relaxed,
+                                                std::memory_order_relaxed)) {
+          break;
+        }
+      } else if (diff < 0) {
+        return false;
+      }
+    }
 
-			node->sequence.store(pos + m_mask + 1, std::memory_order_release);
+    if (out_element) {
+      *out_element = node->data;
+    }
 
-			return true;
-		}
+    node->sequence.store(pos + m_mask + 1, std::memory_order_release);
 
-		bool try_enqueue(const T& element, usize max_retries) {
-			usize pos;
-			MPMCNode<T>* node;
-			usize seq;
-			usize retries = 0;
+    return true;
+  }
 
-			for (;;) {
-				if (retries >= max_retries) {
-					return false;
-				}
+  bool try_enqueue(const T &element, usize max_retries) {
+    usize pos;
+    MPMCNode<T> *node;
+    usize seq;
+    usize retries = 0;
 
-				pos = m_enqueue_pos.load(std::memory_order_relaxed);
-				node = &m_buffer[pos & m_mask];
-				seq = node->sequence.load(std::memory_order_acquire);
+    for (;;) {
+      if (retries >= max_retries) {
+        return false;
+      }
 
-				isize diff = (isize)seq - (isize)pos;
+      pos = m_enqueue_pos.load(std::memory_order_relaxed);
+      node = &m_buffer[pos & m_mask];
+      seq = node->sequence.load(std::memory_order_acquire);
 
-				if (diff == 0) {
-					if (m_enqueue_pos.compare_exchange_weak(pos, pos + 1,
-						std::memory_order_relaxed,
-						std::memory_order_relaxed)) {
-						break;
-					}
-					retries++;
-				}
-				else if (diff < 0) {
-					return false;
-				}
-				else {
-					retries++;
-				}
-			}
+      isize diff = (isize)seq - (isize)pos;
 
-			node->data = element;
-			node->sequence.store(pos + 1, std::memory_order_release);
+      if (diff == 0) {
+        if (m_enqueue_pos.compare_exchange_weak(pos, pos + 1,
+                                                std::memory_order_relaxed,
+                                                std::memory_order_relaxed)) {
+          break;
+        }
+        retries++;
+      } else if (diff < 0) {
+        return false;
+      } else {
+        retries++;
+      }
+    }
 
-			return true;
-		}
+    node->data = element;
+    node->sequence.store(pos + 1, std::memory_order_release);
 
-		bool try_dequeue(T* out_element, usize max_retries) {
-			usize pos;
-			MPMCNode<T>* node;
-			usize seq;
-			usize retries = 0;
+    return true;
+  }
 
-			for (;;) {
-				if (retries >= max_retries) {
-					return false;
-				}
+  bool try_dequeue(T *out_element, usize max_retries) {
+    usize pos;
+    MPMCNode<T> *node;
+    usize seq;
+    usize retries = 0;
 
-				pos = m_dequeue_pos.load(std::memory_order_relaxed);
-				node = &m_buffer[pos & m_mask];
-				seq = node->sequence.load(std::memory_order_acquire);
+    for (;;) {
+      if (retries >= max_retries) {
+        return false;
+      }
 
-				isize diff = (isize)seq - (isize)(pos + 1);
+      pos = m_dequeue_pos.load(std::memory_order_relaxed);
+      node = &m_buffer[pos & m_mask];
+      seq = node->sequence.load(std::memory_order_acquire);
 
-				if (diff == 0) {
-					if (m_dequeue_pos.compare_exchange_weak(pos, pos + 1,
-						std::memory_order_relaxed,
-						std::memory_order_relaxed)) {
-						break;
-					}
-					retries++;
-				}
-				else if (diff < 0) {
-					return false;
-				}
-				else {
-					retries++;
-				}
-			}
+      isize diff = (isize)seq - (isize)(pos + 1);
 
-			if (out_element) {
-				*out_element = node->data;
-			}
+      if (diff == 0) {
+        if (m_dequeue_pos.compare_exchange_weak(pos, pos + 1,
+                                                std::memory_order_relaxed,
+                                                std::memory_order_relaxed)) {
+          break;
+        }
+        retries++;
+      } else if (diff < 0) {
+        return false;
+      } else {
+        retries++;
+      }
+    }
 
-			node->sequence.store(pos + m_mask + 1, std::memory_order_release);
+    if (out_element) {
+      *out_element = node->data;
+    }
 
-			return true;
-		}
+    node->sequence.store(pos + m_mask + 1, std::memory_order_release);
 
-		usize size_approx() const {
-			usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
-			usize dequeue = m_dequeue_pos.load(std::memory_order_relaxed);
+    return true;
+  }
 
-			if (enqueue >= dequeue) {
-				return enqueue - dequeue;
-			}
-			return (SIZE_MAX - dequeue) + enqueue + 1;
-		}
+  usize size_approx() const {
+    usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
+    usize dequeue = m_dequeue_pos.load(std::memory_order_relaxed);
 
-		usize capacity() const {
-			return m_capacity;
-		}
+    if (enqueue >= dequeue) {
+      return enqueue - dequeue;
+    }
+    return (SIZE_MAX - dequeue) + enqueue + 1;
+  }
 
-		bool empty_approx() const {
-			return size_approx() == 0;
-		}
+  usize capacity() const { return m_capacity; }
 
-		bool full_approx() const {
-			return size_approx() >= m_capacity;
-		}
+  bool empty_approx() const { return size_approx() == 0; }
 
-		Iterator begin() {
-			usize dequeue = m_dequeue_pos.load(std::memory_order_relaxed);
-			usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
-			return { this, dequeue, enqueue };
-		}
+  bool full_approx() const { return size_approx() >= m_capacity; }
 
-		Iterator end() {
-			usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
-			return { this, enqueue, enqueue };
-		}
-	};
-}
+  Iterator begin() {
+    usize dequeue = m_dequeue_pos.load(std::memory_order_relaxed);
+    usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
+    return {this, dequeue, enqueue};
+  }
+
+  Iterator end() {
+    usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
+    return {this, enqueue, enqueue};
+  }
+};
+} // namespace edge
 
 #endif

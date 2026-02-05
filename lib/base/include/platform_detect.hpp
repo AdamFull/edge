@@ -5,8 +5,9 @@
 extern "C" {
 #endif
 
-	// Target platform detection
-#if defined(_WIN32) || defined(_WIN64) || defined(__WIN32__) || defined(__WINDOWS__)
+// Target platform detection
+#if defined(_WIN32) || defined(_WIN64) || defined(__WIN32__) ||                \
+    defined(__WINDOWS__)
 #define EDGE_PLATFORM_WINDOWS 1
 #define EDGE_PLATFORM_NAME "Windows"
 #elif defined(__ANDROID__)
@@ -30,12 +31,14 @@ extern "C" {
 #warning "Unknown platform detected"
 #endif
 
-	// Target arch detection
-#if defined(__x86_64__) || defined(__x86_64) || defined(__amd64__) || defined(__amd64) || defined(_M_X64) || defined(_M_AMD64)
+// Target arch detection
+#if defined(__x86_64__) || defined(__x86_64) || defined(__amd64__) ||          \
+    defined(__amd64) || defined(_M_X64) || defined(_M_AMD64)
 #define EDGE_ARCH_X64 1
 #define EDGE_ARCH_NAME "x64"
 #define EDGE_ARCH_BITS 64
-#elif defined(i386) || defined(__i386) || defined(__i386__) || defined(_M_IX86) || defined(_X86_)
+#elif defined(i386) || defined(__i386) || defined(__i386__) ||                 \
+    defined(_M_IX86) || defined(_X86_)
 #define EDGE_ARCH_X86 1
 #define EDGE_ARCH_NAME "x86"
 #define EDGE_ARCH_BITS 32
@@ -62,7 +65,7 @@ extern "C" {
 #define EDGE_POINTER_SIZE 4
 #endif
 
-	// Compiler detection
+// Compiler detection
 #if defined(_MSC_VER)
 #define EDGE_COMPILER_MSVC 1
 #define EDGE_COMPILER_NAME "MSVC"
@@ -70,18 +73,20 @@ extern "C" {
 #elif defined(__clang__)
 #define EDGE_COMPILER_CLANG 1
 #define EDGE_COMPILER_NAME "Clang"
-#define EDGE_COMPILER_VERSION (__clang_major__ * 10000 + __clang_minor__ * 100 + __clang_patchlevel__)
+#define EDGE_COMPILER_VERSION                                                  \
+  (__clang_major__ * 10000 + __clang_minor__ * 100 + __clang_patchlevel__)
 #elif defined(__GNUC__)
 #define EDGE_COMPILER_GCC 1
 #define EDGE_COMPILER_NAME "GCC"
-#define EDGE_COMPILER_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
+#define EDGE_COMPILER_VERSION                                                  \
+  (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
 #else
 #define EDGE_COMPILER_UNKNOWN 1
 #define EDGE_COMPILER_NAME "Unknown"
 #define EDGE_COMPILER_VERSION 0
 #endif
 
-	// Build configuration detections
+// Build configuration detections
 #if defined(DEBUG) || defined(_DEBUG) || !defined(NDEBUG)
 #define EDGE_DEBUG 1
 #define EDGE_BUILD_CONFIG "Debug"
@@ -90,8 +95,9 @@ extern "C" {
 #define EDGE_BUILD_CONFIG "Release"
 #endif
 
-	// Endiannes detection
-#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && defined(__ORDER_BIG_ENDIAN__)
+// Endiannes detection
+#if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) &&             \
+    defined(__ORDER_BIG_ENDIAN__)
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 #define EDGE_LITTLE_ENDIAN 1
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
@@ -99,11 +105,13 @@ extern "C" {
 #endif
 #elif defined(_WIN32) || defined(_WIN64)
 #define EDGE_LITTLE_ENDIAN 1
-#elif defined(__LITTLE_ENDIAN__) || defined(__ARMEL__) || defined(__THUMBEL__) || \
-      defined(__AARCH64EL__) || defined(_MIPSEL) || defined(__MIPSEL) || defined(__MIPSEL__)
+#elif defined(__LITTLE_ENDIAN__) || defined(__ARMEL__) ||                      \
+    defined(__THUMBEL__) || defined(__AARCH64EL__) || defined(_MIPSEL) ||      \
+    defined(__MIPSEL) || defined(__MIPSEL__)
 #define EDGE_LITTLE_ENDIAN 1
 #elif defined(__BIG_ENDIAN__) || defined(__ARMEB__) || defined(__THUMBEB__) || \
-      defined(__AARCH64EB__) || defined(_MIPSEB) || defined(__MIPSEB) || defined(__MIPSEB__)
+    defined(__AARCH64EB__) || defined(_MIPSEB) || defined(__MIPSEB) ||         \
+    defined(__MIPSEB__)
 #define EDGE_BIG_ENDIAN 1
 #else
 #if defined(EDGE_ARCH_X64) || defined(EDGE_ARCH_AARCH64)
@@ -118,11 +126,13 @@ extern "C" {
 #if defined(EDGE_ARCH_X64) || defined(EDGE_ARCH_X86)
 
 // SSE family
-#if defined(__SSE__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 1)
+#if defined(__SSE__) || defined(_M_X64) ||                                     \
+    (defined(_M_IX86_FP) && _M_IX86_FP >= 1)
 #define EDGE_HAS_SSE 1
 #endif
 
-#if defined(__SSE2__) || defined(_M_X64) || (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
+#if defined(__SSE2__) || defined(_M_X64) ||                                    \
+    (defined(_M_IX86_FP) && _M_IX86_FP >= 2)
 #define EDGE_HAS_SSE2 1
 #endif
 
@@ -313,7 +323,7 @@ extern "C" {
 #include <arm_sve.h>
 #endif
 
-	// Platform feature
+// Platform feature
 #if defined(EDGE_PLATFORM_LINUX) || defined(EDGE_PLATFORM_ANDROID)
 #define EDGE_PLATFORM_POSIX 1
 #endif
@@ -376,10 +386,10 @@ extern "C" {
 #endif
 
 #if defined(EDGE_COMPILER_GCC) || defined(EDGE_COMPILER_CLANG)
-#define EDGE_LIKELY(x)   __builtin_expect(!!(x), 1)
+#define EDGE_LIKELY(x) __builtin_expect(!!(x), 1)
 #define EDGE_UNLIKELY(x) __builtin_expect(!!(x), 0)
 #else
-#define EDGE_LIKELY(x)   (x)
+#define EDGE_LIKELY(x) (x)
 #define EDGE_UNLIKELY(x) (x)
 #endif
 
