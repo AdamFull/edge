@@ -4,52 +4,6 @@
 #include "allocator.hpp"
 
 namespace edge {
-template <TrivialType T> struct ListNode;
-
-template <TrivialType T> struct List;
-
-template <TrivialType T> struct ListIterator {
-  ListNode<T> *current;
-
-  bool operator==(const ListIterator &other) const {
-    return current == other.current;
-  }
-
-  bool operator!=(const ListIterator &other) const {
-    return current != other.current;
-  }
-
-  T &operator*() const { return current->data; }
-
-  T *operator->() const { return &current->data; }
-
-  ListIterator &operator++() {
-    if (current) {
-      current = current->next;
-    }
-    return *this;
-  }
-
-  ListIterator operator++(int) {
-    ListIterator tmp = *this;
-    ++(*this);
-    return tmp;
-  }
-
-  ListIterator &operator--() {
-    if (current) {
-      current = current->prev;
-    }
-    return *this;
-  }
-
-  ListIterator operator--(int) {
-    ListIterator tmp = *this;
-    --(*this);
-    return tmp;
-  }
-};
-
 template <TrivialType T> struct ListNode {
   T data;
   ListNode *next = nullptr;
@@ -121,7 +75,49 @@ template <TrivialType T> struct List {
   ListNode<T> *m_tail = nullptr;
   usize m_size = 0ull;
 
-  void clear(NotNull<const Allocator *> alloc) {
+  struct Iterator {
+    ListNode<T> *current;
+
+    bool operator==(const Iterator &other) const {
+      return current == other.current;
+    }
+
+    bool operator!=(const Iterator &other) const {
+      return current != other.current;
+    }
+
+    T &operator*() const { return current->data; }
+
+    T *operator->() const { return &current->data; }
+
+    Iterator &operator++() {
+      if (current) {
+        current = current->next;
+      }
+      return *this;
+    }
+
+    Iterator operator++(int) {
+      Iterator tmp = *this;
+      ++*this;
+      return tmp;
+    }
+
+    Iterator &operator--() {
+      if (current) {
+        current = current->prev;
+      }
+      return *this;
+    }
+
+    Iterator operator--(int) {
+      Iterator tmp = *this;
+      --*this;
+      return tmp;
+    }
+  };
+
+  void clear(const NotNull<const Allocator *> alloc) {
     ListNode<T> *current = m_head;
     while (current) {
       ListNode<T> *next = current->next;
@@ -134,8 +130,8 @@ template <TrivialType T> struct List {
     m_size = 0;
   }
 
-  bool push_front(NotNull<const Allocator *> alloc, const T &element) {
-    ListNode<T> *node = alloc->allocate<ListNode<T>>(element, nullptr, nullptr);
+  bool push_front(const NotNull<const Allocator *> alloc, const T &element) {
+    auto *node = alloc->allocate<ListNode<T>>(element, nullptr, nullptr);
     if (!node) {
       return false;
     }
@@ -153,9 +149,9 @@ template <TrivialType T> struct List {
     return true;
   }
 
-  void destroy(NotNull<const Allocator *> alloc) { clear(alloc); }
+  void destroy(const NotNull<const Allocator *> alloc) { clear(alloc); }
 
-  bool push_back(NotNull<const Allocator *> alloc, const T &element) {
+  bool push_back(const NotNull<const Allocator *> alloc, const T &element) {
     ListNode<T> *node = alloc->allocate<ListNode<T>>(element, nullptr, nullptr);
     if (!node) {
       return false;
@@ -174,7 +170,7 @@ template <TrivialType T> struct List {
     return true;
   }
 
-  bool pop_front(NotNull<const Allocator *> alloc, T *out_element) {
+  bool pop_front(const NotNull<const Allocator *> alloc, T *out_element) {
     if (!m_head) {
       return false;
     }
@@ -198,7 +194,7 @@ template <TrivialType T> struct List {
     return true;
   }
 
-  bool pop_back(NotNull<const Allocator *> alloc, T *out_element) {
+  bool pop_back(const NotNull<const Allocator *> alloc, T *out_element) {
     if (!m_tail) {
       return false;
     }
@@ -236,7 +232,7 @@ template <TrivialType T> struct List {
     return &m_tail->data;
   }
 
-  T *get(usize index) const {
+  T *get(const usize index) const {
     if (index >= m_size) {
       return nullptr;
     }
@@ -258,7 +254,7 @@ template <TrivialType T> struct List {
     return current ? &current->data : nullptr;
   }
 
-  bool insert(NotNull<const Allocator *> alloc, usize index, const T &element) {
+  bool insert(const NotNull<const Allocator *> alloc, const usize index, const T &element) {
     if (index > m_size) {
       return false;
     }
@@ -291,7 +287,7 @@ template <TrivialType T> struct List {
     return true;
   }
 
-  bool remove(NotNull<const Allocator *> alloc, usize index, T *out_element) {
+  bool remove(const NotNull<const Allocator *> alloc, const usize index, T *out_element) {
     if (index >= m_size) {
       return false;
     }
@@ -382,23 +378,23 @@ template <TrivialType T> struct List {
       m_tail = m_tail->next;
     }
   }
+
+  Iterator begin() {
+    return Iterator{m_head};
+  }
+
+  Iterator end() {
+    return Iterator{nullptr};
+  }
+
+  Iterator begin() const {
+    return Iterator{m_head};
+  }
+
+  Iterator end() const {
+    return {nullptr};
+  }
 };
-
-template <TrivialType T> inline ListIterator<T> begin(List<T> &list) {
-  return ListIterator<T>{list.m_head};
-}
-
-template <TrivialType T> inline ListIterator<T> end(List<T> &list) {
-  return ListIterator<T>{nullptr};
-}
-
-template <TrivialType T> inline ListIterator<T> begin(const List<T> &list) {
-  return ListIterator<T>{list.m_head};
-}
-
-template <TrivialType T> inline ListIterator<T> end(const List<T> &list) {
-  return ListIterator<T>{nullptr};
-}
 } // namespace edge
 
 #endif

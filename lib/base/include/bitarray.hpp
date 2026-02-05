@@ -5,25 +5,25 @@
 
 namespace edge {
 template <usize BitCount> struct BitArray {
-  constexpr usize bit_count() { return BitCount; }
+  static constexpr usize bit_count() { return BitCount; }
 
-  constexpr usize byte_count() { return BitCount / 8; }
+  static constexpr usize byte_count() { return BitCount / 8; }
 
-  constexpr void set(usize index) { m_data[index / 8] |= (1 << (index % 8)); }
+  constexpr void set(const usize index) { m_data[index / 8] |= (1 << (index % 8)); }
 
-  constexpr void clear(usize index) {
+  constexpr void clear(const usize index) {
     m_data[index / 8] &= ~(1 << (index % 8));
   }
 
-  constexpr void toggle(usize index) {
+  constexpr void toggle(const usize index) {
     m_data[index / 8] ^= (1 << (index % 8));
   }
 
-  constexpr bool get(usize index) const {
+  constexpr bool get(const usize index) const {
     return (m_data[index / 8] & (1 << (index % 8))) != 0;
   }
 
-  constexpr void put(usize index, bool value) {
+  constexpr void put(const usize index, const bool value) {
     value ? set(index) : clear(index);
     if (value) {
       set(index);
@@ -36,10 +36,10 @@ template <usize BitCount> struct BitArray {
 
   constexpr void set_all() { memset(m_data, 0xFF, sizeof(m_data)); }
 
-  constexpr i32 count_set() const {
-    i32 count = 0;
+  constexpr usize count_set() const {
+    usize count = 0;
 
-    for (i32 i = 0; i < sizeof(m_data); i++) {
+    for (usize i = 0; i < sizeof(m_data); i++) {
       u8 byte = m_data[i];
       while (byte) {
         byte &= byte - 1;
@@ -50,11 +50,11 @@ template <usize BitCount> struct BitArray {
     return count;
   }
 
-  constexpr i32 find_first_set() const {
-    for (i32 i = 0; i < sizeof(m_data); i++) {
+  constexpr usize find_first_set() const {
+    for (usize i = 0; i < sizeof(m_data); i++) {
       if (m_data[i] != 0) {
-        for (i32 bit = 0; bit < 8; bit++) {
-          i32 index = i * 8 + bit;
+        for (usize bit = 0; bit < 8; bit++) {
+          const usize index = i * 8 + bit;
           if (index >= BitCount) {
             return -1;
           }
@@ -69,7 +69,7 @@ template <usize BitCount> struct BitArray {
   }
 
   constexpr bool any_set() const {
-    for (i32 i = 0; i < sizeof(m_data); i++) {
+    for (usize i = 0; i < sizeof(m_data); i++) {
       if (m_data[i] != 0) {
         return true;
       }

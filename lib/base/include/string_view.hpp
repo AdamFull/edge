@@ -21,7 +21,7 @@ struct StringView {
   constexpr StringView(const StringView &) = default;
   constexpr StringView &operator=(const StringView &) = default;
 
-  constexpr StringView(const CharT *str, usize count)
+  constexpr StringView(const CharT *str, const usize count)
       : m_data{str}, m_length{count} {}
 
   constexpr StringView(const CharT *str)
@@ -32,11 +32,11 @@ struct StringView {
 
   constexpr const_pointer data() const { return m_data; }
 
-  constexpr size_type size() const { return m_length; }
+  [[nodiscard]] constexpr size_type size() const { return m_length; }
 
-  constexpr size_type length() const { return m_length; }
+  [[nodiscard]] constexpr size_type length() const { return m_length; }
 
-  constexpr bool empty() const { return m_length == 0; }
+  [[nodiscard]] constexpr bool empty() const { return m_length == 0; }
 
   constexpr const_reference operator[](size_type index) const {
     assert(index < m_length);
@@ -60,14 +60,14 @@ struct StringView {
     m_length -= count;
   }
 
-  constexpr void remove_suffix(size_type count) {
+  constexpr void remove_suffix(const size_type count) {
     assert(m_length >= count &&
            "cannot remove_suffix() larger than StringView size");
     m_length -= count;
   }
 
   constexpr StringView substr(size_type offset = 0,
-                              size_type count = UINT64_MAX) const {
+                              const size_type count = UINT64_MAX) const {
     assert(offset < m_length && "offset in substr() is too big");
 
     size_type actual_count = count;
@@ -93,8 +93,8 @@ struct StringView {
       return 1;
     }
 
-    i32 result = Traits::compare(m_data, other.m_data, min_len);
-    if (result != 0) {
+    if (const i32 result = Traits::compare(m_data, other.m_data, min_len);
+        result != 0) {
       return result;
     }
 
@@ -130,7 +130,7 @@ struct StringView {
     return !empty() && Traits::eq(m_data[m_length - 1], c);
   }
 
-  constexpr bool contains(StringView needle) const {
+  constexpr bool contains(const StringView needle) const {
     return find(needle) != SIZE_MAX;
   }
 
@@ -172,8 +172,8 @@ struct StringView {
       return SIZE_MAX;
     }
 
-    size_type last_possible = m_length - needle.m_length;
-    if (pos > last_possible) {
+    if (const size_type last_possible = m_length - needle.m_length;
+        pos > last_possible) {
       pos = last_possible;
     }
 

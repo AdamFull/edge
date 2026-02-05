@@ -34,7 +34,7 @@ template <typename R, typename... Args> struct Callable<R(Args...)> {
     return invoke_fn(data, std::forward<Args>(args)...);
   }
 
-  void destroy(NotNull<const Allocator *> alloc) {
+  void destroy(const NotNull<const Allocator *> alloc) {
     if (data) {
       alloc->deallocate(data);
     }
@@ -49,8 +49,8 @@ template <typename R, typename... Args> struct Callable<R(Args...)> {
 };
 
 template <typename R, typename... Args>
-inline Callable<R(Args...)>
-callable_create_from_func(NotNull<const Allocator *> alloc, R (*fn)(Args...)) {
+Callable<R(Args...)>
+callable_create_from_func(const NotNull<const Allocator *> alloc, R (*fn)(Args...)) {
   using FnPtr = R (*)(Args...);
 
   FnPtr *stored = alloc->allocate<FnPtr>(fn);
@@ -65,12 +65,12 @@ callable_create_from_func(NotNull<const Allocator *> alloc, R (*fn)(Args...)) {
 }
 
 template <typename F>
-inline auto callable_create_from_lambda(NotNull<const Allocator *> alloc,
+auto callable_create_from_lambda(const NotNull<const Allocator *> alloc,
                                         F &&functor) {
   using FType = std::decay_t<F>;
-  using Sig = typename callable_traits<FType>::signature;
+  using Sig = callable_traits<FType>::signature;
 
-  FType *stored = alloc->allocate<FType>(std::forward<F>(functor));
+  auto *stored = alloc->allocate<FType>(std::forward<F>(functor));
 
   return [=]<typename R, typename... Args>(R (*)(Args...)) {
     Callable<R(Args...)> result;

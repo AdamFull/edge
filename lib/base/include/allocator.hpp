@@ -69,7 +69,8 @@ inline void aligned_free(void *ptr) {
 #endif
 }
 
-inline void *aligned_realloc(void *ptr, usize new_size, usize alignment) {
+inline void *aligned_realloc(void *ptr, const usize new_size,
+                             const usize alignment) {
   if (!ptr) {
     return aligned_malloc(new_size, alignment);
   }
@@ -93,24 +94,20 @@ inline void *aligned_realloc(void *ptr, usize new_size, usize alignment) {
 #endif
 }
 
-inline void *tracked_malloc(usize size, usize alignment, void *user_data) {
+inline void *tracked_malloc(const usize size, const usize alignment, void *user_data) {
   if (size == 0) {
     return nullptr;
   }
 
-  if (alignment < alignof(AllocationHeader)) {
-    alignment = alignof(AllocationHeader);
-  }
+  constexpr usize header_size = sizeof(AllocationHeader);
+  constexpr usize back_ptr_size = sizeof(void *);
 
-  usize header_size = sizeof(AllocationHeader);
-  usize back_ptr_size = sizeof(void *);
+  constexpr usize min_offset = header_size + back_ptr_size;
+  const usize user_data_offset = (min_offset + alignment - 1) & ~(alignment - 1);
 
-  usize min_offset = header_size + back_ptr_size;
-  usize user_data_offset = (min_offset + alignment - 1) & ~(alignment - 1);
+  const usize total_size = user_data_offset + size;
 
-  usize total_size = user_data_offset + size;
-
-  usize alloc_alignment = alignment > alignof(AllocationHeader)
+  const usize alloc_alignment = alignment > alignof(AllocationHeader)
                               ? alignment
                               : alignof(AllocationHeader);
   void *raw_ptr = aligned_malloc(total_size, alloc_alignment);
@@ -118,17 +115,18 @@ inline void *tracked_malloc(usize size, usize alignment, void *user_data) {
     return nullptr;
   }
 
-  AllocationHeader *header = (AllocationHeader *)raw_ptr;
+  const auto header = static_cast<AllocationHeader *>(raw_ptr);
   header->size = size;
 
-  void **back_ptr =
-      (void **)((char *)raw_ptr + user_data_offset - sizeof(void *));
+  const auto back_ptr =
+      reinterpret_cast<void **>(static_cast<char *>(raw_ptr) + user_data_offset -
+                                            sizeof(void *));
   *back_ptr = raw_ptr;
 
-  AllocatorStats *stats = (AllocatorStats *)user_data;
+  const auto stats = static_cast<AllocatorStats *>(user_data);
   stats->alloc_bytes.fetch_add(size);
 
-  return (char *)raw_ptr + user_data_offset;
+  return static_cast<char *>(raw_ptr) + user_data_offset;
 }
 
 inline void tracked_free(void *ptr, void *user_data) {
@@ -136,16 +134,16 @@ inline void tracked_free(void *ptr, void *user_data) {
     return;
   }
 
-  void **back_ptr = ((void **)ptr) - 1;
-  AllocationHeader *header = (AllocationHeader *)(*back_ptr);
+  void **back_ptr = static_cast<void **>(ptr) - 1;
+  const auto header = static_cast<AllocationHeader *>(*back_ptr);
 
-  AllocatorStats *stats = (AllocatorStats *)user_data;
+  const auto stats = static_cast<AllocatorStats *>(user_data);
   stats->free_bytes.fetch_add(header->size);
 
   aligned_free(header);
 }
 
-inline void *tracked_realloc(void *ptr, usize size, usize alignment,
+inline void *tracked_realloc(void *ptr, const usize size, const usize alignment,
                              void *user_data) {
   if (!ptr) {
     return tracked_malloc(size, alignment, user_data);
@@ -156,16 +154,16 @@ inline void *tracked_realloc(void *ptr, usize size, usize alignment,
     return nullptr;
   }
 
-  void **back_ptr = ((void **)ptr) - 1;
-  AllocationHeader *old_header = (AllocationHeader *)(*back_ptr);
-  usize old_size = old_header->size;
+  void **back_ptr = static_cast<void **>(ptr) - 1;
+  const auto old_header = static_cast<AllocationHeader *>(*back_ptr);
+  const usize old_size = old_header->size;
 
   void *new_ptr = tracked_malloc(size, alignment, user_data);
   if (!new_ptr) {
     return nullptr;
   }
 
-  usize copy_size = old_size < size ? old_size : size;
+  const usize copy_size = old_size < size ? old_size : size;
   memcpy(new_ptr, ptr, copy_size);
 
   tracked_free(ptr, user_data);
@@ -185,18 +183,18 @@ struct Allocator {
   realloc_fn m_realloc;
   void *user_data;
 
-  static Allocator create(malloc_fn malloc_pfn, free_fn free_pfn,
-                          realloc_fn realloc_pfn, void *user_data) {
+  static Allocator create(const malloc_fn malloc_pfn, const free_fn free_pfn,
+                          const realloc_fn realloc_pfn, void *user_data) {
     return {malloc_pfn, free_pfn, realloc_pfn, user_data};
   }
 
   static Allocator create_default() {
     return create(
-        [](usize size, usize alignment, void *) {
+        [](const usize size, const usize alignment, void *) {
           return detail::aligned_malloc(size, alignment);
         },
         [](void *ptr, void *) { detail::aligned_free(ptr); },
-        [](void *ptr, usize size, usize alignment, void *) {
+        [](void *ptr, const usize size, const usize alignment, void *) {
           return detail::aligned_realloc(ptr, size, alignment);
         },
         nullptr);
@@ -209,7 +207,7 @@ struct Allocator {
   }
 
   usize get_net() const {
-    detail::AllocatorStats *stats = (detail::AllocatorStats *)user_data;
+    const auto stats = static_cast<detail::AllocatorStats *>(user_data);
     if (!stats) {
       return ~0ull;
     }
@@ -217,7 +215,8 @@ struct Allocator {
     return stats->alloc_bytes.load() - stats->free_bytes.load();
   }
 
-  void *malloc(usize size, usize alignment = alignof(max_align_t)) const {
+  void *malloc(const usize size,
+               const usize alignment = alignof(max_align_t)) const {
     if (!m_malloc) {
       return nullptr;
     }
@@ -231,8 +230,8 @@ struct Allocator {
     return m_free(ptr, user_data);
   }
 
-  void *realloc(void *ptr, usize size,
-                usize alignment = alignof(max_align_t)) const {
+  void *realloc(void *ptr, const usize size,
+                const usize alignment = alignof(max_align_t)) const {
     if (!m_realloc) {
       return nullptr;
     }
@@ -244,15 +243,15 @@ struct Allocator {
       return nullptr;
     }
 
-    usize len = strlen(str);
-    char *copy = (char *)malloc(len + 1);
+    const usize len = strlen(str);
+    const auto copy = static_cast<char *>(malloc(len + 1));
     if (copy) {
       memcpy(copy, str, len + 1);
     }
     return copy;
   }
 
-  char *strndup(const char *str, usize n) const {
+  char *strndup(const char *str, const usize n) const {
     if (!str) {
       return nullptr;
     }
@@ -261,7 +260,7 @@ struct Allocator {
     if (n < len)
       len = n;
 
-    char *copy = (char *)malloc(len + 1);
+    const auto copy = static_cast<char *>(malloc(len + 1));
     if (copy) {
       memcpy(copy, str, len);
       copy[len] = '\0';
@@ -270,7 +269,7 @@ struct Allocator {
   }
 
   template <typename T, typename... Args> T *allocate(Args &&...args) const {
-    T *ptr = (T *)malloc(sizeof(T), alignof(T));
+    T *ptr = static_cast<T *>(malloc(sizeof(T), alignof(T)));
     if (!ptr) {
       return nullptr;
     }
@@ -283,12 +282,13 @@ struct Allocator {
   }
 
   template <typename T>
-  T *allocate_array(usize count, usize alignment = alignof(T)) const {
+  T *allocate_array(const usize count,
+                    const usize alignment = alignof(T)) const {
     if (count == 0) {
       return nullptr;
     }
 
-    T *ptr = (T *)malloc(sizeof(T) * count, alignment);
+    T *ptr = static_cast<T *>(malloc(sizeof(T) * count, alignment));
     if (!ptr) {
       return nullptr;
     }
@@ -314,7 +314,7 @@ struct Allocator {
     free(ptr);
   }
 
-  template <typename T> void deallocate_array(T *ptr, usize count) const {
+  template <typename T> void deallocate_array(T *ptr, const usize count) const {
     if (!ptr) {
       return;
     }

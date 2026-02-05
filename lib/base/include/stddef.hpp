@@ -130,7 +130,7 @@ template <typename T> struct NotNull {
 template <typename V, typename E> struct Result {
   Result(V value) : m_has_value(true), m_value(value) {}
 
-  Result(E error) : m_has_value(false), m_error(error) {}
+  Result(E error) : m_error(error) {}
 
   explicit operator bool() const { return m_has_value; }
 
@@ -172,7 +172,7 @@ template <typename T, usize N> constexpr usize array_size(const T (&)[N]) {
 }
 
 template <typename TargetT, typename SourceT> TargetT safe_cast(SourceT *ptr) {
-  static_assert(std::is_pointer<TargetT>::value,
+  static_assert(std::is_pointer_v<TargetT>,
                 "Target must be a pointer type");
 
 #if EDGE_DEBUG
@@ -185,7 +185,7 @@ template <typename TargetT, typename SourceT> TargetT safe_cast(SourceT *ptr) {
 }
 
 template <typename TargetT, typename SourceT> TargetT safe_cast(SourceT &ref) {
-  static_assert(std::is_reference<TargetT>::value,
+  static_assert(std::is_reference_v<TargetT>,
                 "Target must be a reference type");
 #if EDGE_DEBUG
   return dynamic_cast<TargetT>(ref);

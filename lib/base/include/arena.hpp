@@ -22,9 +22,9 @@ struct Arena {
 
   bool protect(void *addr, usize size, VMemProt prot);
   void *alloc_ex(usize size, usize alignment);
-  void *alloc(usize size) { return alloc_ex(size, alignof(max_align_t)); }
+  void *alloc(const usize size) { return alloc_ex(size, alignof(max_align_t)); }
 
-  template <typename T> T *alloc(usize count = 1) {
+  template <typename T> T *alloc(const usize count = 1) {
     return static_cast<T *>(alloc_ex(sizeof(T) * count, alignof(T)));
   }
 

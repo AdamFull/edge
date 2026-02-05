@@ -30,11 +30,11 @@ constexpr VMemProt operator~(VMemProt a) {
   return static_cast<VMemProt>(~static_cast<u32>(a));
 }
 
-constexpr VMemProt &operator|=(VMemProt &a, VMemProt b) { return a = a | b; }
+constexpr VMemProt &operator|=(VMemProt &a, const VMemProt b) { return a = a | b; }
 
-constexpr VMemProt &operator&=(VMemProt &a, VMemProt b) { return a = a & b; }
+constexpr VMemProt &operator&=(VMemProt &a, const VMemProt b) { return a = a & b; }
 
-constexpr VMemProt &operator^=(VMemProt &a, VMemProt b) { return a = a ^ b; }
+constexpr VMemProt &operator^=(VMemProt &a, const VMemProt b) { return a = a ^ b; }
 
 usize vmem_page_size();
 usize vmem_allocation_granularity();

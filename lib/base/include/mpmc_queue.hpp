@@ -5,7 +5,6 @@
 #include "math.hpp"
 
 #include <atomic>
-#include <cstring>
 
 namespace edge {
 template <TrivialType T> struct alignas(64) MPMCNode {
@@ -40,7 +39,7 @@ template <TrivialType T> struct MPMCQueue {
     }
   };
 
-  bool create(NotNull<const Allocator *> alloc, usize capacity) {
+  bool create(const NotNull<const Allocator *> alloc, usize capacity) {
     if (capacity == 0) {
       return false;
     }
@@ -71,7 +70,7 @@ template <TrivialType T> struct MPMCQueue {
     return true;
   }
 
-  void destroy(NotNull<const Allocator *> alloc) {
+  void destroy(const NotNull<const Allocator *> alloc) {
     if (m_buffer) {
       alloc->deallocate_array(m_buffer, m_capacity);
     }
@@ -80,16 +79,13 @@ template <TrivialType T> struct MPMCQueue {
   bool enqueue(const T &element) {
     usize pos;
     MPMCNode<T> *node;
-    usize seq;
 
     for (;;) {
       pos = m_enqueue_pos.load(std::memory_order_relaxed);
       node = &m_buffer[pos & m_mask];
-      seq = node->sequence.load(std::memory_order_acquire);
+      const usize seq = node->sequence.load(std::memory_order_acquire);
 
-      isize diff = (isize)seq - (isize)pos;
-
-      if (diff == 0) {
+      if (const isize diff = static_cast<isize>(seq) - static_cast<isize>(pos); diff == 0) {
         if (m_enqueue_pos.compare_exchange_weak(pos, pos + 1,
                                                 std::memory_order_relaxed,
                                                 std::memory_order_relaxed)) {
@@ -109,16 +105,13 @@ template <TrivialType T> struct MPMCQueue {
   bool dequeue(T *out_element) {
     usize pos;
     MPMCNode<T> *node;
-    usize seq;
 
     for (;;) {
       pos = m_dequeue_pos.load(std::memory_order_relaxed);
       node = &m_buffer[pos & m_mask];
-      seq = node->sequence.load(std::memory_order_acquire);
+      const usize seq = node->sequence.load(std::memory_order_acquire);
 
-      isize diff = (isize)seq - (isize)(pos + 1);
-
-      if (diff == 0) {
+      if (const isize diff = static_cast<isize>(seq) - static_cast<isize>(pos + 1); diff == 0) {
         if (m_dequeue_pos.compare_exchange_weak(pos, pos + 1,
                                                 std::memory_order_relaxed,
                                                 std::memory_order_relaxed)) {
@@ -138,10 +131,9 @@ template <TrivialType T> struct MPMCQueue {
     return true;
   }
 
-  bool try_enqueue(const T &element, usize max_retries) {
+  bool try_enqueue(const T &element, const usize max_retries) {
     usize pos;
     MPMCNode<T> *node;
-    usize seq;
     usize retries = 0;
 
     for (;;) {
@@ -151,11 +143,9 @@ template <TrivialType T> struct MPMCQueue {
 
       pos = m_enqueue_pos.load(std::memory_order_relaxed);
       node = &m_buffer[pos & m_mask];
-      seq = node->sequence.load(std::memory_order_acquire);
+      const usize seq = node->sequence.load(std::memory_order_acquire);
 
-      isize diff = (isize)seq - (isize)pos;
-
-      if (diff == 0) {
+      if (const isize diff = static_cast<isize>(seq) - static_cast<isize>(pos); diff == 0) {
         if (m_enqueue_pos.compare_exchange_weak(pos, pos + 1,
                                                 std::memory_order_relaxed,
                                                 std::memory_order_relaxed)) {
@@ -175,10 +165,9 @@ template <TrivialType T> struct MPMCQueue {
     return true;
   }
 
-  bool try_dequeue(T *out_element, usize max_retries) {
+  bool try_dequeue(T *out_element, const usize max_retries) {
     usize pos;
     MPMCNode<T> *node;
-    usize seq;
     usize retries = 0;
 
     for (;;) {
@@ -188,11 +177,9 @@ template <TrivialType T> struct MPMCQueue {
 
       pos = m_dequeue_pos.load(std::memory_order_relaxed);
       node = &m_buffer[pos & m_mask];
-      seq = node->sequence.load(std::memory_order_acquire);
+      const usize seq = node->sequence.load(std::memory_order_acquire);
 
-      isize diff = (isize)seq - (isize)(pos + 1);
-
-      if (diff == 0) {
+      if (const isize diff = static_cast<isize>(seq) - static_cast<isize>(pos + 1); diff == 0) {
         if (m_dequeue_pos.compare_exchange_weak(pos, pos + 1,
                                                 std::memory_order_relaxed,
                                                 std::memory_order_relaxed)) {
@@ -216,8 +203,8 @@ template <TrivialType T> struct MPMCQueue {
   }
 
   usize size_approx() const {
-    usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
-    usize dequeue = m_dequeue_pos.load(std::memory_order_relaxed);
+    const usize enqueue = m_enqueue_pos.load(std::memory_order_relaxed);
+    const usize dequeue = m_dequeue_pos.load(std::memory_order_relaxed);
 
     if (enqueue >= dequeue) {
       return enqueue - dequeue;

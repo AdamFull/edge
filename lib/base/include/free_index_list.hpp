@@ -9,7 +9,7 @@ struct FreeIndexList {
   u32 m_capacity = 0ull;
   u32 m_count = 0ull;
 
-  bool create(NotNull<const Allocator *> alloc, u32 capacity) {
+  bool create(const NotNull<const Allocator *> alloc, const u32 capacity) {
     if (capacity == 0) {
       return false;
     }
@@ -31,7 +31,7 @@ struct FreeIndexList {
     return true;
   }
 
-  void destroy(NotNull<const Allocator *> alloc) {
+  void destroy(const NotNull<const Allocator *> alloc) const {
     if (m_indices) {
       alloc->deallocate_array(m_indices, m_capacity);
     }
@@ -46,7 +46,7 @@ struct FreeIndexList {
     return true;
   }
 
-  bool free(u32 index) {
+  bool free(const u32 index) {
     if (m_count >= m_capacity) {
       return false;
     }

@@ -11,61 +11,6 @@ constexpr usize HASHMAP_DEFAULT_BUCKET_COUNT = 16;
 constexpr f32 HASHMAP_MAX_LOAD_FACTOR = 0.75f;
 } // namespace detail
 
-template <typename K, typename V> struct HashMapEntry;
-
-template <typename K, typename V, typename Hash, typename KeyEqual>
-struct HashMap;
-
-template <typename K, typename V, typename Hash, typename KeyEqual>
-struct HashMapIterator {
-  const HashMap<K, V, Hash, KeyEqual> *map;
-  usize bucket_index;
-  HashMapEntry<K, V> *current;
-
-  bool operator==(const HashMapIterator &other) const {
-    return current == other.current;
-  }
-
-  bool operator!=(const HashMapIterator &other) const {
-    return current != other.current;
-  }
-
-  HashMapEntry<K, V> &operator*() const { return *current; }
-
-  HashMapEntry<K, V> *operator->() const { return current; }
-
-  HashMapIterator &operator++() {
-    if (!map || !current) {
-      return *this;
-    }
-
-    // Try next in chain
-    if (current->next) {
-      current = current->next;
-      return *this;
-    }
-
-    // Find next non-empty bucket
-    for (usize i = bucket_index + 1; i < map->m_bucket_count; i++) {
-      if (map->m_buckets[i]) {
-        bucket_index = i;
-        current = map->m_buckets[i];
-        return *this;
-      }
-    }
-
-    // End of iteration
-    current = nullptr;
-    return *this;
-  }
-
-  HashMapIterator operator++(int) {
-    HashMapIterator tmp = *this;
-    ++(*this);
-    return tmp;
-  }
-};
-
 template <typename K, typename V> struct HashMapEntry {
   K key = {};
   V value = {};
@@ -83,9 +28,56 @@ struct HashMap {
 
   using value_type = HashMapEntry<K, V>;
   using size_type = usize;
-  using iterator = HashMapIterator<K, V, Hash, KeyEqual>;
 
-  bool create(NotNull<const Allocator *> alloc,
+  struct Iterator {
+    const HashMap *map;
+    usize bucket_index;
+    HashMapEntry<K, V> *current;
+
+    bool operator==(const Iterator &other) const {
+      return current == other.current;
+    }
+
+    bool operator!=(const Iterator &other) const {
+      return current != other.current;
+    }
+
+    HashMapEntry<K, V> &operator*() const { return *current; }
+    HashMapEntry<K, V> *operator->() const { return current; }
+
+    Iterator &operator++() {
+      if (!map || !current) {
+        return *this;
+      }
+
+      // Try next in chain
+      if (current->next) {
+        current = current->next;
+        return *this;
+      }
+
+      // Find next non-empty bucket
+      for (usize i = bucket_index + 1; i < map->m_bucket_count; i++) {
+        if (map->m_buckets[i]) {
+          bucket_index = i;
+          current = map->m_buckets[i];
+          return *this;
+        }
+      }
+
+      // End of iteration
+      current = nullptr;
+      return *this;
+    }
+
+    Iterator operator++(int) {
+      Iterator tmp = *this;
+      ++(*this);
+      return tmp;
+    }
+  };
+
+  bool create(const NotNull<const Allocator *> alloc,
               usize initial_bucket_count = 0ull) {
     if (initial_bucket_count == 0ull) {
       initial_bucket_count = detail::HASHMAP_DEFAULT_BUCKET_COUNT;
@@ -107,7 +99,7 @@ struct HashMap {
     return true;
   }
 
-  void destroy(NotNull<const Allocator *> alloc) {
+  void destroy(const NotNull<const Allocator *> alloc) {
     clear(alloc);
 
     if (m_buckets) {
@@ -115,7 +107,7 @@ struct HashMap {
     }
   }
 
-  void clear(NotNull<const Allocator *> alloc) {
+  void clear(const NotNull<const Allocator *> alloc) {
     for (usize i = 0; i < m_bucket_count; i++) {
       HashMapEntry<K, V> *entry = m_buckets[i];
       while (entry) {
@@ -132,7 +124,7 @@ struct HashMap {
     m_size = 0;
   }
 
-  bool rehash(NotNull<const Allocator *> alloc, usize new_bucket_count) {
+  bool rehash(const NotNull<const Allocator *> alloc, usize new_bucket_count) {
     if (new_bucket_count == 0) {
       return false;
     }
@@ -172,10 +164,10 @@ struct HashMap {
     if (m_bucket_count == 0) {
       return 0.0f;
     }
-    return (f32)m_size / (f32)m_bucket_count;
+    return static_cast<f32>(m_size) / static_cast<f32>(m_bucket_count);
   }
 
-  bool insert(NotNull<const Allocator *> alloc, const K &key, const V &value) {
+  bool insert(const NotNull<const Allocator *> alloc, const K &key, const V &value) {
     // Check load factor and rehash if needed
     if (load_factor() >= detail::HASHMAP_MAX_LOAD_FACTOR) {
       rehash(alloc, m_bucket_count * 2);
@@ -209,14 +201,14 @@ struct HashMap {
     return true;
   }
 
-  HashMapIterator<K, V, Hash, KeyEqual> find(const K &key) {
+  Iterator find(const K &key) {
     usize hash = Hash{}(key);
     usize bucket_index = hash & (m_bucket_count - 1);
 
     HashMapEntry<K, V> *entry = m_buckets[bucket_index];
     while (entry) {
       if (entry->hash == hash && KeyEqual{}(entry->key, key)) {
-        return HashMapIterator<K, V, Hash, KeyEqual>{
+        return Iterator{
             .map = this, .bucket_index = bucket_index, .current = entry};
       }
       entry = entry->next;
@@ -225,7 +217,7 @@ struct HashMap {
     return end();
   }
 
-  HashMapIterator<K, V, Hash, KeyEqual> find(const K &key) const {
+  Iterator find(const K &key) const {
     return const_cast<HashMap *>(this)->find(key);
   }
 
@@ -249,7 +241,7 @@ struct HashMap {
     return dummy;
   }
 
-  bool remove(NotNull<const Allocator *> alloc, const K &key,
+  bool remove(const NotNull<const Allocator *> alloc, const K &key,
               V *out_value = nullptr) {
     usize hash = Hash{}(key);
     usize bucket_index = hash % m_bucket_count;
@@ -282,39 +274,37 @@ struct HashMap {
     return false;
   }
 
-  HashMapIterator<K, V, Hash, KeyEqual> begin() {
-    HashMapIterator<K, V, Hash, KeyEqual> it;
+  Iterator begin() {
+    Iterator it;
     it.map = this;
     it.bucket_index = 0;
     it.current = nullptr;
 
     for (usize i = 0; i < m_bucket_count; i++) {
       if (m_buckets[i]) {
-        return HashMapIterator<K, V, Hash, KeyEqual>{
+        return Iterator{
             .map = this, .bucket_index = i, .current = m_buckets[i]};
       }
     }
 
-    return HashMapIterator<K, V, Hash, KeyEqual>{this, 0, nullptr};
+    return Iterator{this, 0, nullptr};
   }
 
-  HashMapIterator<K, V, Hash, KeyEqual> end() {
-    return HashMapIterator<K, V, Hash, KeyEqual>{this, 0, nullptr};
+  Iterator end() {
+    return Iterator{this, 0, nullptr};
   }
 
-  HashMapIterator<K, V, Hash, KeyEqual> begin() const {
+  Iterator begin() const {
     return const_cast<HashMap *>(this)->begin();
   }
 
-  HashMapIterator<K, V, Hash, KeyEqual> end() const {
+  Iterator end() const {
     return const_cast<HashMap *>(this)->end();
   }
 
-  bool contains(const K &key) const { return find(key) != end(); }
-
-  bool empty() const { return m_size == 0; }
-
-  usize size() const { return m_size; }
+  [[nodiscard]] bool contains(const K &key) const { return find(key) != end(); }
+  [[nodiscard]] bool empty() const { return m_size == 0; }
+  [[nodiscard]] usize size() const { return m_size; }
 
   HashMapEntry<K, V> **m_buckets = nullptr;
   usize m_bucket_count = 0ull;

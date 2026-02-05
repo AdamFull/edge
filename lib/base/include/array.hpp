@@ -12,7 +12,7 @@ namespace edge {
 template <typename T> struct Array {
   EDGE_DECLARE_CONTAINER_HEADER(T)
 
-  void destroy(NotNull<const Allocator *> alloc) {
+  void destroy(const NotNull<const Allocator *> alloc) {
     destroy_elements();
     if (m_data) {
       alloc->free(m_data);
@@ -27,14 +27,16 @@ template <typename T> struct Array {
     m_size = 0;
   }
 
-  bool reserve(NotNull<const Allocator *> alloc, size_type new_cap) {
+  bool reserve(const NotNull<const Allocator *> alloc,
+               const size_type new_cap) {
     if (new_cap <= m_capacity) {
       return true;
     }
     return grow_to(alloc, new_cap);
   }
 
-  bool resize(NotNull<const Allocator *> alloc, size_type new_size) {
+  bool resize(const NotNull<const Allocator *> alloc,
+              const size_type new_size) {
     if (new_size > m_capacity) {
       if (!grow_to(alloc, new_size)) {
         return false;
@@ -97,7 +99,7 @@ template <typename T> struct Array {
 
   constexpr bool empty() const noexcept { return m_size == 0; }
 
-  bool push_back(NotNull<const Allocator *> alloc, const_reference value) {
+  bool push_back(const NotNull<const Allocator *> alloc, const_reference value) {
     if (m_size == m_capacity) {
       if (!grow_to(alloc, m_capacity == 0 ? 16 : m_capacity * 2)) {
         return false;
@@ -108,7 +110,7 @@ template <typename T> struct Array {
   }
 
   bool push_back(const_reference value) {
-    bool is_full = m_size >= m_capacity;
+    const bool is_full = m_size >= m_capacity;
     assert(!is_full && "Array is already full.");
     if (is_full) {
       return false;
@@ -117,7 +119,7 @@ template <typename T> struct Array {
     return true;
   }
 
-  bool push_back(NotNull<const Allocator *> alloc, T &&value) {
+  bool push_back(const NotNull<const Allocator *> alloc, T &&value) {
     if (m_size == m_capacity) {
       if (!grow_to(alloc, m_capacity == 0 ? 16 : m_capacity * 2)) {
         return false;
@@ -128,7 +130,7 @@ template <typename T> struct Array {
   }
 
   bool push_back(T &&value) {
-    bool is_full = m_size >= m_capacity;
+    const bool is_full = m_size >= m_capacity;
     assert(!is_full && "Array is already full.");
     if (is_full) {
       return false;
@@ -138,7 +140,7 @@ template <typename T> struct Array {
   }
 
   template <typename... Args>
-  bool emplace_back(NotNull<const Allocator *> alloc, Args &&...args) {
+  bool emplace_back(const NotNull<const Allocator *> alloc, Args &&...args) {
     if (m_size == m_capacity) {
       if (!grow_to(alloc, m_capacity == 0 ? 16 : m_capacity * 2)) {
         return false;
@@ -171,7 +173,7 @@ template <typename T> struct Array {
     return true;
   }
 
-  bool insert(NotNull<const Allocator *> alloc, size_type index,
+  bool insert(const NotNull<const Allocator *> alloc, size_type index,
               const_reference value) {
     assert(index <= m_size && "Array::insert: index out of bounds");
     if (index > m_size) {
@@ -256,7 +258,8 @@ private:
     }
   }
 
-  bool grow_to(NotNull<const Allocator *> alloc, size_type new_cap) {
+  bool grow_to(const NotNull<const Allocator *> alloc,
+               const size_type new_cap) {
     auto new_data =
         static_cast<pointer>(alloc->malloc(sizeof(T) * new_cap, alignof(T)));
     assert(new_data && "Array: allocation failed during grow");
@@ -274,7 +277,7 @@ private:
     return true;
   }
 
-  static void move_elements(pointer dst, pointer src, size_type count) {
+  static void move_elements(pointer dst, pointer src, const size_type count) {
     if (!src || count == 0) {
       return;
     }

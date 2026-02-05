@@ -16,14 +16,15 @@ template <TrivialType T> struct Span {
 
   constexpr Span() = default;
 
-  constexpr Span(pointer data, size_type size) : m_data(data), m_size(size) {}
+  constexpr Span(const_pointer data, const size_type size) : m_data(data), m_size(size) {}
 
   constexpr Span(pointer begin, pointer end)
       : m_data(begin), m_size(static_cast<size_type>(end - begin)) {
     assert(end >= begin);
   }
 
-  template <size_type N> constexpr Span(T (&arr)[N]) : m_data(arr), m_size(N) {}
+  template <size_type N>
+  constexpr Span(T (&arr)[N]) : m_data(arr), m_size(N) {}
 
   constexpr Span(Array<T> &arr) noexcept
       : m_data(arr.data()), m_size(arr.size()) {}
@@ -41,11 +42,11 @@ template <TrivialType T> struct Span {
     requires std::is_const_v<T>
       : m_data(arr.data()), m_size(arr.size()) {}
 
-  constexpr size_type size() const { return m_size; }
+  [[nodiscard]] constexpr size_type size() const { return m_size; }
 
-  constexpr size_type size_bytes() const { return m_size * sizeof(T); }
+  [[nodiscard]] constexpr size_type size_bytes() const { return m_size * sizeof(T); }
 
-  constexpr bool empty() const { return m_size == 0; }
+  [[nodiscard]] constexpr bool empty() const { return m_size == 0; }
 
   constexpr reference operator[](size_type index) {
     assert(index < m_size && "Span::operator[]: index out of bounds");
@@ -83,9 +84,9 @@ template <TrivialType T> struct Span {
 
   EDGE_DECLARE_RANDOM_ACCESS_ITERATOR(T, m_data, m_size)
 
-  Span<T> subspan(size_type offset, size_type count) const {
+  Span subspan(size_type offset, const size_type count) const {
     if (offset >= m_size) {
-      return Span<T>();
+      return Span();
     }
 
     size_type actual_count = count;
@@ -93,23 +94,23 @@ template <TrivialType T> struct Span {
       actual_count = m_size - offset;
     }
 
-    return Span<T>(m_data + offset, actual_count);
+    return Span(m_data + offset, actual_count);
   }
 
-  Span<T> subspan(size_type offset) const { return subspan(offset, m_size); }
+  Span subspan(const size_type offset) const { return subspan(offset, m_size); }
 
-  Span<T> first(size_type count) const {
+  Span first(size_type count) const {
     if (count > m_size) {
       count = m_size;
     }
-    return Span<T>(m_data, count);
+    return Span(m_data, count);
   }
 
-  Span<T> last(size_type count) const {
+  Span last(size_type count) const {
     if (count > m_size) {
       count = m_size;
     }
-    return Span<T>(m_data + (m_size - count), count);
+    return Span(m_data + (m_size - count), count);
   }
 
   void copy_to(pointer dest) const {
@@ -118,9 +119,9 @@ template <TrivialType T> struct Span {
     }
   }
 
-  void copy_from(const_pointer src, size_type count) {
+  void copy_from(const_pointer src, const size_type count) {
     if (m_data && src && count > 0) {
-      size_type actual_count = count > m_size ? m_size : count;
+      const size_type actual_count = count > m_size ? m_size : count;
       memcpy(m_data, src, sizeof(T) * actual_count);
     }
   }

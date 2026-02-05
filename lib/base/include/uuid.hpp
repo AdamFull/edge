@@ -13,10 +13,10 @@ struct alignas(16) UUID {
   };
 
   constexpr UUID() : bytes{} {}
-  constexpr UUID(u64 high, u64 low) : qwords{low, high} {}
-  constexpr UUID(u32 d0, u32 d1, u32 d2, u32 d3) : dwords{d0, d1, d2, d3} {}
+  constexpr UUID(const u64 high, const u64 low) : qwords{low, high} {}
+  constexpr UUID(const u32 d0, const u32 d1, const u32 d2, const u32 d3) : dwords{d0, d1, d2, d3} {}
 
-  EDGE_FORCE_INLINE bool is_null() const {
+  [[nodiscard]] EDGE_FORCE_INLINE bool is_null() const {
     return qwords[0] == 0 && qwords[1] == 0;
   }
 
@@ -25,14 +25,13 @@ struct alignas(16) UUID {
     qwords[1] = 0;
   }
 
-  constexpr u8 version() const { return (bytes[6] >> 4) & 0x0F; }
-
-  constexpr u8 variant() const { return (bytes[8] >> 6) & 0x03; }
+  [[nodiscard]] constexpr u8 version() const { return (bytes[6] >> 4) & 0x0F; }
+  [[nodiscard]] constexpr u8 variant() const { return (bytes[8] >> 6) & 0x03; }
 };
 
 template <> struct Hash<UUID> {
   EDGE_FORCE_INLINE usize operator()(const UUID &uuid) const {
-    return static_cast<usize>(uuid.qwords[0] ^ uuid.qwords[1]);
+    return uuid.qwords[0] ^ uuid.qwords[1];
   }
 };
 

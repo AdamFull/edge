@@ -13,11 +13,11 @@ namespace detail {
 constexpr usize STRING_DEFAULT_CAPACITY = 16;
 
 namespace utf8 {
-inline constexpr bool is_continuation_byte(char8_t c) {
+constexpr bool is_continuation_byte(const char8_t c) {
   return (c & 0xC0) == 0x80;
 }
 
-inline constexpr usize sequence_length(u8 first_byte) {
+constexpr usize sequence_length(const u8 first_byte) {
   if ((first_byte & 0x80) == 0x00)
     return 1; // 0xxxxxxx
   if ((first_byte & 0xE0) == 0xC0)
@@ -29,32 +29,32 @@ inline constexpr usize sequence_length(u8 first_byte) {
   return 0;
 }
 
-inline constexpr bool is_valid_codepoint(char32_t cp) {
+constexpr bool is_valid_codepoint(const char32_t cp) {
   return cp <= 0x10FFFF && (cp < 0xD800 || cp > 0xDFFF);
 }
 
-inline constexpr bool is_surrogate(char32_t cp) {
+constexpr bool is_surrogate(const char32_t cp) {
   return cp >= 0xD800u && cp <= 0xDFFFu;
 }
 
-inline constexpr bool is_high_surrogate(char16_t cp) {
+constexpr bool is_high_surrogate(const char16_t cp) {
   return cp >= 0xD800u && cp <= 0xDBFFu;
 }
 
-inline constexpr bool is_high_surrogate_invalid(char16_t cp) {
+constexpr bool is_high_surrogate_invalid(const char16_t cp) {
   return cp < 0xD800u || cp > 0xDBFFu;
 }
 
-inline constexpr bool is_low_surrogate(char16_t cp) {
+constexpr bool is_low_surrogate(const char16_t cp) {
   return cp >= 0xDC00u && cp <= 0xDFFFu;
 }
 
-inline constexpr bool is_low_surrogate_invalid(char16_t cp) {
+constexpr bool is_low_surrogate_invalid(const char16_t cp) {
   return cp < 0xDC00u || cp > 0xDFFF;
 }
 
-inline constexpr usize char_byte_count(char8_t fb) {
-  auto uc = static_cast<u8>(fb);
+constexpr usize char_byte_count(const char8_t fb) {
+  const auto uc = static_cast<u8>(fb);
   if ((uc & 0x80) == 0)
     return 1;
   if ((uc & 0xE0) == 0xC0)
@@ -66,23 +66,22 @@ inline constexpr usize char_byte_count(char8_t fb) {
   return 0;
 }
 
-inline bool decode_char(const char8_t *utf8, usize remaining, char32_t &cp,
+inline bool decode_char(const char8_t *utf8, const usize remaining, char32_t &cp,
                         usize &readed) {
   if (remaining == 0) {
     return false;
   }
 
-  char8_t uc0 = utf8[0];
-  usize len = char_byte_count(uc0);
+  const char8_t uc0 = utf8[0];
 
-  switch (len) {
+  switch (char_byte_count(uc0)) {
   case 1: {
     readed = 1;
     cp = static_cast<char32_t>(uc0);
     return true;
   }
   case 2: {
-    char8_t uc1 = utf8[1];
+    const char8_t uc1 = utf8[1];
     if (!is_continuation_byte(uc1)) {
       return false;
     }
@@ -91,8 +90,8 @@ inline bool decode_char(const char8_t *utf8, usize remaining, char32_t &cp,
     return true;
   }
   case 3: {
-    char8_t uc1 = utf8[1];
-    char8_t uc2 = utf8[2];
+    const char8_t uc1 = utf8[1];
+    const char8_t uc2 = utf8[2];
     if (!is_continuation_byte(uc1) || !is_continuation_byte(uc2)) {
       return false;
     }
@@ -102,9 +101,9 @@ inline bool decode_char(const char8_t *utf8, usize remaining, char32_t &cp,
     return true;
   }
   case 4: {
-    char8_t uc1 = utf8[1];
-    char8_t uc2 = utf8[2];
-    char8_t uc3 = utf8[3];
+    const char8_t uc1 = utf8[1];
+    const char8_t uc2 = utf8[2];
+    const char8_t uc3 = utf8[3];
     if (!is_continuation_byte(uc1) || !is_continuation_byte(uc2) ||
         !is_continuation_byte(uc3)) {
       return false;
@@ -122,7 +121,7 @@ inline bool decode_char(const char8_t *utf8, usize remaining, char32_t &cp,
   }
 }
 
-inline bool encode_char(char32_t cp, char8_t *out, usize &len) {
+inline bool encode_char(const char32_t cp, char8_t *out, usize &len) {
   if (!is_valid_codepoint(cp)) {
     return false;
   }
@@ -157,7 +156,7 @@ inline bool encode_char(char32_t cp, char8_t *out, usize &len) {
   return true;
 }
 
-inline bool encode_char(char16_t cp, char8_t *out, usize &len) {
+inline bool encode_char(const char16_t cp, char8_t *out, usize &len) {
   if (is_high_surrogate(cp) || is_low_surrogate(cp)) {
     return false;
   }
@@ -165,23 +164,22 @@ inline bool encode_char(char16_t cp, char8_t *out, usize &len) {
   return encode_char(static_cast<char32_t>(cp), out, len);
 }
 
-inline bool encode_char(char16_t cp_high, char16_t cp_low, char8_t *out,
+inline bool encode_char(const char16_t cp_high, const char16_t cp_low, char8_t *out,
                         usize &len) {
   if (is_high_surrogate_invalid(cp_high) || is_low_surrogate_invalid(cp_low)) {
     return false;
   }
 
-  char32_t cp = static_cast<char32_t>(0x10000u + ((cp_high - 0xD800u) << 10) +
+  const char32_t cp = static_cast<char32_t>(0x10000u + ((cp_high - 0xD800u) << 10) +
                                       (cp_low - 0xDC00u));
   return encode_char(cp, out, len);
 }
 
-inline bool validate_utf8(const char8_t *data, usize length) {
+inline bool validate_utf8(const char8_t *data, const usize length) {
   usize pos = 0;
   while (pos < length) {
-    char32_t cp = 0;
     usize cp_size = 0;
-    if (!decode_char(data + pos, length - pos, cp, cp_size)) {
+    if (char32_t cp = 0; !decode_char(data + pos, length - pos, cp, cp_size)) {
       return false;
     }
     pos += cp_size;
@@ -207,20 +205,21 @@ struct String {
   usize m_length = 0ull;
   usize m_capacity = 0ull;
 
-  bool from_raw(NotNull<const Allocator *> alloc, const char *cstr, usize len) {
+  bool from_raw(const NotNull<const Allocator *> alloc, const char *cstr,
+                const usize len) {
     if (!cstr) {
       return allocate(alloc, len + 1);
     }
 
-    traits_type::copy(m_data, (const_pointer)cstr, len);
+    traits_type::copy(m_data, reinterpret_cast<const char8_t*>(cstr), len);
     m_data[len] = u8'\0';
     m_length = len;
 
     return true;
   }
 
-  bool from_utf8(NotNull<const Allocator *> alloc, const_pointer cstr,
-                 usize len) {
+  bool from_utf8(const NotNull<const Allocator *> alloc, const char8_t* cstr,
+                 const usize len) {
     if (!cstr) {
       return allocate(alloc, detail::STRING_DEFAULT_CAPACITY);
     }
@@ -229,7 +228,7 @@ struct String {
       return false;
     }
 
-    m_data = (pointer)alloc->malloc(len + 1, alignof(value_type));
+    m_data = static_cast<char8_t *>(alloc->malloc(len + 1, alignof(value_type)));
     if (!m_data) {
       return false;
     }
@@ -241,14 +240,15 @@ struct String {
     return true;
   }
 
-  bool from_utf16(NotNull<const Allocator *> alloc, const char16_t *str,
-                  usize len) {
+  bool from_utf16(const NotNull<const Allocator *> alloc, const char16_t *str,
+                  const usize len) {
     if (!str) {
       return allocate(alloc, detail::STRING_DEFAULT_CAPACITY);
     }
 
-    usize capacity = len * 4;
-    m_data = (pointer)alloc->malloc(capacity + 1, alignof(value_type));
+    const usize capacity = len * 4;
+    m_data = static_cast<char8_t *>(
+        alloc->malloc(capacity + 1, alignof(value_type)));
     if (!m_data) {
       return false;
     }
@@ -258,18 +258,19 @@ struct String {
   }
 
   template <usize N>
-  bool from_utf16(NotNull<const Allocator *> alloc, const char16_t (&str)[N]) {
+  bool from_utf16(const NotNull<const Allocator *> alloc, const char16_t (&str)[N]) {
     return from_utf16(alloc, str, N - 1);
   }
 
   bool from_utf32(NotNull<const Allocator *> alloc, const char32_t *str,
-                  usize len) {
+                  const usize len) {
     if (!str) {
       return allocate(alloc, detail::STRING_DEFAULT_CAPACITY);
     }
 
-    usize capacity = len * 4;
-    m_data = (pointer)alloc->malloc(capacity + 1, alignof(value_type));
+    const usize capacity = len * 4;
+    m_data = static_cast<char8_t *>(
+        alloc->malloc(capacity + 1, alignof(value_type)));
     if (!m_data) {
       return false;
     }
@@ -279,16 +280,16 @@ struct String {
   }
 
   template <usize N>
-  bool from_utf32(NotNull<const Allocator *> alloc, const char32_t (&str)[N]) {
+  bool from_utf32(const NotNull<const Allocator *> alloc, const char32_t (&str)[N]) {
     return from_utf32(alloc, str, N - 1);
   }
 
-  char16_t *to_utf16(NotNull<const Allocator *> alloc) {
+  [[nodiscard]] char16_t *to_utf16(const NotNull<const Allocator *> alloc) const {
     usize len = 0, pos = 0, out_pos = 0;
 
     while (pos < m_length) {
-      value_type first_byte = m_data[pos];
-      usize seq_len = detail::utf8::char_byte_count(first_byte);
+      const value_type first_byte = m_data[pos];
+      const usize seq_len = detail::utf8::char_byte_count(first_byte);
 
       if (seq_len == 0) {
         return nullptr;
@@ -301,8 +302,9 @@ struct String {
 
     pos = 0;
 
-    char16_t *out =
-        (char16_t *)alloc->malloc(len * sizeof(char16_t), alignof(char16_t));
+    auto *out =
+        static_cast<char16_t *>(
+        alloc->malloc(len * sizeof(char16_t), alignof(char16_t)));
     if (!out) {
       return nullptr;
     }
@@ -331,15 +333,15 @@ struct String {
     return out;
   }
 
-  char32_t *to_utf32(NotNull<const Allocator *> alloc) {
+  [[nodiscard]] char32_t *to_utf32(const NotNull<const Allocator *> alloc) const {
     usize len = 0, pos = 0, out_pos = 0;
 
     while (pos < m_length) {
-      value_type first_byte = m_data[pos];
-      usize seq_len = detail::utf8::char_byte_count(first_byte);
+      const value_type first_byte = m_data[pos];
+      const usize seq_len = detail::utf8::char_byte_count(first_byte);
 
       if (seq_len == 0) {
-        return 0;
+        return nullptr;
       }
 
       len++;
@@ -348,8 +350,9 @@ struct String {
 
     pos = 0;
 
-    char32_t *out =
-        (char32_t *)alloc->malloc(len * sizeof(char32_t), alignof(char32_t));
+    auto *out =
+        static_cast<char32_t *>(
+        alloc->malloc(len * sizeof(char32_t), alignof(char32_t)));
     if (!out) {
       return nullptr;
     }
@@ -368,7 +371,7 @@ struct String {
     return out;
   }
 
-  void destroy(NotNull<const Allocator *> alloc) {
+  void destroy(const NotNull<const Allocator *> alloc) {
     if (m_data) {
       alloc->deallocate_array(m_data, m_capacity);
       m_data = nullptr;
@@ -377,14 +380,14 @@ struct String {
     }
   }
 
-  inline void clear() {
+  void clear() {
     m_length = 0;
     if (m_data) {
       m_data[0] = u8'\0';
     }
   }
 
-  bool reserve(NotNull<const Allocator *> alloc, usize capacity) {
+  bool reserve(const NotNull<const Allocator *> alloc, usize capacity) {
     if (capacity == 0) {
       capacity = detail::STRING_DEFAULT_CAPACITY;
     }
@@ -393,8 +396,9 @@ struct String {
       return true;
     }
 
-    pointer new_data =
-        (pointer)alloc->realloc(m_data, capacity, alignof(value_type));
+    auto* new_data =
+        static_cast<char8_t *>(
+        alloc->realloc(m_data, capacity, alignof(value_type)));
     if (!new_data) {
       return false;
     }
@@ -408,16 +412,17 @@ struct String {
   template <typename T, usize N>
     requires std::is_same_v<T, char8_t> || std::is_same_v<T, char16_t> ||
              std::is_same_v<T, char32_t>
-  bool append(NotNull<const Allocator *> alloc, const T (&str)[N]) {
+  bool append(const NotNull<const Allocator *> alloc, const T (&str)[N]) {
     return append(alloc, str, N - 1);
   }
 
-  bool append(NotNull<const Allocator *> alloc, const_pointer text) {
-    return append(alloc, text, strlen((const char *)text));
+  bool append(const NotNull<const Allocator *> alloc,
+              const char8_t* text) {
+    return append(alloc, text, strlen(reinterpret_cast<const char *>(text)));
   }
 
-  bool append(NotNull<const Allocator *> alloc, const_pointer buffer,
-              usize length) {
+  bool append(const NotNull<const Allocator *> alloc, const char8_t* buffer,
+              const usize length) {
     if (!buffer || length == 0) {
       return false;
     }
@@ -435,12 +440,13 @@ struct String {
 
   template <typename T>
     requires std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t>
-  bool append(NotNull<const Allocator *> alloc, const T *buffer, usize len) {
+  bool append(const NotNull<const Allocator *> alloc, const T *buffer,
+              const usize len) {
     if (!buffer || len == 0) {
       return false;
     }
 
-    pointer data = (pointer)alloc->malloc((len * 4) + 1, alignof(value_type));
+    auto* data = static_cast<char8_t*>(alloc->malloc((len * 4) + 1, alignof(value_type)));
     if (!data) {
       return false;
     }
@@ -451,16 +457,15 @@ struct String {
       for (usize i = 0; i < len; ++i) {
         usize bytes_count = 0;
 
-        char16_t c = buffer[i];
-        if (detail::utf8::is_high_surrogate(c)) {
+        if (char16_t c = buffer[i]; detail::utf8::is_high_surrogate(c)) {
           // Check for incomplete surrogate pair
           if (i + 1 >= len) {
             alloc->free(data);
             return false;
           }
 
-          char16_t low = buffer[++i];
-          if (!detail::utf8::encode_char(c, low, data + pos, bytes_count)) {
+          if (const char16_t low = buffer[++i];
+              !detail::utf8::encode_char(c, low, data + pos, bytes_count)) {
             alloc->free(data);
             return false;
           }
@@ -495,7 +500,7 @@ struct String {
     return true;
   }
 
-  bool append(NotNull<const Allocator *> alloc, value_type c) {
+  bool append(const NotNull<const Allocator *> alloc, const value_type c) {
     if (!grow(alloc, 2)) {
       return false;
     }
@@ -508,7 +513,7 @@ struct String {
 
   template <typename T>
     requires std::is_same_v<T, char16_t> || std::is_same_v<T, char32_t>
-  bool append(NotNull<const Allocator *> alloc, T cp) {
+  bool append(const NotNull<const Allocator *> alloc, T cp) {
     usize byte_len = 0;
     value_type buf[4];
     if (!detail::utf8::encode_char(cp, buf, byte_len)) {
@@ -526,8 +531,8 @@ struct String {
     return true;
   }
 
-  bool append(NotNull<const Allocator *> alloc, char16_t cp_high,
-              char16_t cp_low) {
+  bool append(const NotNull<const Allocator *> alloc, const char16_t cp_high,
+              const char16_t cp_low) {
     usize byte_len = 0;
     value_type buf[4];
     if (!detail::utf8::encode_char(cp_high, cp_low, buf, byte_len)) {
@@ -547,12 +552,12 @@ struct String {
 
   // TODO: Not needed for now, but in future may be having insert for other
   // encodings will be cool to haves
-  bool insert(NotNull<const Allocator *> alloc, usize pos, const_pointer text) {
+  bool insert(const NotNull<const Allocator *> alloc, const usize pos, const char8_t* text) {
     if (!text || pos > m_length) {
       return false;
     }
 
-    usize text_len = traits_type::length(text);
+    const usize text_len = traits_type::length(text);
     if (text_len == 0) {
       return true;
     }
@@ -569,7 +574,7 @@ struct String {
     return true;
   }
 
-  bool remove(usize pos, usize length) {
+  bool remove(const usize pos, usize length) {
     if (pos >= m_length) {
       return false;
     }
@@ -585,11 +590,11 @@ struct String {
     return true;
   }
 
-  bool empty() const { return m_length == 0; }
+  [[nodiscard]] bool empty() const { return m_length == 0; }
 
   template <typename CharT>
     requires std::same_as<CharT, char> || std::same_as<CharT, char8_t>
-  i32 compare(const CharT *other) const {
+  [[nodiscard]] i32 compare(const CharT *other) const {
     if (!m_data) {
       return other ? -1 : 0;
     }
@@ -605,7 +610,7 @@ struct String {
             : traits_type::length(reinterpret_cast<const char8_t *>(other)));
   }
 
-  i32 compare(const String &str2) const {
+  [[nodiscard]] i32 compare(const String &str2) const {
     if (!m_data) {
       return str2.m_data ? -1 : 0;
     }
@@ -614,9 +619,9 @@ struct String {
       return 1;
     }
 
-    usize min_len = m_length < str2.m_length ? m_length : str2.m_length;
-    i32 result = traits_type::compare(m_data, str2.m_data, min_len);
-    if (result != 0) {
+    const usize min_len = m_length < str2.m_length ? m_length : str2.m_length;
+    if (const i32 result = traits_type::compare(m_data, str2.m_data, min_len);
+        result != 0) {
       return result;
     }
 
@@ -629,12 +634,12 @@ struct String {
     return 0;
   }
 
-  usize find(const_pointer needle) const {
+  [[nodiscard]] usize find(const char8_t* needle) const {
     if (!m_data || !needle) {
       return SIZE_MAX;
     }
 
-    usize needle_len = traits_type::length(needle);
+    const usize needle_len = traits_type::length(needle);
     if (needle_len == 0) {
       return 0;
     }
@@ -652,39 +657,36 @@ struct String {
     return SIZE_MAX;
   }
 
-  usize find(value_type c, usize pos = 0) const {
+  [[nodiscard]] usize find(const value_type c, const usize pos = 0) const {
     if (!m_data || pos >= m_length) {
       return SIZE_MAX;
     }
 
-    const_pointer result = traits_type::find(m_data + pos, m_length - pos, c);
+    const char8_t* result = traits_type::find(m_data + pos, m_length - pos, c);
     return result ? static_cast<usize>(result - m_data) : SIZE_MAX;
   }
 
-  bool duplicate(NotNull<const Allocator *> alloc, String dest) {
+  bool duplicate(const NotNull<const Allocator *> alloc, String& dest) const {
     return dest.from_utf8(alloc, m_data, m_length);
   }
 
-  constexpr const_reference front() const {
+  [[nodiscard]] constexpr const_reference front() const {
     assert(m_length > 0 && "front() called on empty String");
     return m_data[0];
   }
 
-  constexpr const_reference back() const {
+  [[nodiscard]] constexpr const_reference back() const {
     assert(m_length > 0 && "back() called on empty String");
     return m_data[m_length - 1];
   }
 
-  iterator begin() { return m_data; }
-
-  iterator end() { return m_data + m_length; }
-
-  const_iterator begin() const { return m_data; }
-
-  const_iterator end() const { return m_data + m_length; }
+  [[nodiscard]] iterator begin() { return m_data; }
+  [[nodiscard]] iterator end() { return m_data + m_length; }
+  [[nodiscard]] iterator begin() const { return m_data; }
+  [[nodiscard]] iterator end() const { return m_data + m_length; }
 
 private:
-  bool allocate(NotNull<const Allocator *> alloc, usize capacity) {
+  bool allocate(const NotNull<const Allocator *> alloc, usize capacity) {
     if (capacity < detail::STRING_DEFAULT_CAPACITY) {
       capacity = detail::STRING_DEFAULT_CAPACITY;
     }
@@ -701,8 +703,8 @@ private:
     return true;
   }
 
-  bool grow(NotNull<const Allocator *> alloc, usize additional) {
-    usize required = m_length + additional;
+  bool grow(const NotNull<const Allocator *> alloc, const usize additional) {
+    const usize required = m_length + additional;
     if (required <= m_capacity) {
       return true;
     }

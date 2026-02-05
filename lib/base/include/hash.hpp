@@ -6,13 +6,13 @@
 #include <functional>
 
 namespace edge {
-inline u32 hash_fnv1a32(const void *key, u32 len) {
-  const char *data = (char *)key;
+inline u32 hash_fnv1a32(const void *key, const u32 len) {
+  const auto data = static_cast<const char *>(key);
   u32 hash = 0x811c9dc5;
-  u32 prime = 0x1000193;
 
   for (usize i = 0; i < len; ++i) {
-    u8 value = data[i];
+    constexpr u32 prime = 0x1000193;
+    const u8 value = data[i];
     hash = hash ^ value;
     hash *= prime;
   }
@@ -20,13 +20,13 @@ inline u32 hash_fnv1a32(const void *key, u32 len) {
   return hash;
 }
 
-inline u64 hash_fnv1a64(const void *key, u64 len) {
-  const char *data = (char *)key;
+inline u64 hash_fnv1a64(const void *key, const u64 len) {
+  const auto data = static_cast<const char *>(key);
   u64 hash = 0xcbf29ce484222325;
-  u64 prime = 0x100000001b3;
 
   for (usize i = 0; i < len; ++i) {
-    u8 value = data[i];
+    constexpr u64 prime = 0x100000001b3;
+    const u8 value = data[i];
     hash = hash ^ value;
     hash *= prime;
   }
@@ -37,7 +37,7 @@ inline u64 hash_fnv1a64(const void *key, u64 len) {
 u32 hash_crc32(const void *data, usize size);
 usize hash_pointer(const void *ptr);
 
-constexpr inline usize hash_combine(usize hash1, usize hash2) {
+constexpr inline usize hash_combine(usize hash1, const usize hash2) {
   if constexpr (sizeof(usize) == 8) {
     hash1 ^= hash2 + 0x9e3779b97f4a7c15ULL + (hash1 << 6) + (hash1 >> 2);
   } else {

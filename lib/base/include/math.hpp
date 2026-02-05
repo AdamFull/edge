@@ -29,7 +29,6 @@ inline constexpr f32 EPSILON_F32 = 1.192092896e-07f;
 inline constexpr f64 EPSILON_F64 = 2.2204460492503131e-16;
 
 template <Arithmetic T> constexpr T min(T a, T b) { return a < b ? a : b; }
-
 template <Arithmetic T> constexpr T max(T a, T b) { return a > b ? a : b; }
 
 template <Arithmetic T> constexpr T clamp(T x, T low, T high) {
@@ -80,7 +79,7 @@ template <Arithmetic T> constexpr T sign(T x) {
   }
 }
 
-template <typename T> constexpr void swap(T &a, T &b) {
+template <typename T> constexpr void swap(T &a, T &b) noexcept {
   T temp = a;
   a = b;
   b = temp;
@@ -94,7 +93,7 @@ template <UnsignedArithmetic T> constexpr T next_pow2(T x) {
   if (x == 0) {
     return 1;
   }
-  x--;
+  --x;
   x |= x >> 1;
   x |= x >> 2;
   x |= x >> 4;
@@ -121,7 +120,7 @@ template <UnsignedArithmetic T> constexpr T prev_pow2(T x) {
   return x - (x >> 1);
 }
 
-template <UnsignedArithmetic T> constexpr i32 popcount(T x) {
+template <UnsignedArithmetic T> constexpr i32 popcnt(T x) {
   i32 count = 0;
   while (x) {
     count += x & 1;
@@ -191,13 +190,13 @@ template <Arithmetic T> constexpr T square(T x) { return x * x; }
 
 template <Arithmetic T> constexpr T cube(T x) { return x * x * x; }
 
-template <FloatingPoint T> inline T fract(T x) { return x - std::floor(x); }
+template <FloatingPoint T> T fract(T x) { return x - std::floor(x); }
 
-template <FloatingPoint T> inline T mod(T x, T y) {
+template <FloatingPoint T> T mod(T x, T y) {
   return x - y * std::floor(x / y);
 }
 
-template <FloatingPoint T> inline T wrap(T x, T min_val, T max_val) {
+template <FloatingPoint T> T wrap(T x, T min_val, T max_val) {
   T range = max_val - min_val;
   return min_val + mod(x - min_val, range);
 }
@@ -264,44 +263,29 @@ template <Arithmetic T> constexpr bool in_range(T x, T min_val, T max_val) {
 }
 
 template <std::integral T> constexpr T floor(T x) { return x; }
-
 template <std::integral T> constexpr T ceil(T x) { return x; }
-
 template <std::integral T> constexpr T round(T x) { return x; }
 
-template <FloatingPoint T> inline T floor(T x) { return std::floor(x); }
+template <FloatingPoint T> T floor(T x) { return std::floor(x); }
+template <FloatingPoint T> T ceil(T x) { return std::ceil(x); }
+template <FloatingPoint T> T round(T x) { return std::round(x); }
+template <FloatingPoint T> T sqrt(T x) { return std::sqrt(x); }
 
-template <FloatingPoint T> inline T ceil(T x) { return std::ceil(x); }
-
-template <FloatingPoint T> inline T round(T x) { return std::round(x); }
-
-template <FloatingPoint T> inline T sqrt(T x) { return std::sqrt(x); }
-
-template <FloatingPoint T> inline T pow(T base, T exp) {
+template <FloatingPoint T> T pow(T base, T exp) {
   return std::pow(base, exp);
 }
 
-template <FloatingPoint T> inline T sin(T x) { return std::sin(x); }
-
-template <FloatingPoint T> inline T cos(T x) { return std::cos(x); }
-
-template <FloatingPoint T> inline T tan(T x) { return std::tan(x); }
-
-template <FloatingPoint T> inline T asin(T x) { return std::asin(x); }
-
-template <FloatingPoint T> inline T acos(T x) { return std::acos(x); }
-
-template <FloatingPoint T> inline T atan(T x) { return std::atan(x); }
-
-template <FloatingPoint T> inline T atan2(T y, T x) { return std::atan2(y, x); }
-
-template <FloatingPoint T> inline T exp(T x) { return std::exp(x); }
-
-template <FloatingPoint T> inline T log(T x) { return std::log(x); }
-
-template <FloatingPoint T> inline T log10(T x) { return std::log10(x); }
-
-template <FloatingPoint T> inline T log2(T x) { return std::log2(x); }
+template <FloatingPoint T> T sin(T x) { return std::sin(x); }
+template <FloatingPoint T> T cos(T x) { return std::cos(x); }
+template <FloatingPoint T> T tan(T x) { return std::tan(x); }
+template <FloatingPoint T> T asin(T x) { return std::asin(x); }
+template <FloatingPoint T> T acos(T x) { return std::acos(x); }
+template <FloatingPoint T> T atan(T x) { return std::atan(x); }
+template <FloatingPoint T> T atan2(T y, T x) { return std::atan2(y, x); }
+template <FloatingPoint T> T exp(T x) { return std::exp(x); }
+template <FloatingPoint T> T log(T x) { return std::log(x); }
+template <FloatingPoint T> T log10(T x) { return std::log10(x); }
+template <FloatingPoint T> T log2(T x) { return std::log2(x); }
 } // namespace edge
 
 #endif

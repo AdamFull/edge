@@ -18,13 +18,12 @@ struct Handle {
   constexpr explicit Handle(HandleRawType raw)
       : version{raw & ((1u << HANDLE_VERSION_BITS) - 1)},
         index{(raw >> HANDLE_VERSION_BITS) & ((1u << HANDLE_INDEX_BITS) - 1)} {}
-  constexpr Handle(HandleIndexType idx, HandleVersionType ver)
+  constexpr Handle(const HandleIndexType idx, const HandleVersionType ver)
       : version{ver & ((1u << HANDLE_VERSION_BITS) - 1)},
         index{idx & ((1u << HANDLE_INDEX_BITS) - 1)} {}
 
   constexpr explicit operator HandleIndexType() const {
-    return (static_cast<HandleIndexType>(index) << HANDLE_VERSION_BITS) |
-           static_cast<HandleIndexType>(version);
+    return (index << HANDLE_VERSION_BITS) | version;
   }
 
   constexpr bool operator==(const Handle &other) const {
@@ -40,10 +39,10 @@ struct Handle {
   }
 };
 
-constexpr Handle HANDLE_INVALID = Handle(~0u);
+constexpr auto HANDLE_INVALID = Handle(~0u);
 constexpr u64 HANDLE_INDEX_MASK = (1ull << HANDLE_INDEX_BITS) - 1;
 constexpr u64 HANDLE_VERSION_MASK = (1ull << HANDLE_VERSION_BITS) - 1;
-constexpr u32 HANDLE_MAX_CAPACITY = static_cast<u32>(HANDLE_INDEX_MASK);
+constexpr u32 HANDLE_MAX_CAPACITY = HANDLE_INDEX_MASK;
 
 template <TrivialType T> struct HandlePool {
   T *m_data = nullptr;
@@ -77,7 +76,7 @@ template <TrivialType T> struct HandlePool {
     }
 
     Entry operator*() const {
-      auto handle =
+      const auto handle =
           Handle{m_current_index, m_pool->m_versions[m_current_index]};
       return {handle, &m_pool->m_data[m_current_index]};
     }
@@ -91,7 +90,7 @@ template <TrivialType T> struct HandlePool {
   };
 
   struct ConstIterator {
-    const HandlePool<T> *m_pool;
+    const HandlePool *m_pool;
     HandleIndexType m_current_index;
 
     struct Entry {
@@ -115,7 +114,7 @@ template <TrivialType T> struct HandlePool {
     }
 
     Entry operator*() const {
-      auto handle =
+      const auto handle =
           Handle{m_current_index, m_pool->m_versions[m_current_index]};
       return {handle, &m_pool->m_data[m_current_index]};
     }
@@ -128,7 +127,7 @@ template <TrivialType T> struct HandlePool {
     }
   };
 
-  bool create(NotNull<const Allocator *> alloc, u32 capacity) {
+  bool create(const NotNull<const Allocator *> alloc, const u32 capacity) {
     if (capacity == 0 || capacity > HANDLE_MAX_CAPACITY) {
       return false;
     }
@@ -156,14 +155,14 @@ template <TrivialType T> struct HandlePool {
 
     // Initialize free indices in reverse order (so 0 is allocated first)
     for (usize i = 0; i < capacity; i++) {
-      usize index = capacity - 1 - i;
+      const usize index = capacity - 1 - i;
       m_free_indices.push_back(alloc, static_cast<HandleIndexType>(index));
     }
 
     return true;
   }
 
-  void destroy(NotNull<const Allocator *> alloc) {
+  void destroy(const NotNull<const Allocator *> alloc) {
     m_free_indices.destroy(alloc);
 
     if (m_versions) {
@@ -187,7 +186,7 @@ template <TrivialType T> struct HandlePool {
 
     memset(&m_data[index], 0, sizeof(T));
 
-    auto version = m_versions[index];
+    const auto version = m_versions[index];
     m_count++;
 
     return Handle{index, version};
@@ -205,7 +204,7 @@ template <TrivialType T> struct HandlePool {
 
     memcpy(&m_data[index], &element, sizeof(T));
 
-    auto version = m_versions[index];
+    const auto version = m_versions[index];
     m_count++;
 
     return Handle{index, version};
@@ -286,7 +285,7 @@ template <TrivialType T> struct HandlePool {
     return true;
   }
 
-  bool is_valid(Handle handle) const {
+  bool is_valid(const Handle handle) const {
     if (handle == HANDLE_INVALID) {
       return false;
     }
@@ -321,8 +320,7 @@ template <TrivialType T> struct HandlePool {
   Iterator begin() {
     HandleIndexType index = 0;
     while (index < m_capacity) {
-      auto handle = Handle{index, m_versions[index]};
-      if (is_valid(handle)) {
+      if (const auto handle = Handle{index, m_versions[index]}; is_valid(handle)) {
         break;
       }
       index++;
@@ -335,8 +333,7 @@ template <TrivialType T> struct HandlePool {
   ConstIterator begin() const {
     HandleIndexType index = 0;
     while (index < m_capacity) {
-      auto handle = Handle{index, m_versions[index]};
-      if (is_valid(handle)) {
+      if (const auto handle = Handle{index, m_versions[index]}; is_valid(handle)) {
         break;
       }
       index++;

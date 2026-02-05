@@ -6,15 +6,15 @@
 namespace edge::filesystem {
 using Path = String;
 
-inline constexpr bool is_alpha(char8_t c) {
+constexpr bool is_alpha(const char8_t c) {
   return (c >= u8'A' && c <= u8'Z') || (c >= u8'a' && c <= u8'z');
 }
 
-inline constexpr bool is_separator(char8_t c) {
+constexpr bool is_separator(const char8_t c) {
   return c == u8'\\' || c == u8'/';
 }
 
-inline constexpr usize find_last_separator(StringView<char8_t> path) {
+constexpr usize find_last_separator(const StringView<char8_t> path) {
   for (usize i = path.size(); i > 0; --i) {
     if (is_separator(path[i - 1])) {
       return i - 1;
@@ -23,7 +23,7 @@ inline constexpr usize find_last_separator(StringView<char8_t> path) {
   return SIZE_MAX;
 }
 
-inline constexpr usize find_first_separator(StringView<char8_t> path) {
+constexpr usize find_first_separator(const StringView<char8_t> path) {
   for (usize i = 0; i < path.size(); ++i) {
     if (is_separator(path[i])) {
       return i;
@@ -32,7 +32,7 @@ inline constexpr usize find_first_separator(StringView<char8_t> path) {
   return SIZE_MAX;
 }
 
-inline constexpr bool is_absolute(StringView<char8_t> path) {
+constexpr bool is_absolute(const StringView<char8_t> path) {
   if (path.empty()) {
     return false;
   }
@@ -49,7 +49,7 @@ inline constexpr bool is_absolute(StringView<char8_t> path) {
   return false;
 }
 
-inline constexpr StringView<char8_t> filename(StringView<char8_t> path) {
+constexpr StringView<char8_t> filename(StringView<char8_t> path) {
   if (path.empty()) {
     return path;
   }
@@ -62,7 +62,7 @@ inline constexpr StringView<char8_t> filename(StringView<char8_t> path) {
     return u8"/";
   }
 
-  auto pos = find_last_separator(path);
+  const auto pos = find_last_separator(path);
   if (pos == SIZE_MAX) {
     return path;
   }
@@ -70,37 +70,37 @@ inline constexpr StringView<char8_t> filename(StringView<char8_t> path) {
   return path.substr(pos + 1);
 }
 
-inline constexpr StringView<char8_t> extension(StringView<char8_t> path) {
-  StringView<char8_t> fname = filename(path);
-  if (fname.empty() || fname == StringView<char8_t>{u8"."} ||
-      fname == StringView<char8_t>{u8".."}) {
+constexpr StringView<char8_t> extension(const StringView<char8_t> path) {
+  const StringView<char8_t> file_name = filename(path);
+  if (file_name.empty() || file_name == StringView<char8_t>{u8"."} ||
+      file_name == StringView<char8_t>{u8".."}) {
     return StringView<char8_t>{};
   }
 
-  usize pos = fname.rfind(u8'.');
+  const usize pos = file_name.rfind(u8'.');
   if (pos == SIZE_MAX || pos == 0) {
     return StringView<char8_t>{};
   }
 
-  return fname.substr(pos);
+  return file_name.substr(pos);
 }
 
-inline constexpr StringView<char8_t> stem(StringView<char8_t> path) {
-  StringView<char8_t> fname = filename(path);
-  if (fname.empty() || fname == StringView<char8_t>{u8"."} ||
-      fname == StringView<char8_t>{u8".."}) {
-    return fname;
+constexpr StringView<char8_t> stem(const StringView<char8_t> path) {
+  const StringView<char8_t> file_name = filename(path);
+  if (file_name.empty() || file_name == StringView<char8_t>{u8"."} ||
+      file_name == StringView<char8_t>{u8".."}) {
+    return file_name;
   }
 
-  usize pos = fname.rfind(u8'.');
+  const usize pos = file_name.rfind(u8'.');
   if (pos == SIZE_MAX || pos == 0) {
-    return fname;
+    return file_name;
   }
 
-  return fname.substr(0, pos);
+  return file_name.substr(0, pos);
 }
 
-inline constexpr StringView<char8_t> parent_path(StringView<char8_t> path) {
+constexpr StringView<char8_t> parent_path(StringView<char8_t> path) {
   if (path.empty()) {
     return path;
   }
@@ -113,7 +113,7 @@ inline constexpr StringView<char8_t> parent_path(StringView<char8_t> path) {
     return StringView<char8_t>{};
   }
 
-  auto pos = find_last_separator(path);
+  const auto pos = find_last_separator(path);
   if (pos == SIZE_MAX) {
     return StringView<char8_t>{};
   }
@@ -129,8 +129,10 @@ inline constexpr StringView<char8_t> parent_path(StringView<char8_t> path) {
   return path.substr(0, pos);
 }
 
-inline Path append(NotNull<const Allocator *> alloc, StringView<char8_t> base,
-                   StringView<char8_t> component, char8_t separator = u8'/') {
+inline Path append(const NotNull<const Allocator *> alloc,
+                   const StringView<char8_t> base,
+                   const StringView<char8_t> component,
+                   const char8_t separator = u8'/') {
   Path result = {};
 
   if (base.empty()) {

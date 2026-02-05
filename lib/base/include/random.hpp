@@ -13,7 +13,7 @@ struct RngPCG {
   u64 state = 0;
   u64 inc = 0;
 
-  constexpr void seed(u64 seed_val) noexcept {
+  constexpr void seed(const u64 seed_val) noexcept {
     state = 0;
     inc = (seed_val << 1) | 1;
     state = state * 6364136223846793005ULL + inc;
@@ -22,11 +22,11 @@ struct RngPCG {
   }
 
   constexpr u32 next32() noexcept {
-    u64 oldstate = state;
-    state = oldstate * 6364136223846793005ULL + inc;
-    u32 xorshifted = (u32)(((oldstate >> 18u) ^ oldstate) >> 27u);
-    u32 rot = (u32)(oldstate >> 59u);
-    return (xorshifted >> rot) | (xorshifted << ((-(i32)rot) & 31));
+    const u64 old_state = state;
+    state = old_state * 6364136223846793005ULL + inc;
+    const u32 xor_shifted = static_cast<u32>(((old_state >> 18u) ^ old_state) >> 27u);
+    const u32 rot = static_cast<u32>(old_state >> 59u);
+    return (xor_shifted >> rot) | (xor_shifted << ((-static_cast<i32>(rot)) & 31));
   }
 
   constexpr u64 next64() noexcept {
@@ -36,11 +36,11 @@ struct RngPCG {
 
 struct RngXoshiro256 {
   u64 s[4] = {};
-  static constexpr u64 jmpvals[] = {
+  static constexpr u64 jump_values[] = {
       0x180ec6d33cfd0abaULL, 0xd5a61266f0c9392cULL, 0xa9582618e03fc9aaULL,
       0x39abdc4529b1661cULL};
 
-  constexpr void seed(u64 seed_val) noexcept {
+  constexpr void seed(const u64 seed_val) noexcept {
     u64 z = seed_val;
     for (i32 i = 0; i < 4; i++) {
       z += 0x9e3779b97f4a7c15ULL;
@@ -52,8 +52,8 @@ struct RngXoshiro256 {
   }
 
   constexpr u64 next64() noexcept {
-    u64 result = std::rotl(s[1] * 5, 7) * 9;
-    u64 t = s[1] << 17;
+    const u64 result = std::rotl(s[1] * 5, 7) * 9;
+    const u64 t = s[1] << 17;
 
     s[2] ^= s[0];
     s[3] ^= s[1];
@@ -71,7 +71,7 @@ struct RngXoshiro256 {
     u64 s0 = 0, s1 = 0, s2 = 0, s3 = 0;
     for (i32 i = 0; i < 4; i++) {
       for (i32 b = 0; b < 64; b++) {
-        if (jmpvals[i] & (1ULL << b)) {
+        if (jump_values[i] & (1ULL << b)) {
           s0 ^= s[0];
           s1 ^= s[1];
           s2 ^= s[2];
@@ -90,7 +90,7 @@ struct RngXoshiro256 {
 struct RngSplitMix64 {
   u64 state = 0;
 
-  constexpr void seed(u64 seed_val) noexcept { state = seed_val; }
+  constexpr void seed(const u64 seed_val) noexcept { state = seed_val; }
 
   constexpr u64 next64() noexcept {
     u64 z = (state += 0x9e3779b97f4a7c15ULL);
@@ -110,27 +110,26 @@ concept RngAlgorithm = requires(T rng, u64 seed) {
 };
 
 template <RngAlgorithm Algorithm>
-inline constexpr u32 rng_gen_u32_bounded(Algorithm &state, u32 bound) noexcept {
+constexpr u32 rng_gen_u32_bounded(Algorithm &state, const u32 bound) noexcept {
   if (bound == 0) {
     return 0;
   }
 
-  auto threshold = (u32)(-bound) % bound;
+  const auto threshold = -bound % bound;
   for (;;) {
     auto r = state.next32();
-    auto m = static_cast<u64>(r) * static_cast<u64>(bound);
-    auto l = static_cast<u32>(m);
-    if (l >= threshold) {
+    const auto m = static_cast<u64>(r) * static_cast<u64>(bound);
+    if (const auto l = static_cast<u32>(m); l >= threshold) {
       return static_cast<u32>(m >> 32);
     }
   }
 }
 
 template <RngAlgorithm Algorithm>
-inline constexpr i32 rng_gen_i32_range(Algorithm &state, i32 min_val,
+constexpr i32 rng_gen_i32_range(Algorithm &state, i32 min_val,
                                        i32 max_val) noexcept {
   if (min_val > max_val) {
-    i32 temp = min_val;
+    const i32 temp = min_val;
     min_val = max_val;
     max_val = temp;
   }
@@ -139,20 +138,20 @@ inline constexpr i32 rng_gen_i32_range(Algorithm &state, i32 min_val,
 }
 
 template <RngAlgorithm Algorithm>
-inline constexpr f32 rng_gen_f32(Algorithm &state) noexcept {
+constexpr f32 rng_gen_f32(Algorithm &state) noexcept {
   auto r = state.next32() >> 8;
   return static_cast<f32>(r) * (1.0f / 16777216.0f);
 }
 
 template <RngAlgorithm Algorithm>
-inline constexpr f32 rng_gen_f32_range(Algorithm &state, f32 min_val,
-                                       f32 max_val) noexcept {
+constexpr f32 rng_gen_f32_range(Algorithm &state, f32 min_val,
+                                const f32 max_val) noexcept {
   return min_val + state.next32() * (max_val - min_val);
 }
 
 template <RngAlgorithm Algorithm>
-inline f32 rng_gen_normal_f32(Algorithm &state, f32 mean = 0.0f,
-                              f32 stddev = 1.0f) noexcept {
+f32 rng_gen_normal_f32(Algorithm &state, const f32 mean = 0.0f,
+                       const f32 stddev = 1.0f) noexcept {
   static thread_local bool has_spare = false;
   static thread_local f32 spare;
 
@@ -176,7 +175,7 @@ inline f32 rng_gen_normal_f32(Algorithm &state, f32 mean = 0.0f,
 }
 
 template <RngAlgorithm Algorithm>
-inline f32 gen_exp_f32(Algorithm &state, f32 lambda = 1.0f) noexcept {
+f32 gen_exp_f32(Algorithm &state, f32 lambda = 1.0f) noexcept {
   if (lambda <= 0.0f) {
     return 0.0f;
   }
@@ -184,7 +183,7 @@ inline f32 gen_exp_f32(Algorithm &state, f32 lambda = 1.0f) noexcept {
 }
 
 template <RngAlgorithm Algorithm>
-inline constexpr u64 rng_gen_u64_bounded(Algorithm &state, u64 bound) noexcept {
+constexpr u64 rng_gen_u64_bounded(Algorithm &state, u64 bound) noexcept {
   if (bound == 0) {
     return 0;
   }
@@ -192,10 +191,10 @@ inline constexpr u64 rng_gen_u64_bounded(Algorithm &state, u64 bound) noexcept {
 }
 
 template <RngAlgorithm Algorithm>
-inline constexpr i64 rng_gen_i64_range(Algorithm &state, i64 min_val,
+constexpr i64 rng_gen_i64_range(Algorithm &state, i64 min_val,
                                        i64 max_val) {
   if (min_val > max_val) {
-    i64 temp = min_val;
+    const i64 temp = min_val;
     min_val = max_val;
     max_val = temp;
   }
@@ -204,20 +203,20 @@ inline constexpr i64 rng_gen_i64_range(Algorithm &state, i64 min_val,
 }
 
 template <RngAlgorithm Algorithm>
-inline constexpr f64 rng_gen_f64(Algorithm &state) noexcept {
+constexpr f64 rng_gen_f64(Algorithm &state) noexcept {
   auto r = state.next64() >> 11;
   return static_cast<f64>(r) * (1.0 / 9007199254740992.0);
 }
 
 template <RngAlgorithm Algorithm>
-inline constexpr f64 rng_gen_f64_range(Algorithm &state, f64 min_val,
-                                       f64 max_val) noexcept {
+constexpr f64 rng_gen_f64_range(Algorithm &state, const f64 min_val,
+                                const f64 max_val) noexcept {
   return min_val + rng_gen_f64(state) * (max_val - min_val);
 }
 
 template <RngAlgorithm Algorithm>
-inline f64 rng_gen_normal_f64(Algorithm &state, f64 mean = 0.0,
-                              f64 stddev = 1.0) noexcept {
+f64 rng_gen_normal_f64(Algorithm &state, const f64 mean = 0.0,
+                       const f64 stddev = 1.0) noexcept {
   static thread_local bool has_spare = false;
   static thread_local f64 spare;
 
@@ -241,7 +240,7 @@ inline f64 rng_gen_normal_f64(Algorithm &state, f64 mean = 0.0,
 }
 
 template <RngAlgorithm Algorithm>
-inline f64 rng_gen_exp_f64(Algorithm &state, f64 lambda = 1.0) noexcept {
+f64 rng_gen_exp_f64(Algorithm &state, const f64 lambda = 1.0) noexcept {
   if (lambda <= 0.0) {
     return 0.0;
   }
@@ -249,14 +248,14 @@ inline f64 rng_gen_exp_f64(Algorithm &state, f64 lambda = 1.0) noexcept {
 }
 
 template <RngAlgorithm Algorithm>
-inline constexpr bool rng_gen_bool(Algorithm &state,
-                                   f32 probability = 0.5f) noexcept {
+constexpr bool rng_gen_bool(Algorithm &state,
+                                   const f32 probability = 0.5f) noexcept {
   return rng_gen_f32(state) < probability;
 }
 
 template <RngAlgorithm Algorithm, TrivialType T>
-inline constexpr void rng_shuffle(Algorithm &state, T *array,
-                                  usize count) noexcept {
+constexpr void rng_shuffle(Algorithm &state, T *array,
+                           const usize count) noexcept {
   if (!array || count == 0) {
     return;
   }
@@ -270,8 +269,8 @@ inline constexpr void rng_shuffle(Algorithm &state, T *array,
 }
 
 template <RngAlgorithm Algorithm, TrivialType T>
-inline constexpr T rng_choice(Algorithm &state, const T *array,
-                              usize count) noexcept {
+constexpr T rng_choice(Algorithm &state, const T *array,
+                       const usize count) noexcept {
   if (!array || count == 0) {
     return T{};
   }
@@ -281,8 +280,8 @@ inline constexpr T rng_choice(Algorithm &state, const T *array,
 }
 
 template <RngAlgorithm Algorithm, TrivialType T>
-inline constexpr T *rng_choice_ptr(Algorithm &state, T *array,
-                                   usize count) noexcept {
+constexpr T *rng_choice_ptr(Algorithm &state, T *array,
+                            const usize count) noexcept {
   if (!array || count == 0) {
     return nullptr;
   }
@@ -291,12 +290,12 @@ inline constexpr T *rng_choice_ptr(Algorithm &state, T *array,
 }
 
 template <RngAlgorithm Algorithm>
-inline constexpr void rng_gen_bytes(Algorithm &state, void *buffer,
-                                    usize size) noexcept {
+constexpr void rng_gen_bytes(Algorithm &state, void *buffer,
+                             const usize size) noexcept {
   if (!buffer || size == 0)
     return;
 
-  u8 *bytes = static_cast<u8 *>(buffer);
+  const auto bytes = static_cast<u8 *>(buffer);
   usize i = 0;
 
   while (i + 8 <= size) {
