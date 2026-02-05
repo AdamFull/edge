@@ -29,17 +29,20 @@
 #endif
 
 namespace edge {
-	struct FiberContext;
+struct FiberContext;
 
-	using FiberEntryFn = void(*)();
+using FiberEntryFn = void (*)();
 
-	FiberContext* fiber_context_create(NotNull<const Allocator*> allocator, FiberEntryFn entry, void* stack_ptr, usize stack_size);
-	void fiber_context_destroy(NotNull<const Allocator*> allocator, FiberContext* context);
+FiberContext *fiber_context_create(NotNull<const Allocator *> allocator,
+                                   FiberEntryFn entry, void *stack_ptr,
+                                   usize stack_size);
+void fiber_context_destroy(NotNull<const Allocator *> allocator,
+                           FiberContext *context);
 
-	void* fiber_get_stack_ptr(FiberContext* ctx);
-	usize fiber_get_stack_size(FiberContext* ctx);
+void *fiber_get_stack_ptr(FiberContext *ctx);
+usize fiber_get_stack_size(FiberContext *ctx);
 
-	bool fiber_context_switch(FiberContext* from, FiberContext* to);
-}
+bool fiber_context_switch(FiberContext *from, FiberContext *to);
+} // namespace edge
 
 #endif /* EDGE_FIBER_H */
