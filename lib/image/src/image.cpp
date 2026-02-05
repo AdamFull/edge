@@ -8,9 +8,10 @@ namespace detail {
 constexpr usize max_ident_size = max(ktx1::ident_size, dds::ident_size);
 }
 
-void ImageInfo::init(const ImageFormatDesc *desc, u32 width, u32 height,
-                     u32 depth, u32 mip_count, u32 layer_count,
-                     u32 face_count) {
+void ImageInfo::init(const ImageFormatDesc *desc, const u32 width,
+                     const u32 height,
+                     const u32 depth, const u32 mip_count,
+                     const u32 layer_count, const u32 face_count) {
   format_desc = desc;
 
   base_width = width;
@@ -30,9 +31,9 @@ void ImageInfo::init(const ImageFormatDesc *desc, u32 width, u32 height,
   }
 
   for (usize i = 0; i < static_cast<usize>(mip_levels); ++i) {
-    u32 mip_width = max(base_width >> static_cast<u32>(i), 1u);
-    u32 mip_height = max(base_height >> static_cast<u32>(i), 1u);
-    u32 mip_depth = max(base_depth >> static_cast<u32>(i), 1u);
+    const u32 mip_width = max(base_width >> static_cast<u32>(i), 1u);
+    const u32 mip_height = max(base_height >> static_cast<u32>(i), 1u);
+    const u32 mip_depth = max(base_depth >> static_cast<u32>(i), 1u);
 
     whole_size +=
         format_desc->comp_size(mip_width, mip_height, mip_depth) * array_layers;
@@ -40,7 +41,7 @@ void ImageInfo::init(const ImageFormatDesc *desc, u32 width, u32 height,
 }
 
 Result<IImageReader *, IImageReader::Result>
-open_image_reader(NotNull<const Allocator *> alloc, NotNull<FILE *> stream) {
+open_image_reader(const NotNull<const Allocator *> alloc, NotNull<FILE *> stream) {
   u8 buffer[detail::max_ident_size];
 
   if (fread(buffer, 1, detail::max_ident_size, stream.m_ptr) !=
@@ -64,8 +65,7 @@ open_image_reader(NotNull<const Allocator *> alloc, NotNull<FILE *> stream) {
 }
 
 Result<IImageWriter *, IImageWriter::Result>
-open_image_writer(NotNull<const Allocator *> alloc, NotNull<FILE *> stream,
-                  ImageContainerType type) {
+open_image_writer(const NotNull<const Allocator *> alloc, NotNull<FILE *> stream, const ImageContainerType type) {
   IImageWriter *writer = nullptr;
 
   switch (type) {

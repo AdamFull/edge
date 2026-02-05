@@ -372,7 +372,7 @@ constexpr static ImageFormatDesc g_format_table[] = {
      VK_FORMAT_A8_UNORM, DXGI_FORMAT_A8_UNORM}};
 
 [[maybe_unused]] static const ImageFormatDesc *
-find_format_entry_by_vk(u32 vk_format) {
+find_format_entry_by_vk(const u32 vk_format) {
   for (const auto &entry : g_format_table) {
     if (entry.vk_format == vk_format) {
       return &entry;
@@ -381,7 +381,7 @@ find_format_entry_by_vk(u32 vk_format) {
   return nullptr;
 }
 
-static const ImageFormatDesc *find_format_entry_by_gl(u32 gl_internal) {
+static const ImageFormatDesc *find_format_entry_by_gl(const u32 gl_internal) {
   for (const auto &entry : g_format_table) {
     if (entry.gl_internal_format == gl_internal) {
       return &entry;
@@ -390,7 +390,7 @@ static const ImageFormatDesc *find_format_entry_by_gl(u32 gl_internal) {
   return nullptr;
 }
 
-static const ImageFormatDesc *find_format_entry_by_dxgi(u32 dxgi_format) {
+static const ImageFormatDesc *find_format_entry_by_dxgi(const u32 dxgi_format) {
   for (const auto &entry : g_format_table) {
     if (entry.dxgi_format == dxgi_format) {
       return &entry;

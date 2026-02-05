@@ -89,7 +89,7 @@ struct PixelFormat {
   u32 b_bit_mask;
   u32 a_bit_mask;
 
-  DXGI_FORMAT get_format() const {
+  [[nodiscard]] DXGI_FORMAT get_format() const {
     if (flags & DDS_PIXEL_FORMAT_FOUR_CC_FLAG_BIT) {
       switch (fourcc) {
       case FOURCC_DXT1:
@@ -189,6 +189,8 @@ struct PixelFormat {
           return DXGI_FORMAT_A8_UNORM;
         }
         break;
+      default:
+        break;
       }
     }
 
@@ -215,6 +217,8 @@ struct PixelFormat {
           // TODO: N\A in DXGI
           return DXGI_FORMAT_UNKNOWN;
         }
+      default:
+        break;
       }
     }
 
@@ -258,23 +262,24 @@ struct DDSReader final : IImageReader {
   usize current_layer = 0;
   usize current_mip = 0;
 
-  DDSReader(NotNull<FILE *> fstream) : stream{fstream.m_ptr} {}
+  DDSReader(const NotNull<FILE *> fstream) : stream{fstream.m_ptr} {}
 
   Result create(NotNull<const Allocator *> alloc) override {
     using namespace detail::dds;
 
-    Header header;
+    Header header{};
     if (read_bytes(&header, header_size) != header_size) {
       return Result::InvalidHeader;
     }
 
-    bool fourcc_pixel_format =
+    const bool fourcc_pixel_format =
         header.ddspf.flags & DDS_PIXEL_FORMAT_FOUR_CC_FLAG_BIT;
 
     const ImageFormatDesc *format_desc = nullptr;
-    u32 layer_count = 1, face_count = 1;
+    u32 layer_count = 1;
+    u32 face_count = 1;
     if (fourcc_pixel_format && (header.ddspf.fourcc == FOURCC_DX10)) {
-      HeaderDXT10 header_dxt10;
+      HeaderDXT10 header_dxt10{};
       if (read_bytes(&header_dxt10, header_dxt10_size) != header_dxt10_size) {
         return Result::InvalidHeader;
       }
@@ -284,12 +289,13 @@ struct DDSReader final : IImageReader {
         return Result::InvalidPixelFormat;
       }
 
+      layer_count = header_dxt10.array_size;
       if ((header_dxt10.misc_flag & DDS_MISC_TEXTURE_CUBE_FLAG_BIT) ==
           DDS_MISC_TEXTURE_CUBE_FLAG_BIT) {
         face_count *= 6;
       }
     } else {
-      auto dxgi_format = header.ddspf.get_format();
+      const auto dxgi_format = header.ddspf.get_format();
 
       format_desc = detail::find_format_entry_by_dxgi(dxgi_format);
       if (!format_desc) {
@@ -324,12 +330,12 @@ struct DDSReader final : IImageReader {
     block_info.block_height = max(info.base_height >> block_info.mip_level, 1u);
     block_info.block_depth = max(info.base_depth >> block_info.mip_level, 1u);
 
-    usize copy_size = info.format_desc->comp_size(block_info.block_width,
-                                                  block_info.block_height,
-                                                  block_info.block_depth) *
-                      block_info.layer_count;
-    usize bytes_readed =
-        fread((u8 *)dst_memory + dst_offset, 1, copy_size, stream);
+    const usize copy_size = info.format_desc->comp_size(
+                                block_info.block_width, block_info.block_height,
+                                block_info.block_depth) *
+                            block_info.layer_count;
+    const usize bytes_readed =
+        fread(static_cast<u8 *>(dst_memory) + dst_offset, 1, copy_size, stream);
     if (bytes_readed != copy_size) {
       return Result::EndOfStream;
     }
@@ -344,14 +350,14 @@ struct DDSReader final : IImageReader {
     return Result::Success;
   }
 
-  const ImageInfo &get_info() const override { return info; }
+  [[nodiscard]] const ImageInfo &get_info() const override { return info; }
 
-  ImageContainerType get_container_type() const override {
+  [[nodiscard]] ImageContainerType get_container_type() const override {
     return ImageContainerType::DDS;
   }
 
 private:
-  usize read_bytes(void *buffer, usize count) const {
+  usize read_bytes(void *buffer, const usize count) const {
     return fread(buffer, 1, count, stream);
   }
 };
@@ -360,7 +366,7 @@ struct DDSWriter final : IImageWriter {
   FILE *stream = nullptr;
   ImageInfo info = {};
 
-  DDSWriter(NotNull<FILE *> fstream) : stream{fstream.m_ptr} {}
+  DDSWriter(const NotNull<FILE *> fstream) : stream{fstream.m_ptr} {}
 
   Result create(NotNull<const Allocator *> alloc,
                 const ImageInfo &image_info) override {
@@ -406,7 +412,7 @@ struct DDSWriter final : IImageWriter {
     } else {
       header.flags |= DDS_HEADER_PITCH_FLAG_BIT;
       header.pitch_or_linear_size =
-          static_cast<u32>(info.base_width * info.format_desc->block_size);
+          (info.base_width * info.format_desc->block_size);
     }
 
     // TODO: Since DXT10 header is used, it is not necessary to fill it, but for
@@ -480,7 +486,7 @@ struct DDSWriter final : IImageWriter {
     const usize layer_block_size =
         info.format_desc->comp_size(block_width, block_height, block_depth);
 
-    auto mip_comp_size = [this](u32 mip_level) {
+    auto mip_comp_size = [this](const u32 mip_level) {
       const u32 mip_width = max(info.base_width >> mip_level, 1u);
       const u32 mip_height = max(info.base_height >> mip_level, 1u);
       const u32 mip_depth = max(info.base_depth >> mip_level, 1u);
@@ -497,10 +503,10 @@ struct DDSWriter final : IImageWriter {
       mip_offset += mip_comp_size(mip);
     }
 
-    const usize data_start_offset =
+    constexpr usize data_start_offset =
         ident_size + header_size + header_dxt10_size;
 
-    const u8 *src_bytes = static_cast<const u8 *>(src_memory);
+    const auto src_bytes = static_cast<const u8 *>(src_memory);
     for (u32 layer_index = 0; layer_index < block_info.layer_count;
          ++layer_index) {
       const u32 layer = block_info.array_layer + layer_index;
@@ -523,14 +529,14 @@ struct DDSWriter final : IImageWriter {
     return Result::Success;
   }
 
-  const ImageInfo &get_info() const override { return info; }
+  [[nodiscard]] const ImageInfo &get_info() const override { return info; }
 
-  ImageContainerType get_container_type() const override {
+  [[nodiscard]] ImageContainerType get_container_type() const override {
     return ImageContainerType::DDS;
   }
 
 private:
-  usize write_bytes(const void *buffer, usize count) const {
+  usize write_bytes(const void *buffer, const usize count) const {
     return fwrite(buffer, 1, count, stream);
   }
 };

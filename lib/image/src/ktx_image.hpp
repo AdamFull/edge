@@ -32,7 +32,7 @@ struct Header {
 
 static constexpr usize header_size = sizeof(Header);
 
-static u32 swap_u32(u32 val) {
+static u32 swap_u32(const u32 val) {
   return ((val & 0xFF000000) >> 24) | ((val & 0x00FF0000) >> 8) |
          ((val & 0x0000FF00) << 8) | ((val & 0x000000FF) << 24);
 }
@@ -80,7 +80,7 @@ struct KTX10Reader final : IImageReader {
   Result create(NotNull<const Allocator *> alloc) override {
     using namespace detail::ktx1;
 
-    Header header;
+    Header header{};
     if (read_bytes(&header, header_size) != header_size) {
       return Result::InvalidHeader;
     }
@@ -114,7 +114,7 @@ struct KTX10Reader final : IImageReader {
               header.number_of_array_elements, header.number_of_faces);
 
     // Skip metadata
-    fseek(stream, header.bytes_of_key_value_data, SEEK_CUR);
+    fseek(stream, static_cast<long>(header.bytes_of_key_value_data), SEEK_CUR);
 
     return Result::Success;
   }
@@ -158,28 +158,29 @@ struct KTX10Reader final : IImageReader {
       return Result::EndOfStream;
     }
 
-    usize bytes_readed =
-        read_bytes((u8 *)dst_memory + dst_offset, calculated_block_size);
+    const usize bytes_readed =
+        read_bytes(
+        static_cast<u8 *>(dst_memory) + dst_offset, calculated_block_size);
     if (bytes_readed != calculated_block_size) {
       return Result::EndOfStream;
     }
 
     dst_offset += calculated_block_size;
 
-    usize current_stream_offset = ftell(stream);
+    const usize current_stream_offset = ftell(stream);
     fseek(stream, (current_stream_offset + 3) & ~3, SEEK_SET);
 
     return Result::Success;
   }
 
-  const ImageInfo &get_info() const override { return info; }
+  [[nodiscard]] const ImageInfo &get_info() const override { return info; }
 
-  ImageContainerType get_container_type() const override {
+  [[nodiscard]] ImageContainerType get_container_type() const override {
     return ImageContainerType::KTX_1_0;
   }
 
 private:
-  usize read_bytes(void *buffer, usize count) const {
+  usize read_bytes(void *buffer, const usize count) const {
     return fread(buffer, 1, count, stream);
   }
 };
@@ -188,7 +189,7 @@ struct KTX10Writer final : IImageWriter {
   FILE *stream = nullptr;
   ImageInfo info = {};
 
-  KTX10Writer(NotNull<FILE *> fstream) : stream{fstream.m_ptr} {}
+  KTX10Writer(const NotNull<FILE *> fstream) : stream{fstream.m_ptr} {}
 
   Result create(NotNull<const Allocator *> alloc,
                 const ImageInfo &image_info) override {
@@ -264,7 +265,7 @@ struct KTX10Writer final : IImageWriter {
       return Result::EndOfStream;
     }
 
-    auto mip_comp_size = [this](u32 mip_level) {
+    auto mip_comp_size = [this](const u32 mip_level) {
       const u32 mip_width = max(info.base_width >> mip_level, 1u);
       const u32 mip_height = max(info.base_height >> mip_level, 1u);
       const u32 mip_depth = max(info.base_depth >> mip_level, 1u);
@@ -313,27 +314,25 @@ struct KTX10Writer final : IImageWriter {
     return Result::Success;
   }
 
-  const ImageInfo &get_info() const override { return info; }
+  [[nodiscard]] const ImageInfo &get_info() const override { return info; }
 
-  ImageContainerType get_container_type() const override {
+  [[nodiscard]] ImageContainerType get_container_type() const override {
     return ImageContainerType::KTX_1_0;
   }
 
 private:
-  usize write_bytes(const void *buffer, usize count) const {
+  usize write_bytes(const void *buffer, const usize count) const {
     return fwrite(buffer, 1, count, stream);
   }
 };
 } // namespace edge
 
-namespace edge {
-namespace detail::ktx2 {
+namespace edge::detail::ktx2 {
 // TODO: NOT IMPLEMENTED
 constexpr u8 IDENTIFIER[] = {0xAB, 0x4B, 0x54, 0x58, 0x20, 0x32,
                              0x30, 0xBB, 0x0D, 0x0A, 0x1A, 0x0A};
 
 static constexpr usize ident_size = sizeof(IDENTIFIER);
-} // namespace detail::ktx2
-} // namespace edge
+} // namespace edge::detail::ktx2
 
 #endif

@@ -19,10 +19,10 @@ struct ImageFormatDesc {
   u32 vk_format;
   u32 dxgi_format;
 
-  usize comp_size(u32 width, u32 height, u32 depth) const {
+  usize comp_size(const u32 width, const u32 height, const u32 depth) const {
     if (compressed) {
-      u32 blocks_x = (width + block_width - 1) / block_width;
-      u32 blocks_y = (height + block_height - 1) / block_height;
+      const u32 blocks_x = (width + block_width - 1) / block_width;
+      const u32 blocks_y = (height + block_height - 1) / block_height;
       return blocks_x * blocks_y * depth * block_size;
     }
 
@@ -78,8 +78,8 @@ struct IImageReader {
   virtual Result read_next_block(void *dst_memory, usize &dst_offset,
                                  ImageBlockInfo &block_info) = 0;
 
-  virtual const ImageInfo &get_info() const = 0;
-  virtual ImageContainerType get_container_type() const = 0;
+  [[nodiscard]] virtual const ImageInfo &get_info() const = 0;
+  [[nodiscard]] virtual ImageContainerType get_container_type() const = 0;
 };
 
 struct IImageWriter {
@@ -103,8 +103,8 @@ struct IImageWriter {
   virtual Result write_next_block(const void *src_memory,
                                   const ImageBlockInfo &block_info) = 0;
 
-  virtual const ImageInfo &get_info() const = 0;
-  virtual ImageContainerType get_container_type() const = 0;
+  [[nodiscard]] virtual const ImageInfo &get_info() const = 0;
+  [[nodiscard]] virtual ImageContainerType get_container_type() const = 0;
 };
 
 Result<IImageReader *, IImageReader::Result>
