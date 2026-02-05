@@ -8,6 +8,7 @@
 #include "imgui_shdr.h"
 #include "imgui_vs.h"
 
+#include <inttypes.h>
 #include <utility>
 
 namespace edge::gfx {

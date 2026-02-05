@@ -3,6 +3,7 @@
 
 #include <array.hpp>
 #include <logger.hpp>
+#include <inttypes.h>
 #include <math.hpp>
 
 #include <atomic>
