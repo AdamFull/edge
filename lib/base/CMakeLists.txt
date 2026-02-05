@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(libedgebase VERSION 1.0.0 LANGUAGES C CXX)
+project(libedgebase VERSION 1.0.0 LANGUAGES C CXX ASM)
 
 # Set C standard
 set(CMAKE_C_STANDARD 11)
@@ -11,9 +11,11 @@ option(EDGE_BASE_BUILD_EXAMPLES "Build examples" ON)
 
 set(EDGE_BASE_SOURCES
     "src/arena.cpp"
+    "src/fiber.cpp"
     "src/filesystem.cpp"
     "src/hash.cpp"
     "src/random.cpp"
+    "src/scheduler.cpp"
     "src/threads.cpp"
     "src/uuid.cpp"
     "src/vmem.cpp"
@@ -24,6 +26,12 @@ set(EDGE_BASE_HEADERS
     "include/arena.hpp"
     "include/array.hpp"
     "include/bitarray.hpp"
+    "include/buffer.hpp"
+    "include/callable.hpp"
+    "include/fiber.hpp"
+    "include/filesystem.hpp"
+    "include/free_index_list.hpp"
+    "include/handle_pool.hpp"
     "include/hash.hpp"
     "include/hashmap.hpp"
     "include/list.hpp"
@@ -31,15 +39,41 @@ set(EDGE_BASE_HEADERS
     "include/mpmc_queue.hpp"
     "include/platform_detect.hpp"
     "include/random.hpp"
+    "include/random_access_iterator.hpp"
+    "include/scheduler.hpp"
+    "include/span.hpp"
     "include/stddef.hpp"
     "include/string.hpp"
+    "include/string_view.hpp"
+    "include/threads.hpp"
+    "include/uuid.hpp"
     "include/vmem.hpp"
 )
+
+# Determine architecture and select appropriate assembly file
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    set(EDGE_CORO_ARCH "x86_64")
+    if(WIN32)
+        set(EDGE_BASE_SOURCES ${EDGE_BASE_SOURCES} "src/fiber_asm_x64_win.asm")
+        set_source_files_properties("src/fiber_asm_x64_win.asm" PROPERTIES LANGUAGE ASM)
+    else()
+        set(EDGE_BASE_SOURCES ${EDGE_BASE_SOURCES} "src/fiber_asm_x64_sysv.asm")
+    endif()
+elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+    set(EDGE_CORO_ARCH "aarch64")
+    set(EDGE_BASE_SOURCES ${EDGE_BASE_SOURCES} "src/fiber_asm_aarch64.asm")
+else()
+    message(FATAL_ERROR "Unsupported architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+endif()
 
 # Library
 add_library(edge_base STATIC
     ${EDGE_BASE_SOURCES}
 )
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    target_compile_options(edge_base PRIVATE -m64)
+endif()
 
 # Include directories
 target_include_directories(edge_base PUBLIC

@@ -1,11 +1,11 @@
 #ifndef EDGE_SCHEDULER_HPP
 #define EDGE_SCHEDULER_HPP
 
-#include <array.hpp>
-#include <callable.hpp>
-#include <mpmc_queue.hpp>
-#include <span.hpp>
-#include <threads.hpp>
+#include "array.hpp"
+#include "callable.hpp"
+#include "mpmc_queue.hpp"
+#include "span.hpp"
+#include "threads.hpp"
 
 #include "fiber.hpp"
 

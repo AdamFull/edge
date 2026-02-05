@@ -3,3 +3,6 @@ target_link_libraries(edge_containers_test PRIVATE edge_base)
 
 add_executable(edge_benchmark benchmark.cpp)
 target_link_libraries(edge_benchmark PRIVATE edge_base)
+
+add_executable(fiber_scheduler_test fiber_scheduler_test.cpp)
+target_link_libraries(fiber_scheduler_test PRIVATE edge_base)
