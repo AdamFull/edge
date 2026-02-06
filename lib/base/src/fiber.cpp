@@ -106,9 +106,9 @@ extern "C" void fiber_init(void) {
 
 extern "C" void fiber_abort(void) { std::abort(); }
 
-FiberContext *fiber_context_create(NotNull<const Allocator *> allocator,
-                                   FiberEntryFn entry, void *stack_ptr,
-                                   usize stack_size) {
+FiberContext *fiber_context_create(const NotNull<const Allocator *> allocator,
+                                   const FiberEntryFn entry, void *stack_ptr,
+                                   const usize stack_size) {
   FiberContext *ctx = allocator->allocate<FiberContext>();
   if (!ctx) {
     return nullptr;
