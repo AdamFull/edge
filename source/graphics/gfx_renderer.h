@@ -75,7 +75,7 @@ struct RenderResource {
   }
 
   u32 get_srv_index() const { return srv_index; }
-  u32 get_uav_index(usize mip = 0) const {
+  u32 get_uav_index(const usize mip = 0) const {
     if (is_image()) {
       if (auto *img = std::get_if<ImageResource>(&resource)) {
         if (mip >= img->handle.level_count) {
@@ -212,16 +212,18 @@ struct Renderer {
   Handle create_empty();
 
   Handle create_image(const ImageCreateInfo &create_info);
-  bool attach_image(Handle h, Image image);
-  bool update_image(NotNull<const Allocator *> alloc, Handle h, Image img);
+  bool attach_image(Handle h, const Image &image);
+  bool update_image(NotNull<const Allocator *> alloc, Handle h,
+                    const Image &img);
 
   Handle create_buffer(const BufferCreateInfo &create_info);
-  bool attach_buffer(Handle h, Buffer buf);
-  bool update_buffer(NotNull<const Allocator *> alloc, Handle h, Buffer buf);
+  bool attach_buffer(Handle h, const Buffer &buf);
+  bool update_buffer(NotNull<const Allocator *> alloc, Handle h,
+                     const Buffer &buf);
 
   Handle create_sampler(const VkSamplerCreateInfo &create_info);
-  bool attach_sampler(Handle handle, Sampler smp);
-  bool update_sampler(NotNull<const Allocator *> alloc, Handle h, Sampler smp);
+  bool attach_sampler(Handle handle, const Sampler& smp);
+  bool update_sampler(NotNull<const Allocator *> alloc, Handle h, const Sampler& smp);
 
   RenderResource *get_resource(Handle h);
   void free_resource(NotNull<const Allocator *> alloc, Handle h);
@@ -231,12 +233,12 @@ struct Renderer {
 
   bool frame_begin();
   bool frame_end(NotNull<const Allocator *> alloc,
-                 VkSemaphoreSubmitInfoKHR uploader_semaphore);
+                 const VkSemaphoreSubmitInfoKHR &uploader_semaphore);
 
   void image_update_end(NotNull<const Allocator *> alloc,
-                        ImageUpdateInfo &update_info);
+                        ImageUpdateInfo &update_info) const;
   void buffer_update_end(NotNull<const Allocator *> alloc,
-                         BufferUpdateInfo &update_info);
+                         BufferUpdateInfo &update_info) const;
 
   template <typename T> void push_constants(VkShaderStageFlags, T data) {
     active_frame->cmd.push_constants(pipeline_layout,
@@ -250,9 +252,9 @@ struct Renderer {
 private:
   void flush_resource_destruction(RendererFrame &frame);
 
-  void update_srv_descriptor(u32 index, Sampler sampler);
-  void update_srv_descriptor(u32 index, ImageView view);
-  void update_uav_descriptor(u32 index, ImageView view);
+  void update_srv_descriptor(u32 index, const Sampler &sampler);
+  void update_srv_descriptor(u32 index, const ImageView &view);
+  void update_uav_descriptor(u32 index, const ImageView &view);
 
   HandlePool<RenderResource> resource_pool = {};
 

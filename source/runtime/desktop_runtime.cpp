@@ -38,7 +38,7 @@ struct RuntimeLayout {
 };
 
 namespace {
-Key glfw_key_to_engine_key(i32 glfw_key) {
+Key glfw_key_to_engine_key(const i32 glfw_key) {
   switch (glfw_key) {
   case GLFW_KEY_SPACE:
     return Key::Space;
@@ -255,7 +255,7 @@ Key glfw_key_to_engine_key(i32 glfw_key) {
   }
 }
 
-MouseBtn glfw_mouse_btn_to_engine_btn(i32 glfw_btn) {
+MouseBtn glfw_mouse_btn_to_engine_btn(const i32 glfw_btn) {
   switch (glfw_btn) {
   case GLFW_MOUSE_BUTTON_LEFT:
     return MouseBtn::Left;
@@ -280,7 +280,7 @@ MouseBtn glfw_mouse_btn_to_engine_btn(i32 glfw_btn) {
   }
 }
 
-PadBtn glfw_gamepad_btn_to_engine_btn(i32 glfw_btn) {
+PadBtn glfw_gamepad_btn_to_engine_btn(const i32 glfw_btn) {
   switch (glfw_btn) {
   case GLFW_GAMEPAD_BUTTON_A:
     return PadBtn::A;
@@ -319,14 +319,14 @@ PadBtn glfw_gamepad_btn_to_engine_btn(i32 glfw_btn) {
   }
 }
 
-f32 apply_deadzone(f32 value, f32 deadzone) {
+f32 apply_deadzone(const f32 value, const f32 deadzone) {
   if (abs(value) < deadzone) {
     return 0.0f;
   }
 
   // Rescale to 0-1 range after deadzone
-  f32 sign = value < 0.0f ? -1.0f : 1.0f;
-  f32 abs_val = abs(value);
+  const f32 sign = value < 0.0f ? -1.0f : 1.0f;
+  const f32 abs_val = abs(value);
   return sign * ((abs_val - deadzone) / (1.0f - deadzone));
 }
 } // namespace
@@ -344,7 +344,7 @@ struct DesktopRuntime final : IRuntime {
       }
     }
 
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    const HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
     DWORD dwMode = 0;
 
     GetConsoleMode(hOut, &dwMode);
@@ -365,15 +365,15 @@ struct DesktopRuntime final : IRuntime {
 #elif defined(EDGE_PLATFORM_LINUX)
 #endif
 
-    GLFWallocator glfw_allocator = {
-        .allocate = [](size_t size, void *user) -> void * {
-          return ((Allocator *)user)->malloc(size);
+    const GLFWallocator glfw_allocator = {
+        .allocate = [](const size_t size, void *user) -> void * {
+          return static_cast<Allocator *>(user)->malloc(size);
         },
-        .reallocate = [](void *block, size_t size, void *user) -> void * {
-          return ((Allocator *)user)->realloc(block, size);
+        .reallocate = [](void *block, const size_t size, void *user) -> void * {
+          return static_cast<Allocator *>(user)->realloc(block, size);
         },
         .deallocate = [](void *block, void *user) -> void {
-          ((Allocator *)user)->free(block);
+          static_cast<Allocator *>(user)->free(block);
         },
         .user = (void *)init_info.alloc};
 
@@ -384,7 +384,7 @@ struct DesktopRuntime final : IRuntime {
       return false;
     }
 
-    glfwSetErrorCallback([](i32 error, const char *description) -> void {
+    glfwSetErrorCallback([](const i32 error, const char *description) -> void {
       EDGE_LOG_ERROR("GLFW error: %d. %s.", error, description);
     });
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
@@ -422,28 +422,28 @@ struct DesktopRuntime final : IRuntime {
     }
 
     glfwSetWindowFocusCallback(
-        wnd_handle, [](GLFWwindow *window, i32 focused) -> void {
-          auto *rt = (DesktopRuntime *)glfwGetWindowUserPointer(window);
+        wnd_handle, [](GLFWwindow *window, const i32 focused) -> void {
+          auto *rt = static_cast<DesktopRuntime *>(glfwGetWindowUserPointer(window));
           rt->focused = focused == GLFW_TRUE;
         });
 
     // For input
     glfwSetKeyCallback(
         wnd_handle,
-        [](GLFWwindow *window, i32 key, i32 scancode, i32 action,
+        [](GLFWwindow *window, const i32 key, const i32 scancode, const i32 action,
            i32 mods) -> void {
-          auto *rt = (DesktopRuntime *)glfwGetWindowUserPointer(window);
+          const auto *rt = static_cast<DesktopRuntime *>(glfwGetWindowUserPointer(window));
           KeyboardDevice *keyboard = rt->input_system->get_keyboard();
 
-          Key engine_key = glfw_key_to_engine_key(key);
-          if (engine_key != Key::Unknown && action != GLFW_REPEAT) {
+          if (const Key engine_key = glfw_key_to_engine_key(key);
+              engine_key != Key::Unknown && action != GLFW_REPEAT) {
             keyboard->set_key(engine_key, action == GLFW_PRESS);
           }
         });
 
     glfwSetCursorPosCallback(
-        wnd_handle, [](GLFWwindow *window, double xpos, double ypos) -> void {
-          auto *rt = (DesktopRuntime *)glfwGetWindowUserPointer(window);
+        wnd_handle, [](GLFWwindow *window, const double xpos, const double ypos) -> void {
+          const auto *rt = static_cast<DesktopRuntime *>(glfwGetWindowUserPointer(window));
           MouseDevice *mouse = rt->input_system->get_mouse();
           mouse->set_axis(MouseAxis::Pos, {static_cast<f32>(xpos),
                                            static_cast<f32>(ypos), 0.0f});
@@ -451,11 +451,11 @@ struct DesktopRuntime final : IRuntime {
 
     glfwSetMouseButtonCallback(
         wnd_handle,
-        [](GLFWwindow *window, i32 button, i32 action, i32 mods) -> void {
-          auto *rt = (DesktopRuntime *)glfwGetWindowUserPointer(window);
+        [](GLFWwindow *window, const i32 button, const i32 action, const i32 mods) -> void {
+          const auto *rt = static_cast<DesktopRuntime *>(glfwGetWindowUserPointer(window));
           MouseDevice *mouse = rt->input_system->get_mouse();
 
-          MouseBtn engine_btn = glfw_mouse_btn_to_engine_btn(button);
+          const MouseBtn engine_btn = glfw_mouse_btn_to_engine_btn(button);
           if (action != GLFW_REPEAT) {
             mouse->set_btn(engine_btn, action == GLFW_PRESS);
           }
@@ -463,20 +463,20 @@ struct DesktopRuntime final : IRuntime {
 
     glfwSetScrollCallback(
         wnd_handle,
-        [](GLFWwindow *window, double xoffset, double yoffset) -> void {
-          auto *rt = (DesktopRuntime *)glfwGetWindowUserPointer(window);
+        [](GLFWwindow *window, const double xoffset, const double yoffset) -> void {
+          const auto *rt = static_cast<DesktopRuntime *>(glfwGetWindowUserPointer(window));
           MouseDevice *mouse = rt->input_system->get_mouse();
           mouse->set_axis(MouseAxis::Scroll, {static_cast<f32>(xoffset),
                                               static_cast<f32>(yoffset), 0.0f});
         });
 
     glfwSetCharCallback(
-        wnd_handle, [](GLFWwindow *window, u32 codepoint) -> void {
-          auto *rt = (DesktopRuntime *)glfwGetWindowUserPointer(window);
+        wnd_handle, [](GLFWwindow *window, const u32 codepoint) -> void {
+          const auto *rt = static_cast<DesktopRuntime *>(glfwGetWindowUserPointer(window));
           rt->input_system->input_text.add_character(codepoint);
         });
 
-    glfwSetJoystickCallback([](i32 jid, i32 event) -> void {
+    glfwSetJoystickCallback([](const i32 jid, const i32 event) -> void {
       const char *guid = glfwGetJoystickGUID(jid);
 
       i32 vendor_id = 0, product_id = 0;
@@ -507,7 +507,7 @@ struct DesktopRuntime final : IRuntime {
     glfwPollEvents();
 
     for (i32 jid = GLFW_JOYSTICK_1; jid <= GLFW_JOYSTICK_LAST; ++jid) {
-      usize pad_idx = jid - GLFW_JOYSTICK_1;
+      const usize pad_idx = jid - GLFW_JOYSTICK_1;
       if (pad_idx >= MAX_GAMEPADS) {
         break;
       }
@@ -518,13 +518,11 @@ struct DesktopRuntime final : IRuntime {
         if (!pad->connected) {
           pad->connected = true;
 
-          const char *name = glfwGetGamepadName(jid);
-          if (name) {
+          if (const char *name = glfwGetGamepadName(jid)) {
             strncpy(pad->name, name, sizeof(pad->name) - 1);
           }
 
-          const char *guid = glfwGetJoystickGUID(jid);
-          if (guid) {
+          if (const char *guid = glfwGetJoystickGUID(jid)) {
             sscanf(guid, "%4x%4x", &pad->vendor_id, &pad->product_id);
           }
         }
@@ -532,7 +530,7 @@ struct DesktopRuntime final : IRuntime {
         GLFWgamepadstate state;
         if (glfwGetGamepadState(jid, &state)) {
           for (i32 btn = 0; btn < GLFW_GAMEPAD_BUTTON_LAST + 1; ++btn) {
-            PadBtn engine_btn = glfw_gamepad_btn_to_engine_btn(btn);
+            const PadBtn engine_btn = glfw_gamepad_btn_to_engine_btn(btn);
             pad->set_btn(engine_btn, state.buttons[btn] == GLFW_PRESS);
           }
 
@@ -578,7 +576,7 @@ struct DesktopRuntime final : IRuntime {
     }
 
 #if defined(EDGE_PLATFORM_WINDOWS)
-    *(VkWin32SurfaceCreateInfoKHR *)surface_info = {
+    *static_cast<VkWin32SurfaceCreateInfoKHR *>(surface_info) = {
         .sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR,
         .hinstance = layout->hinst,
         .hwnd = glfwGetWin32Window(wnd_handle)};
@@ -591,13 +589,13 @@ struct DesktopRuntime final : IRuntime {
     glfwGetWindowSize(wnd_handle, &width, &height);
   }
 
-  f32 get_surface_scale_factor() const override {
+  [[nodiscard]] f32 get_surface_scale_factor() const override {
     f32 xscale, yscale;
     glfwGetWindowContentScale(wnd_handle, &xscale, &yscale);
     return xscale;
   }
 
-  bool is_focused() const override { return focused; }
+  [[nodiscard]] bool is_focused() const override { return focused; }
 
   void set_title(const char *title) override {
     glfwSetWindowTitle(wnd_handle, title);
@@ -610,7 +608,7 @@ private:
   InputSystem *input_system = nullptr;
 };
 
-IRuntime *create_runtime(NotNull<const Allocator *> alloc) {
+IRuntime *create_runtime(const NotNull<const Allocator *> alloc) {
   return alloc->allocate<DesktopRuntime>();
 }
 } // namespace edge

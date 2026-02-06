@@ -9,14 +9,14 @@ bool InputSystem::create(NotNull<const Allocator *> alloc) {
   return listeners.reserve(alloc, 8);
 }
 
-void InputSystem::destroy(NotNull<const Allocator *> alloc) {
+void InputSystem::destroy(const NotNull<const Allocator *> alloc) {
   for (auto &[id, listener] : listeners) {
     alloc->deallocate(listener);
   }
   listeners.destroy(alloc);
 }
 
-u64 InputSystem::add_listener(NotNull<const Allocator *> alloc,
+u64 InputSystem::add_listener(const NotNull<const Allocator *> alloc,
                               IListener *listener) {
   auto id = next_listener_id++;
 
@@ -28,13 +28,13 @@ u64 InputSystem::add_listener(NotNull<const Allocator *> alloc,
   return id;
 }
 
-void InputSystem::remove_listener(NotNull<const Allocator *> alloc,
-                                  u64 listener_id) {
+void InputSystem::remove_listener(const NotNull<const Allocator *> alloc,
+                                  const u64 listener_id) {
   assert(listener_id != 0 && "Listener is invalid.");
 
   for (usize i = 0; i < listeners.size(); i++) {
-    auto &listener_pair = listeners[i];
-    if (listener_pair.first == listener_id) {
+    auto &[fst, snd] = listeners[i];
+    if (fst == listener_id) {
       std::pair<u64, IListener *> out_elem;
       listeners.remove(i, &out_elem);
       alloc->deallocate(out_elem.second);
@@ -48,7 +48,7 @@ void InputSystem::update(f64 current_time) {
   {
     // TODO: Speedup bit checks with simd
     for (auto key : Range{Key::Space, Key::Menu}) {
-      auto index = static_cast<usize>(key);
+      const auto index = static_cast<usize>(key);
       dispatch(DeviceType::Keyboard, index, keyboard.state.cur.get(index),
                keyboard.state.prev.get(index));
     }
@@ -59,13 +59,13 @@ void InputSystem::update(f64 current_time) {
   {
     // TODO: Speedup bit checks with simd
     for (auto btn : Range{MouseBtn::Left, MouseBtn::_8}) {
-      auto index = static_cast<usize>(btn);
+      const auto index = static_cast<usize>(btn);
       dispatch(DeviceType::Mouse, index, mouse.state.cur_btn.get(index),
                mouse.state.prev_btn.get(index));
     }
 
     for (auto axis : Range{MouseAxis::Pos, MouseAxis::Scroll}) {
-      auto index = static_cast<usize>(axis);
+      const auto index = static_cast<usize>(axis);
       dispatch(DeviceType::Mouse, index, mouse.state.cur_axes[index],
                mouse.state.prev_axes[index]);
     }
@@ -75,19 +75,19 @@ void InputSystem::update(f64 current_time) {
 
   // Dispatch gamepad state changes
   for (usize i = 0; i < MAX_GAMEPADS; ++i) {
-    auto pad_type =
+    const auto pad_type =
         static_cast<DeviceType>(static_cast<usize>(DeviceType::Pad0) + i);
     PadDevice &pad = gamepads[i];
 
     // TODO: Speedup bit checks with simd
     for (auto btn : Range{PadBtn::A, PadBtn::DpadLeft}) {
-      auto index = static_cast<usize>(btn);
+      const auto index = static_cast<usize>(btn);
       dispatch(pad_type, index, pad.state.cur_btn.get(index),
                pad.state.prev_btn.get(index));
     }
 
     for (auto axis : Range{PadAxis::StickLeft, PadAxis::TriggerRight}) {
-      auto index = static_cast<usize>(axis);
+      const auto index = static_cast<usize>(axis);
       dispatch(pad_type, index, pad.state.cur_axes[index],
                pad.state.prev_axes[index]);
     }
@@ -117,8 +117,8 @@ void InputSystem::clear() {
   touch.clear();
 }
 
-void InputSystem::dispatch(DeviceType type, usize button, bool cur,
-                           bool prev) const {
+void InputSystem::dispatch(const DeviceType type, const usize button, const bool cur,
+                           const bool prev) const {
   if (cur != prev) {
     for (auto &[id, listener] : listeners) {
       listener->on_bool_change(this, type, button, cur, prev);

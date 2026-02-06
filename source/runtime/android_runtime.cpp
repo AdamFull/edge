@@ -19,7 +19,7 @@ struct RuntimeLayout {
 static JNIEnv *get_jni_env(struct android_app *app) {
   JNIEnv *env = nullptr;
   jint get_env_result =
-      app->activity->vm->GetEnv((void **)&env, JNI_VERSION_1_6);
+      app->activity->vm->GetEnv(static_cast<void **>(&env), JNI_VERSION_1_6);
   if (get_env_result == JNI_EDETACHED) {
     if (app->activity->vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
       return nullptr;
@@ -31,7 +31,7 @@ static JNIEnv *get_jni_env(struct android_app *app) {
 
 void on_app_cmd_cb(struct android_app *app, i32 cmd);
 
-Key android_keycode_to_engine_key(i32 keycode) {
+Key android_keycode_to_engine_key(const i32 keycode) {
   switch (keycode) {
   case AKEYCODE_SPACE:
     return Key::Space;
@@ -307,13 +307,13 @@ paddleboat_mouse_button_to_engine_btn(Paddleboat_Mouse_Buttons button) {
   }
 }
 
-f32 apply_deadzone(f32 value, f32 deadzone) {
+f32 apply_deadzone(const f32 value, const f32 deadzone) {
   if (abs(value) < deadzone) {
     return 0.0f;
   }
 
-  f32 sign = value < 0.0f ? -1.0f : 1.0f;
-  f32 abs_val = abs(value);
+  const f32 sign = value < 0.0f ? -1.0f : 1.0f;
+  const f32 abs_val = abs(value);
   return sign * ((abs_val - deadzone) / (1.0f - deadzone));
 }
 

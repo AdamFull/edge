@@ -370,8 +370,8 @@ struct TouchPoint {
   [[nodiscard]] f32 get_delta_y() const { return y - y_prev; }
 
   [[nodiscard]] f32 get_distance_from_start() const {
-    f32 dx = x - x_start;
-    f32 dy = y - y_start;
+    const f32 dx = x - x_start;
+    const f32 dy = y - y_start;
     return sqrt(dx * dx + dy * dy);
   }
 
@@ -384,7 +384,7 @@ struct TouchState {
   TouchPoint touches[MAX_TOUCHES] = {};
   bool enabled = true;
 
-  TouchPoint *find_or_create(TouchId id) {
+  TouchPoint *find_or_create(const TouchId id) {
     for (auto &touch : touches) {
       if (touch.active && touch.id == id) {
         return &touch;
@@ -402,7 +402,7 @@ struct TouchState {
     return nullptr;
   }
 
-  [[nodiscard]] TouchPoint *find(TouchId id) {
+  [[nodiscard]] TouchPoint *find(const TouchId id) {
     for (auto &touch : touches) {
       if (touch.active && touch.id == id) {
         return &touch;
@@ -411,7 +411,7 @@ struct TouchState {
     return nullptr;
   }
 
-  [[nodiscard]] const TouchPoint *find(TouchId id) const {
+  [[nodiscard]] const TouchPoint *find(const TouchId id) const {
     for (const auto &touch : touches) {
       if (touch.active && touch.id == id) {
         return &touch;
@@ -460,9 +460,9 @@ struct TouchState {
 struct TouchDevice {
   TouchState state;
 
-  void update_touch(TouchId id, TouchPhase phase, f32 x, f32 y,
-                    f32 pressure = 1.0f, f32 radius = 0.0f,
-                    f64 timestamp = 0.0) {
+  void update_touch(const TouchId id, const TouchPhase phase, const f32 x,
+                    const f32 y, const f32 pressure = 1.0f,
+                    const f32 radius = 0.0f, const f64 timestamp = 0.0) {
 
     TouchPoint *touch = state.find_or_create(id);
     if (!touch) {
@@ -486,11 +486,11 @@ struct TouchDevice {
     }
   }
 
-  [[nodiscard]] const TouchPoint *get_touch(TouchId id) const {
+  [[nodiscard]] const TouchPoint *get_touch(const TouchId id) const {
     return state.find(id);
   }
 
-  [[nodiscard]] const TouchPoint *get_touch_at(usize index) const {
+  [[nodiscard]] const TouchPoint *get_touch_at(const usize index) const {
     if (index >= MAX_TOUCHES)
       return nullptr;
     return state.touches[index].active ? &state.touches[index] : nullptr;
@@ -512,7 +512,7 @@ struct InputTextDevice {
   char32_t buffer[32] = {};
   usize position = 0;
 
-  void add_character(char32_t codepoint) {
+  void add_character(const char32_t codepoint) {
     assert(position < 32);
     buffer[position++] = codepoint;
   }
@@ -579,13 +579,13 @@ struct InputSystem {
   MouseDevice *get_mouse() { return &mouse; }
   [[nodiscard]] const MouseDevice *get_mouse() const { return &mouse; }
 
-  PadDevice *get_gamepad(usize index) {
+  PadDevice *get_gamepad(const usize index) {
     if (index >= MAX_GAMEPADS)
       return nullptr;
     return &gamepads[index];
   }
 
-  [[nodiscard]] const PadDevice *get_gamepad(usize index) const {
+  [[nodiscard]] const PadDevice *get_gamepad(const usize index) const {
     if (index >= MAX_GAMEPADS)
       return nullptr;
     return &gamepads[index];

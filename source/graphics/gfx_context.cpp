@@ -92,7 +92,7 @@ static const char *g_instance_extensions[] = {
 #endif // EDGE_DEBUG
 };
 
-static struct gfx_key_value g_device_extensions[] = {
+static gfx_key_value g_device_extensions[] = {
     {VK_KHR_SWAPCHAIN_EXTENSION_NAME, true},
     {VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, true},
     {VK_KHR_MAINTENANCE_4_EXTENSION_NAME, true},
@@ -129,7 +129,7 @@ static struct gfx_key_value g_device_extensions[] = {
 #endif
 };
 
-static const u32 g_required_api_version = VK_API_VERSION_1_1;
+static constexpr u32 g_required_api_version = VK_API_VERSION_1_1;
 
 namespace edge::gfx {
 struct Context {
@@ -166,37 +166,39 @@ struct Context {
 
 static Context g_ctx = {};
 
-static void *VKAPI_CALL vk_alloc_cb(void *user_data, size_t size,
+static void *VKAPI_CALL vk_alloc_cb(void *user_data, const size_t size,
                                     size_t alignment,
                                     VkSystemAllocationScope allocation_scope) {
-  const Allocator *alloc = (const Allocator *)user_data;
+  const auto alloc = static_cast<const Allocator *>(user_data);
   return alloc->malloc(size);
 }
 
 static void VKAPI_CALL vk_free_cb(void *user_data, void *memory) {
-  const Allocator *alloc = (const Allocator *)user_data;
+  const auto alloc = static_cast<const Allocator *>(user_data);
   alloc->free(memory);
 }
 
 static void *VKAPI_CALL
-vk_realloc_cb(void *user_data, void *original, size_t size, size_t alignment,
-              VkSystemAllocationScope allocation_scope) {
-  const Allocator *alloc = (const Allocator *)user_data;
+vk_realloc_cb(void *user_data, void *original, const size_t size,
+              size_t alignment, VkSystemAllocationScope allocation_scope) {
+  const auto alloc = static_cast<const Allocator *>(user_data);
   return alloc->realloc(original, size);
 }
 
-static void VKAPI_CALL vk_internal_alloc_cb(
-    void *user_data, size_t size, VkInternalAllocationType allocation_type,
-    VkSystemAllocationScope allocation_scope) {
+static void VKAPI_CALL
+vk_internal_alloc_cb(void *user_data, const size_t size,
+                     const VkInternalAllocationType allocation_type,
+                     const VkSystemAllocationScope allocation_scope) {
   (void)user_data;
   (void)size;
   (void)allocation_type;
   (void)allocation_scope;
 }
 
-static void VKAPI_CALL vk_internal_free_cb(
-    void *user_data, size_t size, VkInternalAllocationType allocation_type,
-    VkSystemAllocationScope allocation_scope) {
+static void VKAPI_CALL
+vk_internal_free_cb(void *user_data, const size_t size,
+                    const VkInternalAllocationType allocation_type,
+                    const VkSystemAllocationScope allocation_scope) {
   (void)user_data;
   (void)size;
   (void)allocation_type;
@@ -204,8 +206,8 @@ static void VKAPI_CALL vk_internal_free_cb(
 }
 
 static VKAPI_ATTR VkBool32 VKAPI_CALL debug_utils_messenger_cb(
-    VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
-    VkDebugUtilsMessageTypeFlagsEXT message_type,
+    const VkDebugUtilsMessageSeverityFlagBitsEXT message_severity,
+    const VkDebugUtilsMessageTypeFlagsEXT message_type,
     const VkDebugUtilsMessengerCallbackDataEXT *callback_data,
     void *user_data) {
   (void)message_type;
@@ -245,8 +247,8 @@ static u32 compute_max_mip_level(u32 size) {
 static bool
 is_extension_supported(const char *extension_name,
                        const VkExtensionProperties *available_extensions,
-                       u32 available_count) {
-  for (i32 i = 0; i < available_count; i++) {
+                       const u32 available_count) {
+  for (usize i = 0; i < available_count; i++) {
     if (strcmp(extension_name, available_extensions[i].extensionName) == 0) {
       return true;
     }
@@ -256,8 +258,8 @@ is_extension_supported(const char *extension_name,
 
 static bool is_layer_supported(const char *layer_name,
                                const VkLayerProperties *available_layers,
-                               u32 available_count) {
-  for (i32 i = 0; i < available_count; i++) {
+                               const u32 available_count) {
+  for (usize i = 0; i < available_count; i++) {
     if (strcmp(layer_name, available_layers[i].layerName) == 0) {
       return true;
     }
@@ -290,7 +292,7 @@ choose_suitable_extent(VkExtent2D request_extent,
   return request_extent;
 }
 
-static bool is_hdr_format(VkFormat format) {
+static bool is_hdr_format(const VkFormat format) {
   switch (format) {
     // 10-bit formats
   case VK_FORMAT_A2B10G10R10_UNORM_PACK32:
@@ -334,7 +336,7 @@ static bool is_hdr_format(VkFormat format) {
   }
 }
 
-static bool is_hdr_color_space(VkColorSpaceKHR color_space) {
+static bool is_hdr_color_space(const VkColorSpaceKHR color_space) {
   switch (color_space) {
   case VK_COLOR_SPACE_HDR10_ST2084_EXT:
   case VK_COLOR_SPACE_HDR10_HLG_EXT:
@@ -361,7 +363,8 @@ static bool is_surface_format_hdr(const VkSurfaceFormatKHR *format) {
 }
 
 static bool surface_format_equal(const VkSurfaceFormatKHR *a,
-                                 const VkSurfaceFormatKHR *b, bool full_match) {
+                                 const VkSurfaceFormatKHR *b,
+                                 const bool full_match) {
   if (full_match) {
     return a->format == b->format && a->colorSpace == b->colorSpace;
   }
@@ -369,11 +372,11 @@ static bool surface_format_equal(const VkSurfaceFormatKHR *a,
 }
 
 static bool find_surface_format(const VkSurfaceFormatKHR *available_formats,
-                                u32 available_count,
+                                const u32 available_count,
                                 const VkSurfaceFormatKHR *requested,
                                 VkSurfaceFormatKHR *out_format,
-                                bool full_match) {
-  for (u32 i = 0; i < available_count; i++) {
+                                const bool full_match) {
+  for (usize i = 0; i < available_count; i++) {
     if (surface_format_equal(&available_formats[i], requested, full_match)) {
       *out_format = available_formats[i];
       return true;
@@ -383,12 +386,12 @@ static bool find_surface_format(const VkSurfaceFormatKHR *available_formats,
 }
 
 static bool pick_by_priority_list(const VkSurfaceFormatKHR *available_formats,
-                                  u32 available_count,
+                                  const u32 available_count,
                                   const VkSurfaceFormatKHR *priority_list,
-                                  u32 priority_count, bool hdr_only,
+                                  const u32 priority_count, const bool hdr_only,
                                   VkSurfaceFormatKHR *out_format) {
   for (u32 p = 0; p < priority_count; p++) {
-    for (u32 i = 0; i < available_count; i++) {
+    for (usize i = 0; i < available_count; i++) {
       // Skip if filtering by HDR and format doesn't match
       if (hdr_only && !is_surface_format_hdr(&available_formats[i])) {
         continue;
@@ -410,9 +413,9 @@ static bool pick_by_priority_list(const VkSurfaceFormatKHR *available_formats,
 }
 
 static VkSurfaceFormatKHR
-choose_surface_format(VkSurfaceFormatKHR requested_surface_format,
+choose_surface_format(const VkSurfaceFormatKHR requested_surface_format,
                       const VkSurfaceFormatKHR *available_surface_formats,
-                      u32 available_count, bool prefer_hdr) {
+                      const u32 available_count, const bool prefer_hdr) {
   static const VkSurfaceFormatKHR hdr_priority_list[] = {
       {VK_FORMAT_A2B10G10R10_UNORM_PACK32, VK_COLOR_SPACE_HDR10_ST2084_EXT},
       {VK_FORMAT_A2R10G10B10_UNORM_PACK32, VK_COLOR_SPACE_HDR10_ST2084_EXT},
@@ -472,19 +475,19 @@ choose_surface_format(VkSurfaceFormatKHR requested_surface_format,
 }
 
 static VkCompositeAlphaFlagBitsKHR choose_suitable_composite_alpha(
-    VkCompositeAlphaFlagBitsKHR request_composite_alpha,
-    VkCompositeAlphaFlagsKHR supported_composite_alpha) {
+    const VkCompositeAlphaFlagBitsKHR request_composite_alpha,
+    const VkCompositeAlphaFlagsKHR supported_composite_alpha) {
   if (request_composite_alpha & supported_composite_alpha) {
     return request_composite_alpha;
   }
 
-  static const VkCompositeAlphaFlagBitsKHR composite_alpha_priority_list[] = {
-      VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-      VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
-      VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
-      VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR};
+  static constexpr VkCompositeAlphaFlagBitsKHR composite_alpha_priority_list[] =
+      {VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+       VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR,
+       VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR,
+       VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR};
 
-  for (u32 i = 0; i < array_size(composite_alpha_priority_list); i++) {
+  for (usize i = 0; i < array_size(composite_alpha_priority_list); i++) {
     if (composite_alpha_priority_list[i] & supported_composite_alpha) {
       return composite_alpha_priority_list[i];
     }
@@ -493,18 +496,20 @@ static VkCompositeAlphaFlagBitsKHR choose_suitable_composite_alpha(
   return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 }
 
-VkPresentModeKHR choose_suitable_present_mode(
-    VkPresentModeKHR request_present_mode,
-    const VkPresentModeKHR *available_present_modes, u32 available_count,
-    const VkPresentModeKHR *present_mode_priority_list, u32 priority_count) {
-  for (u32 i = 0; i < available_count; i++) {
+VkPresentModeKHR
+choose_suitable_present_mode(const VkPresentModeKHR request_present_mode,
+                             const VkPresentModeKHR *available_present_modes,
+                             const u32 available_count,
+                             const VkPresentModeKHR *present_mode_priority_list,
+                             const u32 priority_count) {
+  for (usize i = 0; i < available_count; i++) {
     if (available_present_modes[i] == request_present_mode) {
       return request_present_mode;
     }
   }
 
-  for (u32 p = 0; p < priority_count; p++) {
-    for (u32 i = 0; i < available_count; i++) {
+  for (usize p = 0; p < priority_count; p++) {
+    for (usize i = 0; i < available_count; i++) {
       if (available_present_modes[i] == present_mode_priority_list[p]) {
         return present_mode_priority_list[p];
       }
@@ -538,11 +543,10 @@ static bool instance_init() {
   u32 enabled_layer_count = 0;
 
 #ifdef USE_VALIDATION_LAYERS
-  for (i32 i = 0; i < array_size(g_instance_layers); ++i) {
+  for (const auto layer_name : g_instance_layers) {
     assert(enabled_layer_count < GFX_LAYERS_MAX &&
            "Validation layer enables overflow.");
 
-    const char *layer_name = g_instance_layers[i];
     if (is_layer_supported(layer_name, available_layers, layer_count)) {
       enabled_layers[enabled_layer_count++] = layer_name;
 
@@ -561,11 +565,10 @@ static bool instance_init() {
   u32 enabled_extension_count = 0;
   ;
 
-  for (i32 i = 0; i < array_size(g_instance_extensions); ++i) {
+  for (const auto ext_name : g_instance_extensions) {
     assert(enabled_extension_count < GFX_INSTANCE_EXTENSIONS_MAX &&
            "Extension enables overflow.");
 
-    const char *ext_name = g_instance_extensions[i];
     if (is_extension_supported(ext_name, available_extensions,
                                extension_count)) {
       enabled_extensions[enabled_extension_count++] = ext_name;
@@ -602,10 +605,10 @@ static bool instance_init() {
       .ppEnabledExtensionNames = enabled_extensions};
 
 #ifdef USE_VALIDATION_LAYER_FEATURES
-  const VkValidationFeaturesEXT validation_features = {
+  constexpr VkValidationFeaturesEXT validation_features = {
       .sType = VK_STRUCTURE_TYPE_VALIDATION_FEATURES_EXT,
       .enabledValidationFeatureCount =
-          (u32)array_size(g_validation_features_enable),
+          static_cast<u32>(array_size(g_validation_features_enable)),
       .pEnabledValidationFeatures = g_validation_features_enable};
 
   if (g_ctx.validation_enabled) {
@@ -624,7 +627,7 @@ static bool instance_init() {
 
 #ifdef USE_VALIDATION_LAYERS
   if (g_ctx.validation_enabled) {
-    const VkDebugUtilsMessengerCreateInfoEXT debug_info = {
+    constexpr VkDebugUtilsMessengerCreateInfoEXT debug_info = {
         .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT,
         .messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
                            VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
@@ -660,7 +663,7 @@ static bool select_adapter() {
   i32 selected_device = -1;
 
   u32 adapter_count = 0;
-  vkEnumeratePhysicalDevices(g_ctx.inst, &adapter_count, NULL);
+  vkEnumeratePhysicalDevices(g_ctx.inst, &adapter_count, nullptr);
   adapter_count = min(adapter_count, GFX_ADAPTER_MAX);
 
   if (adapter_count == 0) {
@@ -671,8 +674,8 @@ static bool select_adapter() {
   VkPhysicalDevice adapters[GFX_ADAPTER_MAX];
   vkEnumeratePhysicalDevices(g_ctx.inst, &adapter_count, adapters);
 
-  for (i32 i = 0; i < adapter_count; i++) {
-    VkPhysicalDevice adapter = adapters[i];
+  for (usize i = 0; i < adapter_count; i++) {
+    const auto adapter = adapters[i];
 
     VkPhysicalDeviceProperties properties;
     vkGetPhysicalDeviceProperties(adapter, &properties);
@@ -680,10 +683,11 @@ static bool select_adapter() {
     vkGetPhysicalDeviceFeatures(adapter, &features);
 
     u32 extension_count = 0;
-    vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count, NULL);
-    VkExtensionProperties *available_extensions =
+    vkEnumerateDeviceExtensionProperties(adapter, nullptr, &extension_count,
+                                         nullptr);
+    auto *available_extensions =
         g_ctx.alloc->allocate_array<VkExtensionProperties>(extension_count);
-    vkEnumerateDeviceExtensionProperties(adapter, NULL, &extension_count,
+    vkEnumerateDeviceExtensionProperties(adapter, nullptr, &extension_count,
                                          available_extensions);
 
     i32 adapter_score = 0;
@@ -701,12 +705,12 @@ static bool select_adapter() {
 
     // Check extensions
     bool all_required_found = true;
-    for (i32 j = 0; j < array_size(g_device_extensions); ++j) {
+    for (auto &g_device_extension : g_device_extensions) {
       assert(enabled_extension_count < GFX_DEVICE_EXTENSIONS_MAX &&
              "Device extension enables overflow.");
 
-      struct gfx_key_value *ext_pair = &g_device_extensions[j];
-      bool supported = is_extension_supported(
+      const gfx_key_value *ext_pair = &g_device_extension;
+      const bool supported = is_extension_supported(
           ext_pair->key, available_extensions, extension_count);
       if (!supported && ext_pair->required) {
         all_required_found = false;
@@ -730,7 +734,7 @@ static bool select_adapter() {
     u32 queue_family_count = 0;
 
     vkGetPhysicalDeviceQueueFamilyProperties(adapter, &queue_family_count,
-                                             NULL);
+                                             nullptr);
     queue_family_count = min(queue_family_count, GFX_QUEUE_FAMILY_MAX);
     vkGetPhysicalDeviceQueueFamilyProperties(adapter, &queue_family_count,
                                              queue_families);
@@ -738,7 +742,7 @@ static bool select_adapter() {
     // Check surface support
     if (g_ctx.surf != VK_NULL_HANDLE) {
       VkBool32 surface_supported = VK_FALSE;
-      for (i32 j = 0; j < queue_family_count; ++j) {
+      for (usize j = 0; j < queue_family_count; ++j) {
         adapter_score += queue_families[j].queueCount * 10;
         if (surface_supported == VK_FALSE) {
           vkGetPhysicalDeviceSurfaceSupportKHR(adapter, j, g_ctx.surf,
@@ -780,14 +784,14 @@ static bool device_init() {
   VkDeviceQueueCreateInfo queue_create_infos[GFX_QUEUE_FAMILY_MAX];
 
   f32 queue_priorities[32];
-  for (i32 i = 0; i < 32; ++i) {
-    queue_priorities[i] = 1.0f;
+  for (float &queue_priority : queue_priorities) {
+    queue_priority = 1.0f;
   }
 
-  for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
+  for (usize i = 0; i < g_ctx.queue_family_count; ++i) {
     queue_create_infos[i] = {.sType =
                                  VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                             .queueFamilyIndex = (u32)i,
+                             .queueFamilyIndex = static_cast<u32>(i),
                              .queueCount = g_ctx.queue_families[i].queueCount,
                              .pQueuePriorities = queue_priorities};
   }
@@ -918,8 +922,8 @@ static bool allocator_init() {
     create_info.flags |= VMA_ALLOCATOR_CREATE_AMD_DEVICE_COHERENT_MEMORY_BIT;
   }
 
-  VkResult result = vmaCreateAllocator(&create_info, &g_ctx.vma);
-  if (result != VK_SUCCESS) {
+  if (const VkResult result = vmaCreateAllocator(&create_info, &g_ctx.vma);
+      result != VK_SUCCESS) {
     return false;
   }
 
@@ -977,8 +981,8 @@ bool context_init(const ContextCreateInfo *create_info) {
     goto fatal_error;
   }
 
-  result = vkGetPhysicalDeviceSurfaceFormatsKHR(g_ctx.adapter, g_ctx.surf,
-                                                &g_ctx.surf_format_count, NULL);
+  result = vkGetPhysicalDeviceSurfaceFormatsKHR(
+      g_ctx.adapter, g_ctx.surf, &g_ctx.surf_format_count, nullptr);
   if (result != VK_SUCCESS) {
     goto fatal_error;
   }
@@ -993,7 +997,7 @@ bool context_init(const ContextCreateInfo *create_info) {
   }
 
   result = vkGetPhysicalDeviceSurfacePresentModesKHR(
-      g_ctx.adapter, g_ctx.surf, &g_ctx.surf_present_mode_count, NULL);
+      g_ctx.adapter, g_ctx.surf, &g_ctx.surf_present_mode_count, nullptr);
   if (result != VK_SUCCESS) {
     goto fatal_error;
   }
@@ -1052,8 +1056,9 @@ void context_shutdown() {
   volkFinalize();
 }
 
-void context_set_object_name(const char *name, VkObjectType type, u64 handle) {
-  VkDebugUtilsObjectNameInfoEXT name_info = {
+void context_set_object_name(const char *name, const VkObjectType type,
+                             const u64 handle) {
+  const VkDebugUtilsObjectNameInfoEXT name_info = {
       .sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT,
       .objectType = type,
       .objectHandle = handle,
@@ -1074,11 +1079,11 @@ const VkPhysicalDeviceProperties *get_adapter_props() {
   return &g_ctx.properties;
 }
 
-static i32 queue_calculate_family_score(QueueRequest request,
-                                        u32 family_index) {
+static i32 queue_calculate_family_score(const QueueRequest request,
+                                        const u32 family_index) {
   QueueCapsFlags caps = QUEUE_CAPS_NONE;
 
-  VkQueueFamilyProperties props = g_ctx.queue_families[family_index];
+  const VkQueueFamilyProperties props = g_ctx.queue_families[family_index];
   if (props.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
     caps |= QUEUE_CAPS_GRAPHICS;
   }
@@ -1151,14 +1156,14 @@ static i32 queue_calculate_family_score(QueueRequest request,
   return score;
 }
 
-bool Queue::request(QueueRequest create_info) {
+bool Queue::request(const QueueRequest create_info) {
   queue_index = 0; // TODO: Select specific index
 
   i32 best_score = -1;
 
-  for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
-    i32 score = queue_calculate_family_score(create_info, i);
-    if (score > best_score) {
+  for (usize i = 0; i < g_ctx.queue_family_count; ++i) {
+    if (const i32 score = queue_calculate_family_score(create_info, i);
+        score > best_score) {
       best_score = score;
       family_index = i;
     }
@@ -1175,7 +1180,7 @@ void Queue::release() {
   // TODO: release indices
 }
 
-VkQueue Queue::get_handle() {
+VkQueue Queue::get_handle() const {
   if (family_index == -1) {
     return VK_NULL_HANDLE;
   }
@@ -1186,12 +1191,13 @@ VkQueue Queue::get_handle() {
   return handle;
 }
 
-bool Queue::submit(Fence fence, const VkSubmitInfo2KHR *submit_info) {
+bool Queue::submit(const Fence fence,
+                   const VkSubmitInfo2KHR *submit_info) const {
   if (!submit_info) {
     return false;
   }
 
-  VkQueue queue_ = get_handle();
+  const auto queue_ = get_handle();
   if (queue_ == VK_NULL_HANDLE) {
     return false;
   }
@@ -1200,12 +1206,12 @@ bool Queue::submit(Fence fence, const VkSubmitInfo2KHR *submit_info) {
                            fence ? fence : VK_NULL_HANDLE) == VK_SUCCESS;
 }
 
-bool Queue::present(const VkPresentInfoKHR *present_info) {
+bool Queue::present(const VkPresentInfoKHR *present_info) const {
   if (!present_info) {
     return false;
   }
 
-  VkQueue queue_ = get_handle();
+  const auto queue_ = get_handle();
   if (queue_ == VK_NULL_HANDLE) {
     return false;
   }
@@ -1213,12 +1219,12 @@ bool Queue::present(const VkPresentInfoKHR *present_info) {
   return vkQueuePresentKHR(queue_, present_info) == VK_SUCCESS;
 }
 
-void Queue::wait_idle() {
+void Queue::wait_idle() const {
   if (family_index == -1) {
     return;
   }
 
-  VkQueue queue_ = get_handle();
+  const auto queue_ = get_handle();
   if (queue_ == VK_NULL_HANDLE) {
     return;
   }
@@ -1226,7 +1232,7 @@ void Queue::wait_idle() {
   vkQueueWaitIdle(queue_);
 }
 
-bool CmdPool::create(Queue queue) {
+bool CmdPool::create(const Queue queue) {
   if (!queue) {
     return false;
   }
@@ -1234,9 +1240,9 @@ bool CmdPool::create(Queue queue) {
   const VkCommandPoolCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-      .queueFamilyIndex = (u32)queue.family_index};
+      .queueFamilyIndex = static_cast<u32>(queue.family_index)};
 
-  VkResult result =
+  const VkResult result =
       vkCreateCommandPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
     return false;
@@ -1253,7 +1259,7 @@ void CmdPool::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool CmdBuf::create(CmdPool cmd_pool) {
+bool CmdBuf::create(const CmdPool cmd_pool) {
   if (!cmd_pool) {
     return false;
   }
@@ -1264,8 +1270,9 @@ bool CmdBuf::create(CmdPool cmd_pool) {
       .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
       .commandBufferCount = 1};
 
-  VkResult result = vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &handle);
-  if (result != VK_SUCCESS) {
+  if (const VkResult result =
+          vkAllocateCommandBuffers(g_ctx.dev, &alloc_info, &handle);
+      result != VK_SUCCESS) {
     return false;
   }
 
@@ -1281,28 +1288,28 @@ void CmdBuf::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool CmdBuf::begin() {
+bool CmdBuf::begin() const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
-  const VkCommandBufferBeginInfo begin_info = {
+  constexpr VkCommandBufferBeginInfo begin_info = {
       .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
       .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT};
 
   return vkBeginCommandBuffer(handle, &begin_info) == VK_SUCCESS;
 }
 
-bool CmdBuf::end() {
+bool CmdBuf::end() const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   return vkEndCommandBuffer(handle) == VK_SUCCESS;
 }
 
-static void make_color(uint32_t color, f32 (&out_color)[4]) {
-  out_color[0] = ((color >> 24) & 0xFF) / 255.0f;
-  out_color[1] = ((color >> 16) & 0xFF) / 255.0f;
-  out_color[2] = ((color >> 8) & 0xFF) / 255.0f;
-  out_color[3] = (color & 0xFF) / 255.0f;
+static void make_color(const uint32_t color, f32 (&out_color)[4]) {
+  out_color[0] = static_cast<f32>((color >> 24) & 0xFF) / 255.0f;
+  out_color[1] = static_cast<f32>((color >> 16) & 0xFF) / 255.0f;
+  out_color[2] = static_cast<f32>((color >> 8) & 0xFF) / 255.0f;
+  out_color[3] = static_cast<f32>(color & 0xFF) / 255.0f;
 }
 
-void CmdBuf::begin_marker(const char *name, u32 color) {
+void CmdBuf::begin_marker(const char *name, const u32 color) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
   VkDebugUtilsLabelEXT label_info = {
@@ -1312,12 +1319,12 @@ void CmdBuf::begin_marker(const char *name, u32 color) {
   vkCmdBeginDebugUtilsLabelEXT(handle, &label_info);
 }
 
-void CmdBuf::end_marker() {
+void CmdBuf::end_marker() const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   vkCmdEndDebugUtilsLabelEXT(handle);
 }
 
-bool CmdBuf::reset() {
+bool CmdBuf::reset() const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   return vkResetCommandBuffer(handle,
                               VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) ==
@@ -1326,23 +1333,25 @@ bool CmdBuf::reset() {
 
 void CmdBuf::reset_query(QueryPool query, u32 first_query, u32 query_count) {}
 
-void CmdBuf::write_timestamp(QueryPool query, VkPipelineStageFlagBits2 stage,
-                             u32 query_index) {
+void CmdBuf::write_timestamp(const QueryPool &query,
+                             const VkPipelineStageFlagBits2 stage,
+                             const u32 query_index) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   assert(query && "QueryPool handle is null");
   vkCmdWriteTimestamp2KHR(handle, stage, query, query_index);
 }
 
-void CmdBuf::bind_descriptor(PipelineLayout layout, DescriptorSet descriptor,
-                             VkPipelineBindPoint bind_point) {
+void CmdBuf::bind_descriptor(const PipelineLayout &layout,
+                             const DescriptorSet &descriptor,
+                             const VkPipelineBindPoint bind_point) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   assert(layout && "PipelineLayout handle is null");
   assert(descriptor && "DescriptorSet handle is null");
   vkCmdBindDescriptorSets(handle, bind_point, layout, 0u, 1u,
-                          &descriptor.handle, 0u, NULL);
+                          &descriptor.handle, 0u, nullptr);
 }
 
-void CmdBuf::pipeline_barrier(const PipelineBarrierBuilder &builder) {
+void CmdBuf::pipeline_barrier(const PipelineBarrierBuilder &builder) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
   const VkDependencyInfoKHR dependency_info = {
@@ -1357,89 +1366,94 @@ void CmdBuf::pipeline_barrier(const PipelineBarrierBuilder &builder) {
   vkCmdPipelineBarrier2KHR(handle, &dependency_info);
 }
 
-void CmdBuf::begin_rendering(const VkRenderingInfoKHR &rendering_info) {
+void CmdBuf::begin_rendering(const VkRenderingInfoKHR &rendering_info) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   vkCmdBeginRenderingKHR(handle, &rendering_info);
 }
 
-void CmdBuf::end_rendering() {
+void CmdBuf::end_rendering() const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   vkCmdEndRenderingKHR(handle);
 }
 
-void CmdBuf::bind_index_buffer(Buffer buffer, VkIndexType type) {
+void CmdBuf::bind_index_buffer(const Buffer &buffer,
+                               const VkIndexType type) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   assert(buffer && "Buffer handle is null");
   vkCmdBindIndexBuffer(handle, buffer, 0, type);
 }
 
-void CmdBuf::bind_pipeline(Pipeline pipeline) {
+void CmdBuf::bind_pipeline(const Pipeline &pipeline) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   assert(pipeline && "Pipeline handle is null");
   vkCmdBindPipeline(handle, pipeline.bind_point, pipeline);
 }
 
-void CmdBuf::set_viewport(VkViewport viewport) {
+void CmdBuf::set_viewport(const VkViewport &viewport) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   vkCmdSetViewport(handle, 0u, 1u, &viewport);
 }
 
-void CmdBuf::set_viewport(f32 x, f32 y, f32 width, f32 height, f32 depth_min,
-                          f32 depth_max) {
+void CmdBuf::set_viewport(const f32 x, const f32 y, const f32 width,
+                          const f32 height, const f32 depth_min,
+                          const f32 depth_max) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
 
-  VkViewport viewport = {.x = x,
-                         .y = y,
-                         .width = width,
-                         .height = height,
-                         .minDepth = depth_min,
-                         .maxDepth = depth_max};
+  const VkViewport viewport = {.x = x,
+                               .y = y,
+                               .width = width,
+                               .height = height,
+                               .minDepth = depth_min,
+                               .maxDepth = depth_max};
   vkCmdSetViewport(handle, 0u, 1u, &viewport);
 }
 
-void CmdBuf::set_scissor(VkRect2D rect) {
+void CmdBuf::set_scissor(const VkRect2D rect) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   vkCmdSetScissor(handle, 0u, 1u, &rect);
 }
 
-void CmdBuf::set_scissor(i32 off_x, i32 off_y, u32 width, u32 height) {
+void CmdBuf::set_scissor(const i32 off_x, const i32 off_y, const u32 width,
+                         const u32 height) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
-  VkRect2D rect = {.offset = {.x = off_x, .y = off_y},
-                   .extent = {.width = width, .height = height}};
+  const VkRect2D rect = {.offset = {.x = off_x, .y = off_y},
+                         .extent = {.width = width, .height = height}};
   vkCmdSetScissor(handle, 0u, 1u, &rect);
 }
 
-void CmdBuf::push_constants(PipelineLayout layout, VkShaderStageFlags flags,
-                            u32 offset, u32 size, const void *data) {
+void CmdBuf::push_constants(const PipelineLayout layout,
+                            const VkShaderStageFlags flags, const u32 offset,
+                            const u32 size, const void *data) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   assert(layout && "PipelineLayout handle is null");
   vkCmdPushConstants(handle, layout, flags, offset, size, data);
 }
 
-void CmdBuf::draw_indexed(u32 idx_cnt, u32 inst_cnt, u32 first_idx,
-                          i32 vtx_offset, u32 first_inst) {
+void CmdBuf::draw_indexed(const u32 idx_cnt, const u32 inst_cnt,
+                          const u32 first_idx, const i32 vtx_offset,
+                          const u32 first_inst) const {
   assert(handle != VK_NULL_HANDLE && "CmdBuf handle is null");
   vkCmdDrawIndexed(handle, idx_cnt, inst_cnt, first_idx, vtx_offset,
                    first_inst);
 }
 
-void updete_descriptors(const VkWriteDescriptorSet *writes, u32 count) {
-  vkUpdateDescriptorSets(g_ctx.dev, count, writes, 0u, NULL);
+void update_descriptors(const VkWriteDescriptorSet *writes, const u32 count) {
+  vkUpdateDescriptorSets(g_ctx.dev, count, writes, 0u, nullptr);
 }
 
-bool QueryPool::create(VkQueryType type, u32 count) {
+bool QueryPool::create(const VkQueryType type, const u32 count) {
   const VkQueryPoolCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
       .queryType = type,
       .queryCount = type == VK_QUERY_TYPE_TIMESTAMP ? count * 2 : count};
 
-  VkResult result =
+  const VkResult result =
       vkCreateQueryPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
     return false;
   }
 
-  this->type = type;
+  query_type = type;
   max_query = create_info.queryCount;
   host_reset_enabled =
       context_is_extension_enabled(VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME);
@@ -1455,16 +1469,16 @@ void QueryPool::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-void QueryPool::reset() {
+void QueryPool::reset() const {
   assert(handle != VK_NULL_HANDLE && "QueryPool handle is null");
   vkResetQueryPoolEXT(g_ctx.dev, handle, 0, max_query);
 }
 
-bool QueryPool::get_data(u32 first_query, void *out_data) {
+bool QueryPool::get_data(const u32 first_query, void *out_data) const {
   assert(handle != VK_NULL_HANDLE && "QueryPool handle is null");
 
   VkResult result = VK_SUCCESS;
-  switch (type) {
+  switch (query_type) {
   case VK_QUERY_TYPE_OCCLUSION: {
     result =
         vkGetQueryPoolResults(g_ctx.dev, handle, first_query, 1, sizeof(u64),
@@ -1484,9 +1498,10 @@ bool QueryPool::get_data(u32 first_query, void *out_data) {
   return result == VK_SUCCESS;
 }
 
-void DescriptorLayoutBuilder::add_binding(VkDescriptorSetLayoutBinding binding,
-                                          VkDescriptorBindingFlags flags) {
-  u32 index = binding_count++;
+void DescriptorLayoutBuilder::add_binding(
+    const VkDescriptorSetLayoutBinding &binding,
+    const VkDescriptorBindingFlags flags) {
+  const u32 index = binding_count++;
   bindings[index] = binding;
   binding_flags[index] = flags;
 }
@@ -1507,14 +1522,14 @@ bool DescriptorSetLayout::create(const DescriptorLayoutBuilder &builder) {
       .pBindings = builder.bindings,
   };
 
-  VkResult result = vkCreateDescriptorSetLayout(g_ctx.dev, &create_info,
-                                                &g_ctx.vk_alloc, &handle);
+  const VkResult result = vkCreateDescriptorSetLayout(g_ctx.dev, &create_info,
+                                                      &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
     return false;
   }
 
   for (i32 i = 0; i < builder.binding_count; ++i) {
-    VkDescriptorSetLayoutBinding binding = builder.bindings[i];
+    const VkDescriptorSetLayoutBinding binding = builder.bindings[i];
     descriptor_sizes[binding.descriptorType] += binding.descriptorCount;
   }
 
@@ -1529,16 +1544,16 @@ void DescriptorSetLayout::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool DescriptorPool::create(u32 *descriptor_sizes) {
-  if (!descriptor_sizes) {
+bool DescriptorPool::create(Span<u32> descriptor_sizes_span) {
+  if (descriptor_sizes_span.empty()) {
     return false;
   }
 
   VkDescriptorPoolSize pool_sizes[DESCRIPTOR_SIZES_COUNT];
-  for (i32 i = 0; i < DESCRIPTOR_SIZES_COUNT; ++i) {
+  for (usize i = 0; i < DESCRIPTOR_SIZES_COUNT; ++i) {
     VkDescriptorPoolSize *pool_size = &pool_sizes[i];
-    pool_size->type = (VkDescriptorType)i;
-    pool_size->descriptorCount = descriptor_sizes[i] ? descriptor_sizes[i] : 1;
+    pool_size->type = static_cast<VkDescriptorType>(i);
+    pool_size->descriptorCount = descriptor_sizes_span[i] ? descriptor_sizes_span[i] : 1;
   }
 
   const VkDescriptorPoolCreateInfo create_info = {
@@ -1549,13 +1564,13 @@ bool DescriptorPool::create(u32 *descriptor_sizes) {
       .poolSizeCount = DESCRIPTOR_SIZES_COUNT,
       .pPoolSizes = pool_sizes};
 
-  VkResult result =
+  const VkResult result =
       vkCreateDescriptorPool(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
     return false;
   }
 
-  memcpy(this->descriptor_sizes, descriptor_sizes,
+  memcpy(this->descriptor_sizes, descriptor_sizes_span.data(),
          DESCRIPTOR_SIZES_COUNT * sizeof(u32));
 
   return true;
@@ -1569,24 +1584,25 @@ void DescriptorPool::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool DescriptorSet::create(DescriptorPool pool,
+bool DescriptorSet::create(const DescriptorPool &descriptor_pool,
                            const DescriptorSetLayout *layouts) {
-  if (!pool || !layouts) {
+  if (!descriptor_pool || !layouts) {
     return false;
   }
 
   const VkDescriptorSetAllocateInfo alloc_info = {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .descriptorPool = pool,
+      .descriptorPool = descriptor_pool,
       .descriptorSetCount = 1,
       .pSetLayouts = &layouts->handle};
 
-  VkResult result = vkAllocateDescriptorSets(g_ctx.dev, &alloc_info, &handle);
-  if (result != VK_SUCCESS) {
+  if (const VkResult result =
+          vkAllocateDescriptorSets(g_ctx.dev, &alloc_info, &handle);
+      result != VK_SUCCESS) {
     return false;
   }
 
-  this->pool = pool;
+  pool = descriptor_pool;
   return true;
 }
 
@@ -1598,15 +1614,15 @@ void DescriptorSet::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-void PipelineLayoutBuilder::add_range(VkShaderStageFlags stage_flags,
-                                      u32 offset, u32 size) {
-  VkPushConstantRange constant_range = {
-      .stageFlags = stage_flags, .offset = offset, .size = size};
+void PipelineLayoutBuilder::add_range(const VkShaderStageFlags flags,
+                                      const u32 offset, const u32 size) {
+  const VkPushConstantRange constant_range = {
+      .stageFlags = flags, .offset = offset, .size = size};
 
   constant_ranges[constant_range_count++] = constant_range;
 }
 
-void PipelineLayoutBuilder::add_layout(DescriptorSetLayout layout) {
+void PipelineLayoutBuilder::add_layout(const DescriptorSetLayout &layout) {
   if (!layout) {
     return;
   }
@@ -1622,7 +1638,7 @@ bool PipelineLayout::create(const PipelineLayoutBuilder &builder) {
       .pushConstantRangeCount = builder.constant_range_count,
       .pPushConstantRanges = builder.constant_ranges};
 
-  VkResult result =
+  const VkResult result =
       vkCreatePipelineLayout(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
     return false;
@@ -1639,7 +1655,7 @@ void PipelineLayout::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool PipelineCache::create(const u8 *data, usize data_size) {
+bool PipelineCache::create(const u8 *data, const usize data_size) {
   const VkPipelineCacheCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
       .initialDataSize = data_size,
@@ -1657,7 +1673,7 @@ void PipelineCache::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool ShaderModule::create(const u32 *code, usize size) {
+bool ShaderModule::create(const u32 *code, const usize size) {
   const VkShaderModuleCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
       .codeSize = size,
@@ -1680,7 +1696,7 @@ bool Pipeline::create(const VkGraphicsPipelineCreateInfo *create_info) {
     return false;
   }
 
-  VkResult result = vkCreateGraphicsPipelines(
+  const VkResult result = vkCreateGraphicsPipelines(
       g_ctx.dev, VK_NULL_HANDLE, 1u, create_info, &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
     return false;
@@ -1690,7 +1706,7 @@ bool Pipeline::create(const VkGraphicsPipelineCreateInfo *create_info) {
   return true;
 }
 
-bool Pipeline::create(ComputePipelineCreateInfo create_info) {
+bool Pipeline::create(const ComputePipelineCreateInfo &create_info) {
   const VkComputePipelineCreateInfo pipeline_create_info = {
       .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
       .stage = {.stage = VK_SHADER_STAGE_COMPUTE_BIT,
@@ -1698,7 +1714,7 @@ bool Pipeline::create(ComputePipelineCreateInfo create_info) {
                 .pName = "main"},
       .layout = create_info.layout};
 
-  VkResult result = vkCreateComputePipelines(
+  const VkResult result = vkCreateComputePipelines(
       g_ctx.dev, create_info.cache ? create_info.cache : VK_NULL_HANDLE, 1,
       &pipeline_create_info, &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
@@ -1717,11 +1733,11 @@ void Pipeline::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool Swapchain::create(SwapchainCreateInfo create_info) {
-  VkPresentModeKHR present_mode = create_info.vsync_enable
+bool Swapchain::create(const SwapchainCreateInfo create_info) {
+  const VkPresentModeKHR swapchain_present_mode = create_info.vsync_enable
                                       ? VK_PRESENT_MODE_FIFO_KHR
                                       : VK_PRESENT_MODE_IMMEDIATE_KHR;
-  VkPresentModeKHR present_mode_priority_list[3] = {
+  constexpr VkPresentModeKHR present_mode_priority_list[3] = {
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
       VK_PRESENT_MODE_FIFO_KHR, VK_PRESENT_MODE_MAILBOX_KHR,
       VK_PRESENT_MODE_IMMEDIATE_KHR
@@ -1739,7 +1755,7 @@ bool Swapchain::create(SwapchainCreateInfo create_info) {
   }
 
   u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
-  for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
+  for (usize i = 0; i < g_ctx.queue_family_count; ++i) {
     queue_family_indices[i] = i;
   }
 
@@ -1747,7 +1763,7 @@ bool Swapchain::create(SwapchainCreateInfo create_info) {
   requested_surface_format.format = create_info.preferred_format;
   requested_surface_format.colorSpace = create_info.preferred_color_space;
 
-  VkSurfaceFormatKHR selected_surface_format =
+  auto [surface_format, surface_color_space] =
       choose_surface_format(requested_surface_format, g_ctx.surf_formats,
                             g_ctx.surf_format_count, create_info.hdr_enable);
 
@@ -1757,8 +1773,8 @@ bool Swapchain::create(SwapchainCreateInfo create_info) {
       .minImageCount =
           clamp(2u, surf_caps.minImageCount,
                 surf_caps.maxImageCount ? surf_caps.maxImageCount : 16),
-      .imageFormat = selected_surface_format.format,
-      .imageColorSpace = selected_surface_format.colorSpace,
+      .imageFormat = surface_format,
+      .imageColorSpace = surface_color_space,
       .imageExtent = choose_suitable_extent(extent, &surf_caps),
       .imageArrayLayers = 1,
       .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
@@ -1772,7 +1788,7 @@ bool Swapchain::create(SwapchainCreateInfo create_info) {
           choose_suitable_composite_alpha(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR,
                                           surf_caps.supportedCompositeAlpha),
       .presentMode = choose_suitable_present_mode(
-          present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
+          swapchain_present_mode, g_ctx.surf_present_modes, g_ctx.surf_present_mode_count,
           present_mode_priority_list, array_size(present_mode_priority_list)),
       .oldSwapchain = handle};
 
@@ -1782,11 +1798,11 @@ bool Swapchain::create(SwapchainCreateInfo create_info) {
     return false;
   }
 
-  format = selected_surface_format.format;
-  color_space = selected_surface_format.colorSpace;
+  format = surface_format;
+  color_space = surface_color_space;
   image_count = swapchain_create_info.minImageCount;
   extent = swapchain_create_info.imageExtent;
-  this->present_mode = swapchain_create_info.presentMode;
+  present_mode = swapchain_create_info.presentMode;
   composite_alpha = swapchain_create_info.compositeAlpha;
 
   return true;
@@ -1811,7 +1827,7 @@ bool Swapchain::update() {
   }
 
   u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
-  for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
+  for (usize i = 0; i < g_ctx.queue_family_count; ++i) {
     queue_family_indices[i] = i;
   }
 
@@ -1845,11 +1861,11 @@ bool Swapchain::update() {
   return true;
 }
 
-bool Swapchain::is_outdated() {
+bool Swapchain::is_outdated() const {
   assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 
   VkSurfaceCapabilitiesKHR surf_caps;
-  VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
+  const VkResult result = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
       g_ctx.adapter, g_ctx.surf, &surf_caps);
   if (result != VK_SUCCESS) {
     return false;
@@ -1864,19 +1880,19 @@ bool Swapchain::is_outdated() {
          extent.height != surf_caps.currentExtent.height;
 }
 
-bool Swapchain::get_images(Image *image_out) {
+bool Swapchain::get_images(Image *image_out) const {
   assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
 
   VkImage images[GFX_SWAPCHAIN_IMAGES_MAX];
 
   u32 image_count;
-  VkResult result =
+  const VkResult result =
       vkGetSwapchainImagesKHR(g_ctx.dev, handle, &image_count, images);
   if (result != VK_SUCCESS || image_count != image_count) {
     return false;
   }
 
-  for (i32 i = 0; i < image_count; ++i) {
+  for (usize i = 0; i < image_count; ++i) {
     Image &image = image_out[i];
     image.handle = images[i];
     image.extent.width = extent.width;
@@ -1892,8 +1908,9 @@ bool Swapchain::get_images(Image *image_out) {
   return true;
 }
 
-bool Swapchain::acquire_next_image(u64 timeout, Semaphore semaphore,
-                                   u32 *next_image_idx) {
+bool Swapchain::acquire_next_image(const u64 timeout,
+                                   const Semaphore &semaphore,
+                                   u32 *next_image_idx) const {
   assert(handle != VK_NULL_HANDLE && "Swapchain handle is null");
   assert(semaphore && "Semaphore handle is null");
   assert(next_image_idx && "next_image_ids is null");
@@ -1909,13 +1926,13 @@ void DeviceMemory::setup() {
   persistent = mapped != nullptr;
 }
 
-bool DeviceMemory::is_mapped() { return mapped != nullptr; }
+bool DeviceMemory::is_mapped() const { return mapped != nullptr; }
 
 void *DeviceMemory::map() {
   if (!persistent && !mapped) {
     void *mappedMemory;
-    VkResult result = vmaMapMemory(g_ctx.vma, handle, &mappedMemory);
-    if (result != VK_SUCCESS) {
+    if (const VkResult result = vmaMapMemory(g_ctx.vma, handle, &mappedMemory);
+        result != VK_SUCCESS) {
       return nullptr;
     }
     mapped = mappedMemory;
@@ -1931,36 +1948,38 @@ void DeviceMemory::unmap() {
   }
 }
 
-void DeviceMemory::flush(VkDeviceSize offset, VkDeviceSize size) {
+void DeviceMemory::flush(const VkDeviceSize offset,
+                         const VkDeviceSize size) const {
   if (!coherent) {
     VkResult result = vmaFlushAllocation(g_ctx.vma, handle, offset, size);
     // TODO: fatal error
   }
 }
 
-void DeviceMemory::update(const void *data, VkDeviceSize size,
-                          VkDeviceSize offset) {
+void DeviceMemory::update(const void *data, const VkDeviceSize size,
+                          const VkDeviceSize offset) {
   if (persistent) {
-    memcpy((i8 *)mapped + offset, data, size);
+    memcpy(static_cast<i8 *>(mapped) + offset, data, size);
     flush(offset, size);
   } else {
     map();
 
-    memcpy((i8 *)mapped + offset, data, size);
+    memcpy(static_cast<i8 *>(mapped) + offset, data, size);
     unmap();
 
     flush(offset, size);
   }
 }
 
-bool Image::create(ImageCreateInfo create_info) {
-  u32 max_dimension = (create_info.extent.width > create_info.extent.height)
-                          ? create_info.extent.width
-                          : create_info.extent.height;
-  u32 max_mip_levels = compute_max_mip_level(max_dimension);
+bool Image::create(const ImageCreateInfo &create_info) {
+  const u32 max_dimension =
+      (create_info.extent.width > create_info.extent.height)
+          ? create_info.extent.width
+          : create_info.extent.height;
+  const u32 max_mip_levels = compute_max_mip_level(max_dimension);
 
   u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
-  for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
+  for (usize i = 0; i < g_ctx.queue_family_count; ++i) {
     queue_family_indices[i] = i;
   }
 
@@ -1970,8 +1989,10 @@ bool Image::create(ImageCreateInfo create_info) {
   const VkImageCreateInfo image_create_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .flags = (create_info.face_count == 6u)
-                   ? (VkImageCreateFlags)VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT
-                   : (VkImageCreateFlags)VK_IMAGE_CREATE_EXTENDED_USAGE_BIT,
+                   ? static_cast<VkImageCreateFlags>(
+                         VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)
+                   : static_cast<VkImageCreateFlags>(
+                         VK_IMAGE_CREATE_EXTENDED_USAGE_BIT),
       .imageType = (create_info.extent.depth > 1u)    ? VK_IMAGE_TYPE_3D
                    : (create_info.extent.height > 1u) ? VK_IMAGE_TYPE_2D
                                                       : VK_IMAGE_TYPE_1D,
@@ -1989,16 +2010,16 @@ bool Image::create(ImageCreateInfo create_info) {
       .pQueueFamilyIndices = queue_family_indices,
       .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED};
 
-  bool is_color_attachment =
+  const bool is_color_attachment =
       create_info.usage_flags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-  bool is_depth_attachment =
+  const bool is_depth_attachment =
       create_info.usage_flags & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
   if (is_color_attachment || is_depth_attachment) {
     allocation_create_info.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
     allocation_create_info.priority = 1.0f;
   }
   VmaAllocationInfo alloc_info;
-  VkResult result =
+  const VkResult result =
       vmaCreateImage(g_ctx.vma, &image_create_info, &allocation_create_info,
                      &handle, &memory.handle, &alloc_info);
   if (result != VK_SUCCESS) {
@@ -2028,8 +2049,8 @@ void Image::destroy() {
   memory = VK_NULL_HANDLE;
 }
 
-bool ImageView::create(Image image, VkImageViewType type,
-                       VkImageSubresourceRange subresource_range) {
+bool ImageView::create(const Image &image, const VkImageViewType type,
+                       const VkImageSubresourceRange &subresource_range) {
   assert(image && "Image handle is null");
 
   const VkImageViewCreateInfo create_info = {
@@ -2046,13 +2067,13 @@ bool ImageView::create(Image image, VkImageViewType type,
           },
       .subresourceRange = subresource_range};
 
-  VkResult result =
+  const VkResult result =
       vkCreateImageView(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
     return false;
   }
 
-  this->type = type;
+  view_type = type;
   range = subresource_range;
   return true;
 }
@@ -2065,9 +2086,9 @@ void ImageView::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool Buffer::create(BufferCreateInfo create_info) {
+bool Buffer::create(const BufferCreateInfo &create_info) {
   u32 queue_family_indices[GFX_QUEUE_FAMILY_MAX];
-  for (i32 i = 0; i < g_ctx.queue_family_count; ++i) {
+  for (usize i = 0; i < g_ctx.queue_family_count; ++i) {
     queue_family_indices[i] = i;
   }
 
@@ -2116,7 +2137,8 @@ bool Buffer::create(BufferCreateInfo create_info) {
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
     minimal_alignment =
         max(minimal_alignment,
-            (u32)g_ctx.properties.limits.minStorageBufferOffsetAlignment);
+            static_cast<u32>(
+                g_ctx.properties.limits.minStorageBufferOffsetAlignment));
   } else if (create_info.flags & BUFFER_FLAG_VERTEX) {
     buffer_create_info.usage |=
         VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT;
@@ -2141,10 +2163,11 @@ bool Buffer::create(BufferCreateInfo create_info) {
                                 VK_BUFFER_USAGE_TRANSFER_DST_BIT;
   }
 
-  buffer_create_info.size = align_up((u32)create_info.size, minimal_alignment);
+  buffer_create_info.size =
+      align_up(static_cast<u32>(create_info.size), minimal_alignment);
 
   VmaAllocationInfo alloc_info;
-  VkResult result =
+  const VkResult result =
       vmaCreateBuffer(g_ctx.vma, &buffer_create_info, &allocation_create_info,
                       &handle, &memory.handle, &alloc_info);
   if (result != VK_SUCCESS) {
@@ -2176,16 +2199,16 @@ void Buffer::destroy() {
   memory = VK_NULL_HANDLE;
 }
 
-void BufferView::write(Span<const u8> data, VkDeviceSize offset) {
+void BufferView::write(Span<const u8> data, const VkDeviceSize offset) {
   if (offset + data.size() > size) {
     return;
   }
 
-  memcpy((u8 *)buffer.memory.map() + local_offset + offset, data.data(),
-         data.size());
+  memcpy(static_cast<u8 *>(buffer.memory.map()) + local_offset + offset,
+         data.data(), data.size());
 }
 
-bool Semaphore::create(VkSemaphoreType type, u64 value) {
+bool Semaphore::create(const VkSemaphoreType type, const u64 value) {
   const VkSemaphoreTypeCreateInfo type_create_info = {
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
       .semaphoreType = type,
@@ -2195,14 +2218,14 @@ bool Semaphore::create(VkSemaphoreType type, u64 value) {
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
       .pNext = &type_create_info};
 
-  VkResult result =
+  const VkResult result =
       vkCreateSemaphore(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
     return false;
   }
 
-  this->type = type;
-  this->value = value;
+  sem_type = type;
+  sem_value = value;
 
   return true;
 }
@@ -2215,11 +2238,11 @@ void Semaphore::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool Fence::create(VkFenceCreateFlags flags) {
+bool Fence::create(const VkFenceCreateFlags flags) {
   const VkFenceCreateInfo create_info = {
       .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO, .flags = flags};
 
-  VkResult result =
+  const VkResult result =
       vkCreateFence(g_ctx.dev, &create_info, &g_ctx.vk_alloc, &handle);
   if (result != VK_SUCCESS) {
     return false;
@@ -2236,26 +2259,28 @@ void Fence::destroy() {
   handle = VK_NULL_HANDLE;
 }
 
-bool Fence::wait(u64 timeout) {
+bool Fence::wait(const u64 timeout) const {
   assert(handle != VK_NULL_HANDLE && "Fence handle is null");
 
-  VkResult result = vkWaitForFences(g_ctx.dev, 1, &handle, VK_TRUE, timeout);
-  if (result != VK_SUCCESS) {
+  if (const VkResult result =
+          vkWaitForFences(g_ctx.dev, 1, &handle, VK_TRUE, timeout);
+      result != VK_SUCCESS) {
     return false;
   }
 
   return true;
 }
 
-void Fence::reset() {
+void Fence::reset() const {
   assert(handle != VK_NULL_HANDLE && "Fence handle is null");
   vkResetFences(g_ctx.dev, 1, &handle);
 }
 
-bool PipelineBarrierBuilder::add_memory(VkPipelineStageFlags2 src_stage_mask,
-                                        VkAccessFlags2 src_access_mask,
-                                        VkPipelineStageFlags2 dst_stage_mask,
-                                        VkAccessFlags2 dst_access_mask) {
+bool PipelineBarrierBuilder::add_memory(
+    const VkPipelineStageFlags2 src_stage_mask,
+    const VkAccessFlags2 src_access_mask,
+    const VkPipelineStageFlags2 dst_stage_mask,
+    const VkAccessFlags2 dst_access_mask) {
   if (memory_barrier_count >= MEMORY_BARRIERS_MAX) {
     return false;
   }
@@ -2277,7 +2302,7 @@ struct VulkanStateInfo {
   VkAccessFlags2 access_mask = VK_ACCESS_2_NONE;
 };
 
-static VulkanStateInfo get_image_state_info(ResourceState state) {
+static VulkanStateInfo get_image_state_info(const ResourceState state) {
   switch (state) {
   case ResourceState::Undefined:
     return VulkanStateInfo{.layout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -2347,7 +2372,7 @@ static VulkanStateInfo get_image_state_info(ResourceState state) {
   }
 }
 
-static VulkanStateInfo get_buffer_state_info(ResourceState state) {
+static VulkanStateInfo get_buffer_state_info(const ResourceState state) {
   switch (state) {
   case ResourceState::Undefined:
     return VulkanStateInfo{.stage_mask = VK_PIPELINE_STAGE_2_NONE,
@@ -2404,16 +2429,17 @@ static VulkanStateInfo get_buffer_state_info(ResourceState state) {
   }
 }
 
-bool PipelineBarrierBuilder::add_buffer(Buffer buffer, ResourceState old_state,
-                                        ResourceState new_state,
-                                        VkDeviceSize offset,
-                                        VkDeviceSize size) {
+bool PipelineBarrierBuilder::add_buffer(const Buffer &buffer,
+                                        const ResourceState old_state,
+                                        const ResourceState new_state,
+                                        const VkDeviceSize offset,
+                                        const VkDeviceSize size) {
   if (buffer_barrier_count >= BUFFER_BARRIERS_MAX || !buffer) {
     return false;
   }
 
-  VulkanStateInfo src_layout_info = get_buffer_state_info(old_state);
-  VulkanStateInfo dst_layout_info = get_buffer_state_info(new_state);
+  const VulkanStateInfo src_layout_info = get_buffer_state_info(old_state);
+  const VulkanStateInfo dst_layout_info = get_buffer_state_info(new_state);
 
   // TODO: Use StackBuffer
   buffer_barriers[buffer_barrier_count++] = {
@@ -2430,14 +2456,15 @@ bool PipelineBarrierBuilder::add_buffer(Buffer buffer, ResourceState old_state,
 }
 
 bool PipelineBarrierBuilder::add_image(
-    Image image, ResourceState old_state, ResourceState new_state,
-    VkImageSubresourceRange subresource_range) {
+    const Image &image, const ResourceState old_state,
+    const ResourceState new_state,
+    const VkImageSubresourceRange &subresource_range) {
   if (image_barrier_count >= IMAGE_BARRIERS_MAX || !image) {
     return false;
   }
 
-  VulkanStateInfo src_layout_info = get_image_state_info(old_state);
-  VulkanStateInfo dst_layout_info = get_image_state_info(new_state);
+  const VulkanStateInfo src_layout_info = get_image_state_info(old_state);
+  const VulkanStateInfo dst_layout_info = get_image_state_info(new_state);
 
   // TODO: Use StackBuffer
   image_barriers[image_barrier_count++] = {

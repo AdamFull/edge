@@ -40,13 +40,13 @@ struct FrameTimeController {
   f32 mean_frame_time = 0.0f;
 
   bool create();
-  void destroy();
+  void destroy() const;
 
   void set_limit(f64 target_frame_rate);
 
   template <typename F> void process(F &&fn) {
-    timepoint_t target_time = last_frame_time + target_frame_time;
-    timepoint_t current_time = std::chrono::high_resolution_clock::now();
+    const timepoint_t target_time = last_frame_time + target_frame_time;
+    const timepoint_t current_time = std::chrono::high_resolution_clock::now();
 
     f32 delta_time =
         std::chrono::duration<f32>(current_time - prev_time).count();
@@ -72,8 +72,8 @@ struct FrameTimeController {
     }
 
     if (current_time < target_time) {
-      std::chrono::nanoseconds remaining_duration = target_time - current_time;
-      f64 remaining_seconds =
+      const std::chrono::nanoseconds remaining_duration = target_time - current_time;
+      const f64 remaining_seconds =
           std::chrono::duration<f64>(remaining_duration).count();
       accurate_sleep(remaining_seconds);
     }

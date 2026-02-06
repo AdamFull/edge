@@ -14,8 +14,8 @@ constexpr f32 IMGUI_STICK_DEADZONE = 0.15f;
 constexpr f32 IMGUI_TRIGGER_DEADZONE = 0.15f;
 constexpr f32 IMGUI_TRIGGER_THRESHOLD = 0.15f;
 
-static std::pair<f32, f32> radial_deadzone(f32 x, f32 y, f32 deadzone) {
-  f32 magnitude = sqrt(x * x + y * y);
+static std::pair<f32, f32> radial_deadzone(const f32 x, const f32 y, const f32 deadzone) {
+  const f32 magnitude = sqrt(x * x + y * y);
   if (magnitude < deadzone) {
     return {0.0f, 0.0f};
   }
@@ -23,13 +23,13 @@ static std::pair<f32, f32> radial_deadzone(f32 x, f32 y, f32 deadzone) {
   f32 scale = (magnitude - deadzone) / (1.0f - deadzone);
   scale = min(scale, 1.0f);
 
-  f32 normalized_x = x / magnitude;
-  f32 normalized_y = y / magnitude;
+  const f32 normalized_x = x / magnitude;
+  const f32 normalized_y = y / magnitude;
 
   return {normalized_x * scale, normalized_y * scale};
 }
 
-static f32 simple_deadzone(f32 value, f32 deadzone) {
+static f32 simple_deadzone(const f32 value, const f32 deadzone) {
   if (value < deadzone) {
     return 0.0f;
   }
@@ -37,9 +37,9 @@ static f32 simple_deadzone(f32 value, f32 deadzone) {
   return (value - deadzone) / (1.0f - deadzone);
 }
 
-static void handle_axis_direction(ImGuiIO &io, ImGuiKey negative_key,
-                                  ImGuiKey positive_key, f32 value,
-                                  float threshold) {
+static void handle_axis_direction(ImGuiIO &io, const ImGuiKey negative_key,
+                                  const ImGuiKey positive_key, const f32 value,
+                                  const float threshold) {
   if (value < -threshold) {
     io.AddKeyAnalogEvent(negative_key, true, -value);
   } else {
@@ -53,7 +53,7 @@ static void handle_axis_direction(ImGuiIO &io, ImGuiKey negative_key,
   }
 }
 
-constexpr ImGuiKey translate_key_code(Key code) {
+constexpr ImGuiKey translate_key_code(const Key code) {
   switch (code) {
   case Key::Unknown:
     return ImGuiKey_None;
@@ -286,7 +286,7 @@ constexpr ImGuiKey translate_key_code(Key code) {
   }
 }
 
-constexpr ImGuiKey translate_gamepad_button(PadBtn code) {
+constexpr ImGuiKey translate_gamepad_button(const PadBtn code) {
   switch (code) {
   case PadBtn::A:
     return ImGuiKey_GamepadFaceDown;
@@ -323,7 +323,7 @@ constexpr ImGuiKey translate_gamepad_button(PadBtn code) {
   }
 }
 
-constexpr ImGuiMouseButton translate_mouse_code(MouseBtn code) {
+constexpr ImGuiMouseButton translate_mouse_code(const MouseBtn code) {
   switch (code) {
   case MouseBtn::Left:
     return ImGuiMouseButton_Left;
@@ -343,40 +343,39 @@ static void SetupImGuiStyle() {
 
 struct ImGuiInputListener final : InputSystem::IListener {
   void on_bool_change(NotNull<const InputSystem *> input_system,
-                      DeviceType device, usize button, bool cur,
+                      const DeviceType device, usize button, const bool cur,
                       bool prev) override {
     ImGuiIO &io = ImGui::GetIO();
 
     switch (device) {
-    case edge::DeviceType::Keyboard: {
-      auto key = static_cast<Key>(button);
-      ImGuiKey imgui_key = translate_key_code(key);
-      if (imgui_key != ImGuiKey_None) {
+    case DeviceType::Keyboard: {
+      const auto key = static_cast<Key>(button);
+      if (const ImGuiKey imgui_key = translate_key_code(key);
+          imgui_key != ImGuiKey_None) {
         io.AddKeyEvent(imgui_key, cur);
       }
       break;
     }
-    case edge::DeviceType::Mouse: {
-      auto btn = static_cast<MouseBtn>(button);
-      ImGuiMouseButton imgui_btn = translate_mouse_code(btn);
-      if (imgui_btn != ImGuiMouseButton_COUNT) {
+    case DeviceType::Mouse: {
+      const auto btn = static_cast<MouseBtn>(button);
+      if (const ImGuiMouseButton imgui_btn = translate_mouse_code(btn);
+          imgui_btn != ImGuiMouseButton_COUNT) {
         io.AddMouseButtonEvent(imgui_btn, cur);
       }
       break;
     }
-    case edge::DeviceType::Pad0: {
+    case DeviceType::Pad0: {
       // io.BackendFlags &= ~ImGuiBackendFlags_HasGamepad;
 
-      auto btn = static_cast<PadBtn>(button);
-      ImGuiKey key = translate_gamepad_button(btn);
-      if (key != ImGuiKey_None) {
+      const auto btn = static_cast<PadBtn>(button);
+      if (const ImGuiKey key = translate_gamepad_button(btn); key != ImGuiKey_None) {
         io.AddKeyEvent(key, cur);
       }
 
       // io.BackendFlags |= ImGuiBackendFlags_HasGamepad;
       break;
     }
-    case edge::DeviceType::Touch: {
+    case DeviceType::Touch: {
       break;
     }
     default:
@@ -390,13 +389,13 @@ struct ImGuiInputListener final : InputSystem::IListener {
     ImGuiIO &io = ImGui::GetIO();
 
     switch (device) {
-    case edge::DeviceType::Mouse: {
+    case DeviceType::Mouse: {
       switch (static_cast<MouseAxis>(button)) {
-      case edge::MouseAxis::Pos: {
+      case MouseAxis::Pos: {
         io.AddMousePosEvent(cur.x, cur.y);
         break;
       }
-      case edge::MouseAxis::Scroll: {
+      case MouseAxis::Scroll: {
         io.AddMouseWheelEvent(cur.x, cur.y);
         break;
       }
@@ -405,12 +404,12 @@ struct ImGuiInputListener final : InputSystem::IListener {
       }
       break;
     }
-    case edge::DeviceType::Pad0: {
+    case DeviceType::Pad0: {
       // TODO: io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, );
       // TODO: io.AddKeyAnalogEvent(ImGuiKey_GamepadL2, );
       break;
     }
-    case edge::DeviceType::Touch: {
+    case DeviceType::Touch: {
       break;
     }
     default:
@@ -419,27 +418,27 @@ struct ImGuiInputListener final : InputSystem::IListener {
   }
 
   void on_character(NotNull<const InputSystem *> input_system,
-                    char32_t codepoint) override {
+                    const char32_t codepoint) override {
     ImGuiIO &io = ImGui::GetIO();
     io.AddInputCharacter(codepoint);
   }
 };
 
-bool ImGuiLayer::create(NotNull<const Allocator *> alloc,
-                        ImGuiLayerInitInfo init_info) {
+bool ImGuiLayer::create(const NotNull<const Allocator *> alloc,
+                        const ImGuiLayerInitInfo init_info) {
   runtime = init_info.runtime;
   input_system = init_info.input_system;
 
   ImGui::SetAllocatorFunctions(
-      [](size_t size, void *user_data) -> void * {
-        const Allocator *allocator = (const Allocator *)user_data;
+      [](const size_t size, void *user_data) -> void * {
+        const auto allocator = static_cast<const Allocator *>(user_data);
         return allocator->malloc(size);
       },
       [](void *ptr, void *user_data) -> void {
-        const Allocator *allocator = (const Allocator *)user_data;
+        const auto allocator = static_cast<const Allocator *>(user_data);
         allocator->free(ptr);
       },
-      (void *)alloc.m_ptr);
+      (void*)(alloc.m_ptr));
 
   if (!ImGui::CreateContext()) {
     return false;
@@ -465,7 +464,7 @@ bool ImGuiLayer::create(NotNull<const Allocator *> alloc,
 
   SetupImGuiStyle();
 
-  f32 scale_factor = init_info.runtime->get_surface_scale_factor();
+  const f32 scale_factor = init_info.runtime->get_surface_scale_factor();
 
   io.FontGlobalScale = scale_factor;
 
@@ -475,10 +474,10 @@ bool ImGuiLayer::create(NotNull<const Allocator *> alloc,
   i32 width, height;
   init_info.runtime->get_surface_extent(width, height);
 
-  io.DisplaySize.x = (f32)width;
-  io.DisplaySize.y = (f32)height;
+  io.DisplaySize.x = static_cast<f32>(width);
+  io.DisplaySize.y = static_cast<f32>(height);
 
-  ImGuiInputListener *listener = alloc->allocate<ImGuiInputListener>();
+  auto *listener = alloc->allocate<ImGuiInputListener>();
   if (!listener) {
     return false;
   }
@@ -494,7 +493,7 @@ void ImGuiLayer::destroy(NotNull<const Allocator *> alloc) {
   ImGui::DestroyContext();
 }
 
-void ImGuiLayer::on_frame_begin(f32 dt) {
+void ImGuiLayer::on_frame_begin(const f32 dt) {
   ImGuiIO &io = ImGui::GetIO();
   io.DeltaTime = dt;
 
@@ -502,8 +501,8 @@ void ImGuiLayer::on_frame_begin(f32 dt) {
   i32 width, height;
   runtime->get_surface_extent(width, height);
 
-  io.DisplaySize.x = (f32)width;
-  io.DisplaySize.y = (f32)height;
+  io.DisplaySize.x = static_cast<f32>(width);
+  io.DisplaySize.y = static_cast<f32>(height);
 
   io.AddFocusEvent(runtime->is_focused());
 

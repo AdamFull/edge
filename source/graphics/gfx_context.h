@@ -24,7 +24,7 @@ template <typename T> struct VulkanHandle {
   }
 
   void set_name(const char *name) const {
-    context_set_object_name(name, VkObjectTraits<T>::object_type, (u64)handle);
+    context_set_object_name(name, VkObjectTraits<T>::object_type, reinterpret_cast<u64>(handle));
   }
 
   template <typename... Args>
@@ -32,7 +32,7 @@ template <typename T> struct VulkanHandle {
     char buffer[256];
     snprintf(buffer, sizeof(buffer), format, std::forward<Args>(args)...);
     context_set_object_name(buffer, VkObjectTraits<T>::object_type,
-                            (u64)handle);
+                            reinterpret_cast<u64>(handle));
   }
 
   explicit operator bool() const { return handle != VK_NULL_HANDLE; }
@@ -40,19 +40,19 @@ template <typename T> struct VulkanHandle {
 };
 
 struct Fence : VulkanHandle<VkFence> {
-  using VulkanHandle<VkFence>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   bool create(VkFenceCreateFlags flags);
   void destroy();
-  bool wait(u64 timeout);
-  void reset();
+  bool wait(u64 timeout) const;
+  void reset() const;
 };
 
 struct Semaphore : VulkanHandle<VkSemaphore> {
-  using VulkanHandle<VkSemaphore>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
-  VkSemaphoreType type = {};
-  u64 value = 0ull;
+  VkSemaphoreType sem_type = {};
+  u64 sem_value = 0ull;
 
   bool create(VkSemaphoreType type, u64 value);
   void destroy();
@@ -70,34 +70,34 @@ struct Queue {
   bool request(QueueRequest create_info);
   void release();
 
-  VkQueue get_handle();
-  bool submit(Fence fence, const VkSubmitInfo2KHR *submit_info);
-  bool present(const VkPresentInfoKHR *present_info);
-  void wait_idle();
+  VkQueue get_handle() const;
+  bool submit(Fence fence, const VkSubmitInfo2KHR *submit_info) const;
+  bool present(const VkPresentInfoKHR *present_info) const;
+  void wait_idle() const;
 };
 
 struct QueryPool : VulkanHandle<VkQueryPool> {
-  using VulkanHandle<VkQueryPool>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
-  VkQueryType type = {};
+  VkQueryType query_type = {};
   u32 max_query = 0u;
   bool host_reset_enabled = false;
 
   bool create(VkQueryType type, u32 count);
   void destroy();
-  void reset();
-  bool get_data(u32 first_query, void *out_data);
+  void reset() const;
+  bool get_data(u32 first_query, void *out_data) const;
 };
 
 struct PipelineLayout : VulkanHandle<VkPipelineLayout> {
-  using VulkanHandle<VkPipelineLayout>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   bool create(const PipelineLayoutBuilder &builder);
   void destroy();
 };
 
 struct DescriptorSetLayout : VulkanHandle<VkDescriptorSetLayout> {
-  using VulkanHandle<VkDescriptorSetLayout>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT] = {};
 
@@ -106,32 +106,32 @@ struct DescriptorSetLayout : VulkanHandle<VkDescriptorSetLayout> {
 };
 
 struct DescriptorPool : VulkanHandle<VkDescriptorPool> {
-  using VulkanHandle<VkDescriptorPool>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
-  u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT];
+  u32 descriptor_sizes[DESCRIPTOR_SIZES_COUNT]{};
 
-  bool create(u32 *descriptor_sizes);
+  bool create(Span<u32> descriptor_sizes_span);
   void destroy();
 };
 
 struct DescriptorSet : VulkanHandle<VkDescriptorSet> {
-  using VulkanHandle<VkDescriptorSet>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   DescriptorPool pool = {};
 
-  bool create(DescriptorPool pool, const DescriptorSetLayout *layouts);
+  bool create(const DescriptorPool &descriptor_pool, const DescriptorSetLayout *layouts);
   void destroy();
 };
 
 struct PipelineCache : VulkanHandle<VkPipelineCache> {
-  using VulkanHandle<VkPipelineCache>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   bool create(const u8 *data, usize data_size);
   void destroy();
 };
 
 struct ShaderModule : VulkanHandle<VkShaderModule> {
-  using VulkanHandle<VkShaderModule>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   bool create(const u32 *code, usize size);
   void destroy();
@@ -144,24 +144,24 @@ struct ComputePipelineCreateInfo {
 };
 
 struct Pipeline : VulkanHandle<VkPipeline> {
-  using VulkanHandle<VkPipeline>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   VkPipelineBindPoint bind_point = {};
 
   bool create(const VkGraphicsPipelineCreateInfo *create_info);
-  bool create(ComputePipelineCreateInfo create_info);
+  bool create(const ComputePipelineCreateInfo &create_info);
   void destroy();
 };
 
 struct Sampler : VulkanHandle<VkSampler> {
-  using VulkanHandle<VkSampler>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   bool create(const VkSamplerCreateInfo &create_info);
   void destroy();
 };
 
 struct DeviceMemory : VulkanHandle<VmaAllocation> {
-  using VulkanHandle<VmaAllocation>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   VkDeviceSize size = 0;
   void *mapped = nullptr;
@@ -170,16 +170,16 @@ struct DeviceMemory : VulkanHandle<VmaAllocation> {
   bool persistent = false;
 
   void setup();
-  bool is_mapped();
+  bool is_mapped() const;
   void *map();
   void unmap();
-  void flush(VkDeviceSize offset, VkDeviceSize size);
+  void flush(VkDeviceSize offset, VkDeviceSize size) const;
   void update(const void *data, VkDeviceSize size, VkDeviceSize offset);
 };
 
 // TODO: COMPACT DATA
 struct Image : VulkanHandle<VkImage> {
-  using VulkanHandle<VkImage>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   DeviceMemory memory = {};
 
@@ -190,30 +190,30 @@ struct Image : VulkanHandle<VkImage> {
   VkImageUsageFlags usage_flags = 0;
   VkFormat format = VK_FORMAT_UNDEFINED;
 
-  bool create(ImageCreateInfo create_info);
+  bool create(const ImageCreateInfo &create_info);
   void destroy();
 };
 
 struct ImageView : VulkanHandle<VkImageView> {
-  using VulkanHandle<VkImageView>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
-  VkImageViewType type = {};
+  VkImageViewType view_type = {};
   VkImageSubresourceRange range = {};
 
-  bool create(Image image, VkImageViewType type,
-              VkImageSubresourceRange subresource_range);
+  bool create(const Image &image, VkImageViewType type,
+              const VkImageSubresourceRange &subresource_range);
   void destroy();
 };
 
 struct Buffer : VulkanHandle<VkBuffer> {
-  using VulkanHandle<VkBuffer>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   DeviceMemory memory = {};
 
   BufferFlags flags = 0;
   VkDeviceAddress address = 0;
 
-  bool create(BufferCreateInfo create_info);
+  bool create(const BufferCreateInfo &create_info);
   void destroy();
 };
 
@@ -228,7 +228,7 @@ struct BufferView {
 };
 
 struct Swapchain : VulkanHandle<VkSwapchainKHR> {
-  using VulkanHandle<VkSwapchainKHR>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   VkFormat format = VK_FORMAT_UNDEFINED;
   VkColorSpaceKHR color_space = {};
@@ -241,51 +241,51 @@ struct Swapchain : VulkanHandle<VkSwapchainKHR> {
   void destroy();
 
   bool update();
-  bool is_outdated();
-  bool get_images(Image *image_out);
-  bool acquire_next_image(u64 timeout, Semaphore semaphore,
-                          u32 *next_image_idx);
+  bool is_outdated() const;
+  bool get_images(Image *image_out) const;
+  bool acquire_next_image(u64 timeout, const Semaphore &semaphore,
+                          u32 *next_image_idx) const;
 };
 
 struct CmdPool : VulkanHandle<VkCommandPool> {
-  using VulkanHandle<VkCommandPool>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   bool create(Queue queue);
   void destroy();
 };
 
 struct CmdBuf : VulkanHandle<VkCommandBuffer> {
-  using VulkanHandle<VkCommandBuffer>::VulkanHandle;
+  using VulkanHandle::VulkanHandle;
 
   CmdPool pool = {};
 
   bool create(CmdPool cmd_pool);
   void destroy();
 
-  bool begin();
-  bool end();
-  void begin_marker(const char *name, u32 color);
-  void end_marker();
-  bool reset();
-  void reset_query(QueryPool query, u32 first_query, u32 query_count);
-  void write_timestamp(QueryPool query, VkPipelineStageFlagBits2 stage,
-                       u32 query_index);
-  void bind_descriptor(PipelineLayout layout, DescriptorSet descriptor,
-                       VkPipelineBindPoint bind_point);
-  void pipeline_barrier(const PipelineBarrierBuilder &builder);
-  void begin_rendering(const VkRenderingInfoKHR &rendering_info);
-  void end_rendering();
-  void bind_index_buffer(Buffer buffer, VkIndexType type);
-  void bind_pipeline(Pipeline pipeline);
-  void set_viewport(VkViewport viewport);
+  bool begin() const;
+  bool end() const;
+  void begin_marker(const char *name, u32 color) const;
+  void end_marker() const;
+  bool reset() const;
+  static void reset_query(QueryPool query, u32 first_query, u32 query_count);
+  void write_timestamp(const QueryPool &query, VkPipelineStageFlagBits2 stage,
+                       u32 query_index) const;
+  void bind_descriptor(const PipelineLayout &layout, const DescriptorSet &descriptor,
+                       VkPipelineBindPoint bind_point) const;
+  void pipeline_barrier(const PipelineBarrierBuilder &builder) const;
+  void begin_rendering(const VkRenderingInfoKHR &rendering_info) const;
+  void end_rendering() const;
+  void bind_index_buffer(const Buffer &buffer, VkIndexType type) const;
+  void bind_pipeline(const Pipeline &pipeline) const;
+  void set_viewport(const VkViewport &viewport) const;
   void set_viewport(f32 x, f32 y, f32 width, f32 height, f32 depth_min = 0.0f,
-                    f32 depth_max = 1.0f);
-  void set_scissor(VkRect2D rect);
-  void set_scissor(i32 off_x, i32 off_y, u32 width, u32 height);
+                    f32 depth_max = 1.0f) const;
+  void set_scissor(VkRect2D rect) const;
+  void set_scissor(i32 off_x, i32 off_y, u32 width, u32 height) const;
   void push_constants(PipelineLayout layout, VkShaderStageFlags flags,
-                      u32 offset, u32 size, const void *data);
+                      u32 offset, u32 size, const void *data) const;
   void draw_indexed(u32 idx_cnt, u32 inst_cnt, u32 first_idx, i32 vtx_offset,
-                    u32 first_inst);
+                    u32 first_inst) const;
 };
 
 struct DescriptorLayoutBuilder {
@@ -293,7 +293,7 @@ struct DescriptorLayoutBuilder {
   VkDescriptorBindingFlagsEXT binding_flags[MAX_BINDING_COUNT] = {};
   u32 binding_count = 0u;
 
-  void add_binding(VkDescriptorSetLayoutBinding binding,
+  void add_binding(const VkDescriptorSetLayoutBinding &binding,
                    VkDescriptorBindingFlags flags);
 };
 
@@ -312,11 +312,11 @@ struct PipelineBarrierBuilder {
                   VkAccessFlags2 src_access_mask,
                   VkPipelineStageFlags2 dst_stage_mask,
                   VkAccessFlags2 dst_access_mask);
-  bool add_buffer(Buffer buffer, ResourceState old_state,
+  bool add_buffer(const Buffer &buffer, ResourceState old_state,
                   ResourceState new_state, VkDeviceSize offset,
                   VkDeviceSize size);
-  bool add_image(Image image, ResourceState old_state, ResourceState new_state,
-                 VkImageSubresourceRange subresource_range);
+  bool add_image(const Image &image, ResourceState old_state, ResourceState new_state,
+                 const VkImageSubresourceRange &subresource_range);
   void reset();
 };
 
@@ -326,8 +326,8 @@ struct PipelineLayoutBuilder {
   VkDescriptorSetLayout descriptor_layouts[MAX_BINDING_COUNT] = {};
   u32 descriptor_layout_count = 0u;
 
-  void add_range(VkShaderStageFlags flaags, u32 offset, u32 size);
-  void add_layout(DescriptorSetLayout layout);
+  void add_range(VkShaderStageFlags flags, u32 offset, u32 size);
+  void add_layout(const DescriptorSetLayout &layout);
 };
 
 struct ContextCreateInfo {
@@ -335,14 +335,14 @@ struct ContextCreateInfo {
   IRuntime *runtime = nullptr;
 };
 
-bool context_init(const ContextCreateInfo *cteate_info);
+bool context_init(const ContextCreateInfo *create_info);
 void context_shutdown();
 
 bool context_is_extension_enabled(const char *name);
 
 const VkPhysicalDeviceProperties *get_adapter_props();
 
-void updete_descriptors(const VkWriteDescriptorSet *writes, u32 count);
+void update_descriptors(const VkWriteDescriptorSet *writes, u32 count);
 } // namespace edge::gfx
 
 #endif // GFX_CONTEXT_H

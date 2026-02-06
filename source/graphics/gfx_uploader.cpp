@@ -12,9 +12,9 @@
 #include <volk.h>
 
 namespace edge::gfx {
-bool ResourceSet::create(NotNull<const Allocator *> alloc,
-                         NotNull<Uploader *> uploader) {
-  BufferCreateInfo buffer_create_info = {
+bool ResourceSet::create(const NotNull<const Allocator *> alloc,
+                         const NotNull<Uploader *> uploader) {
+  const BufferCreateInfo buffer_create_info = {
       .size = 32 * 1024 * 1024, .alignment = 1, .flags = BUFFER_FLAG_STAGING};
 
   if (!staging_memory.create(buffer_create_info)) {
@@ -34,7 +34,7 @@ bool ResourceSet::create(NotNull<const Allocator *> alloc,
   return true;
 }
 
-void ResourceSet::destroy(NotNull<const Allocator *> alloc,
+void ResourceSet::destroy(const NotNull<const Allocator *> alloc,
                           NotNull<Uploader *> uploader) {
   cmd.destroy();
   semaphore.destroy();
@@ -76,21 +76,21 @@ bool ResourceSet::end() {
 }
 
 BufferView
-ResourceSet::try_allocate_staging_memory(NotNull<const Allocator *> alloc,
-                                         VkDeviceSize required_memory,
-                                         VkDeviceSize required_alignment) {
+ResourceSet::try_allocate_staging_memory(const NotNull<const Allocator *> alloc,
+                                         const VkDeviceSize required_memory,
+    const VkDeviceSize required_alignment) {
   if (!begin()) {
     return {};
   }
 
-  VkDeviceSize aligned_requested_size =
+  const VkDeviceSize aligned_requested_size =
       align_up(required_memory, required_alignment);
-  VkDeviceSize available_size = staging_memory.memory.size -
+  const VkDeviceSize available_size = staging_memory.memory.size -
                                 staging_offset.load(std::memory_order_acquire);
 
   if (staging_memory.memory.size < aligned_requested_size ||
       available_size < aligned_requested_size) {
-    BufferCreateInfo create_info = {.size = required_memory,
+    const BufferCreateInfo create_info = {.size = required_memory,
                                     .alignment = required_alignment,
                                     .flags = BUFFER_FLAG_STAGING};
 
@@ -111,8 +111,8 @@ ResourceSet::try_allocate_staging_memory(NotNull<const Allocator *> alloc,
                     .size = aligned_requested_size};
 }
 
-bool Uploader::create(NotNull<const Allocator *> alloc,
-                      UploaderCreateInfo create_info) {
+bool Uploader::create(const NotNull<const Allocator *> alloc,
+                      const UploaderCreateInfo create_info) {
   allocator = alloc.m_ptr;
   sched = create_info.sched;
   queue = create_info.queue;
@@ -145,7 +145,7 @@ bool Uploader::create(NotNull<const Allocator *> alloc,
   return true;
 }
 
-void Uploader::destroy(NotNull<const Allocator *> alloc) {
+void Uploader::destroy(const NotNull<const Allocator *> alloc) {
   queue.wait_idle();
 
   should_exit.store(true, std::memory_order_release);
@@ -163,7 +163,7 @@ void Uploader::destroy(NotNull<const Allocator *> alloc) {
   cmd_pool.destroy();
 }
 
-ImagePromise *Uploader::load_image(NotNull<const Allocator *> alloc,
+ImagePromise *Uploader::load_image(const NotNull<const Allocator *> alloc,
                                    const char *path) {
   ImagePromise *promise = alloc->allocate<ImagePromise>();
 
@@ -184,7 +184,7 @@ ResourceSet &Uploader::get_resource_set() {
                        FRAME_OVERLAP];
 }
 
-void Uploader::load_image_job(NotNull<const Allocator *> alloc,
+void Uploader::load_image_job(const NotNull<const Allocator *> alloc,
                               const char *path) {
   FILE *stream = fopen(path, "rb");
   if (!stream) {
@@ -193,15 +193,15 @@ void Uploader::load_image_job(NotNull<const Allocator *> alloc,
   }
 
   // TODO: Write error descriptions and converters
-  auto reader_open_result = open_image_reader(alloc, stream);
+  const auto reader_open_result = open_image_reader(alloc, stream);
   if (!reader_open_result) {
     job_failed(ImageLoadingError::HeaderReadingError);
     return;
   }
 
   IImageReader *reader = reader_open_result.value();
-  auto reader_result = reader->create(alloc);
-  if (reader_result != IImageReader::Result::Success) {
+  if (const auto reader_result = reader->create(alloc);
+      reader_result != IImageReader::Result::Success) {
     job_failed(ImageLoadingError::HeaderReadingError);
     return;
   }
@@ -242,7 +242,7 @@ void Uploader::load_image_job(NotNull<const Allocator *> alloc,
   barrier_builder.reset();
 
   // Copy image data
-  BufferView buffer_view =
+  const BufferView buffer_view =
       set.try_allocate_staging_memory(alloc, image_info.whole_size, 16);
   if (!buffer_view) {
     EDGE_LOG_ERROR(
@@ -301,7 +301,6 @@ i32 Uploader::thread_entry(void *data) {
 i32 Uploader::thread_loop() {
   Array<Job *> uploading_jobs = {};
   Array<ImagePromise *> image_promises = {};
-  usize promise_count = 0;
 
   if (!image_promises.reserve(allocator, 64)) {
     return -1;
@@ -329,7 +328,7 @@ i32 Uploader::thread_loop() {
 
     if (uploading_jobs.empty()) {
       sleeping.store(true, std::memory_order_release);
-      u32 futex_val = futex_counter.load(std::memory_order_acquire);
+      const u32 futex_val = futex_counter.load(std::memory_order_acquire);
       futex_wait(&futex_counter, futex_val, std::chrono::nanoseconds::max());
       sleeping.store(false, std::memory_order_release);
       continue;
@@ -343,15 +342,14 @@ i32 Uploader::thread_loop() {
       thread_yield();
     }
 
-    usize set_idx = resource_set_index.fetch_add(1, std::memory_order_acq_rel) %
+    const usize set_idx = resource_set_index.fetch_add(1, std::memory_order_acq_rel) %
                     FRAME_OVERLAP;
-    ResourceSet &set = resource_sets[set_idx];
 
-    if (set.recording) {
+    if (ResourceSet &set = resource_sets[set_idx]; set.recording) {
       set.cmd.end();
 
-      u64 wait_value = set.counter.fetch_add(1, std::memory_order_relaxed);
-      u64 signal_value = wait_value + 1;
+      const u64 wait_value = set.counter.fetch_add(1, std::memory_order_relaxed);
+      const u64 signal_value = wait_value + 1;
 
       VkSemaphoreSubmitInfoKHR wait_info = {
           .sType = VK_STRUCTURE_TYPE_SEMAPHORE_SUBMIT_INFO_KHR,
@@ -391,7 +389,6 @@ i32 Uploader::thread_loop() {
     }
 
     uploading_jobs.clear();
-    promise_count = 0;
   }
 
   // Cleanup

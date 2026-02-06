@@ -98,7 +98,7 @@ enum class ResourceState : u8 {
   Count
 };
 
-inline constexpr const char *to_cstring(ResourceState state) {
+constexpr const char *to_cstring(const ResourceState state) {
   switch (state) {
   case ResourceState::Undefined:
     return "Undefined";
@@ -184,98 +184,98 @@ template <typename T> struct VkObjectTraits;
 
 template <> struct VkObjectTraits<VkCommandPool> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_COMMAND_POOL;
-  static constexpr const char *name = "VkCommandPool";
+  static constexpr auto name = "VkCommandPool";
 };
 
 template <> struct VkObjectTraits<VkCommandBuffer> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_COMMAND_BUFFER;
-  static constexpr const char *name = "VkCommandBuffer";
+  static constexpr auto name = "VkCommandBuffer";
 };
 
 template <> struct VkObjectTraits<VkQueryPool> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_QUERY_POOL;
-  static constexpr const char *name = "VkQueryPool";
+  static constexpr auto name = "VkQueryPool";
 };
 
 template <> struct VkObjectTraits<VkDescriptorSetLayout> {
   static constexpr VkObjectType object_type =
       VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT;
-  static constexpr const char *name = "VkDescriptorSetLayout";
+  static constexpr auto name = "VkDescriptorSetLayout";
 };
 
 template <> struct VkObjectTraits<VkDescriptorPool> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_DESCRIPTOR_POOL;
-  static constexpr const char *name = "VkDescriptorPool";
+  static constexpr auto name = "VkDescriptorPool";
 };
 
 template <> struct VkObjectTraits<VkDescriptorSet> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_DESCRIPTOR_SET;
-  static constexpr const char *name = "VkDescriptorSet";
+  static constexpr auto name = "VkDescriptorSet";
 };
 
 template <> struct VkObjectTraits<VkPipelineLayout> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_PIPELINE_LAYOUT;
-  static constexpr const char *name = "VkPipelineLayout";
+  static constexpr auto name = "VkPipelineLayout";
 };
 
 template <> struct VkObjectTraits<VkSwapchainKHR> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_SWAPCHAIN_KHR;
-  static constexpr const char *name = "VkSwapchainKHR";
+  static constexpr auto name = "VkSwapchainKHR";
 };
 
 template <> struct VkObjectTraits<VmaAllocation> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_DEVICE_MEMORY;
-  static constexpr const char *name = "VmaAllocation";
+  static constexpr auto name = "VmaAllocation";
 };
 
 template <> struct VkObjectTraits<VkImage> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_IMAGE;
-  static constexpr const char *name = "VkImage";
+  static constexpr auto name = "VkImage";
 };
 
 template <> struct VkObjectTraits<VkImageView> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_IMAGE_VIEW;
-  static constexpr const char *name = "VkImageView";
+  static constexpr auto name = "VkImageView";
 };
 
 template <> struct VkObjectTraits<VkBuffer> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_BUFFER;
-  static constexpr const char *name = "VkBuffer";
+  static constexpr auto name = "VkBuffer";
 };
 
 template <> struct VkObjectTraits<VkPipelineCache> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_PIPELINE_CACHE;
-  static constexpr const char *name = "VkPipelineCache";
+  static constexpr auto name = "VkPipelineCache";
 };
 
 template <> struct VkObjectTraits<VkShaderModule> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_SHADER_MODULE;
-  static constexpr const char *name = "VkShaderModule";
+  static constexpr auto name = "VkShaderModule";
 };
 
 template <> struct VkObjectTraits<VkPipeline> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_PIPELINE;
-  static constexpr const char *name = "VkPipeline";
+  static constexpr auto name = "VkPipeline";
 };
 
 template <> struct VkObjectTraits<VkSampler> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_SAMPLER;
-  static constexpr const char *name = "VkSampler";
+  static constexpr auto name = "VkSampler";
 };
 
 template <> struct VkObjectTraits<VkSemaphore> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_SEMAPHORE;
-  static constexpr const char *name = "VkSemaphore";
+  static constexpr auto name = "VkSemaphore";
 };
 
 template <> struct VkObjectTraits<VkFence> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_FENCE;
-  static constexpr const char *name = "VkFence";
+  static constexpr auto name = "VkFence";
 };
 
 template <> struct VkObjectTraits<VkQueue> {
   static constexpr VkObjectType object_type = VK_OBJECT_TYPE_QUEUE;
-  static constexpr const char *name = "VkQueue";
+  static constexpr auto name = "VkQueue";
 };
 } // namespace edge::gfx
 

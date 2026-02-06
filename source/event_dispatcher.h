@@ -40,7 +40,7 @@ struct EventDispatcher {
   void destroy(NotNull<const Allocator *> alloc);
 
   template <typename F>
-  u64 add_listener(NotNull<const Allocator *> alloc, u64 categories, F &&fn) {
+  u64 add_listener(NotNull<const Allocator *> alloc, const u64 categories, F &&fn) {
     EventListener listener = {};
     if (!listener.create(alloc, std::forward<F>(fn))) {
       return 0;

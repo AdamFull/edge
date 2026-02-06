@@ -21,7 +21,7 @@ static edge::Scheduler *sched = nullptr;
 namespace edge {
 bool FrameTimeController::create() {
 #if EDGE_PLATFORM_WINDOWS
-  waitable_timer = CreateWaitableTimer(NULL, FALSE, NULL);
+  waitable_timer = CreateWaitableTimer(nullptr, FALSE, nullptr);
   if (waitable_timer) {
     return true;
   }
@@ -29,13 +29,13 @@ bool FrameTimeController::create() {
   return false;
 }
 
-void FrameTimeController::destroy() {
+void FrameTimeController::destroy() const {
 #if EDGE_PLATFORM_WINDOWS
   CloseHandle(waitable_timer);
 #endif
 }
 
-void FrameTimeController::set_limit(f64 target_frame_rate) {
+void FrameTimeController::set_limit(const f64 target_frame_rate) {
   target_frame_time =
       std::chrono::duration_cast<std::chrono::high_resolution_clock::duration>(
           std::chrono::duration<f64>(1.0 / target_frame_rate));
@@ -45,7 +45,7 @@ void FrameTimeController::set_limit(f64 target_frame_rate) {
 void FrameTimeController::accurate_sleep(f64 seconds) {
   // Adaptive algorithm (same across all platforms)
   while (seconds - welford_estimate > 1e-7) {
-    f64 to_wait = seconds - welford_estimate;
+    const f64 to_wait = seconds - welford_estimate;
 
     auto start = std::chrono::high_resolution_clock::now();
 
@@ -62,8 +62,8 @@ void FrameTimeController::accurate_sleep(f64 seconds) {
     }
 #elif EDGE_PLATFORM_WINDOWS
     LARGE_INTEGER due;
-    due.QuadPart = -i64(to_wait * 1e7); // Convert to 100ns units
-    SetWaitableTimerEx(waitable_timer, &due, 0, NULL, NULL, NULL, 0);
+    due.QuadPart = -static_cast<i64>(to_wait * 1e7); // Convert to 100ns units
+    SetWaitableTimerEx(waitable_timer, &due, 0, nullptr, nullptr, nullptr, 0);
     WaitForSingleObject(waitable_timer, INFINITE);
 #else
     // TODO: Linux
@@ -71,30 +71,30 @@ void FrameTimeController::accurate_sleep(f64 seconds) {
 #endif
     auto end = std::chrono::high_resolution_clock::now();
 
-    f64 observed = std::chrono::duration<f64>(end - start).count();
+    const f64 observed = std::chrono::duration<f64>(end - start).count();
     seconds -= observed;
 
     // Update statistics using Welford's online algorithm
     ++welford_count;
-    f64 error = observed - to_wait;
-    f64 delta = error - welford_mean;
+    const f64 error = observed - to_wait;
+    const f64 delta = error - welford_mean;
     welford_mean += delta / welford_count;
     welford_m2 += delta * (error - welford_mean);
-    f64 stddev =
+    const f64 stddev =
         welford_count > 1 ? sqrt(welford_m2 / (welford_count - 1)) : 0.0;
     welford_estimate = welford_mean + stddev;
   }
 
   // Spin lock for remaining time (cross-platform)
-  auto start = std::chrono::high_resolution_clock::now();
-  auto spin_duration = std::chrono::duration<f64>(seconds);
+  const auto start = std::chrono::high_resolution_clock::now();
+  const auto spin_duration = std::chrono::duration<f64>(seconds);
   while (std::chrono::high_resolution_clock::now() - start < spin_duration) {
     // Tight spin loop for maximum precision
   }
 }
 
-bool EngineContext::create(NotNull<const Allocator *> alloc,
-                           NotNull<RuntimeLayout *> runtime_layout) {
+bool EngineContext::create(const NotNull<const Allocator *> alloc,
+                           const NotNull<RuntimeLayout *> runtime_layout) {
   if (!event_dispatcher.create(alloc)) {
     EDGE_LOG_FATAL("Failed to initialize EventDispatcher.");
     return false;
@@ -107,7 +107,7 @@ bool EngineContext::create(NotNull<const Allocator *> alloc,
   }
   EDGE_LOG_INFO("InputSystem initialized.");
 
-  RuntimeInitInfo runtime_info = {.alloc = &allocator,
+  const RuntimeInitInfo runtime_info = {.alloc = &allocator,
                                   .layout = runtime_layout.m_ptr,
                                   .input_system = &input_system,
 
@@ -131,7 +131,7 @@ bool EngineContext::create(NotNull<const Allocator *> alloc,
   }
   EDGE_LOG_INFO("Graphics initialized.");
 
-  const gfx::QueueRequest direct_queue_request = {
+  constexpr gfx::QueueRequest direct_queue_request = {
       .required_caps = gfx::QUEUE_CAPS_GRAPHICS | gfx::QUEUE_CAPS_COMPUTE |
                        gfx::QUEUE_CAPS_TRANSFER | gfx::QUEUE_CAPS_PRESENT,
       .preferred_caps = gfx::QUEUE_CAPS_NONE,
@@ -145,7 +145,7 @@ bool EngineContext::create(NotNull<const Allocator *> alloc,
   EDGE_LOG_INFO("Direct queue found.");
 
   // NOTE: Optional, not required
-  const gfx::QueueRequest copy_queue_request = {
+  constexpr gfx::QueueRequest copy_queue_request = {
       .required_caps = gfx::QUEUE_CAPS_TRANSFER,
       .strategy = gfx::QUEUE_SELECTION_STRATEGY_PREFER_DEDICATED,
       .prefer_separate_family = false};
@@ -196,7 +196,7 @@ bool EngineContext::create(NotNull<const Allocator *> alloc,
 
   test_tex = HANDLE_INVALID;
 
-  VkSamplerCreateInfo sampler_create_info = {
+  constexpr VkSamplerCreateInfo sampler_create_info = {
       .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
       .magFilter = VK_FILTER_LINEAR,
       .minFilter = VK_FILTER_LINEAR,
@@ -213,7 +213,7 @@ bool EngineContext::create(NotNull<const Allocator *> alloc,
   return true;
 }
 
-void EngineContext::destroy(NotNull<const Allocator *> alloc) {
+void EngineContext::destroy(const NotNull<const Allocator *> alloc) {
   // Wait for all work done
   if (main_queue) {
     main_queue.wait_idle();
@@ -223,8 +223,8 @@ void EngineContext::destroy(NotNull<const Allocator *> alloc) {
     copy_queue.wait_idle();
   }
 
-  for (auto &pending : pending_images) {
-    alloc->deallocate(pending.promise);
+  for (auto &[handle, promise] : pending_images) {
+    alloc->deallocate(promise);
   }
   pending_images.destroy(alloc);
 
@@ -259,26 +259,24 @@ bool EngineContext::run() {
   while (!runtime->requested_close()) {
     sched->tick();
     frame_time_controller.process(
-        [this](f32 delta_time) -> void { tick(delta_time); });
+        [this](const f32 delta_time) -> void { tick(delta_time); });
   }
 
   return true;
 }
 
-void EngineContext::tick(f32 delta_time) {
+void EngineContext::tick(const f32 delta_time) {
   runtime->process_events();
   input_system.update();
 
   imgui_layer.on_frame_begin(delta_time);
 
   {
-    ImGuiWindowFlags overlay_flags =
+    constexpr ImGuiWindowFlags overlay_flags =
         ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking |
         ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings |
         ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav |
         ImGuiWindowFlags_NoMove;
-
-    ImGuiIO &io = ImGui::GetIO();
 
     const ImGuiViewport *viewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2(10.0f, 10.0f), ImGuiCond_Always);
@@ -299,8 +297,8 @@ void EngineContext::tick(f32 delta_time) {
   }
 
   if (test_tex != HANDLE_INVALID) {
-    ImTextureBinding imgui_binding{test_tex, default_sampler_handle};
-    ImGui::Image((ImTextureRef)imgui_binding, {512, 512});
+    const ImTextureBinding imgui_binding{test_tex, default_sampler_handle};
+    ImGui::Image(static_cast<ImTextureRef>(imgui_binding), {512, 512});
   }
 
   ImGui::ShowDemoWindow();
@@ -308,25 +306,25 @@ void EngineContext::tick(f32 delta_time) {
   imgui_layer.on_frame_end();
 
   if (renderer.frame_begin()) {
-    auto semaphore =
+    const auto semaphore =
         uploader.last_submitted_semaphore.load(std::memory_order_acquire);
     if (semaphore.semaphore) {
       for (usize i = pending_images.size(); i > 0; --i) {
-        usize index = i - 1;
+        const usize index = i - 1;
 
-        PendingImage &pending_image = pending_images[index];
-        if (pending_image.promise->is_done()) {
+        if (auto &[handle, promise] = pending_images[index];
+            promise->is_done()) {
           pending_images.remove(index, nullptr);
 
           gfx::RenderResource *res =
-              renderer.get_resource(pending_image.handle);
+              renderer.get_resource(handle);
           res->state = gfx::ResourceState::TransferDst;
 
-          test_tex = pending_image.handle;
+          test_tex = handle;
 
-          renderer.attach_image(pending_image.handle,
-                                pending_image.promise->value);
-          allocator.deallocate(pending_image.promise);
+          renderer.attach_image(handle,
+                                promise->value);
+          allocator.deallocate(promise);
         }
       }
     }
@@ -379,7 +377,7 @@ int edge_main(RuntimeLayout *runtime_layout) {
     goto cleanup;
   }
 
-  edge::EngineContext engine = {};
+  EngineContext engine = {};
   if (!engine.create(&allocator, runtime_layout)) {
     return_value = -1;
     goto cleanup;
@@ -395,7 +393,7 @@ cleanup:
 
   logger.destroy(&allocator);
 
-  usize net_allocated = allocator.get_net();
+  const usize net_allocated = allocator.get_net();
   assert(net_allocated == 0 && "Memory leaks detected.");
 
   return return_value;

@@ -9,7 +9,7 @@ struct ImTextureBinding {
   Handle image = HANDLE_INVALID;
   Handle sampler = HANDLE_INVALID;
 
-  ImTextureBinding(Handle img, Handle samp) : image{img}, sampler{samp} {}
+  ImTextureBinding(const Handle img, const Handle samp) : image{img}, sampler{samp} {}
 
   explicit operator ImTextureID() const {
     return (static_cast<ImTextureID>(static_cast<u32>(sampler)) << 32) |
@@ -20,7 +20,7 @@ struct ImTextureBinding {
     return ImTextureRef{static_cast<ImTextureID>(*this)};
   }
 
-  static ImTextureBinding from_texture_id(ImTextureID tex_ref) {
+  static ImTextureBinding from_texture_id(const ImTextureID tex_ref) {
     return ImTextureBinding(
         Handle(static_cast<u32>(tex_ref & 0xFFFFFFFFu)),
         Handle(static_cast<u32>((tex_ref >> 32) & 0xFFFFFFFFu)));
