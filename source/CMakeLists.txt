@@ -1,43 +1,44 @@
 project(edge LANGUAGES C CXX)
 
 set(EDGE_ENGINE_SOURCES
-    "event_dispatcher.cpp"
-    "imgui_layer.cpp"
-    "main.cpp"
+        "event_dispatcher.cpp"
+        "imgui_layer.cpp"
+        "main.cpp"
+        "world/scene.cpp"
 )
 
-if(ANDROID)
+if (ANDROID)
     find_package(game-activity REQUIRED CONFIG)
 
     add_library(${PROJECT_NAME} SHARED ${EDGE_ENGINE_SOURCES})
 
-    target_link_libraries(${PROJECT_NAME} 
-        PUBLIC
-        log android 
-        game-activity::game-activity_static
+    target_link_libraries(${PROJECT_NAME}
+            PUBLIC
+            log android
+            game-activity::game-activity_static
     )
-elseif(WIN32)
+elseif (WIN32)
     add_executable(${PROJECT_NAME} WIN32 ${EDGE_ENGINE_SOURCES})
-else()
+else ()
     add_executable(${PROJECT_NAME} ${EDGE_ENGINE_SOURCES})
-endif()
+endif ()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE _CRT_SECURE_NO_WARNINGS)
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
-target_compile_options(${PROJECT_NAME} PRIVATE -mavx2)
-endif()
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    target_compile_options(${PROJECT_NAME} PRIVATE -mavx2)
+endif ()
 
 target_compile_definitions(${PROJECT_NAME} PUBLIC
-    $<$<CONFIG:Debug>:EDGE_DEBUG>
-    $<$<CONFIG:Release>:EDGE_RELEASE>
+        $<$<CONFIG:Debug>:EDGE_DEBUG>
+        $<$<CONFIG:Release>:EDGE_RELEASE>
 )
 
 add_subdirectory(graphics)
 add_subdirectory(runtime)
 
 target_link_libraries(${PROJECT_NAME}
-    PRIVATE
-    edge_externals
-    edge_foundation
+        PRIVATE
+        edge_externals
+        edge_foundation
 )
