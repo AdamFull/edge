@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <type_traits>
+#include <initializer_list>
 
 namespace edge {
 template <typename T> struct Array {
@@ -291,6 +292,92 @@ private:
       }
     }
   }
+};
+
+template <typename T, usize N> class StaticArray {
+  static_assert(N > 0, "StaticArray: N must be greater than 0");
+
+public:
+  EDGE_DECLARE_CONTAINER_HEADER(T)
+
+  constexpr StaticArray() : m_data{} {}
+
+  constexpr StaticArray(std::initializer_list<T> init) : m_data{} {
+    static_assert(
+        std::is_copy_assignable_v<T>,
+        "StaticArray initializer_list constructor requires copy-assignable T");
+    assert(init.size() <= N &&
+           "StaticArray: initializer_list has more elements than N");
+    usize i = 0;
+    for (auto &v : init) {
+      m_data[i++] = v;
+    }
+  }
+
+  constexpr StaticArray(const StaticArray &) = default;
+  constexpr StaticArray &operator=(const StaticArray &) = default;
+  constexpr StaticArray(StaticArray &&) = default;
+  constexpr StaticArray &operator=(StaticArray &&) = default;
+
+  constexpr reference operator[](usize index) {
+    assert(index < N && "StaticArray::operator[]: index out of bounds");
+    return m_data[index];
+  }
+
+  constexpr const_reference operator[](usize index) const {
+    assert(index < N && "StaticArray::operator[]: index out of bounds");
+    return m_data[index];
+  }
+
+  constexpr reference at(usize index) {
+    assert(index < N && "StaticArray::at: index out of bounds");
+    return m_data[index];
+  }
+
+  constexpr const_reference at(usize index) const {
+    assert(index < N && "StaticArray::at: index out of bounds");
+    return m_data[index];
+  }
+
+  constexpr reference front() { return m_data[0]; }
+  constexpr const_reference front() const { return m_data[0]; }
+
+  constexpr reference back() { return m_data[N - 1]; }
+  constexpr const_reference back()  const { return m_data[N - 1]; }
+
+  constexpr usize size() const noexcept { return N; }
+  constexpr bool empty() const noexcept { return N == 0; }
+  constexpr usize capacity() const noexcept { return N; }
+
+  constexpr pointer data() noexcept { return m_data; }
+  constexpr const_pointer data() const noexcept { return m_data; }
+
+  EDGE_DECLARE_RANDOM_ACCESS_ITERATOR(T, m_data, N)
+
+  constexpr void fill(const T& val) {
+    for (usize i = 0; i < N; ++i) {
+      m_data[i] = val;
+    }
+  }
+
+  constexpr void swap(StaticArray& other) noexcept(noexcept(std::swap(m_data[0], other.m_data[0]))) {
+    for (usize i = 0; i < N; ++i) {
+      T tmp = std::move(m_data[i]);
+      m_data[i] = std::move(other.m_data[i]);
+      other.m_data[i] = std::move(tmp);
+    }
+  }
+
+  constexpr bool operator==(const StaticArray& other) const {
+    for (usize i = 0; i < N; ++i) {
+      if (m_data[i] != other.m_data[i]) return false;
+    }
+    return true;
+  }
+
+  constexpr bool operator!=(const StaticArray& other) const { return !(*this == other); }
+private:
+  T m_data[N];
 };
 } // namespace edge
 
