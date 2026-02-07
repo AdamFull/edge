@@ -167,7 +167,8 @@ struct HashMap {
     return static_cast<f32>(m_size) / static_cast<f32>(m_bucket_count);
   }
 
-  bool insert(const NotNull<const Allocator *> alloc, const K &key, const V &value) {
+  bool insert(const NotNull<const Allocator *> alloc, const K &key,
+              const V &value) {
     // Check load factor and rehash if needed
     if (load_factor() >= detail::HASHMAP_MAX_LOAD_FACTOR) {
       rehash(alloc, m_bucket_count * 2);
@@ -290,17 +291,9 @@ struct HashMap {
     return Iterator{this, 0, nullptr};
   }
 
-  Iterator end() {
-    return Iterator{this, 0, nullptr};
-  }
-
-  Iterator begin() const {
-    return const_cast<HashMap *>(this)->begin();
-  }
-
-  Iterator end() const {
-    return const_cast<HashMap *>(this)->end();
-  }
+  Iterator end() { return Iterator{this, 0, nullptr}; }
+  Iterator begin() const { return const_cast<HashMap *>(this)->begin(); }
+  Iterator end() const { return const_cast<HashMap *>(this)->end(); }
 
   [[nodiscard]] bool contains(const K &key) const { return find(key) != end(); }
   [[nodiscard]] bool empty() const { return m_size == 0; }
