@@ -8,43 +8,40 @@
 
 namespace edge {
 template <typename T> struct Array;
+template <typename T, usize N> class StaticArray;
 
-template <TrivialType T, typename StorageProvider> struct Buffer;
-
+// TODO: This container can be used not only for trivial types, can cause bugs
 template <TrivialType T> struct Span {
   EDGE_DECLARE_CONTAINER_HEADER(T)
 
   constexpr Span() = default;
 
-  constexpr Span(const_pointer data, const size_type size) : m_data(data), m_size(size) {}
+  constexpr Span(pointer data, const size_type size)
+      : m_data(data), m_size(size) {}
 
   constexpr Span(pointer begin, pointer end)
       : m_data(begin), m_size(static_cast<size_type>(end - begin)) {
     assert(end >= begin);
   }
 
-  template <size_type N>
-  constexpr Span(T (&arr)[N]) : m_data(arr), m_size(N) {}
+  template <size_type N> constexpr Span(T (&arr)[N]) : m_data(arr), m_size(N) {}
 
   constexpr Span(Array<T> &arr) noexcept
+      : m_data(arr.data()), m_size(arr.size()) {}
+
+  template <size_type N>
+  constexpr Span(StaticArray<T, N> &arr) noexcept
       : m_data(arr.data()), m_size(arr.size()) {}
 
   constexpr Span(const Array<T> &arr) noexcept
     requires std::is_const_v<T>
       : m_data(arr.data()), m_size(arr.size()) {}
 
-  template <typename StorageProvider>
-  constexpr Span(Buffer<T, StorageProvider> &arr) noexcept
-      : m_data(arr.data()), m_size(arr.size()) {}
-
-  template <typename StorageProvider>
-  constexpr Span(const Buffer<T, StorageProvider> &arr) noexcept
-    requires std::is_const_v<T>
-      : m_data(arr.data()), m_size(arr.size()) {}
-
   [[nodiscard]] constexpr size_type size() const { return m_size; }
 
-  [[nodiscard]] constexpr size_type size_bytes() const { return m_size * sizeof(T); }
+  [[nodiscard]] constexpr size_type size_bytes() const {
+    return m_size * sizeof(T);
+  }
 
   [[nodiscard]] constexpr bool empty() const { return m_size == 0; }
 
@@ -79,7 +76,6 @@ template <TrivialType T> struct Span {
   }
 
   constexpr pointer data() noexcept { return m_data; }
-
   constexpr const_pointer data() const noexcept { return m_data; }
 
   EDGE_DECLARE_RANDOM_ACCESS_ITERATOR(T, m_data, m_size)
