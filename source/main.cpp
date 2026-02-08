@@ -3,6 +3,7 @@
 #include <allocator.hpp>
 #include <logger.hpp>
 #include <scheduler.hpp>
+#include <filesystem.hpp>
 
 #include <assert.h>
 
@@ -345,11 +346,11 @@ int edge_main(RuntimeLayout *runtime_layout) {
   allocator = Allocator::create_tracking();
 #else
   allocator = Allocator::create(
-      [](usize size, usize alignment, void *) {
+      [](const usize size, const usize alignment, void *) {
         return mi_aligned_alloc(alignment, size);
       },
       [](void *ptr, void *) { mi_free(ptr); },
-      [](void *ptr, usize size, usize alignment, void *) {
+      [](void *ptr, const usize size, const usize alignment, void *) {
         return mi_aligned_recalloc(ptr, 1, size, alignment);
       },
       nullptr);
@@ -377,6 +378,14 @@ int edge_main(RuntimeLayout *runtime_layout) {
     goto cleanup;
   }
 
+  filesystem::Filesystem fs = {};
+  if (!fs.create(&allocator)) {
+    return_value = -1;
+    goto cleanup;
+  }
+
+  filesystem::Filesystem::set_instance(&fs);
+
   EngineContext engine = {};
   if (!engine.create(&allocator, runtime_layout)) {
     return_value = -1;
@@ -386,6 +395,8 @@ int edge_main(RuntimeLayout *runtime_layout) {
   engine.run();
 cleanup:
   engine.destroy(&allocator);
+
+  fs.destroy(&allocator);
 
   if (sched) {
     Scheduler::destroy(&allocator, sched);
