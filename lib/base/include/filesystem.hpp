@@ -1,7 +1,35 @@
-#ifndef EDGE_FILESYSTEM_LIST_H
-#define EDGE_FILESYSTEM_LIST_H
+#ifndef EDGE_FILESYSTEM_H
+#define EDGE_FILESYSTEM_H
 
+#include "array.hpp"
+#include "enumerator.hpp"
 #include "string_view.hpp"
+
+namespace edge::filesystem {
+enum class AccessMode : u32 {
+  Read = 1u << 0,
+  Write = 1u << 1,
+  Append = 1u << 2,
+  Create = 1u << 3,
+  Truncate = 1u << 4,
+};
+using AccessModeFlags = Flags<AccessMode>;
+
+enum class EntryFlag : u32 {
+  File = 1u << 0,
+  Directory = 1u << 1,
+};
+using EntryFlags = Flags<EntryFlag>;
+
+enum struct StreamOrigin : u32 {
+  Begin,
+  Current,
+  End,
+};
+} // namespace edge::filesystem
+
+EDGE_ENUM_FLAGS(filesystem::AccessMode)
+EDGE_ENUM_FLAGS(filesystem::EntryFlag)
 
 namespace edge::filesystem {
 using Path = String;
@@ -157,6 +185,84 @@ inline Path append(const NotNull<const Allocator *> alloc,
 
   return result;
 }
-} // namespace edge::filesystem
 
+class IFile {
+public:
+  virtual ~IFile() = default;
+
+  virtual bool open(StringView<char8_t> path, AccessModeFlags flags) = 0;
+  virtual void close() = 0;
+
+  [[nodiscard]] virtual bool is_open() const = 0;
+
+  [[nodiscard]] virtual usize seek(isize offset, StreamOrigin origin) = 0;
+  [[nodiscard]] virtual usize tell() = 0;
+  virtual usize read(void *buffer_out, usize element_size,
+                     usize element_count) const = 0;
+  virtual usize write(const void *buffer_in, usize element_size,
+                      usize element_count) const = 0;
+
+  virtual bool flush() = 0;
+};
+
+class IFilesystem {
+public:
+  virtual ~IFilesystem() = default;
+
+  virtual bool create(NotNull<const Allocator *> alloc) = 0;
+  virtual void destroy(NotNull<const Allocator *> alloc) = 0;
+
+  virtual bool create_directory(StringView<char8_t> path) = 0;
+  virtual bool remove(StringView<char8_t> path) = 0;
+
+  virtual EntryFlags get_entry_flags(StringView<char8_t> path) = 0;
+};
+
+struct MountPoint {
+  String path;
+  IFilesystem *filesystem;
+};
+
+class Filesystem {
+public:
+  static void set_instance(Filesystem *instance);
+  static Filesystem *get_instance();
+
+  bool create(NotNull<const Allocator *> alloc);
+  void destroy(NotNull<const Allocator *> alloc);
+
+  void mount(NotNull<const Allocator *> alloc, StringView<char8_t> mount_point, IFilesystem* filesystem);
+  void unmount(NotNull<const Allocator *> alloc,
+               StringView<char8_t> mount_point);
+
+  bool exists(StringView<char8_t> path) const;
+  bool is_file(StringView<char8_t> path) const;
+  bool is_directory(StringView<char8_t> path) const;
+
+  bool create_directory(StringView<char8_t> path) const;
+  bool create_directories(StringView<char8_t> path);
+  bool remove(StringView<char8_t> path) const;
+
+private:
+  static Filesystem *s_instance;
+
+  String m_cwd_path;
+  String m_temp_path;
+  String m_cached_path;
+  Array<MountPoint> m_mount_points;
+
+  MountPoint resolve_path(StringView<char8_t> path) const;
+};
+
+bool file_exists(StringView<char8_t> path);
+bool directory_exists(StringView<char8_t> path);
+i64 file_size(StringView<char8_t> path);
+bool create_directory(StringView<char8_t> path);
+bool create_directories(StringView<char8_t> path);
+bool remove_file(StringView<char8_t> path);
+bool remove_directory(StringView<char8_t> path);
+bool rename_path(StringView<char8_t> from, StringView<char8_t> to);
+bool copy_file(StringView<char8_t> from, StringView<char8_t> to);
+
+} // namespace edge::filesystem
 #endif
