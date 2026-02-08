@@ -16,7 +16,7 @@ struct StringView {
   using size_type = usize;
   using difference_type = isize;
 
-  constexpr StringView() : m_data{nullptr}, m_length{0} {}
+  constexpr StringView() : m_data{nullptr} {}
 
   constexpr StringView(const StringView &) = default;
   constexpr StringView &operator=(const StringView &) = default;
@@ -30,12 +30,12 @@ struct StringView {
   template <usize N>
   constexpr StringView(const CharT (&str)[N]) : m_data{str}, m_length{N - 1} {}
 
+  StringView(const String& str) : m_data{str.data()}, m_length{str.length()} {}
+
   constexpr const_pointer data() const { return m_data; }
 
   [[nodiscard]] constexpr size_type size() const { return m_length; }
-
   [[nodiscard]] constexpr size_type length() const { return m_length; }
-
   [[nodiscard]] constexpr bool empty() const { return m_length == 0; }
 
   constexpr const_reference operator[](size_type index) const {
